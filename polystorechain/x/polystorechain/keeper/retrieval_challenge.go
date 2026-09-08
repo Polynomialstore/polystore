@@ -44,6 +44,19 @@ func (k Keeper) RetrievalV2Active(ctx sdk.Context) (bool, error) {
 	return false, nil
 }
 
+// RequireLegacyRetrieval quarantines every ordinary receipt payout route once
+// fresh session challenges are active, including the legacy EVM batch selector.
+func (k Keeper) RequireLegacyRetrieval(ctx sdk.Context) error {
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil {
+		return err
+	}
+	if active {
+		return sdkerrors.ErrInvalidRequest.Wrap("legacy retrieval receipts are disabled; open a new funded v2 retrieval session and submit its challenged proofs")
+	}
+	return nil
+}
+
 func (k Keeper) activateRetrievalV2(ctx sdk.Context) error {
 	h, err := optionalSessionCount(k.RetrievalV2ActivatedHeight.Get(ctx))
 	if err != nil || h != 0 {

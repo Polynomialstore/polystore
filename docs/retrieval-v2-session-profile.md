@@ -170,6 +170,13 @@ legacy readiness clearing run before that write; implementation does not qualify
 funded activation. Governance cannot unset or move an already active boundary to revive old
 payout paths. Skipping the scheduled boundary fails closed.
 
+Activation also disables every legacy ordinary payout entry point before cryptography or
+effects: `ProveLiveness` user receipt, receipt batch and download-session proof,
+and EVM `proveRetrievalBatch`. They require a new funded v2 session; fresh receipt
+nonces or owner signatures do not restore their eligibility. `SystemProof` routes
+exclusively to the frozen C4 storage/repair audit verifier. Preactivation legacy
+operation remains available.
+
 Existing records are not retagged, repriced or replayed. Version-0 COMPLETED
 records stay terminal. Existing OPEN, USER_CONFIRMED and PROOF_SUBMITTED records
 become expiry-refund-only after activation, using their original keys, nonce and
