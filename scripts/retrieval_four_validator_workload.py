@@ -693,7 +693,8 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         # The last offered operation precedes the declared end by one interval.
         while artifact.monotonic_ns() < started + duration * 10**9:
             time.sleep(min(0.2, lifecycle.remaining()))
-        doc["measurement_elapsed_ns"] = artifact.monotonic_ns() - started
+        doc["offered_window_ns"] = duration * 10**9
+        doc["scheduler_and_drain_elapsed_ns"] = artifact.monotonic_ns() - started
         capture_workload_metrics(lifecycle, "sustained_after", fenced=True)
         end_height = lifecycle.wait_height(3) - 1
         doc["economics_after"] = lifecycle.snapshot(end_height)
