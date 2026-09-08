@@ -216,11 +216,48 @@ func startGenerationRetention() {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
+		// Retain the directory cursor across bounded ticks so an unavailable early
+		// batch cannot starve later deals. One descriptor; no growing inventory.
+		var dir *os.File
 		for {
-			recoverDealGenerationStateOnStartup()
+			if dir == nil {
+				dir, _ = os.Open(filepath.Join(uploadDir, "deals"))
+			}
+			if dir != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				done := reconcileNextGenerationBatch(ctx, dir)
+				cancel()
+				if done {
+					_ = dir.Close()
+					dir = nil
+				}
+			}
 			<-ticker.C
 		}
 	}()
+}
+
+func reconcileNextGenerationBatch(ctx context.Context, dir *os.File) bool {
+	entries, err := dir.ReadDir(maxRetentionDealsPerPass)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return true
+	}
+	ids := make([]uint64, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		id, err := strconv.ParseUint(entry.Name(), 10, 64)
+		if err == nil && strconv.FormatUint(id, 10) == entry.Name() {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) > 0 {
+		if err := reconcileDealGenerations(ctx, ids); err != nil {
+			log.Printf("Generation retention: preserving unavailable inventory: %v", err)
+		}
+	}
+	return len(entries) < maxRetentionDealsPerPass
 }
 
 func recoverDealGenerationStateOnStartup() {
@@ -231,30 +268,7 @@ func recoverDealGenerationStateOnStartup() {
 		return
 	}
 	defer dir.Close()
-	for ctx.Err() == nil {
-		entries, err := dir.ReadDir(maxRetentionDealsPerPass)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return
-		}
-		ids := make([]uint64, 0, len(entries))
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			id, err := strconv.ParseUint(entry.Name(), 10, 64)
-			if err == nil && strconv.FormatUint(id, 10) == entry.Name() {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) > 0 {
-			if err := reconcileDealGenerations(ctx, ids); err != nil {
-				log.Printf("Generation retention: preserving unavailable inventory: %v", err)
-				return
-			}
-		}
-		if len(entries) < maxRetentionDealsPerPass {
-			return
-		}
+	for ctx.Err() == nil && !reconcileNextGenerationBatch(ctx, dir) {
 	}
 }
 

@@ -268,3 +268,65 @@ func TestGenerationPublicationRejectsConcurrentStagedWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGenerationRetentionAdvancesPastUnavailableBatch(t *testing.T) {
+	useTempUploadDir(t)
+	current := mustTestManifestRoot(t, "cursor-current")
+	stale := mustTestManifestRoot(t, "cursor-stale")
+	// Determine filesystem order rather than assuming numeric directory sorting.
+	for id := 1; id <= maxRetentionDealsPerPass+1; id++ {
+		if err := os.MkdirAll(filepath.Join(uploadDir, "deals", strconv.Itoa(id)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir, err := os.Open(filepath.Join(uploadDir, "deals"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := dir.ReadDir(maxRetentionDealsPerPass + 1)
+	_ = dir.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	last, err := strconv.ParseUint(entries[len(entries)-1].Name(), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := strconv.ParseUint(entries[0].Name(), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uint64{first, last} {
+		writeTestDealGeneration(t, id, current, 2, false)
+		writeTestDealGeneration(t, id, stale, 2, false)
+	}
+	authority := useRetentionAuthority(t, last, current)
+	authority.Lock()
+	authority.badBody = `{}`
+	authority.Unlock()
+	dir, err = os.Open(filepath.Join(uploadDir, "deals"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	if reconcileNextGenerationBatch(context.Background(), dir) {
+		t.Fatal("first bounded batch incorrectly ended scan")
+	}
+	for _, id := range []uint64{first, last} {
+		if _, err := os.Stat(dealScopedDir(id, stale)); err != nil {
+			t.Fatal("failed authority removed generation", err)
+		}
+	}
+	authority.Lock()
+	authority.badBody = ""
+	authority.Unlock()
+	if !reconcileNextGenerationBatch(context.Background(), dir) {
+		t.Fatal("final batch did not end scan")
+	}
+	if _, err := os.Stat(dealScopedDir(last, stale)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("later healthy deal starved", err)
+	}
+	if _, err := os.Stat(dealScopedDir(last, current)); err != nil {
+		t.Fatal("current root removed", err)
+	}
+}
