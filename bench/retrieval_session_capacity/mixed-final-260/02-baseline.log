@@ -1,0 +1,28 @@
+goos: darwin
+goarch: arm64
+pkg: polystorechain/x/polystorechain/keeper
+cpu: Apple M3
+BenchmarkSubmitRetrievalSessionProofV2Mixed-2   	       3	 276864292 ns/op	  26155844 gas/op	    502997 gas/proof	6434195278 generation-ns/op	        52.00 proofs/op	         6.000 sessions/op	  145685 B/op	    1235 allocs/op
+PASS
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+       41.63 real        41.55 user         0.23 sys
+           121765888  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+                5980  page reclaims
+                2126  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                 278  signals received
+                  10  voluntary context switches
+               49994  involuntary context switches
+        588168588516  instructions retired
+        154398250654  cycles elapsed
+            92881568  peak memory footprint
