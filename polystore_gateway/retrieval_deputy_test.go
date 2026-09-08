@@ -205,3 +205,62 @@ func TestFrozenShardFetchBoundsAndCancellation(t *testing.T) {
 		}
 	})
 }
+
+// Exercise the production provider handler and recovery HTTP client together.
+// uploadDir is fixed before serving; the deputy's separate store is never
+// substituted into the provider process, and no per-request global is changed.
+func TestFrozenShardFetchRealProviderHandler(t *testing.T) {
+	useTempUploadDir(t)
+	deputyDir := t.TempDir()
+	const deal = uint64(9007199254740993)
+	root := mustTestManifestRoot(t, "frozen-repair-provider")
+	newer := mustTestManifestRoot(t, "newer-repair-provider")
+	data := make([]byte, types.BLOB_SIZE)
+	for i := range data {
+		data[i] = byte(i*37 + i/97)
+	}
+	providerDir := dealScopedDir(deal, root)
+	if err := os.MkdirAll(providerDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	filename := "mdu_2_slot_0.bin"
+	if err := os.WriteFile(filepath.Join(providerDir, filename), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A mutable active pointer must never redirect the frozen root's request.
+	if err := writeActiveDealGeneration(deal, newer); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(SpFetchShard))
+	defer server.Close()
+	session := "0x" + fmt.Sprintf("%064x", 1)
+	got, err := fetchShardFromProvider(context.Background(), server.URL, deal, root.Canonical, 2, 0, session)
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("real provider fetch: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(deputyDir, filename)); !os.IsNotExist(err) {
+		t.Fatal("provider fetch wrote deputy artifacts")
+	}
+	if _, err := fetchShardFromProvider(context.Background(), server.URL, deal, newer.Canonical, 2, 0, session); err == nil {
+		t.Fatal("substituted another generation")
+	}
+	if _, err := fetchShardFromProvider(context.Background(), server.URL, deal, root.Canonical, 2, 1, session); err == nil {
+		t.Fatal("served an unowned slot")
+	}
+	for _, token := range []string{"", "wrong-token"} {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/sp/shard?deal_id=%d&mdu_index=2&slot=0&manifest_root=%s", server.URL, deal, root.Canonical), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set(gatewayAuthHeader, token)
+		req.Header.Set("X-PolyStore-Session-Id", session)
+		response, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusForbidden {
+			t.Fatalf("session header bypassed bearer auth: %d", response.StatusCode)
+		}
+	}
+}
