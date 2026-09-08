@@ -1403,6 +1403,16 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
         self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
 
+    def test_c6_audit_profile_is_explicit_and_frozen_before_validation(self):
+        self.runner.home.mkdir(mode=0o700)
+        self.runner.prepare(audit_profile="c6")
+        self.assertEqual(self.runner.doc["profile"]["audit_profile"], "c6")
+        for node in self.runner.nodes:
+            genesis = json.loads((Path(node["home"]) / "config/genesis.json").read_text())
+            params = genesis["app_state"]["nilchain"]["params"]
+            self.assertEqual((params["quota_min_blobs"], params["quota_max_blobs"]), ("132", "132"))
+            self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"), self.runner.doc["genesis_sha256"])
+
     def test_owned_child_peak_memory_survives_normal_and_forced_stop(self):
         # Touch actual pages, then release them before exit: wait4 retains the
         # peak while a late process-list sample would miss this allocation.

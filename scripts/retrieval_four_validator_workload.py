@@ -460,7 +460,7 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     return lifecycle.home / "evidence.json"
 
 
-def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized):
+def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized, expected_samples=None):
     """Check committed inventory/coverage without treating absent audits as success."""
     found = {}
     for view in value:
@@ -480,7 +480,7 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
                 producer.uint(snapshot["deal_end"]) != producer.uint(deal["end_block"])):
             raise ValueError("audit differs from the committed K2 assignment")
         count = producer.uint(audit["sample_count"])
-        if not 1 <= count <= 32:  # One K2 user MDU has 32 distinct rows per slot.
+        if not 1 <= count <= 32 or (expected_samples is not None and count != expected_samples):  # One K2 user MDU has 32 distinct rows per slot.
             raise ValueError("invalid audit sample count")
         coverage = producer.b64(audit["coverage"], (count + 7) // 8)
         accepted = producer.uint(audit.get("accepted_count", 0))
@@ -840,7 +840,7 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 raise ValueError("audit monitor failed: " + str(failures[0]))
 
 
-def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None):
+def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None, audit_profile="normal"):
     """Real canonical ingest and normal audits; optional bounded retrieval workload."""
     gateway = Path(gateway_binary).resolve(strict=True)
     cli = Path(cli_binary).resolve(strict=True)
@@ -924,7 +924,16 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             artifact_source_match="supplied binaries/library; build correspondence not attested")
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
-        lifecycle.prepare()  # Do not call smoke_genesis: normal mint/audit defaults remain intact.
+        lifecycle.prepare(audit_profile=audit_profile)  # Normal mint retained for both explicit audit profiles.
+        quotas = {min(32, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
+                      max(producer.uint(doc["frozen_module_params"]["quota_min_blobs"]),
+                          (32 * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
+                  for key in ("quota_bps_per_epoch_hot", "quota_bps_per_epoch_cold")}
+        if len(quotas) != 1 or not 1 <= next(iter(quotas)) <= 32:
+            raise ValueError("K2 diagnostic requires an unambiguous nonzero frozen audit quota")
+        expected_samples = quotas.pop()
+        doc["audit_sampling_profile"] = dict(name=audit_profile, population_per_slot=32, samples_per_slot=expected_samples,
+            samples_per_epoch=3 * expected_samples, qualification=False)
         genesis = json.loads((Path(lifecycle.nodes[0]["home"]) / "config/genesis.json").read_text())
         doc["normal_mint_profile"] = genesis["app_state"]["mint"]
         epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
@@ -1030,7 +1039,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 values = []
                 for address in providers.values():
                     values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
-                checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain, finalized=finalized)
+                checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain, finalized=finalized, expected_samples=expected_samples)
                 anchor_height = (selected_epoch - 1) * epoch_length + 1
                 anchor = lifecycle.query(node, f"/block?height={anchor_height}")
                 if (producer.uint(anchor["block"]["header"]["height"]) != anchor_height or
@@ -1097,6 +1106,7 @@ def main():
         parser.add_argument("--" + flag)
     parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per32proof transaction")
     parser.add_argument("--proof-only", action="store_true", help="Prepare the six smoke sessions before timing proof submission")
@@ -1104,6 +1114,7 @@ def main():
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
     mode, gateway = options.pop("mode"), options.pop("gateway_binary")
+    audit_profile = options.pop("audit_profile")
     cli, source = options.pop("cli_binary"), options.pop("product_source")
     exporter = options.pop("proof_exporter")
     step_seconds, proof_gas = options.pop("step_seconds"), options.pop("proof_gas")
@@ -1111,15 +1122,15 @@ def main():
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
-            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas)))
+            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas), audit_profile=audit_profile))
     elif exporter or proof_gas is not None or step_seconds != 180:
         parser.error("exporter, proof gas and pilot duration require sustained-providers")
     elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
             parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")
-        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source))
+        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source, audit_profile=audit_profile))
     else:
-        if not k8 or not k2 or gateway or cli or source:
+        if not k8 or not k2 or gateway or cli or source or audit_profile != "normal":
             parser.error("settlement-smoke requires both fixtures and excludes --gateway-binary")
         print(run(artifact.FourValidatorLifecycle(**options), k8, k2, proof_only=proof_only))
 

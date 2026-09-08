@@ -1289,7 +1289,9 @@ class FourValidatorLifecycle:
                 reservation.bind(("127.0.0.1", node[name]))
                 reservation.listen(1)
 
-    def prepare(self):
+    def prepare(self, *, audit_profile="normal"):
+        if audit_profile not in ("normal", "c6"):
+            raise ValueError("unknown benchmark audit profile")
         self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",
                  "--node-dir-prefix", "validator", "--chain-id", self.chain,
                  "--starting-ip-address", "127.0.0.1", "--list-ports", "26657,26654,26651,26648",
@@ -1317,6 +1319,8 @@ class FourValidatorLifecycle:
         if "retrieval_v2_activation_height" not in params:
             raise ValueError("binary genesis does not expose v2 activation")
         params["retrieval_v2_activation_height"] = "1"
+        if audit_profile == "c6":
+            params.update(quota_min_blobs="132", quota_max_blobs="132")
         metadata = genesis["app_state"]["bank"].setdefault("denom_metadata", [])
         if any(item.get("base") == "aatom" for item in metadata):
             raise ValueError("aatom metadata already present; review generated defaults")
@@ -1353,7 +1357,7 @@ class FourValidatorLifecycle:
         if len({node["node_id"] for node in self.nodes}) != 4 or len({json.dumps(node["validator_key"], sort_keys=True) for node in self.nodes}) != 4:
             raise ValueError("expected four independent node and voting keys")
         self.doc.update(genesis_sha256=sha256(first / "config/genesis.json"), frozen_module_params=params,
-                        profile={"consensus": consensus, "timeout_commit": "1s", "execution_budget_ms": 700,
+                        profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"]})
 
