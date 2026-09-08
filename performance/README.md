@@ -206,3 +206,15 @@ recorded binaries. Source hashes and request timings are retained in the JSON.
 This is one controlled pair with system liveness disabled for the isolated E2E
 profile, not warmed repeated performance, healthy storage-audit, capacity, WAN,
 or 1 GiB qualification. The current local machine lacks the 1 GiB scratch budget.
+
+## Final C6 prepared-proof measurement (#260)
+
+The [retained 900-second offered-load window](../bench/retrieval_session_capacity/capacity-final-260/README.md)
+reconciles 1,203 committed proofs on all four validators. The highest stable
+tested offered rate was 2 sessions/s over its 180-second step; 4/s saturated the
+queue. All measurement epochs achieved 96/96 audit samples, and fixed Commit
+and RSS budgets passed. The original whole-run status remains failed because
+a disk guard interrupted a later audit wait after measurement and drain.
+The artifact separates that interruption and supplementary recovery from the
+measured window. These are prepared-proof acceptance results, not delivery or
+paid lifecycle throughput.
