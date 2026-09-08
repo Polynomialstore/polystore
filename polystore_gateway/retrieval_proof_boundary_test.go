@@ -57,7 +57,7 @@ func TestFrozenWitnessSpanCrossesNativePackedMDUs(t *testing.T) {
 	for _, user := range []int{0, users - 2, users - 1} {
 		t.Run(fmt.Sprintf("user_%d", user), func(t *testing.T) {
 			c.StartMDU = c.MetadataMDUs + uint64(user)
-			got, err := readFrozenWitnessCommitments(dir, c, leaves)
+			got, err := readFrozenWitnessCommitments(dir, c, c.StartMDU, leaves)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -89,7 +89,7 @@ func TestFrozenWitnessSpanCrossesNativePackedMDUs(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			if _, err := readFrozenWitnessCommitments(dir, c, leaves); err == nil {
+			if _, err := readFrozenWitnessCommitments(dir, c, c.StartMDU, leaves); err == nil {
 				t.Fatal("accepted malformed witness span")
 			}
 		})
@@ -194,7 +194,7 @@ func TestAuthenticatedUserMDURootTableBoundaries(t *testing.T) {
 			}
 			c.StartMDU = uint64(target.mdu)
 			g := &authenticatedGeneration{rootTable: mdu0[:16*types.BLOB_SIZE], commitments: commitments, tree: tree}
-			got, err := g.userMDU(context.Background(), dir, c)
+			got, err := g.userMDU(context.Background(), dir, c, c.StartMDU)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -215,7 +215,7 @@ func TestAuthenticatedUserMDURootTableBoundaries(t *testing.T) {
 	writeNativeWitnessFixture(t, dir, 3, witnessPayloads[3])
 	c.StartMDU = 4096
 	g := &authenticatedGeneration{rootTable: mdu0[:16*types.BLOB_SIZE], commitments: commitments, tree: tree}
-	if _, err := g.userMDU(context.Background(), dir, c); err == nil {
+	if _, err := g.userMDU(context.Background(), dir, c, c.StartMDU); err == nil {
 		t.Fatal("accepted changed witness commitments under the frozen root table")
 	}
 }

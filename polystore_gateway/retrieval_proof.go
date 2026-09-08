@@ -186,7 +186,7 @@ func prepareRetrievalMetadata(ctx context.Context, dir string, c retrievalchalle
 
 // Authenticate exactly the complete ordered commitment list for this user MDU.
 // The enclosing witness packaging is not cached or claimed to be authenticated.
-func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c retrievalchallenge.Context) (*authenticatedUserMDU, error) {
+func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c retrievalchallenge.Context, mduIndex uint64) (*authenticatedUserMDU, error) {
 	// ponytail: one prepared user MDU per generation; a measured working-set miss
 	// rate can justify a larger cache, while every caller remains memory-bounded.
 	g.mu.Lock()
@@ -194,11 +194,17 @@ func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c ret
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if g.lastProof != nil && g.lastMDU == c.StartMDU {
+	if _, err := c.Bytes(); err != nil {
+		return nil, err
+	}
+	if mduIndex < c.MetadataMDUs || mduIndex-c.MetadataMDUs >= c.UserMDUs {
+		return nil, fmt.Errorf("user MDU outside frozen allocation")
+	}
+	if g.lastProof != nil && g.lastMDU == mduIndex {
 		return g.lastProof, nil
 	}
 	leafCount := uint64(64/c.K) * uint64(c.K+c.M)
-	raw, err := readFrozenWitnessCommitments(dir, c, leafCount)
+	raw, err := readFrozenWitnessCommitments(dir, c, mduIndex, leafCount)
 	if err != nil {
 		return nil, err
 	}
@@ -210,17 +216,17 @@ func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c ret
 	root := tree[len(tree)-1][0]
 	// PolyFS roots are full Blake2s digests. Hop 1 reduces that digest into Fr;
 	// the canonical root-table cell must never replace the full Hop 2 digest.
-	if c.StartMDU == 0 || c.StartMDU > 65536 {
+	if mduIndex == 0 || mduIndex > 65536 {
 		return nil, fmt.Errorf("root-table index out of range")
 	}
-	du, cell := (c.StartMDU-1)/4096, (c.StartMDU-1)%4096
+	du, cell := (mduIndex-1)/4096, (mduIndex-1)%4096
 	opening, _, err := crypto_ffi.ComputeManifestProof(g.rootTable[du*types.BLOB_SIZE:(du+1)*types.BLOB_SIZE], cell)
 	if err != nil {
 		return nil, err
 	}
 	path := proofMerklePath(g.tree, int(du))
 	flat, _ := flattenMerkleProof32(path)
-	valid, err := crypto_ffi.VerifyMdu0RootTableProof(c.Root[:], c.StartMDU, root[:], g.commitments[du], flat, opening)
+	valid, err := crypto_ffi.VerifyMdu0RootTableProof(c.Root[:], mduIndex, root[:], g.commitments[du], flat, opening)
 	if err != nil {
 		return nil, err
 	}
@@ -228,15 +234,15 @@ func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c ret
 		return nil, fmt.Errorf("witness commitment list does not match frozen root table")
 	}
 	p := &authenticatedUserMDU{raw, tree, g.commitments[du], opening, path}
-	g.lastMDU, g.lastProof = c.StartMDU, p
+	g.lastMDU, g.lastProof = mduIndex, p
 	return p, nil
 }
 
-func readFrozenWitnessCommitments(dir string, c retrievalchallenge.Context, leaves uint64) ([]byte, error) {
+func readFrozenWitnessCommitments(dir string, c retrievalchallenge.Context, mduIndex, leaves uint64) ([]byte, error) {
 	if _, err := c.Bytes(); err != nil {
 		return nil, err
 	}
-	if leaves == 0 || leaves > 16384 || c.MetadataMDUs < 2 {
+	if leaves == 0 || leaves > 16384 || c.MetadataMDUs < 2 || mduIndex < c.MetadataMDUs || mduIndex-c.MetadataMDUs >= c.UserMDUs {
 		return nil, fmt.Errorf("invalid witness geometry")
 	}
 	span := leaves * 48
@@ -244,7 +250,7 @@ func readFrozenWitnessCommitments(dir string, c retrievalchallenge.Context, leav
 	if total > (c.MetadataMDUs-1)*RawMduCapacity {
 		return nil, fmt.Errorf("witness allocation is too small")
 	}
-	start := (c.StartMDU - c.MetadataMDUs) * span
+	start := (mduIndex - c.MetadataMDUs) * span
 	out := make([]byte, 0, int(span))
 	for pos := start; pos < start+span; {
 		index, offset := pos/RawMduCapacity, pos%RawMduCapacity
@@ -327,7 +333,7 @@ func generateFrozenSessionProof(ctx context.Context, dir string, f *frozenRetrie
 	if err != nil {
 		return nil, nil, err
 	}
-	user, err := metadata.userMDU(ctx, dir, c)
+	user, err := metadata.userMDU(ctx, dir, c, c.StartMDU)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -341,25 +347,11 @@ func generateFrozenSessionProof(ctx context.Context, dir string, f *frozenRetrie
 		return nil, nil, err
 	}
 	proofs := make([]types.ChainedProof, len(challenges))
-	root := user.tree[len(user.tree)-1][0]
 	for i, ch := range challenges {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-		blob := window[i*types.BLOB_SIZE : (i+1)*types.BLOB_SIZE]
-		commitment, err := crypto_ffi.CommitReceivedBlob(blob)
+		proofs[i], err = buildFrozenBlobProof(ctx, ch, user, window[i*types.BLOB_SIZE:(i+1)*types.BLOB_SIZE])
 		if err != nil {
 			return nil, nil, err
 		}
-		expected := user.commitments[int(ch.LeafIndex)*48 : (int(ch.LeafIndex)+1)*48]
-		if !bytes.Equal(commitment, expected) {
-			return nil, nil, fmt.Errorf("stored response blob does not match authenticated commitment")
-		}
-		opening, y, err := crypto_ffi.ComputeBlobProof(blob, ch.Z[:])
-		if err != nil {
-			return nil, nil, err
-		}
-		proofs[i] = types.ChainedProof{MduIndex: ch.MDUIndex, BlobIndex: ch.LeafIndex, MduRootFr: root[:], RootTableDuCommitment: user.rootCommitment, RootTableDuMerklePath: user.rootPath, ManifestOpening: user.rootOpening, BlobCommitment: commitment, MerklePath: proofMerklePath(user.tree, int(ch.LeafIndex)), ZValue: ch.Z[:], YValue: y, KzgOpeningProof: opening}
 	}
 	valid, err := crypto_ffi.VerifyPolyFSSessionProofBatch(c.Root[:], f.Hash[:], f.Seed[:], rows*uint64(c.K+c.M), proofs)
 	if err != nil {
@@ -369,4 +361,30 @@ func generateFrozenSessionProof(ctx context.Context, dir string, f *frozenRetrie
 		return nil, nil, fmt.Errorf("generated session proof failed batch verification")
 	}
 	return proofs, window, nil
+}
+
+// The caller derives the expected challenge once from the authenticated context
+// and prepares this exact MDU. Sessions and audits share byte/proof construction,
+// while their distinct challenge and admission semantics remain with the caller.
+func buildFrozenBlobProof(ctx context.Context, ch retrievalchallenge.Challenge, user *authenticatedUserMDU, blob []byte) (types.ChainedProof, error) {
+	if err := ctx.Err(); err != nil {
+		return types.ChainedProof{}, err
+	}
+	if uint64(ch.LeafIndex) >= uint64(len(user.commitments)/48) {
+		return types.ChainedProof{}, fmt.Errorf("leaf outside authenticated MDU")
+	}
+	commitment, err := crypto_ffi.CommitReceivedBlob(blob)
+	if err != nil {
+		return types.ChainedProof{}, err
+	}
+	expected := user.commitments[int(ch.LeafIndex)*48 : (int(ch.LeafIndex)+1)*48]
+	if !bytes.Equal(commitment, expected) {
+		return types.ChainedProof{}, fmt.Errorf("stored response blob does not match authenticated commitment")
+	}
+	opening, y, err := crypto_ffi.ComputeBlobProof(blob, ch.Z[:])
+	if err != nil {
+		return types.ChainedProof{}, err
+	}
+	root := user.tree[len(user.tree)-1][0]
+	return types.ChainedProof{MduIndex: ch.MDUIndex, BlobIndex: ch.LeafIndex, MduRootFr: root[:], RootTableDuCommitment: user.rootCommitment, RootTableDuMerklePath: user.rootPath, ManifestOpening: user.rootOpening, BlobCommitment: commitment, MerklePath: proofMerklePath(user.tree, int(ch.LeafIndex)), ZValue: ch.Z[:], YValue: y, KzgOpeningProof: opening}, nil
 }
