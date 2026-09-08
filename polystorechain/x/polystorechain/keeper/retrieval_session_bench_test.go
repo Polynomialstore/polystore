@@ -880,11 +880,17 @@ func TestWriteRetrievalSessionProofFixture(t *testing.T) {
 		proofCount = parsed
 	}
 	require.Greater(t, sessions, 0)
+	require.LessOrEqual(t, sessions, 8192)
 	require.Greater(t, proofCount, 0)
 	require.LessOrEqual(t, proofCount, 32)
+	// An explicitly requested export must fail, rather than silently skip and
+	// leave a caller believing a missing crypto fixture was successfully built.
+	_, err := os.Stat("../../../trusted_setup.txt")
+	require.NoError(t, err, "requested benchmark fixture requires the trusted setup")
 	require.NoError(t, os.MkdirAll(fixtureDir, 0o755))
 
 	env := setupBenchRetrievalEnv(t)
+	require.LessOrEqual(t, proofCount, int(env.rows), "one fixture session must stay in its assigned slot")
 	payload := struct {
 		SessionID []byte               `json:"session_id"`
 		Proofs    []types.ChainedProof `json:"proofs"`
@@ -903,4 +909,5 @@ func TestWriteRetrievalSessionProofFixture(t *testing.T) {
 	}
 	manifestRoot := "0x" + hex.EncodeToString(env.deal.ManifestRoot) + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(fixtureDir, "manifest_root.txt"), []byte(manifestRoot), 0o600))
+	writeBenchmarkFixtureMetadata(t, fixtureDir, env, sessions, proofCount, encoded)
 }
