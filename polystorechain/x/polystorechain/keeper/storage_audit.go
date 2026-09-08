@@ -20,6 +20,9 @@ func storageAssignmentKey(a types.FrozenStorageAssignment) string {
 // storageAssignmentsForDeal excludes empty/uncommitted/expired deals. Pending
 // repair is a separate purpose and never an ACTIVE audit assignment.
 func storageAssignmentsForDeal(ctx sdk.Context, d types.Deal) ([]types.FrozenStorageAssignment, error) {
+	if len(d.Mode2Slots) > 256 {
+		return nil, fmt.Errorf("deal %d mode2 slot inventory exceeds wire bound", d.Id)
+	}
 	if d.TotalMdus == 0 || len(d.ManifestRoot) == 0 || d.EndBlock <= uint64(ctx.BlockHeight()) {
 		return nil, nil
 	}
@@ -132,6 +135,7 @@ func (k Keeper) preflightStorageAudits(ctx sdk.Context, params types.Params) err
 		return fmt.Errorf("invalid bounded storage audit profile")
 	}
 	assignments := make([]types.FrozenStorageAssignment, 0, types.MaxStorageAuditAssignments)
+	legacySlots := make([]collections.Pair[uint64, uint32], 0, types.MaxStorageAuditAssignments)
 	examined := 0
 	err := k.Deals.Walk(ctx, nil, func(_ uint64, d types.Deal) (bool, error) {
 		examined++
@@ -145,11 +149,25 @@ func (k Keeper) preflightStorageAudits(ctx sdk.Context, params types.Params) err
 		if len(assignments)+len(a) > types.MaxStorageAuditAssignments {
 			return true, fmt.Errorf("v2 ACTIVE and repair inventory exceeds 64 assignments")
 		}
+		if len(legacySlots)+len(d.Mode2Slots) > types.MaxStorageAuditAssignments {
+			return true, fmt.Errorf("v2 migration clears at most 64 legacy slots; larger inventory requires reviewed bounded migration")
+		}
 		assignments = append(assignments, a...)
+		// Completion addresses slots by array index. Clear even empty/expired
+		// entries: no pre-activation readiness has v2 proof provenance.
+		for slot := range d.Mode2Slots {
+			legacySlots = append(legacySlots, collections.Join(d.Id, uint32(slot)))
+		}
 		return false, nil
 	})
 	if err != nil {
 		return err
+	}
+	// Only mutate after the entire bounded legacy inventory passes preflight.
+	for _, key := range legacySlots {
+		if err := k.clearMode2RepairReadiness(ctx, key.K1(), key.K2()); err != nil {
+			return err
+		}
 	}
 	for _, a := range assignments {
 		if err := k.StorageAuditAssignments.Set(ctx, storageAssignmentKey(a), a); err != nil {

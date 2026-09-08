@@ -90,6 +90,60 @@ func TestStorageAuditBoundedMigrationAndAssignmentMutation(t *testing.T) {
 	require.Equal(t, d.ManifestRoot, next[0].Assignment.ManifestRoot)
 }
 
+func TestStorageAuditActivationClearsOnlyBoundedLegacySlots(t *testing.T) {
+	for _, expired := range []bool{false, true} {
+		t.Run(fmt.Sprintf("expired=%v", expired), func(t *testing.T) {
+			k, ctx, _, _, _ := storageStateFixture(t)
+			for i := uint64(0); i < 64; i++ {
+				d := storageStateDeal(i)
+				d.RedundancyMode = 2
+				d.TotalMdus = 134 // U=Q=132 for the bounded candidate profile.
+				d.Mode2Profile = &types.StripeReplicaProfile{K: 64, M: 1}
+				d.Mode2Slots = []*types.DealSlot{{Slot: 0, Provider: d.Providers[0], Status: types.SlotStatus_SLOT_STATUS_ACTIVE}}
+				if expired {
+					d.EndBlock = 1
+				}
+				require.NoError(t, k.Deals.Set(ctx, i, d))
+				key := collections.Join(i, uint32(0))
+				require.NoError(t, k.Mode2RepairReadiness.Set(ctx, key, 2))
+				require.NoError(t, k.Mode2RepairReadinessProofs.Set(ctx, key, 999))
+			}
+			ctx = ctx.WithGasMeter(storetypes.NewGasMeter(uint64(types.MaxRetrievalV2BlockGas)))
+			before := ctx.GasMeter().GasConsumed()
+			require.NoError(t, k.processRetrievalChallengeState(ctx))
+			used := ctx.GasMeter().GasConsumed() - before
+			t.Logf("64 legacy slots activation gas: %d", used)
+			require.Less(t, used, uint64(types.MaxRetrievalV2BlockGas))
+			for i := uint64(0); i < 64; i++ {
+				_, err := k.Mode2RepairReadiness.Get(ctx, collections.Join(i, uint32(0)))
+				require.ErrorIs(t, err, collections.ErrNotFound)
+				_, err = k.Mode2RepairReadinessProofs.Get(ctx, collections.Join(i, uint32(0)))
+				require.ErrorIs(t, err, collections.ErrNotFound)
+			}
+		})
+	}
+	for _, slots := range []int{65, 257} {
+		t.Run(fmt.Sprintf("reject-%d-slots", slots), func(t *testing.T) {
+			k, ctx, _, _, _ := storageStateFixture(t)
+			d := storageStateDeal(1)
+			d.EndBlock = 1 // Closed history cannot bypass the activation work cap.
+			d.Mode2Slots = make([]*types.DealSlot, slots)
+			for i := range d.Mode2Slots {
+				d.Mode2Slots[i] = &types.DealSlot{Slot: uint32(i)}
+			}
+			require.NoError(t, k.Deals.Set(ctx, d.Id, d))
+			key := collections.Join(d.Id, uint32(0))
+			require.NoError(t, k.Mode2RepairReadiness.Set(ctx, key, 2))
+			require.Error(t, k.processRetrievalChallengeState(ctx))
+			marker, err := k.Mode2RepairReadiness.Get(ctx, key)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, marker)
+			_, err = k.RetrievalV2ActivatedHeight.Get(ctx)
+			require.ErrorIs(t, err, collections.ErrNotFound)
+		})
+	}
+}
+
 func TestStorageAuditQuotaChangesOnlyAtNextSnapshot(t *testing.T) {
 	k, ctx, _, _, _ := storageStateFixture(t)
 	require.NoError(t, k.Deals.Set(ctx, 0, storageStateDeal(0)))
