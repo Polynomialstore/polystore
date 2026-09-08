@@ -1,5 +1,7 @@
 use blake2::{Blake2s256, Digest};
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scalar};
+#[path = "session_batch.rs"]
+mod session_batch;
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
 #[cfg(target_arch = "wasm32")]
@@ -10,6 +12,7 @@ use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
+pub use session_batch::{SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_PROOFS};
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 use std::fs::File;
@@ -175,6 +178,8 @@ pub struct KzgContext {
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
     g1_points_are_monomial: bool,
+    prepared_h: G2Prepared,
+    prepared_tau: G2Prepared,
 }
 
 impl KzgContext {
@@ -284,6 +289,8 @@ impl KzgContext {
             g1_points.iter().map(|p| G1Projective::from(*p)).collect();
 
         Ok(Self {
+            prepared_h: G2Prepared::from(g2_points[0]),
+            prepared_tau: G2Prepared::from(g2_points[1]),
             g1_points,
             #[cfg(target_arch = "wasm32")]
             g1_points_projective,

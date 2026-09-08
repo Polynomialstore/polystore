@@ -120,3 +120,34 @@ fn setup_read_is_bounded_and_reinit_authenticates_requested_file() {
     );
     assert_eq!(out, [7; 48]);
 }
+
+#[test]
+fn independent_root_table_coordinate_and_scalar_vectors() {
+    use polystore_core::kzg::{encode_mdu_root_for_root_table, root_table_position_for_mdu_index};
+    let vectors: serde_json::Value =
+        serde_json::from_str(include_str!("testdata/session-batch-golden.json")).unwrap();
+    let root: [u8; 32] = hex::decode(vectors["root_boundary_raw_digest"].as_str().unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    for vector in vectors["root_boundaries"].as_array().unwrap() {
+        let mdu = vector["mdu"].as_str().unwrap().parse().unwrap();
+        let position = root_table_position_for_mdu_index(mdu).unwrap();
+        assert_eq!(
+            position.root_table_du as u64,
+            vector["du"].as_u64().unwrap()
+        );
+        assert_eq!(
+            position.root_table_cell as u64,
+            vector["cell"].as_u64().unwrap()
+        );
+        assert_eq!(
+            hex::encode(polystore_core::utils::z_for_cell(position.root_table_cell)),
+            vector["z"].as_str().unwrap()
+        );
+        assert_eq!(
+            hex::encode(encode_mdu_root_for_root_table(&root).unwrap()),
+            vector["y"].as_str().unwrap()
+        );
+    }
+}

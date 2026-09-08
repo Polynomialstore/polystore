@@ -4,6 +4,7 @@ pub mod coding;
 pub mod ffi;
 pub mod kzg;
 pub mod layout;
+pub mod retrieval_challenge;
 pub mod utils;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;

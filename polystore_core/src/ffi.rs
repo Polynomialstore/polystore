@@ -11,6 +11,24 @@ use std::sync::OnceLock;
 
 static KZG_CTX: OnceLock<KzgContext> = OnceLock::new();
 
+/// Bounded synchronous PSB1 request. Returns -1 malformed/error, 0 invalid, 1 valid.
+/// Caller supplies a readable input region; no pointers survive the call.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_verify_polyfs_session_batch_v1(input: *const u8, len: usize) -> c_int {
+    if input.is_null() || len > crate::kzg::SESSION_BATCH_MAX_BYTES || len < 106 {
+        return -1;
+    }
+    let Some(ctx) = KZG_CTX.get() else {
+        return -1;
+    };
+    let input = unsafe { std::slice::from_raw_parts(input, len) };
+    match ctx.verify_polyfs_session_batch(input) {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(_) => -1,
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn polystore_init(trusted_setup_path: *const c_char) -> c_int {
     if trusted_setup_path.is_null() {
