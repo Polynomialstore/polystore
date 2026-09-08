@@ -306,7 +306,7 @@ func storeSystemAuditIntent(in *systemAuditIntent) error {
 		return b.Put(auditIntentKey(in.Signer), raw)
 	})
 }
-func deleteSystemAuditIntent(in *systemAuditIntent) error {
+func deleteSystemAuditIntent(in *systemAuditIntent, covered bool) error {
 	return sessionDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
@@ -316,8 +316,23 @@ func deleteSystemAuditIntent(in *systemAuditIntent) error {
 		if err != nil {
 			return err
 		}
-		if old.operationID() != in.operationID() || old.State == "pending" {
-			return fmt.Errorf("audit intent is unresolved")
+		if old.operationID() != in.operationID() || !bytes.Equal(old.Seed, in.Seed) || old.TxHash != in.TxHash || old.State != in.State {
+			return fmt.Errorf("audit intent changed during reconciliation")
+		}
+		if old.State == "pending" {
+			if !covered {
+				return fmt.Errorf("audit intent is unresolved")
+			}
+			var marker pendingSignerOperation
+			if err := decodePendingSigner(b.Get(pendingSignerKey(in.Signer)), &marker); err != nil {
+				return err
+			}
+			if marker.TxHash != old.TxHash {
+				return fmt.Errorf("audit signer hash changed during reconciliation")
+			}
+			if err := clearPendingSigner(tx, in.Signer, "audit", []string{in.operationID()}); err != nil {
+				return err
+			}
 		}
 		// Terminal intents already released their marker. A retrieval operation may
 		// have used this signer since then; never clear that newer operation here.
@@ -338,9 +353,33 @@ func finishSystemAuditIntent(in *systemAuditIntent, outcome error) error {
 }
 
 func reconcileSystemAudit(ctx context.Context, in *systemAuditIntent, height uint64) (bool, uint64, error) {
+	if in.State == "failed" {
+		if height > in.Context.Window.Deadline {
+			return false, height, deleteSystemAuditIntent(in, false)
+		}
+		return false, height, fmt.Errorf("audit %s failed; automatic retry disabled until frozen deadline: %s", in.operationID(), in.Failure)
+	}
+	// Frozen accepted coverage is authoritative even if the broadcast hash was
+	// lost or the transaction index is unavailable. Bind all original fields;
+	// coverage for another generation, seed, or ordinal cannot release a signer.
+	audits, committed, coverageErr := queryFrozenSystemAudits(ctx, in.Signer, 0)
+	if coverageErr == nil && committed >= in.Context.Window.First {
+		hash, err := in.Context.Hash()
+		if err != nil {
+			return false, height, err
+		}
+		for _, a := range audits {
+			if a.hash == hash && bytes.Equal(a.seed, in.Seed) && auditCovered(a, in.Ordinal) {
+				if err := deleteSystemAuditIntent(in, true); err != nil {
+					return false, committed, err
+				}
+				return true, committed, nil
+			}
+		}
+	}
 	if in.State == "pending" {
 		if in.TxHash == "" {
-			return false, height, fmt.Errorf("%w: audit broadcast hash is unknown", errTxPending)
+			return false, height, fmt.Errorf("%w: audit broadcast hash is unknown and matching committed coverage is unavailable", errTxPending)
 		}
 		_, err := waitForCommittedTx(ctx, in.TxHash)
 		if err != nil && !errors.Is(err, errTxFailed) {
@@ -352,25 +391,15 @@ func reconcileSystemAudit(ctx context.Context, in *systemAuditIntent, height uin
 		if err != nil {
 			return false, height, err
 		}
+		// The hash has now resolved to a committed transaction. Read coverage
+		// once more, since the first observation may have preceded inclusion.
+		return reconcileSystemAudit(ctx, in, height)
 	}
-	if in.State == "failed" {
-		if height > in.Context.Window.Deadline {
-			return false, height, deleteSystemAuditIntent(in)
-		}
-		return false, height, fmt.Errorf("audit %s failed; automatic retry disabled until frozen deadline: %s", in.operationID(), in.Failure)
-	}
-	audits, committed, err := queryFrozenSystemAudits(ctx, in.Signer, 0)
-	if err != nil {
-		return false, height, err
-	}
-	hash, _ := in.Context.Hash()
-	for _, a := range audits {
-		if a.hash == hash && bytes.Equal(a.seed, in.Seed) && auditCovered(a, in.Ordinal) {
-			return true, committed, deleteSystemAuditIntent(in)
-		}
+	if coverageErr != nil {
+		return false, height, coverageErr
 	}
 	if committed > in.Context.Window.Deadline {
-		if err := deleteSystemAuditIntent(in); err != nil {
+		if err := deleteSystemAuditIntent(in, false); err != nil {
 			return false, height, err
 		}
 	}

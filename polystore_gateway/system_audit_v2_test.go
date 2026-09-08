@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cosmos/gogoproto/jsonpb"
+	bolt "go.etcd.io/bbolt"
 	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
@@ -147,6 +148,18 @@ func TestSystemAuditUnknownSurvivesRestartAndQuarantinesSigner(t *testing.T) {
 	if err := initSessionDB(path); err != nil {
 		t.Fatal(err)
 	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(committedHeightHeader, "12")
+		response := types.QueryListStorageAuditsByProviderResponse{Audits: []types.StorageAuditView{view}}
+		if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(w, &response); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
 	var snapshot systemLivenessSnapshot
 	if err := runFrozenSystemLiveness(context.Background(), 12, &snapshot); !errors.Is(err, errTxPending) {
 		t.Fatal(err)
@@ -519,5 +532,159 @@ func TestSystemAuditProducerUsesAnchorAndStopsAtCommittedDeadline(t *testing.T) 
 	}
 	if commands != 1 {
 		t.Fatal("broadcast after the committed deadline", commands)
+	}
+}
+
+func TestSystemAuditCoverageRecoversUnknownOutcomesAtomically(t *testing.T) {
+	for _, name := range []string{
+		"lost_hash_covered", "unavailable_hash_covered", "lost_hash_uncovered", "known_hash_uncovered",
+		"other_generation", "other_seed", "other_ordinal", "missing_height", "before_response_window", "malformed_inventory",
+		"foreign_marker", "other_marker_ordinal", "changed_marker_hash", "missing_marker", "changed_intent_seed",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := submissionTestDB(t)
+			view, c, signer := systemAuditFixture(t, retrievalchallenge.Audit)
+			view.Audit.Coverage[0] = 1 << 3
+			view.Audit.AcceptedCount = 1
+			in := &systemAuditIntent{Version: 1, Signer: signer, Context: c, Seed: bytes.Clone(view.Seed), Ordinal: 3, State: "pending"}
+			if name == "unavailable_hash_covered" || name == "known_hash_uncovered" {
+				in.TxHash = strings.Repeat("D", 64)
+			}
+			if err := storeSystemAuditIntent(in); err != nil {
+				t.Fatal(err)
+			}
+			// Exercise the persisted record, not only the in-memory broadcast callback.
+			if err := closeSessionDB(); err != nil {
+				t.Fatal(err)
+			}
+			if err := initSessionDB(path); err != nil {
+				t.Fatal(err)
+			}
+			in, err := loadSystemAuditIntent(signer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			height := "12"
+			body := ""
+			switch name {
+			case "lost_hash_uncovered", "known_hash_uncovered":
+				view.Audit.Coverage[0] = 0
+				view.Audit.AcceptedCount = 0
+			case "other_generation":
+				view.Audit.Assignment.Snapshot.Generation++
+				other, err := types.StorageAuditContext(*view.Audit, view.EpochLength)
+				if err != nil {
+					t.Fatal(err)
+				}
+				view.CanonicalContext, _ = other.Bytes()
+			case "other_seed":
+				view.Seed = bytes.Repeat([]byte{7}, 32)
+			case "other_ordinal":
+				view.Audit.Coverage[0] = 1 << 2
+			case "missing_height":
+				height = ""
+			case "before_response_window":
+				height = "11"
+			case "malformed_inventory":
+				body = `{}`
+			case "foreign_marker", "other_marker_ordinal", "changed_marker_hash", "missing_marker", "changed_intent_seed":
+				err := sessionDB.Update(func(tx *bolt.Tx) error {
+					b := tx.Bucket(onChainSessionProofsBucket)
+					if name == "missing_marker" {
+						return b.Delete(pendingSignerKey(signer))
+					}
+					if name == "changed_intent_seed" {
+						changed := *in
+						changed.Seed = bytes.Repeat([]byte{8}, 32)
+						raw, err := json.Marshal(changed)
+						if err != nil {
+							return err
+						}
+						return b.Put(auditIntentKey(signer), raw)
+					}
+					marker := pendingSignerOperation{Kind: "audit", IDs: []string{in.operationID()}, TxHash: in.TxHash}
+					switch name {
+					case "foreign_marker":
+						marker.Kind = "retrieval"
+					case "other_marker_ordinal":
+						marker.IDs = []string{strings.TrimSuffix(in.operationID(), ":3") + ":4"}
+					case "changed_marker_hash":
+						marker.TxHash = strings.Repeat("E", 64)
+					}
+					raw, err := json.Marshal(marker)
+					if err != nil {
+						return err
+					}
+					return b.Put(pendingSignerKey(signer), raw)
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			readRecords := func() ([]byte, []byte) {
+				t.Helper()
+				var intent, marker []byte
+				if err := sessionDB.View(func(tx *bolt.Tx) error {
+					b := tx.Bucket(onChainSessionProofsBucket)
+					intent = bytes.Clone(b.Get(auditIntentKey(signer)))
+					marker = bytes.Clone(b.Get(pendingSignerKey(signer)))
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				return intent, marker
+			}
+			beforeIntent, beforeMarker := readRecords()
+			coverageRequests, txRequests := 0, 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/txs/") {
+					txRequests++
+					if name == "unavailable_hash_covered" {
+						http.NotFound(w, r)
+						return
+					}
+					fmt.Fprint(w, `{}`)
+					return // Explicitly unknown outcome, without a polling delay.
+				}
+				if r.URL.Path != "/polystorechain/polystorechain/v1/storage-audits/by-provider/"+signer {
+					t.Error("wrong coverage authority", r.URL.Path)
+				}
+				coverageRequests++
+				if height != "" {
+					w.Header().Set(committedHeightHeader, height)
+				}
+				if body != "" {
+					fmt.Fprint(w, body)
+					return
+				}
+				response := types.QueryListStorageAuditsByProviderResponse{Audits: []types.StorageAuditView{view}}
+				if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(w, &response); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer srv.Close()
+			old := lcdBase
+			lcdBase = srv.URL
+			t.Cleanup(func() { lcdBase = old })
+			accepted, committed, err := reconcileSystemAudit(context.Background(), in, 12)
+			afterIntent, afterMarker := readRecords()
+			recovered := name == "lost_hash_covered" || name == "unavailable_hash_covered"
+			if recovered {
+				if err != nil || !accepted || committed != 12 || afterIntent != nil || afterMarker != nil {
+					t.Fatal("matching coverage did not atomically recover", accepted, committed, err, afterIntent, afterMarker)
+				}
+			} else {
+				if err == nil || accepted || !bytes.Equal(beforeIntent, afterIntent) || !bytes.Equal(beforeMarker, afterMarker) {
+					t.Fatal("ambiguous coverage or changed marker released an intent", accepted, err)
+				}
+			}
+			expectedTxRequests := 0
+			if name == "known_hash_uncovered" {
+				expectedTxRequests = 1
+			}
+			if coverageRequests != 1 || txRequests != expectedTxRequests {
+				t.Fatal("unexpected recovery lookups", coverageRequests, txRequests)
+			}
+		})
 	}
 }
