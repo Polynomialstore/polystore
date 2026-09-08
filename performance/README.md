@@ -86,9 +86,9 @@ python3 scripts/test_bench_retrieval_sessions.py
 bash -n scripts/bench_retrieval_sessions.sh
 ```
 
-The driver supports only the explicitly labeled `legacy-serial` mode. This is
-M0 preparation for #260, with fixed legacy proof coordinates. It does not exercise
-secure v2 challenges or establish capacity. A short lifecycle smoke is:
+The default `legacy-serial` mode remains compatibility evidence with fixed
+legacy proof coordinates. It does not exercise secure v2 challenges or establish
+capacity. A short legacy lifecycle smoke is:
 
 ```bash
 POLYSTORE_BENCH_SESSIONS=1 POLYSTORE_BENCH_PROOFS_PER_SESSION=2 \
@@ -152,12 +152,18 @@ proofs and gas. Timing uses an OS monotonic clock shared between CLI processes,
 including Python 3.9 on macOS; the wall interval includes pacing, CLI submission,
 CheckTx, inclusion, and final session queries.
 
-Remaining M0 work in #260 is independent funded signer concurrency with bounded
-in-flight work and per-account sequencing, explicit warmup/repetitions,
-proof-only and full-lifecycle sustained-load phases, backlog/block-fill/transaction
-byte and execution/RSS measurements. V2 fixtures and provider delivery require
-#255–#257. Fifteen-minute and four-validator qualification runs remain gated on
-those prerequisites; this serial smoke provides no capacity or activation claim.
+For bounded concurrent scheduling, fresh K8/K2 proofs, four-validator settlement
+and restart checks, follow the [concurrent preparation commands](../bench/retrieval_session_capacity/concurrent-preparation/README.md).
+The shell also accepts `POLYSTORE_BENCH_MODE=four-validator-lifecycle` for the
+startup/restart check alone. The fresh settlement workload requires the compatible
+#257 CLI; it rejects older binaries before startup or funding.
+
+The concurrent smoke retains committed/unknown outcomes, exact economic checks,
+Commit-step metric captures and per-process kernel peak RSS. It remains explicitly
+unqualified. Remaining #260 work includes actual 1 GiB delivery, production and
+adversarial traffic, warmed repeated comparisons, sustained offered-load steps
+that demonstrate saturation and a safe load meeting the fixed execution/memory
+budgets. Final collection waits for #257 and the reviewed harness to merge.
 
 
 ## Streamed browser retrieval gate (#260)

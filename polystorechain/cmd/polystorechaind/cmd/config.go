@@ -20,15 +20,7 @@ func initCometBFTConfig() *cmtcfg.Config {
 
 // initAppConfig helps to override default appConfig template and configs.
 // return "", nil if no custom configuration is required for the application.
-func initAppConfig() (string, interface{}) {
-	// The following code snippet is just for reference.
-	type CustomAppConfig struct {
-		serverconfig.Config `mapstructure:",squash"`
-		EVM                 evmconfig.EVMConfig     `mapstructure:"evm"`
-		JSONRPC             evmconfig.JSONRPCConfig `mapstructure:"json-rpc"`
-		TLS                 evmconfig.TLSConfig     `mapstructure:"tls"`
-	}
-
+func initAppConfig() (string, *evmconfig.Config) {
 	// Optionally allow the chain developer to overwrite the SDK's default
 	// server config.
 	srvCfg := serverconfig.DefaultConfig()
@@ -46,14 +38,10 @@ func initAppConfig() (string, interface{}) {
 	// In tests, we set the min gas prices to 0.
 	// srvCfg.MinGasPrices = "0stake"
 
-	evmCfg := evmconfig.DefaultConfig()
-
-	customAppConfig := CustomAppConfig{
-		Config:  *srvCfg,
-		EVM:     evmCfg.EVM,
-		JSONRPC: evmCfg.JSONRPC,
-		TLS:     evmCfg.TLS,
-	}
+	// Keep the chain's SDK defaults while supplying every EVM template field.
+	// multi-node uses this same configuration to render each validator's file.
+	customAppConfig := evmconfig.DefaultConfig()
+	customAppConfig.Config = *srvCfg
 
 	customAppTemplate := serverconfig.DefaultConfigTemplate + evmconfig.DefaultEVMConfigTemplate
 

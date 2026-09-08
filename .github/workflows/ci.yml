@@ -44,6 +44,12 @@ jobs:
           cd polystore_core
           cargo build --release
 
+      - name: Check retrieval workload and native proof preparation
+        if: matrix.service == 'polystorechain'
+        run: |
+          POLYSTORE_TEST_NATIVE_LIBRARY="$GITHUB_WORKSPACE/polystore_core/target/release/libpolystore_core.so" \
+            python3 -m unittest discover -s scripts -p 'test_retrieval*.py'
+
       - name: Test ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
         run: |

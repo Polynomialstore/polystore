@@ -174,7 +174,7 @@ func initTestnetFiles(
 	nodeIDs := make([]string, args.numValidators)
 	valPubKeys := make([]cryptotypes.PubKey, args.numValidators)
 
-	appConfig := srvconfig.DefaultConfig()
+	_, appConfig := initAppConfig()
 	appConfig.MinGasPrices = args.minGasPrices
 	appConfig.API.Enable = false
 	appConfig.BaseConfig.MinGasPrices = "0.0001" + sdk.DefaultBondDenom
