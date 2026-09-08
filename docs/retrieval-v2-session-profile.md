@@ -191,7 +191,7 @@ nonce using the next account sequence.
 
 The signed EVM regression exercises three nonconstant legacy proofs through the
 shared native-action boundary. A 2177439 gas limit consumes that limit and leaves
-no proof nonce or EVM logs. With a 4000000 limit the baseline uses 2282834 gas,
+no proof nonce or EVM logs. With a 4000000 limit the baseline at `7f6b7904` uses 2291408 gas,
 including the 677440 static component and 1500000 cryptography component. The
 receipt, ABCI transaction result, block gas meter and charged account fee agree.
 Successful-path store accounting may change that baseline; the test asserts the
