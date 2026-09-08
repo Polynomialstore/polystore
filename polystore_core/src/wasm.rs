@@ -7,7 +7,7 @@ use crate::kzg::KzgContext;
 use crate::kzg::{
     BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode,
 };
-use crate::layout::{FileRecordV1, pack_length_and_flags};
+use crate::layout::FileRecordV1;
 use js_sys::{Date, Uint8Array};
 use wasm_bindgen::prelude::*;
 
@@ -877,6 +877,27 @@ impl WasmMdu0Builder {
         Ok(WasmMdu0Builder { inner: builder })
     }
 
+    pub fn load_legacy_recovery(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<WasmMdu0Builder, JsValue> {
+        let inner = Mdu0Builder::load_legacy_recovery(data, max_user_mdus, commitments_per_mdu)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(Self { inner })
+    }
+
+    pub fn stage_v2_from_trusted_legacy(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<WasmMdu0Builder, JsValue> {
+        let inner =
+            Mdu0Builder::stage_v2_from_trusted_legacy(data, max_user_mdus, commitments_per_mdu)
+                .map_err(|e| JsValue::from_str(&e))?;
+        Ok(Self { inner })
+    }
+
     pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {
         self.append_file_with_flags(path, size, start_offset, 0)
     }
@@ -888,25 +909,14 @@ impl WasmMdu0Builder {
         start_offset: u64,
         flags: u8,
     ) -> Result<(), JsValue> {
-        let mut path_bytes = [0u8; crate::layout::FILE_RECORD_PATH_BYTES];
-        let bytes = path.as_bytes();
-        if bytes.len() > crate::layout::FILE_RECORD_PATH_BYTES {
-            return Err(JsValue::from_str("path too long"));
-        }
-        path_bytes[..bytes.len()].copy_from_slice(bytes);
-
-        let rec = FileRecordV1 {
-            start_offset,
-            length_and_flags: pack_length_and_flags(size, flags),
-            timestamp: 0,
-            path: path_bytes,
-        };
+        let rec = FileRecordV1::from_path(path, size, start_offset, flags)
+            .map_err(|e| JsValue::from_str(&e))?;
         self.inner
             .append_file_record(rec)
             .map_err(|e| JsValue::from_str(&e))
     }
 
-    pub fn bytes(&mut self) -> Vec<u8> {
+    pub fn bytes(&self) -> Vec<u8> {
         self.inner.bytes().to_vec()
     }
 
@@ -924,7 +934,50 @@ impl WasmMdu0Builder {
             .map_err(|e| JsValue::from_str(&e))
     }
 
+    pub fn get_record_count(&self) -> u32 {
+        self.inner.record_count()
+    }
+
+    pub fn is_legacy_recovery(&self) -> bool {
+        self.inner.is_legacy_recovery()
+    }
+
+    pub fn get_record(&self, index: f64) -> Result<Vec<u8>, JsValue> {
+        let index = checked_metadata_number(index, self.inner.record_count() as usize)?;
+        self.inner
+            .get_file_record(index as u32)
+            .map(|rec| rec.to_bytes().to_vec())
+            .map_err(|e| JsValue::from_str(&e))
+    }
+
+    pub fn read_fat_range(&self, offset: f64, len: f64) -> Result<Vec<u8>, JsValue> {
+        let capacity = self.inner.fat_logical_capacity();
+        let offset = checked_metadata_number(offset, capacity)?;
+        let len = checked_metadata_number(len, capacity - offset)?;
+        let mut out = vec![0; len];
+        self.inner
+            .read_fat_range(offset, &mut out)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(out)
+    }
+
+    /// Returns the stored cell, not the original digest supplied to set_root.
+    pub fn get_root(&self, index: u64) -> Result<Vec<u8>, JsValue> {
+        self.inner
+            .get_root(index)
+            .map(|root| root.to_vec())
+            .map_err(|e| JsValue::from_str(&e))
+    }
+
     pub fn get_witness_count(&self) -> u64 {
         self.inner.witness_mdu_count
     }
+}
+
+// Validate JavaScript numbers before conversion; wasm-bindgen integer arguments wrap.
+fn checked_metadata_number(value: f64, max: usize) -> Result<usize, JsValue> {
+    if !value.is_finite() || value < 0.0 || value.fract() != 0.0 || value > max as f64 {
+        return Err(JsValue::from_str("metadata index or range out of bounds"));
+    }
+    Ok(value as usize)
 }

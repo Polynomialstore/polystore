@@ -4,7 +4,7 @@ use crate::coding::{
     expand_mdu_encoded_flat, expand_payload_flat, reconstruct_mdu_from_shards,
 };
 use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext}; // Added BLOB_SIZE back
-use crate::layout::{FileRecordV1, pack_length_and_flags};
+use crate::layout::FileRecordV1;
 use libc::{c_char, c_int};
 use std::ffi::CStr;
 use std::sync::OnceLock;
@@ -1121,6 +1121,42 @@ pub extern "C" fn polystore_mdu0_builder_load_with_commitments(
     }
 }
 
+/// Explicit legacy operation; never used as a fallback by the normal loader.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_mdu0_builder_load_legacy_recovery(
+    data_ptr: *const u8,
+    len: usize,
+    max_user_mdus: u64,
+    commitments_per_mdu: u64,
+) -> *mut Mdu0Builder {
+    if data_ptr.is_null() || len != crate::builder::MDU_SIZE {
+        return std::ptr::null_mut();
+    }
+    let data = unsafe { std::slice::from_raw_parts(data_ptr, len) };
+    match Mdu0Builder::load_legacy_recovery(data, max_user_mdus, commitments_per_mdu) {
+        Ok(builder) => Box::into_raw(Box::new(builder)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Explicit legacy operation; never used as a fallback by the normal loader.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_mdu0_builder_stage_v2_from_trusted_legacy(
+    data_ptr: *const u8,
+    len: usize,
+    max_user_mdus: u64,
+    commitments_per_mdu: u64,
+) -> *mut Mdu0Builder {
+    if data_ptr.is_null() || len != crate::builder::MDU_SIZE {
+        return std::ptr::null_mut();
+    }
+    let data = unsafe { std::slice::from_raw_parts(data_ptr, len) };
+    match Mdu0Builder::stage_v2_from_trusted_legacy(data, max_user_mdus, commitments_per_mdu) {
+        Ok(builder) => Box::into_raw(Box::new(builder)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn polystore_mdu0_builder_bytes(
     ptr: *mut Mdu0Builder,
@@ -1167,18 +1203,9 @@ pub extern "C" fn polystore_mdu0_append_file_with_flags(
         Err(_) => return -2,
     };
 
-    let mut path_bytes = [0u8; crate::layout::FILE_RECORD_PATH_BYTES];
-    let bytes = path_str.as_bytes();
-    if bytes.len() > crate::layout::FILE_RECORD_PATH_BYTES {
-        return -3; // Path too long
-    }
-    path_bytes[..bytes.len()].copy_from_slice(bytes);
-
-    let rec = FileRecordV1 {
-        start_offset,
-        length_and_flags: pack_length_and_flags(size, flags),
-        timestamp: 0,
-        path: path_bytes,
+    let rec = match FileRecordV1::from_path(path_str, size, start_offset, flags) {
+        Ok(rec) => rec,
+        Err(_) => return -3,
     };
 
     match builder.append_file_record(rec) {
@@ -1221,7 +1248,10 @@ pub extern "C" fn polystore_mdu0_get_root(
     if index >= 65536 {
         return -2;
     }
-    let root = builder.get_root(index);
+    let root = match builder.get_root(index) {
+        Ok(root) => root,
+        Err(_) => return -2,
+    };
     unsafe {
         std::ptr::copy_nonoverlapping(root.as_ptr(), root_ptr, 32);
     }
@@ -1243,7 +1273,7 @@ pub extern "C" fn polystore_mdu0_get_record_count(ptr: *mut Mdu0Builder) -> u32 
         return 0;
     }
     let builder = unsafe { &*ptr };
-    builder.header.record_count
+    builder.record_count()
 }
 
 #[unsafe(no_mangle)]
@@ -1256,10 +1286,13 @@ pub extern "C" fn polystore_mdu0_get_record(
         return -1;
     }
     let builder = unsafe { &*ptr };
-    if index >= builder.header.record_count {
+    if index >= builder.record_count() {
         return -2;
     }
-    let rec = builder.get_file_record(index);
+    let rec = match builder.get_file_record(index) {
+        Ok(rec) => rec,
+        Err(_) => return -2,
+    };
     unsafe {
         *out_rec = rec;
     }
