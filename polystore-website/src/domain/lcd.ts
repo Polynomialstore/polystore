@@ -4,6 +4,9 @@ export interface LcdDeal {
   id: string
   cid: string
   size: string
+  total_mdus?: string
+  witness_mdus?: string
+  current_gen?: string
   owner: string
   escrow: string
   end_block: string
@@ -56,7 +59,7 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function asString(value: unknown, fallback = ''): string {
   if (typeof value === 'string') return value
-  if (typeof value === 'number') return String(value)
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value)
   return fallback
 }
 
@@ -80,6 +83,9 @@ export function normalizeLcdDeal(input: unknown): LcdDeal | null {
     cid,
     size: asString(input['size'] ?? input['size_bytes'] ?? '0', '0'),
     owner: asString(input['owner']),
+    total_mdus: asString(input['total_mdus']),
+    witness_mdus: asString(input['witness_mdus']),
+    current_gen: asString(input['current_gen']),
     escrow: asString(input['escrow_balance'] ?? input['escrow'] ?? ''),
     end_block: asString(input['end_block']),
     start_block: asString(input['start_block']),

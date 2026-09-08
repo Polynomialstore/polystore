@@ -1,133 +1,77 @@
-import { test } from 'node:test';
-import assert from 'node:assert';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
-import { sanitizePolyfsRecordPath } from './polyfsPath'
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import init, { WasmMdu0Builder } from './polystoreCoreRuntime.js'
+import { polyfsMetadataFixture } from './polyfsMetadata.fixture'
+import { decodePolyfsFileRecord, parsePolyfsFilesFromMdu0, readPolyfsFatRange } from './polyfsLocal'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const FILE_RECORD_SIZE = 256;
-const FILE_RECORD_PATH_BYTES = 232;
+const root = new URL('../../../', import.meta.url)
+const ready = readFile(new URL('polystore-website/public/wasm/polystore_core_bg.wasm', root)).then((binary) => init({ module_or_path: binary }))
 
-type WasmMdu0BuilderLike = {
-    append_file: (path: string, sizeBytes: bigint, startOffset: bigint) => void
-    bytes: () => Uint8Array
-}
-
-async function loadPolyStoreCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
-    const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
-    const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
-    try {
-        await fs.access(jsPath)
-        await fs.access(wasmPath)
-    } catch {
-        return null
+test('maintained real WASM agrees with independent FAT v2 bytes and bounded readers', async () => {
+  await ready // Missing or stale maintained artifacts fail this test.
+  const golden = JSON.parse(await readFile(new URL('polystore_core/testdata/polyfs_fat_v2.json', root), 'utf8'))
+  const bytes = polyfsMetadataFixture(golden.records.map((r: { path: string; start: string; length: string; flags: number; timestamp: string }) => ({ path: r.path, start: BigInt(r.start), size: BigInt(r.length), flags: r.flags, timestamp: BigInt(r.timestamp) })))
+  bytes.set(Buffer.from(golden.root_cell_hex, 'hex'))
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), golden.mdu0_sha256)
+  const loaded = WasmMdu0Builder.load(bytes, 65536n, 96n)
+  try {
+    assert.equal(loaded.get_record_count(), 2)
+    assert.equal(loaded.is_legacy_recovery(), false)
+    assert.deepEqual(loaded.bytes(), bytes)
+    assert.equal(Buffer.from(loaded.get_root(0n)).toString('hex'), golden.root_cell_hex)
+    assert.deepEqual(loaded.get_record(1), readPolyfsFatRange(bytes, 384, 256))
+    assert.deepEqual(loaded.read_fat_range(157, 33), readPolyfsFatRange(bytes, 157, 33))
+    assert.equal(decodePolyfsFileRecord(loaded.get_record(0)).timestamp, 17n)
+    assert.equal(parsePolyfsFilesFromMdu0(loaded.bytes())[0].path, 'dir/é.txt')
+    for (const n of [-1, 0.5, NaN, Infinity, 2 ** 32]) {
+      assert.throws(() => loaded.get_record(n))
+      assert.throws(() => loaded.read_fat_range(n, 1))
+      assert.throws(() => loaded.read_fat_range(0, n))
     }
+  } finally { loaded.free() }
+})
 
-    const mod = (await import(pathToFileURL(jsPath).href)) as {
-        default: (args: unknown) => Promise<unknown>
-        WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike
+test('real WASM producer rejects numeric wrapping and lossy paths without mutation', async () => {
+  await ready
+  const builder = new WasmMdu0Builder(65536n)
+  try {
+    for (const path of ['replacement�.txt', 'Desktop/📸.png', 'é'.repeat(116), 'a'.repeat(232), '\ufefffile', 'a//./b']) builder.append_file(path, 1n, 0n)
+    const before = builder.bytes()
+    for (const path of ['', 'x'.repeat(233), ' x', 'x\u0085', '../x', 'x\0y', '\ud800']) assert.throws(() => builder.append_file(path, 1n, 0n))
+    for (const flags of [-1, 256, 0.5, NaN, Infinity]) assert.throws(() => builder.append_file_with_flags('x', 1n, 0n, flags))
+    for (const value of [-1n, 1n << 64n, (1n << 64n) + 1n, 0 as unknown as bigint, '0' as unknown as bigint]) {
+      assert.throws(() => builder.append_file('x', value, 0n))
+      assert.throws(() => builder.append_file('x', 0n, value))
+      assert.throws(() => builder.set_root(value, new Uint8Array(32)))
+      assert.throws(() => builder.get_root(value))
+      assert.throws(() => new WasmMdu0Builder(value))
+      assert.throws(() => WasmMdu0Builder.load(before, value, 64n))
     }
-    return { init: mod.default, WasmMdu0Builder: mod.WasmMdu0Builder, wasmPath }
-}
+    assert.throws(() => builder.append_file('x', 1n << 56n, 0n))
+    assert.throws(() => builder.append_file('x', 1n, (1n << 64n) - 1n))
+    assert.deepEqual(builder.bytes(), before)
+    builder.set_root(0n, new Uint8Array(32).fill(255))
+    assert.notDeepEqual(builder.get_root(0n), new Uint8Array(32).fill(255))
+  } finally { builder.free() }
+})
 
-test('Mdu0Builder WASM', async (t) => {
-    const wasm = await loadPolyStoreCoreWasm()
-    if (!wasm) {
-        t.skip('WASM artifacts not present (polystore-website/public/wasm).')
-        return
-    }
-    const wasmBuffer = await fs.readFile(wasm.wasmPath);
-    await wasm.init({ module_or_path: wasmBuffer });
-
-    const maxUserMdus = 100n;
-    const mdu = new wasm.WasmMdu0Builder(maxUserMdus);
-
-    // Test append
-    const fileName = "test.txt";
-    const fileSize = 1024n;
-    const startOffset = 0n;
-    
-    mdu.append_file(fileName, fileSize, startOffset);
-
-    // Get bytes
-    const bytes = mdu.bytes();
-    assert.strictEqual(bytes.length, 8 * 1024 * 1024, "MDU size should be 8MB");
-
-    // Verify magic "NILF" at start of File Table (16 * 128KB = 2097152)
-    const magicOffset = 16 * 128 * 1024;
-    const magic = new TextDecoder().decode(bytes.slice(magicOffset, magicOffset + 4));
-    assert.strictEqual(magic, "NILF", "Magic mismatch");
-
-    // Verify Record Count (at magicOffset + 8)
-    // record_count is u32 little endian
-    const recordSize = new DataView(bytes.buffer).getUint16(magicOffset + 6, true);
-    assert.strictEqual(recordSize, FILE_RECORD_SIZE, "Record size mismatch");
-    const recordCountOffset = magicOffset + 8;
-    const recordCount = new DataView(bytes.buffer).getUint32(recordCountOffset, true);
-    assert.strictEqual(recordCount, 1, "Record count mismatch");
-    
-    // Verify File Record (at magicOffset + 128)
-    const recordOffset = magicOffset + 128;
-    // StartOffset (u64)
-    const readStartOffset = new DataView(bytes.buffer).getBigUint64(recordOffset, true);
-    assert.strictEqual(readStartOffset, startOffset, "Start offset mismatch");
-    
-    // Path (at recordOffset + 24)
-    // Path is 232 bytes null terminated
-    const pathBytes = bytes.slice(recordOffset + 24, recordOffset + FILE_RECORD_SIZE);
-    // find null terminator
-    let nullIdx = pathBytes.indexOf(0);
-    if (nullIdx === -1) nullIdx = pathBytes.length;
-    const readPath = new TextDecoder().decode(pathBytes.slice(0, nullIdx));
-    assert.strictEqual(readPath, fileName, "Path mismatch");
-});
-
-test('Mdu0Builder WASM rejects paths > 232 bytes', async (t) => {
-    const wasm = await loadPolyStoreCoreWasm()
-    if (!wasm) {
-        t.skip('WASM artifacts not present (polystore-website/public/wasm).')
-        return
-    }
-    const wasmBuffer = await fs.readFile(wasm.wasmPath);
-    await wasm.init({ module_or_path: wasmBuffer });
-
-    const mdu = new wasm.WasmMdu0Builder(10n);
-    const longName = 'x'.repeat(FILE_RECORD_PATH_BYTES + 1);
-    assert.throws(() => {
-        mdu.append_file(longName, 1n, 0n);
-    }, /path too long/i);
-});
-
-test('sanitizePolyfsRecordPath produces a path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadPolyStoreCoreWasm()
-    if (!wasm) {
-        t.skip('WASM artifacts not present (polystore-website/public/wasm).')
-        return
-    }
-    const wasmBuffer = await fs.readFile(wasm.wasmPath);
-    await wasm.init({ module_or_path: wasmBuffer });
-
-    const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizePolyfsRecordPath('a/b/' + 'x'.repeat(400) + '.txt');
-    assert.doesNotThrow(() => {
-        mdu.append_file(sanitized, 1n, 0n);
-    });
-});
-
-test('sanitizePolyfsRecordPath produces a multibyte path acceptable to Mdu0Builder', async (t) => {
-    const wasm = await loadPolyStoreCoreWasm()
-    if (!wasm) {
-        t.skip('WASM artifacts not present (polystore-website/public/wasm).')
-        return
-    }
-    const wasmBuffer = await fs.readFile(wasm.wasmPath);
-    await wasm.init({ module_or_path: wasmBuffer });
-
-    const mdu = new wasm.WasmMdu0Builder(10n);
-    const sanitized = sanitizePolyfsRecordPath('Desktop/' + '📸'.repeat(20) + '.png');
-    assert.doesNotThrow(() => {
-        mdu.append_file(sanitized, 1n, 0n);
-    });
-});
+test('real WASM legacy recovery is explicit, read-only and stages separate v2 bytes', async () => {
+  await ready
+  const legacy = new Uint8Array(8 * 1024 * 1024)
+  legacy.set([78, 73, 76, 70, 1, 0, 0, 1], 16 * 128 * 1024)
+  const before = legacy.slice()
+  assert.throws(() => WasmMdu0Builder.load(legacy, 1n, 64n))
+  const recovery = WasmMdu0Builder.load_legacy_recovery(legacy, 1n, 64n)
+  const staged = WasmMdu0Builder.stage_v2_from_trusted_legacy(legacy, 1n, 64n)
+  try {
+    assert.equal(recovery.is_legacy_recovery(), true)
+    assert.throws(() => recovery.append_file('x', 1n, 0n))
+    assert.throws(() => recovery.set_root(0n, new Uint8Array(32)))
+    assert.deepEqual(recovery.bytes(), before)
+    assert.deepEqual(legacy, before)
+    assert.equal(staged.is_legacy_recovery(), false)
+    assert.deepEqual(staged.bytes(), polyfsMetadataFixture())
+  } finally { recovery.free(); staged.free() }
+})

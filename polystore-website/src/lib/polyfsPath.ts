@@ -1,40 +1,19 @@
 export const POLYFS_RECORD_PATH_MAX_BYTES = 232
 
-export function sanitizePolyfsRecordPath(input: string): string {
-  let value = String(input ?? '').trim()
-  if (!value) return 'file'
-
-  // Treat common OS path separators as delimiters; PolyFS V1 currently stores basename only.
-  value = value.replace(/\\/g, '/')
-  if (value.includes('/')) {
-    const parts = value.split('/').filter(Boolean)
-    value = parts.length ? parts[parts.length - 1] : value
+// Match the native/Rust path policy without changing a stored filename.
+export function validatePolyfsRecordPath(value: string): string {
+  if (typeof value !== 'string' || !value || /^\p{White_Space}|\p{White_Space}$/u.test(value)) {
+    throw new Error('PolyFS path is empty or has outer whitespace')
   }
-
-  // Remove NUL/control characters.
-  let filtered = ''
-  for (const ch of value) {
-    const code = ch.charCodeAt(0)
-    if (code < 32 || code === 127) continue
-    filtered += ch
+  const encoded = new TextEncoder().encode(value)
+  if (encoded.length > POLYFS_RECORD_PATH_MAX_BYTES || new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(encoded) !== value) {
+    throw new Error('PolyFS path must be valid UTF-8 of at most 232 bytes')
   }
-  value = filtered
-  value = value.trim()
-  if (!value) return 'file'
-
-  // Match current PolyFS fixed 232-byte path field. Truncate by UTF-8 bytes, not JS code units,
-  // so multibyte filenames from macOS/Chrome cannot slip through and trip the WASM builder.
-  const encoder = new TextEncoder()
-  if (encoder.encode(value).length > POLYFS_RECORD_PATH_MAX_BYTES) {
-    let truncated = ''
-    for (const ch of value) {
-      const next = truncated + ch
-      if (encoder.encode(next).length > POLYFS_RECORD_PATH_MAX_BYTES) break
-      truncated = next
-    }
-    value = truncated.trim()
-    if (!value) return 'file'
+  if (value.startsWith('/') || /[\\\x00-\x1f\x7f]/u.test(value) || value.split('/').includes('..')) {
+    throw new Error('invalid PolyFS path')
   }
-
   return value
 }
+
+// Retained API name; filenames must no longer be silently renamed or truncated.
+export const sanitizePolyfsRecordPath = validatePolyfsRecordPath

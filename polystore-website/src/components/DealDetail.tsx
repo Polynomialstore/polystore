@@ -20,6 +20,7 @@ import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import type { LcdDeal } from '../domain/lcd'
+import { committedPolyfsLayout } from '../domain/polyfsLayout'
 import {
   deleteCachedFile,
   deleteDealDirectory,
@@ -72,33 +73,6 @@ function bytesTo0xHex(bytes: Uint8Array): string {
   let out = '0x'
   for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0')
   return out
-}
-
-function deriveSlabLayoutFromMdu0(mdu0: Uint8Array, files: PolyfsFileEntry[]): {
-  totalMdus: number
-  witnessMdus: number
-  userMdus: number
-} {
-  const roots = parsePolyfsRootTableFromMdu0(mdu0)
-  let maxEnd = 0
-  for (const file of files) {
-    const start = Number(file.start_offset || 0)
-    const size = Number(file.size_bytes || 0)
-    if (!Number.isFinite(start) || start < 0) continue
-    if (!Number.isFinite(size) || size <= 0) continue
-    const end = start + size
-    if (end > maxEnd) maxEnd = end
-  }
-  const userMdus = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
-  if (roots.length < userMdus) {
-    throw new Error(`invalid slab layout: roots=${roots.length} user_mdus=${userMdus}`)
-  }
-  const witnessMdus = roots.length - userMdus
-  return {
-    totalMdus: 1 + roots.length,
-    witnessMdus,
-    userMdus,
-  }
 }
 
 function formatBytes(bytes: number): string {
@@ -223,7 +197,8 @@ interface FileActivity {
 interface MduExplorerRecord {
   mdu_index: number
   kind: 'mdu0' | 'witness' | 'user'
-  root_hex: string
+  root_hex?: string
+  root_table_cell_hex?: string
   root_table_index?: number
 }
 
@@ -1124,6 +1099,7 @@ export function DealDetail({
         mdu_index: root.mdu_index,
         kind: root.kind,
         root_hex: root.root_hex,
+        root_table_cell_hex: root.root_table_cell_hex,
         root_table_index: root.root_table_index,
       })
     }
@@ -1135,7 +1111,8 @@ export function DealDetail({
       rows.push({
         mdu_index: idx,
         kind: record?.kind ?? fallbackKind,
-        root_hex: record?.root_hex ?? '',
+        root_hex: record?.root_hex,
+        root_table_cell_hex: record?.root_table_cell_hex,
         root_table_index: record?.root_table_index ?? (idx > 0 ? idx - 1 : undefined),
       })
     }
@@ -2130,7 +2107,11 @@ export function DealDetail({
 
   const syncDealIndexFromProviders = useCallback(async () => {
     const dealId = String(deal.id)
-    const { manifestRoot, owner } = await refreshAuthoritativeDealHead()
+    const head = await lcdFetchDeal(appConfig.lcdBase, dealId)
+    if (!head || head.id !== dealId) throw new Error('committed deal query unavailable or mismatched')
+    const manifestRoot = normalizeManifestRoot(head.cid)
+    const owner = head.owner
+    const { totalMdus, witnessMdus, userMdus } = committedPolyfsLayout(head)
     const providerBase = resolveProviderHttpBase()
     const provider = String(primaryProvider || '').trim()
     const rsK = serviceHint.rsK ?? 8
@@ -2279,8 +2260,8 @@ export function DealDetail({
 
       const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0', { metadata: true })
       const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
-      const { totalMdus, witnessMdus, userMdus } = deriveSlabLayoutFromMdu0(mdu0Bytes, parsedFiles)
-      const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes)
+      if (parsedFiles.some((file) => file.start_offset + file.size_bytes > userMdus * RAW_MDU_CAPACITY)) throw new Error('file map exceeds committed user capacity')
+      const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
       if (rootTable.length !== totalMdus - 1) {
         throw new Error('invalid root table length for committed mdu_0')
       }
@@ -2290,14 +2271,6 @@ export function DealDetail({
       const mdu0Root = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
       if (mdu0Root.byteLength !== 32) throw new Error('invalid mdu_0 root length')
       const mdu0RootHex = bytesTo0xHex(mdu0Root)
-      const rootsAgg = new Uint8Array(totalMdus * 32)
-      rootsAgg.set(mdu0Root, 0)
-      for (let i = 0; i < rootTable.length; i += 1) {
-        rootsAgg.set(rootTable[i], (i + 1) * 32)
-      }
-      const manifest = await workerClient.computeManifest(rootsAgg)
-      const manifestBlob = toU8((manifest as { blob?: Uint8Array | number[] }).blob)
-      if (manifestBlob.byteLength === 0) throw new Error('failed to reconstruct manifest blob from committed MDUs')
       if (normalizeManifestRoot(mdu0RootHex) !== normalizeManifestRoot(manifestRoot)) {
         throw new Error(`committed mdu_0 produced mismatched PolyFS root: ${mdu0RootHex}`)
       }
@@ -2306,7 +2279,7 @@ export function DealDetail({
         ...rootTable.map((rootBytes, idx) => ({
           mdu_index: idx + 1,
           kind: (idx + 1) <= witnessMdus ? ('witness' as const) : ('user' as const),
-          root_hex: bytesTo0xHex(rootBytes),
+          root_table_cell_hex: bytesTo0xHex(rootBytes),
           root_table_index: idx,
         })),
       ]
@@ -2322,7 +2295,6 @@ export function DealDetail({
       setDealIndexSyncMessage('Writing browser deal index cache…')
       await deleteDealDirectory(dealId)
       await writeManifestRoot(dealId, manifestRoot)
-      await writeManifestBlob(dealId, manifestBlob, manifestBlob.byteLength)
       await writeMdu(dealId, 0, mdu0Bytes, mdu0Bytes.byteLength)
       for (const witnessMdu of witnessMduArtifacts) {
         await writeMdu(dealId, witnessMdu.index, witnessMdu.data, witnessMdu.data.byteLength)
@@ -2374,7 +2346,7 @@ export function DealDetail({
       })
       setManifestInfo({
         manifest_root: manifestRoot,
-        manifest_blob_hex: bytesTo0xHex(manifestBlob),
+        manifest_blob_hex: '',
         total_mdus: totalMdus,
         witness_mdus: witnessMdus,
         user_mdus: userMdus,
@@ -3026,7 +2998,7 @@ export function DealDetail({
                         <div className="nil-tab-inset px-3 py-2">
                           <div className="text-muted-foreground">Loaded Roots</div>
                           <div className="mt-1 text-foreground">
-                            {mduExplorerRecords.filter((record) => Boolean(record.root_hex)).length} / {Math.max(1, mduExplorerRecords.length)}
+                            {mduExplorerRecords.filter((record) => Boolean(record.root_hex || record.root_table_cell_hex)).length} / {Math.max(1, mduExplorerRecords.length)}
                           </div>
                         </div>
                       </div>
@@ -3126,7 +3098,7 @@ export function DealDetail({
                                 <div className={`text-[10px] uppercase tracking-[0.16em] ${roleTone}`}>{record.kind}</div>
                               </div>
                               <div className="mt-1 text-[10px] font-mono-data text-muted-foreground truncate">
-                                {record.root_hex ? shortHex(record.root_hex, 16, 10) : 'Root unavailable'}
+                                {(record.root_hex || record.root_table_cell_hex) ? shortHex(record.root_hex || record.root_table_cell_hex || '', 16, 10) : 'Root unavailable'}
                               </div>
                               {record.root_table_index !== undefined ? (
                                 <div className="mt-1 text-[10px] text-muted-foreground">Root table index: {record.root_table_index}</div>
@@ -3174,7 +3146,8 @@ export function DealDetail({
                             <div className="bg-background/50 border border-border p-2">
                               <div className="text-muted-foreground uppercase">Root</div>
                               <div className="mt-1 font-mono-data text-foreground break-all">
-                                {selectedMduRecord.root_hex ? shortHex(selectedMduRecord.root_hex, 20, 10) : 'Not loaded'}
+                                {selectedMduRecord.root_hex || selectedMduRecord.root_table_cell_hex ? shortHex(selectedMduRecord.root_hex || selectedMduRecord.root_table_cell_hex || '', 20, 10) : 'Not loaded'}
+                                {selectedMduRecord.root_table_cell_hex && <span> (stored Fr cell)</span>}
                               </div>
                             </div>
                           </div>
@@ -3320,7 +3293,8 @@ export function DealDetail({
                           if (!manifestInfo?.roots?.length) return
                           try {
                             setMerkleError(null)
-                            const roots = manifestInfo.roots.map((root) => root.root_hex).filter(Boolean)
+                            if (manifestInfo.roots.some((root) => !root.root_hex)) throw new Error('Full MDU digests are unavailable; stored Fr cells cannot reconstruct them')
+                            const roots = manifestInfo.roots.map((root) => root.root_hex!)
                             setMduRootMerkle(buildBlake2sMerkleLayers(roots))
                           } catch (err) {
                             setMduRootMerkle(null)
@@ -3357,8 +3331,9 @@ export function DealDetail({
                                 <div className="text-[10px] text-muted-foreground">
                                   MDU #{record.mdu_index} • {record.kind}
                                 </div>
-                                <div className="font-mono-data text-[10px] text-foreground truncate" title={record.root_hex}>
-                                  {shortHex(record.root_hex, 16, 10)}
+                                <div className="font-mono-data text-[10px] text-foreground truncate" title={record.root_hex || record.root_table_cell_hex}>
+                                  {shortHex(record.root_hex || record.root_table_cell_hex || '', 16, 10)}
+                                  {record.root_table_cell_hex && <span> (stored Fr cell)</span>}
                                 </div>
                               </div>
                               <button

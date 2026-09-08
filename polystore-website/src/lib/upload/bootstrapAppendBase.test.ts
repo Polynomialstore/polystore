@@ -1,3 +1,4 @@
+import { polyfsMetadataFixture } from '../polyfsMetadata.fixture'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -131,15 +132,7 @@ test('bootstrapAppendBaseFromNetwork rejects retrieval size mismatches', async (
 
 test('bootstrapAppendBaseFromMdus reconstructs append base from committed user mdus', () => {
   const rawMduCapacity = 8
-  const mdu0 = new Uint8Array(8 * 1024 * 1024)
-  const BLOB = 128 * 1024
-  mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
-  new DataView(mdu0.buffer).setUint16(16 * BLOB + 6, 256, true)
-  new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
-  const recordOffset = 16 * BLOB + 128
-  new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)
-  new DataView(mdu0.buffer).setBigUint64(recordOffset + 8, 10n, true)
-  mdu0.set(new TextEncoder().encode('alpha.bin'), recordOffset + 24)
+  const mdu0 = polyfsMetadataFixture([{ path: 'alpha.bin', size: 10n }])
 
   const result = bootstrapAppendBaseFromMdus({
     rawMduCapacity,
@@ -162,15 +155,7 @@ test('bootstrapAppendBaseFromMdus reconstructs append base from committed user m
 })
 
 test('bootstrapAppendBaseFromMdus rejects mismatched committed user mdu count', () => {
-  const mdu0 = new Uint8Array(8 * 1024 * 1024)
-  const BLOB = 128 * 1024
-  mdu0.set(new TextEncoder().encode('NILF'), 16 * BLOB)
-  new DataView(mdu0.buffer).setUint16(16 * BLOB + 6, 256, true)
-  new DataView(mdu0.buffer).setUint32(16 * BLOB + 8, 1, true)
-  const recordOffset = 16 * BLOB + 128
-  new DataView(mdu0.buffer).setBigUint64(recordOffset, 0n, true)
-  new DataView(mdu0.buffer).setBigUint64(recordOffset + 8, 10n, true)
-  mdu0.set(new TextEncoder().encode('alpha.bin'), recordOffset + 24)
+  const mdu0 = polyfsMetadataFixture([{ path: 'alpha.bin', size: 10n }])
 
   assert.throws(
     () =>
