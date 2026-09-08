@@ -7,6 +7,9 @@ import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/
 import { account, fetchPinnedGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
+import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
@@ -167,6 +170,7 @@ export function useFetch() {
       setLastPlan({ capturedAtMs: Date.now(), dealId: pin.dealId.toString(), manifestRoot: pin.root, filePath: file.path, routePreference: input.routePreference,
         mduSizeBytes: RAW_MDU_CAPACITY_BYTES, blobSizeBytes: BLOB_SIZE_BYTES, leafCount: BigInt(pin.leafCount), globalStart: (pin.metadataMdus + (file.start_offset + start) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), globalEnd: (pin.metadataMdus + (file.start_offset + start + (length || 1n) - 1n) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), providers: [] })
       let logicalBytes = 0, confirmed = 0, route: string | undefined
+      let unsettled = 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined
       const sink = output
       const fetchSession = async (session: FrozenSession) => {
         setProgress((p) => ({ ...p, phase: 'fetching' }))
@@ -176,8 +180,13 @@ export function useFetch() {
       }
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
-        await payment.confirm(sessions, signal); confirmed += sessions.length
-        setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
+        const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() })
+        const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+          confirm: (wave) => payment.confirm(wave, signal), signal,
+          gatewayBase: gatewayEnabled ? appConfig.gatewayBase : undefined,
+          onConfirmed: () => { confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
+        })
+        for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
       }
       const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
         for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
@@ -248,7 +257,9 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
       saved.current = { url, cleanup: sink.cleanup }; output = null
-      setDownloadUrl(url); setReceiptStatus('submitted'); setProgress((p) => ({ ...p, phase: 'done', route }))
+      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}` : undefined
+      setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
+      setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
       return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
     } catch (error) {
       const message = classifyWalletError(error, 'Fetch failed').message

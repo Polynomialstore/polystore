@@ -194,6 +194,14 @@ compatible. Lists contain 1–64 unique session IDs and require one actual signe
 size, gas and public session-range bounds still apply. See the
 [exact inputs and pending-result recovery](../polystore_gateway/polystore-gateway-spec.md#33-retrieval-v2-client-and-operator-contract).
 
+The browser uses singular proof requests after verified output is flushed and
+owner confirmation commits. An available trusted local user-gateway forwards
+each request to the session's frozen payee, preserving provider authentication.
+This also follows direct HTTP, P2P and recovery downloads. A pending or unknown
+HTTP outcome, rejection or unavailable gateway remains visible without discarding
+the verified file or its ACK. The browser does not retry, create proof batches,
+or add another wallet action; operator reconciliation uses the original IDs.
+
 Append/extend, cross-session cryptographic aggregation, automatic batching queues
 and session base-fee amortization are not implemented by this contract. A new
 range requires a new funded session and challenge.

@@ -677,7 +677,7 @@ export function DealDetail({
     [committedManifestRoot, manifestInfo?.manifest_root, slab?.manifest_root],
   )
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, progress, lastPlan } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan } = useFetch()
   const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
@@ -1966,6 +1966,11 @@ export function DealDetail({
                     <div className="nil-tab-panel border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
                       <XCircle className="w-3 h-3" />
                       Download failed: {fileActionError}
+                    </div>
+                  )}
+                  {progress.phase === 'done' && receiptError && (
+                    <div className="nil-tab-panel text-xs text-muted-foreground break-words" role="status" data-testid="retrieval-settlement-status">
+                      {receiptError}
                     </div>
                   )}
 

@@ -256,9 +256,19 @@ defines the strict received-byte and PSB1 verifier boundaries.
    validate decoded packing, then flush and ACK the accepted sessions. Fetch,
    crypto, reconstruction, output-write or cancellation failure must not ACK
    the failed wave. Previously acknowledged waves remain acknowledged.
-7. Provider proof submission is a separate API/operator action. The current
-   browser download flow opens and confirms sessions; it does not automatically
-   invoke `/session-proof`. A confirmed delivery alone does not pay the provider:
+7. After successful owner confirmation, the browser asks an available trusted
+   local user-gateway to submit each session's provider proof through
+   `POST /gateway/session-proof`, using a singular `session_id` and its frozen
+   authorized payee as `provider`. The gateway retains provider authentication;
+   the browser adds no provider secret or wallet action. This shared callback
+   also covers direct HTTP, P2P and reconstructed downloads. Each request has a
+   95-second deadline and a 16 KiB structured response bound. Only HTTP 200
+   `success`/`reconciled` marks provider settlement submitted; HTTP 202 remains
+   pending, including an unknown outcome without a hash. Failed requests and an
+   unavailable/disabled gateway leave verified downloads and successful ACKs
+   intact, with settlement status visible. There are no automatic retries or
+   browser proof batches; reconcile the original session IDs through the
+   provider API below. A confirmed delivery alone does not pay the provider:
    settlement requires both an accepted provider proof and owner confirmation.
 
 Changing between HTTP, user-gateway and P2P transports preserves the same frozen
