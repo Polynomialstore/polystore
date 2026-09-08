@@ -1,0 +1,202 @@
+"""Offline orchestration/economic regressions; no nodes, ports, native load or builds."""
+import base64
+import copy
+import hashlib
+import json
+from pathlib import Path
+import sqlite3
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+import retrieval_bench_artifact as artifact
+import retrieval_four_validator_workload as workload
+import retrieval_fresh_proof as producer
+
+ADDRESSES = ["nil1qyqszqgpqyqszqgpqyqszqgpqyqszqgpdqqjtx", "nil1qgpqyqszqgpqyqszqgpqyqszqgpqyqszuyxhqs",
+             "nil1xycnzvf3xycnzvf3xycnzvf3xycnzvf3ner3g8", "nil1xgeryv3jxgeryv3jxgeryv3jxgeryv3jza95r3"]
+
+
+def fixture_state():
+    life = SimpleNamespace(binary=Path("/binary"), chain="polystore_260-1", deadline=artifact.monotonic_ns() + 60 * 10**9,
+        nodes=[dict(home="/home/validator0", rpc=26657)],
+        env=dict(GOMAXPROCS="2", POLYSTORE_TRUSTED_SETUP="/setup", DYLD_LIBRARY_PATH="/lib", SECRET="excluded"),
+        signers=dict(zip(("owner0", "owner1", "provider0", "provider1"), ADDRESSES)))
+    fixtures, deals = {}, {}
+    for i, k in enumerate((8, 2)):
+        root = bytes([k]) * 32
+        fixtures[k] = dict(k=k, m=4 if k == 8 else 1, manifest_root="0x" + root.hex())
+        deals[k] = dict(id=str(i), owner=ADDRESSES[i], manifest_root=base64.b64encode(root).decode(), total_mdus="3",
+            witness_mdus="1", redundancy_mode=2, end_block="1000", current_gen="1",
+            mode2_slots=[dict(slot=0, status="SLOT_STATUS_ACTIVE", provider=ADDRESSES[i + 2])])
+    operations = workload.build_operations(life, fixtures, deals, 10)
+    return life, fixtures, deals, operations
+
+
+def settlement_fixture():
+    life, _, _, operations = fixture_state()
+    params = dict(base_retrieval_fee=dict(denom="stake", amount="3"), retrieval_price_per_blob=dict(denom="stake", amount="17"), retrieval_burn_bps="3333")
+    before = dict(bank=dict(balances={name + ":stake": "10000" for name in life.signers}, supply=dict(stake="100000")),
+        retrieval=dict(params=params, module_stake="20000", deals={str(i): dict(escrow_balance="10000") for i in (0, 1)},
+                       activities={str(i): {} for i in (0, 1)}, sessions={}))
+    after = copy.deepcopy(before)
+    after["bank"]["supply"]["stake"] = "99854"
+    after["retrieval"]["module_stake"] = "19608"
+    for i in (0, 1):
+        after["bank"]["balances"][f"provider{i}:stake"] = "10123"
+        after["retrieval"]["deals"][str(i)]["escrow_balance"] = "9804"
+        after["retrieval"]["activities"][str(i)] = dict(successful_retrievals_total="3", bytes_served_total="1441792")
+    results, transactions = {}, []
+    for i, op in enumerate(operations):
+        sid = bytes([i + 1] * 32).hex()
+        results[op["operation_id"]] = dict(session_id=sid, all_transactions_committed=True)
+        expected = copy.deepcopy(op["proof_expectation"]["session"])
+        expected.update(session_id=base64.b64encode(bytes.fromhex(sid)).decode(),
+                        manifest_root=base64.b64encode(bytes.fromhex(expected["manifest_root"])).decode(),
+                        status="RETRIEVAL_SESSION_STATUS_COMPLETED", locked_fee="0", challenge_version=2, updated_height="42")
+        after["retrieval"]["sessions"][sid] = expected
+        for kind in ("open-session", "submit-proof", "confirm"):
+            transactions.append(dict(operation_id=op["operation_id"], kind=kind, height=42, outcome="committed_success"))
+    return before, after, operations, results, transactions, life.signers
+
+
+class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_two_owner_matrix_pins_intent_and_real_authorities(self):
+        life, _, _, operations = fixture_state()
+        self.assertEqual(len(operations), 6)
+        self.assertEqual([(op["proof_expectation"]["snapshot"]["k"], op["proof_expectation"]["session"]["blob_count"]) for op in operations],
+                         [(8, 1), (8, 2), (8, 8), (2, 1), (2, 2), (2, 8)])
+        self.assertEqual({op["submit-proof"]["signer"] for op in operations}, set(ADDRESSES[2:]))
+        for op in operations:
+            self.assertEqual(op["proof_expectation"]["snapshot"]["slot"], 0)
+            self.assertEqual(op["proof_expectation"]["session"]["owner"], op["open-session"]["signer"])
+            self.assertNotIn("submit", op["submit-proof"])
+            self.assertIn("{session_id}", op["confirm"]["submit"])
+            self.assertIn("{proof_path}", op["proof_submit"])
+            self.assertNotIn("SECRET", op["open-session"]["env"])
+            self.assertEqual(op["open-session"]["_deadline_ns"], life.deadline)
+
+    def test_unexpected_committed_deal_fails_before_open(self):
+        life, fixtures, deals, _ = fixture_state()
+        for field, bad in (("owner", ADDRESSES[1]), ("manifest_root", base64.b64encode(bytes(32)).decode()), ("total_mdus", "4")):
+            changed = copy.deepcopy(deals)
+            changed[8][field] = bad
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                workload.build_operations(life, fixtures, changed, 10)
+
+    def test_copy_fixture_preserves_and_authenticates_full_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for k in (8, 2):
+                source = root / f"source{k}"
+                source.mkdir()
+                payload = dict(proofs=[dict(mdu_index="2", blob_index=i, blob_commitment=base64.b64encode(bytes([i+1])*48).decode()) for i in range(64//k)])
+                raw = json.dumps(payload).encode()
+                meta = dict(schema_version=1, k=k, m=4 if k == 8 else 1, slot=0, mdu_index=2, metadata_mdus=2,
+                    user_mdus=1, data_bytes=8388608, encoded_blob_bytes=131072, rows_per_slot=64//k, proofs_per_session=64//k,
+                    challenge_kind="legacy-fixed-z", data_pattern="be-fr-last-byte-cycle-1-through-251-v1",
+                    trusted_setup_sha256=producer.SETUP_DIGEST, manifest_root="0x" + "01"*32,
+                    proof_payload_sha256=hashlib.sha256(raw).hexdigest())
+                (source / "1.json").write_bytes(raw)
+                (source / "fixture.json").write_text(json.dumps(meta))
+                result = workload.copy_fixture(source, root / f"copy{k}", k)
+                self.assertEqual((Path(result["directory"]) / "1.json").read_bytes(), raw)
+                (source / "1.json").write_bytes(raw + b" ")
+                with self.assertRaisesRegex(ValueError, "digest"):
+                    workload.copy_fixture(source, root / f"bad{k}", k)
+                self.assertFalse((root / f"bad{k}").exists())
+
+    def test_exact_conservation_and_corruption_rejection(self):
+        values = settlement_fixture()
+        result = workload.verify_settlement(*values)
+        self.assertEqual((result["completed_sessions"], result["proofs"], result["burned_stake"]), (6, 22, 146))
+        self.assertEqual(result["escrow_debits"], {"0": 196, "1": 196})
+        sid = next(iter(values[1]["retrieval"]["sessions"]))
+        cases = [(["bank", "balances", "owner0:stake"], "9999"),
+                 (["bank", "balances", "provider0:stake"], "10124"),
+                 (["bank", "supply", "stake"], "99855"), (["retrieval", "module_stake"], "19609"),
+                 (["retrieval", "deals", "0", "escrow_balance"], "9805"),
+                 (["retrieval", "activities", "0", "successful_retrievals_total"], "4"),
+                 (["retrieval", "sessions", sid, "status"], "RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED"),
+                 (["retrieval", "sessions", sid, "authorized_proof_provider"], ADDRESSES[3]),
+                 (["retrieval", "sessions", sid, "locked_fee"], "17"),
+                 (["retrieval", "sessions", sid, "funding"], 2)]
+        for path, bad in cases:
+            changed = list(copy.deepcopy(values))
+            target = changed[1]
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = bad
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                workload.verify_settlement(*changed)
+
+    def test_incomplete_journal_is_not_completion_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "journal.sqlite"
+            with sqlite3.connect(path) as db:
+                db.executescript("CREATE TABLE operations(id TEXT, result TEXT); CREATE TABLE transactions(result TEXT);")
+                db.execute("INSERT INTO operations VALUES (?,?)", ("one", json.dumps(dict(all_transactions_committed=False))))
+            with self.assertRaisesRegex(ValueError, "did not commit"):
+                workload.journal_results(path, [dict(operation_id="one")])
+
+    def test_smoke_genesis_preserves_consensus_and_audits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            nodes = [dict(home=str(Path(tmp) / str(i))) for i in range(4)]
+            genesis = dict(consensus=dict(params=dict(block=dict(max_bytes="2097152", max_gas="64000000"))),
+                app_state=dict(nilchain=dict(params=dict(epoch_len_blocks="100", retrieval_v2_activation_height="1")),
+                               mint=dict(minter=dict(inflation="0.13"), params=dict(mint_denom="stake"))))
+            for node in nodes:
+                path = Path(node["home"]) / "config"
+                path.mkdir(parents=True)
+                (path / "genesis.json").write_text(json.dumps(genesis))
+            calls = []
+            life = SimpleNamespace(nodes=nodes, doc={}, cli=lambda *args: calls.append(args))
+            workload.smoke_genesis(life)
+            outputs = [(Path(node["home"]) / "config/genesis.json").read_bytes() for node in nodes]
+            self.assertTrue(all(raw == outputs[0] for raw in outputs))
+            self.assertEqual(len(calls), 4)
+            actual = json.loads(outputs[0])
+            self.assertEqual(actual["consensus"], genesis["consensus"])
+            self.assertEqual(actual["app_state"]["nilchain"]["params"]["epoch_len_blocks"], "100")
+            self.assertEqual(actual["app_state"]["mint"]["minter"]["inflation"], "0.000000000000000000")
+            self.assertEqual(life.doc["genesis_sha256"], hashlib.sha256(outputs[0]).hexdigest())
+
+    def test_all_four_retrieval_reads_are_height_pinned_and_must_agree(self):
+        calls = []
+        def query(node, route, height):
+            calls.append((node["id"], height))
+            if "module_accounts" in route:
+                return dict(account=dict(base_account=dict(address=ADDRESSES[0])))
+            if "balances" in route:
+                return dict(balance=dict(denom="stake", amount="100" if node["id"] != 3 else "101"))
+            return dict(params={})
+        life = SimpleNamespace(nodes=[dict(id=i) for i in range(4)], snapshot=lambda height: dict(height=height), query=query)
+        with self.assertRaisesRegex(ValueError, "four validators disagree"):
+            workload.retrieval_snapshot(life, 42, {}, [])
+        self.assertEqual({node for node, _ in calls}, {0, 1, 2, 3})
+        self.assertTrue(all(height == 42 for _, height in calls))
+
+    def test_failed_fresh_proof_never_confirms(self):
+        _, _, _, operations = fixture_state()
+        operation = operations[0]
+        submitted = []
+        response_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionResponse"
+        any_value = b"\x0a" + bytes([len(response_type)]) + response_type + b"\x12\x22\x0a\x20"
+        data = (b"\x12" + bytes([len(any_value)+32]) + any_value + bytes([1])*32).hex()
+        def submit(job):
+            submitted.append(job["kind"])
+            return dict(outcome="committed_success", txhash="AB"*32, data=data, height=11)
+        def broken(*args):
+            raise ValueError("invalid fixture commitment")
+        with tempfile.TemporaryDirectory() as tmp, patch.object(artifact, "scheduled_transaction", side_effect=submit):
+            path = Path(tmp) / "journal.sqlite"
+            artifact.schedule_retrieval_lifecycles([operation], journal_path=path, signers=ADDRESSES,
+                prepare_session_proof=broken, max_in_flight=2, max_queued=4, max_queued_per_signer=4)
+            self.assertEqual(submitted, ["open-session"])
+            with self.assertRaises(ValueError):
+                workload.journal_results(path, [operation])
+
+
+if __name__ == "__main__":
+    unittest.main()
