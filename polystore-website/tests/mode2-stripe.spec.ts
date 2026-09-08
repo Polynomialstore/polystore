@@ -981,7 +981,8 @@ test.describe('mode2 streamed retrieval', () => {
     const deputySessions = await assertSettled()
     expect(deputySessions.every((session) => session.payee === deputy && session.assigned !== deputy)).toBe(true)
     expect(rejectedWindow).toBeDefined()
-    await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', body: Buffer.from(JSON.stringify({
+    const accountingPath = testInfo.outputPath('retrieval-delivery-accounting.json')
+    await fs.writeFile(accountingPath, JSON.stringify({
       scope: '160 KiB live browser retrieval and explicit deputy; no capacity claim',
       provenanceScope: 'checkout source and harness files only; running executable, native library and WASM identities are not recorded',
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -991,7 +992,8 @@ test.describe('mode2 streamed retrieval', () => {
       fixtureBytes: fileBytes.length, fixtureSha256: expectedHash,
       gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult,
       rejectedWindow, sessions: settlements,
-    }, null, 2)) })
+    }, null, 2))
+    await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', path: accountingPath })
     if (isMode2Fast) return
 
     const gatewaySessions = new Set(windows.map((window) => window.session))
