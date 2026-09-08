@@ -51,5 +51,11 @@ Use the existing required binary/library/new-home and full-row nonconstant
 `--fixture-k8` / `--fixture-k2` arguments, adding `--proof-only` for the adversarial
 path. Preserve the supplied runtime and source provenance and retained private
 homes. Source tests exercise mutation rejection and orchestration without nodes;
-**this extension still needs actual runs of both modes** before runtime evidence
-or completion can be claimed.
+Both modes passed on 2026-09-08 at harness `01baa865`, using the final candidate
+chain and native library. [Retained evidence](../bench/retrieval_session_capacity/settlement-final-260/)
+includes four-node transaction outcomes, pinned economic state, committed SDK
+issuance and persistent restart comparisons. Each completed six sessions and
+22 openings, with 392 stake escrow debited, 246 paid and 146 burned. The
+adversarial mode additionally committed all five expected failures and all four
+idempotent retries without changing retrieval state. These remain bounded
+correctness runs; neither establishes sustained capacity or delivered bytes.
