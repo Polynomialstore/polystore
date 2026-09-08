@@ -1,7 +1,9 @@
 import type { Hex } from 'viem'
 
 const PREFIX = 'polystore-retrieval-v1:'
-const MAX_RECORDS = 256, MAX_RECORD_BYTES = 1024 * 1024
+// A 1 GiB download has 133 MDU waves: one open, ACK, and settlement
+// record per wave, plus its output cursor. Never evict unresolved payments.
+const MAX_RECORDS = 512, MAX_RECORD_BYTES = 1024 * 1024
 export interface RetrievalStore {
   get<T>(key: string): T | undefined
   put(key: string, value: unknown): void

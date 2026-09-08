@@ -92,7 +92,7 @@ test('browser store round trips exact integers and contexts across reload and ca
   const value = { exact: 9007199254740993n, bytes: new Uint8Array([0, 128, 255]) }
   store.put('test', value)
   assert.deepEqual(browserRetrievalStore(storage).get('test'), value)
-  for (let i = 1; i < 256; i++) store.put(String(i), { pending: true })
+  for (let i = 1; i < 512; i++) store.put(String(i), { pending: true })
   assert.throws(() => store.put('over-limit', {}), /full/)
   assert.deepEqual(store.get('test'), value)
   store.put('test', value) // updating a retained attempt is allowed at capacity
