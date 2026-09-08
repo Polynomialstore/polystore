@@ -82,7 +82,7 @@ class SustainedTest(unittest.TestCase):
 
 
     def test_block_reconciliation_rejects_missing_transaction_gas_and_header_drift(self):
-        for corrupt in (None, "missing", "gas", "header"):
+        for corrupt in (None, "missing", "gas", "header", "validator_gas"):
             with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as home:
                 journal = Path(home) / "journal.sqlite"
                 tx = dict(txhash="AB" * 32, code=0, gas_used=12, gas_wanted=20)
@@ -101,10 +101,15 @@ class SustainedTest(unittest.TestCase):
                         return dict(canonical=True, signed_header=dict(header=dict(height="11", chain_id="chain",
                             time="drift" if corrupt == "header" and node == 3 else "time", app_hash="EF" * 32),
                             commit=dict(height="11", block_id=dict(hash="CD" * 32))))
-                    return {}
+                    return dict(node=node)
+                def summarize(block, results, height, chain):
+                    value = json.loads(json.dumps(summary))
+                    if corrupt == "validator_gas" and results["node"] == 3:
+                        value["transactions"][0]["gas_used"] += 1
+                    return value
                 life = SimpleNamespace(home=Path(home), chain="chain", nodes=list(range(4)), remaining=Mock(),
                     query=query, doc=dict(commit_step_metrics=dict(phases=phases)))
-                with patch.object(artifact, "committed_block_summary", return_value=summary):
+                with patch.object(artifact, "committed_block_summary", side_effect=summarize):
                     if corrupt:
                         with self.assertRaises(ValueError):
                             workload.reconcile_sustained_blocks(life, journal)

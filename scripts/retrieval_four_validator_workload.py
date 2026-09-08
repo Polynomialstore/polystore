@@ -598,7 +598,8 @@ def reconcile_sustained_blocks(lifecycle, journal):
         for height in range(first, last + 1):
             lifecycle.remaining()
             node = lifecycle.nodes[0]
-            summary = artifact.committed_block_summary(lifecycle.query(node, f"/block?height={height}"),
+            block = lifecycle.query(node, f"/block?height={height}")
+            summary = artifact.committed_block_summary(block,
                 lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
             for node in lifecycle.nodes:
                 signed = lifecycle.query(node, f"/commit?height={height}")
@@ -608,6 +609,11 @@ def reconcile_sustained_blocks(lifecycle, journal):
                         header["time"] != summary["time"] or header["app_hash"].upper() != summary["preceding_app_hash"] or
                         commit["block_id"]["hash"].upper() != summary["block_hash"]):
                     raise ValueError("validators disagree on committed block/application hash or header identity")
+            for node in lifecycle.nodes[1:]:
+                other = artifact.committed_block_summary(block,
+                    lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+                if other["transactions"] != summary["transactions"]:
+                    raise ValueError("validators disagree on committed transaction results")
             for tx in summary["transactions"]:
                 if tx["txhash"] not in expected:
                     continue
@@ -621,7 +627,7 @@ def reconcile_sustained_blocks(lifecycle, journal):
         raise ValueError("fenced blocks omit a committed workload transaction")
     lifecycle.doc["committed_block_reconciliation"] = dict(path=str(path), sha256=artifact.sha256(path),
         first_height=first, last_height=last, committed_workload_transactions=len(matched),
-        all_four_headers_agree=True, qualification=False)
+        all_four_headers_agree=True, all_four_results_agree=True, qualification=False)
 
 
 def summarize_commit_streams(lifecycle, processes):
