@@ -991,6 +991,9 @@ class FourValidatorLifecycle:
                                         ("instrumentation", "prometheus_listen_addr", f'"127.0.0.1:{node["metrics"]}"')):
                 config = set_toml_value(config, section, key, value)
             path.write_text(config)
+            app_path = home / "config/app.toml"
+            app_path.write_text(set_toml_value(app_path.read_text(), "api", "address",
+                                              f'"tcp://127.0.0.1:{node["api"]}"'))
             node["node_id"] = self.cli(home, "comet", "show-node-id")
             if not re.fullmatch(r"[0-9a-f]{40}", node["node_id"]):
                 raise ValueError("invalid generated node identity")
@@ -1026,7 +1029,7 @@ class FourValidatorLifecycle:
                     "--rpc.laddr", f'tcp://127.0.0.1:{node["rpc"]}',
                     "--p2p.laddr", f'tcp://127.0.0.1:{node["p2p"]}',
                     "--grpc.address", f'127.0.0.1:{node["grpc"]}',
-                    "--api.enable=true", "--api.address", f'tcp://127.0.0.1:{node["api"]}',
+                    "--api.enable=true",
                     "--grpc-web.enable=false", "--json-rpc.enable=false", "--minimum-gas-prices", "0.001aatom"]
             self.doc["commands"].append(argv)
             with (home / f"{phase}.log").open("xb") as log:

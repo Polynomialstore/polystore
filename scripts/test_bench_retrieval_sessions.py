@@ -954,7 +954,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                             "retrieval_v2_activation_height": "0", "unchanged_fee": "17"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
                     (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus_listen_addr = ":26660"\\n')
-                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n')
+                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
                         "priv_key": "NEVER RETAIN THIS SECRET"}))
@@ -1019,6 +1019,12 @@ class FourValidatorLifecycleTest(unittest.TestCase):
     def fake_start(self, argv, **kwargs):
         if argv[1] != "start":
             return self.real_popen(argv, **kwargs)
+        # Native start exposes api.enable but reads api.address from app.toml.
+        self.assertNotIn("--api.address", argv)
+        home = Path(argv[argv.index("--home") + 1])
+        node = next(n for n in self.runner.nodes if Path(n["home"]) == home)
+        self.assertIn(f'[api]\naddress = "tcp://127.0.0.1:{node["api"]}"\n',
+                      (home / "config/app.toml").read_text())
         class Process:
             returncode = None
             def poll(self):
