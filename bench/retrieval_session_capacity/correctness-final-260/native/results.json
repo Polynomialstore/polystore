@@ -1,0 +1,80 @@
+[
+  {
+    "label": "old",
+    "case": "trailer",
+    "returncode": 1,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "trailer"
+    ],
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71"
+  },
+  {
+    "label": "old",
+    "case": "reinit",
+    "returncode": 1,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "reinit"
+    ],
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71"
+  },
+  {
+    "label": "old",
+    "case": "merkle",
+    "returncode": 1,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "merkle"
+    ],
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71"
+  },
+  {
+    "label": "current",
+    "case": "trailer",
+    "returncode": 0,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "trailer"
+    ],
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b"
+  },
+  {
+    "label": "current",
+    "case": "reinit",
+    "returncode": 0,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "reinit"
+    ],
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b"
+  },
+  {
+    "label": "current",
+    "case": "merkle",
+    "returncode": 0,
+    "command": [
+      "python3",
+      "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt",
+      "merkle"
+    ],
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b"
+  }
+]

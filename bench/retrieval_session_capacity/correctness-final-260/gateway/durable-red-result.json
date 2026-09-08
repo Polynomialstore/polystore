@@ -1,0 +1,19 @@
+{
+  "phase": "durable-red",
+  "command": [
+    "go",
+    "test",
+    "-p",
+    "2",
+    "-count=1",
+    "-timeout",
+    "30s",
+    "-v",
+    "."
+  ],
+  "exit_code": 1,
+  "guard_stop": null,
+  "elapsed_seconds": 6.0962669579312205,
+  "free_before": 1745543168,
+  "free_after": 1744871424
+}

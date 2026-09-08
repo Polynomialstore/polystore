@@ -1,0 +1,6 @@
+{"case": "reinit", "result": 0}
+Traceback (most recent call last):
+  File "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py", line 19, in <module>
+    assert result < 0, 'reinitialization must authenticate requested file'
+           ^^^^^^^^^^
+AssertionError: reinitialization must authenticate requested file

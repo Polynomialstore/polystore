@@ -1,0 +1,10 @@
+=== RUN   TestHistoricalCaughtChildRollback
+    historical_counterexample_test.go:74: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/app/historical_counterexample_test.go:74
+        	Error:      	Should be false
+        	Test:       	TestHistoricalCaughtChildRollback
+        	Messages:   	caught child revert must discard native state
+--- FAIL: TestHistoricalCaughtChildRollback (0.03s)
+FAIL
+FAIL	polystorechain/app	1.323s
+FAIL

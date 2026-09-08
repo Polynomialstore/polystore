@@ -1,0 +1,6 @@
+{"case": "trailer", "result": 0}
+Traceback (most recent call last):
+  File "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py", line 13, in <module>
+    assert result < 0, 'changed setup trailer must be rejected'
+           ^^^^^^^^^^
+AssertionError: changed setup trailer must be rejected

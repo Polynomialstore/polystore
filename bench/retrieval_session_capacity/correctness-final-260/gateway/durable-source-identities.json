@@ -1,0 +1,18 @@
+[
+  {
+    "label": "red",
+    "commit": "76c8653a225a737bf6e4ef6b1c75272efff05716",
+    "source": "polystore_gateway/fetch_session_onchain.go",
+    "blob": "15efd30b2147e7c06d99b935f07176c549bfaa87",
+    "sha256": "fa1adfd19ec62b71c8a2559577bf98e465cb3e62aa5bb4d677cfb5ba769f4b4b",
+    "scope": "Exact store/load and parseSessionIDHex functions. Real bbolt temp DB; real cached chain types package at76653383, ChainedProof declaration identical to original76c8653. No chain keeper/native verifier/setup loaded."
+  },
+  {
+    "label": "green",
+    "commit": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "source": "polystore_gateway/fetch_session_onchain.go",
+    "blob": "17e608edb7389bfd8059c8720d6836ed0d3cf5b2",
+    "sha256": "25325798eec923c18921a16c53552781d7121484fab458cf2dc8819da997fb95",
+    "scope": "Exact store/load and parseSessionIDHex functions. Real bbolt temp DB; real cached chain types package at76653383, ChainedProof declaration identical to original76c8653. No chain keeper/native verifier/setup loaded."
+  }
+]

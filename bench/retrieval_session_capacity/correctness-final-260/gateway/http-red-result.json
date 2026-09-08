@@ -1,0 +1,19 @@
+{
+  "phase": "http-red",
+  "command": [
+    "go",
+    "test",
+    "-p",
+    "2",
+    "-count=1",
+    "-timeout",
+    "30s",
+    "-v",
+    "."
+  ],
+  "exit_code": 1,
+  "guard_stop": null,
+  "elapsed_seconds": 2.5356827080249786,
+  "free_before": 1742147584,
+  "free_after": 1741574144
+}

@@ -1,0 +1,19 @@
+{
+  "phase": "durable-green",
+  "command": [
+    "go",
+    "test",
+    "-p",
+    "2",
+    "-count=1",
+    "-timeout",
+    "30s",
+    "-v",
+    "."
+  ],
+  "exit_code": 0,
+  "guard_stop": null,
+  "elapsed_seconds": 5.583965917001478,
+  "free_before": 1531568128,
+  "free_after": 1530810368
+}

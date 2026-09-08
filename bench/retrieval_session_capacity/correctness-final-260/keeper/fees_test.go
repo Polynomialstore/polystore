@@ -1,0 +1,370 @@
+package keeper_test
+
+import (
+	"fmt"
+	"testing"
+
+	"cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/stretchr/testify/require"
+
+	"polystorechain/x/polystorechain/keeper"
+	"polystorechain/x/polystorechain/types"
+)
+
+func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte(fmt.Sprintf("retrieval_fee_p%02d", i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	p := types.DefaultParams()
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 3)
+	p.RetrievalBurnBps = 500
+	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
+
+	userBz := make([]byte, 20)
+	copy(userBz, []byte("retrieval_fee_user"))
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(100),
+	})
+	require.NoError(t, err)
+
+	manifestRoot := make([]byte, types.POLYFS_ROOT_SIZE)
+	for i := range manifestRoot {
+		manifestRoot[i] = byte(i + 1)
+	}
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         "0x" + hexEncode(manifestRoot),
+		Size_:       8 * 1024 * 1024,
+		TotalMdus:   4,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+	deal, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
+	require.NoError(t, err)
+
+	openRes, err := msgServer.OpenRetrievalSession(f.ctx, &types.MsgOpenRetrievalSession{
+		Creator:        user,
+		DealId:         resDeal.DealId,
+		Provider:       deal.Providers[0],
+		ManifestRoot:   deal.ManifestRoot,
+		StartMduIndex:  2,
+		StartBlobIndex: 0,
+		BlobCount:      2,
+		Nonce:          1,
+		ExpiresAt:      1,
+	})
+	require.NoError(t, err)
+
+	dealAfter, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(92), dealAfter.EscrowBalance)
+
+	session, err := f.keeper.RetrievalSessions.Get(sdk.UnwrapSDKContext(f.ctx), openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(6), session.LockedFee)
+
+	require.Equal(
+		t,
+		sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 98)).String(),
+		bank.moduleBalances[types.ModuleName].String(),
+	)
+
+	cancelCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(10)
+	_, err = msgServer.CancelRetrievalSession(cancelCtx, &types.MsgCancelRetrievalSession{
+		Creator:   user,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	dealAfterCancel, err := f.keeper.Deals.Get(cancelCtx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(98), dealAfterCancel.EscrowBalance)
+
+	sessionAfter, err := f.keeper.RetrievalSessions.Get(cancelCtx, openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED, sessionAfter.Status)
+	require.True(t, sessionAfter.LockedFee.IsZero())
+}
+
+func TestRetrievalSessionCompletionPaysProviderAndBurnsVariableCut(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 10)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte(fmt.Sprintf("retrieval_pay_p%02d", i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := make([]byte, 20)
+	copy(userBz, []byte("retrieval_pay_user"))
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(100),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, user, resDeal.DealId)
+
+	openRes, err := msgServer.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{
+		Creator:        user,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  proof.MduIndex,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+	})
+	require.NoError(t, err)
+
+	dealAfterOpen, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(89), dealAfterOpen.EscrowBalance)
+	require.Equal(t, "99stake", bank.moduleBalances[types.ModuleName].String())
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   user,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	session, err := f.keeper.RetrievalSessions.Get(ctx, openRes.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, session.Status)
+	require.True(t, session.LockedFee.IsZero())
+	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW, session.Funding)
+
+	dealAfterComplete, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(89), dealAfterComplete.EscrowBalance)
+	require.Equal(t, "8stake", bank.accountBalances[providerAddr.String()].String())
+	require.Equal(t, "89stake", bank.moduleBalances[types.ModuleName].String())
+}
+
+func TestHistoricalConfirmationRequiresProofPayeePin(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 10)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte(fmt.Sprintf("retrieval_pay_p%02d", i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := make([]byte, 20)
+	copy(userBz, []byte("retrieval_pay_user"))
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(100),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	_ = providerAddr
+	require.NoError(t, err)
+
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, user, resDeal.DealId)
+
+	openRes, err := msgServer.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{
+		Creator:        user,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  proof.MduIndex,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+	})
+	require.NoError(t, err)
+
+	dealAfterOpen, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(89), dealAfterOpen.EscrowBalance)
+	require.Equal(t, "99stake", bank.moduleBalances[types.ModuleName].String())
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, f.keeper.RetrievalSessionProofProvider.Remove(ctx, openRes.SessionId))
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   user,
+		SessionId: openRes.SessionId,
+	})
+	require.Error(t, err, "confirmation must reject a missing authenticated proof payee pin")
+}
+
+func TestHistoricalZeroFeeCompletionRemovesPayeePin(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyNewDec(0)
+	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
+	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
+	p.RetrievalBurnBps = 2000
+	require.NoError(t, f.keeper.Params.Set(ctx, p))
+
+	for i := 0; i < 10; i++ {
+		addrBz := make([]byte, 20)
+		copy(addrBz, []byte(fmt.Sprintf("retrieval_pay_p%02d", i)))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	userBz := make([]byte, 20)
+	copy(userBz, []byte("retrieval_pay_user"))
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 100)))
+
+	resDeal, err := msgServer.CreateDeal(ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      100,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(100),
+	})
+	require.NoError(t, err)
+	assignedProvider := resDeal.AssignedProviders[0]
+	providerAddr, err := sdk.AccAddressFromBech32(assignedProvider)
+	_ = providerAddr
+	require.NoError(t, err)
+
+	manifestCid, proof := commitValidMode2ContentAndProof(t, f, ctx, msgServer, user, resDeal.DealId)
+
+	openRes, err := msgServer.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{
+		Creator:        user,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   mustDecodeHexBytes(t, manifestCid),
+		StartMduIndex:  proof.MduIndex,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          1,
+		ExpiresAt:      0,
+	})
+	require.NoError(t, err)
+
+	dealAfterOpen, err := f.keeper.Deals.Get(ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(100), dealAfterOpen.EscrowBalance)
+	require.Equal(t, "100stake", bank.moduleBalances[types.ModuleName].String())
+
+	_, err = msgServer.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{
+		Creator:   assignedProvider,
+		SessionId: openRes.SessionId,
+		Proofs:    []types.ChainedProof{proof},
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{
+		Creator:   user,
+		SessionId: openRes.SessionId,
+	})
+	require.NoError(t, err)
+
+	present, err := f.keeper.RetrievalSessionProofProvider.Has(ctx, openRes.SessionId)
+	require.NoError(t, err)
+	require.False(t, present, "zero-fee terminal settlement must remove its proof payee pin")
+}

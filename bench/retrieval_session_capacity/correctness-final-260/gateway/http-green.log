@@ -1,0 +1,8 @@
+cwd=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/http-green
+command=['go', 'test', '-p', '2', '-count=1', '-timeout', '30s', '-v', '.']
+GOMAXPROCS=2 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTMPDIR=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/go-tmp
+=== RUN   TestMalformedHTTP200MustNotReportCommittedSuccess
+    regression_test.go:8: safe response: hash=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA error=transaction outcome unknown: invalid tx_response: expected JSON object
+--- PASS: TestMalformedHTTP200MustNotReportCommittedSuccess (0.00s)
+PASS
+ok  	historical-http-counterexample	0.332s

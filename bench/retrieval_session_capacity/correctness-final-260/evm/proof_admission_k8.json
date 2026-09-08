@@ -1,0 +1,88 @@
+{
+  "root": "QRZEWVzk8tnKTzK+boOz4GvoXWx8OVg8T1408xXaYug=",
+  "proofs": [
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "IVXT03J8QPR/7xBc8jI1zk3SWk4T7lDddzlD1K+HEO8=",
+      "manifest_opening": "s+iDIsBblPPLZekLb94MQ7Br7AT+NJQhLMCZmudq+6MaEPezRLxXKfDvQIF2gG7w",
+      "root_table_du_commitment": "qb0pAAIKG1t6z/l0Xc9XBhMAhV9ASTUOVKc22xfT/CXDe4XkoFI+qrlF4renYaWJ",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "kBtl3DErK/kk7KeQBJonC8t3WksOGeAV8PZExUChzqL+2sNVYrSGJNSHZ52fyZI9",
+      "merkle_path": [
+        "RbW4F7p7ndl5ly7wox7uUNVkdBjo9xZRidzaJKeJIbw=",
+        "p/VkccoKcVimmE7PBXY/mCSOiZxyIbI4kG/VA9RcCJs=",
+        "0KdFZfIxEDmpYjGxvg8QJerm7ij67tusmm3CZJCq0OM=",
+        "2FSHkxNxY1W+iG2goJQdmhE1lA/xWpQqm1OSnGnk7jY=",
+        "+KX6zEWvOJqIhBmkGg0yuHRYROtwpwDxmM9V0F8UxB8=",
+        "UFOJSMJ0HSQe9CQSn1SmhMeyLqN0NXZb4aP3vBF2dN4=",
+        "RutSlLnDbj9EtPLe+/uHUNWMqTOoXTsgphRVTjyvo/c="
+      ],
+      "z_value": "KgAAAAAAAAAAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "YyF/VkEODf9t36LRdEh5Mgqh7yzQ5xB1kJrI/L5pgM4=",
+      "kzg_opening_proof": "hzp6jG7SEteNWiJ9hO53Ya1QR8f2rXV1X5YHk+WvteNeDi0JT8p8lQrfVgNXyRYQ"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "IVXT03J8QPR/7xBc8jI1zk3SWk4T7lDddzlD1K+HEO8=",
+      "manifest_opening": "s+iDIsBblPPLZekLb94MQ7Br7AT+NJQhLMCZmudq+6MaEPezRLxXKfDvQIF2gG7w",
+      "root_table_du_commitment": "qb0pAAIKG1t6z/l0Xc9XBhMAhV9ASTUOVKc22xfT/CXDe4XkoFI+qrlF4renYaWJ",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "lkeu/HSkg/jj8ysdGqh8meonARPIu0C+Gk1aIznXUa97AcFCG6ZAmZysvh8XlM93",
+      "merkle_path": [
+        "hF5ns/aJZXWjxCt8VkSOvYYdE1f5Qr/ymbH+B17QzXQ=",
+        "p/VkccoKcVimmE7PBXY/mCSOiZxyIbI4kG/VA9RcCJs=",
+        "0KdFZfIxEDmpYjGxvg8QJerm7ij67tusmm3CZJCq0OM=",
+        "2FSHkxNxY1W+iG2goJQdmhE1lA/xWpQqm1OSnGnk7jY=",
+        "+KX6zEWvOJqIhBmkGg0yuHRYROtwpwDxmM9V0F8UxB8=",
+        "UFOJSMJ0HSQe9CQSn1SmhMeyLqN0NXZb4aP3vBF2dN4=",
+        "RutSlLnDbj9EtPLe+/uHUNWMqTOoXTsgphRVTjyvo/c="
+      ],
+      "blob_index": 1,
+      "z_value": "KgAAAAAAAAAAZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "E/xZ+WgOAfnc/qzpJ67TzWXoQhWO8ke5ON69Eag49Tw=",
+      "kzg_opening_proof": "tt01XycjzGOmqmWA47tGccs4jMOOE+pF/S5XBsdnSyx1V83V7wQZquUCnS403wdc"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "IVXT03J8QPR/7xBc8jI1zk3SWk4T7lDddzlD1K+HEO8=",
+      "manifest_opening": "s+iDIsBblPPLZekLb94MQ7Br7AT+NJQhLMCZmudq+6MaEPezRLxXKfDvQIF2gG7w",
+      "root_table_du_commitment": "qb0pAAIKG1t6z/l0Xc9XBhMAhV9ASTUOVKc22xfT/CXDe4XkoFI+qrlF4renYaWJ",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "hqFy7YBdAk6GHIJTox3YUO6oi6TwwXt2reemu+omexd94kFHDhLJfcDCHBu6ndZa",
+      "merkle_path": [
+        "hj/gM60hQVH+sbVSfxHT1lkY+ikd8b4/v/kBua9kXls=",
+        "axrYT+Uh7bSC8NxjsCP3MOE1zGN4juL864emmETetAs=",
+        "0KdFZfIxEDmpYjGxvg8QJerm7ij67tusmm3CZJCq0OM=",
+        "2FSHkxNxY1W+iG2goJQdmhE1lA/xWpQqm1OSnGnk7jY=",
+        "+KX6zEWvOJqIhBmkGg0yuHRYROtwpwDxmM9V0F8UxB8=",
+        "UFOJSMJ0HSQe9CQSn1SmhMeyLqN0NXZb4aP3vBF2dN4=",
+        "RutSlLnDbj9EtPLe+/uHUNWMqTOoXTsgphRVTjyvo/c="
+      ],
+      "blob_index": 2,
+      "z_value": "KgAAAAAAAAAAZgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Oh17BzbTq2Z1lKkBuI4/bK+62eW+0lBQZ9js2iJb4u8=",
+      "kzg_opening_proof": "h8gI3YxonOIMFgps9O79ZpkJmDj9SOqWbgW0D6WxCWLtZBSseIxYqGI8f+3JH+QN"
+    }
+  ]
+}

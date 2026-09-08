@@ -1,0 +1,18 @@
+{
+  "command": [
+    "go",
+    "test",
+    "-mod=readonly",
+    "-p=2",
+    "-overlay=/tmp/polystore-254-execution/260-historical-evm-counterexamples/overlay.json",
+    "./app",
+    "-run",
+    "TestHistorical(CaughtChildRollback|ChildCryptoGas)",
+    "-count=1",
+    "-timeout=90s",
+    "-v"
+  ],
+  "floor_bytes": 629145600,
+  "minimum_free_bytes": 909393920,
+  "returncode": 1
+}

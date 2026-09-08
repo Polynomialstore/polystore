@@ -1,0 +1,56 @@
+{
+  "go_version": "go version go1.25.5 darwin/arm64",
+  "go_executable": "/Users/michaelseiler/.gvm/gos/go1.25.5/bin/go",
+  "go_executable_sha256": "a84ad6c885e8a875475b9c6cea4f2e213f8ab449d43193520811c39b6007485c",
+  "chained_proof_declarations": [
+    {
+      "revision": "76c8653",
+      "blob": "20e97cbb9158728ab171b57165719919be9ba710",
+      "declaration_sha256": "2fcb7eeab0c86dbf833061f3fe9754eed7d01f2ac53a3513a433ff5df1497e93"
+    },
+    {
+      "revision": "76653383",
+      "blob": "20e97cbb9158728ab171b57165719919be9ba710",
+      "declaration_sha256": "2fcb7eeab0c86dbf833061f3fe9754eed7d01f2ac53a3513a433ff5df1497e93"
+    }
+  ],
+  "native_library": "not loaded; JSON and Bolt paths only",
+  "trusted_setup": "not loaded; cryptographic verification not called",
+  "files": {
+    "durable-green/go.mod": "8a90a9cb6e5a242f7eab22656f2f0adcb84a397d780a08f52714d018f0392274",
+    "durable-green/go.sum": "2cd0063522925eab5306c7909d5f7ef112b6245e046f1ff52d9f31e42c02035f",
+    "durable-green/helpers.go": "e302f9c1af39e65465ac6dbc78355d07d2029c70951942f5cc95586361e5fcc2",
+    "durable-green/original_fetch_session_onchain.go.txt": "25325798eec923c18921a16c53552781d7121484fab458cf2dc8819da997fb95",
+    "durable-green/regression_test.go": "307d8c2374b9d246b09ede15f1d3b0963677ad7fb88652614de98b83665b98b1",
+    "durable-green/store.go": "a183c9c800774c7f771f00ff4839e15f3df1ddcea8fca831e8fc89ad4796a54d",
+    "durable-green/strict_json.go": "516edd9b71f54832c952878726e4ac5bbc5a4439719b1d884b1e34092dc21936",
+    "durable-green-result.json": "02ba21993c19e32b03a4473ff8d28a9258693fbfa12d89df2c445d2cecdb3b0e",
+    "durable-green.log": "7bdd0e94d08bf39b7ab49cca20de46dd8389033db933314534fa3b6c482bab18",
+    "durable-red/go.mod": "8a90a9cb6e5a242f7eab22656f2f0adcb84a397d780a08f52714d018f0392274",
+    "durable-red/go.sum": "2cd0063522925eab5306c7909d5f7ef112b6245e046f1ff52d9f31e42c02035f",
+    "durable-red/helpers.go": "e302f9c1af39e65465ac6dbc78355d07d2029c70951942f5cc95586361e5fcc2",
+    "durable-red/original_fetch_session_onchain.go.txt": "fa1adfd19ec62b71c8a2559577bf98e465cb3e62aa5bb4d677cfb5ba769f4b4b",
+    "durable-red/regression_test.go": "307d8c2374b9d246b09ede15f1d3b0963677ad7fb88652614de98b83665b98b1",
+    "durable-red/store.go": "8517c51da3def51afd57eccca700b275078bcd8e9bbb3c9156eb3e3ca427576a",
+    "durable-red-result.json": "80c58061f4aaf9d6877a04454c9989e2f13e6e8a44ed7ffba5ea851208396788",
+    "durable-red.log": "16207a217abab74869b55ac7b88f74898291b6796ac0f0206dd28b9d1207e3bf",
+    "durable-source-identities.json": "bb66c9465e0646a2e2342a16150d17abdaf889babdb2ac8aaa76c4a7a1785c84",
+    "http-green/go.mod": "f1d8bf4785481b7a7f292e29b00b6cdd4eb5da8098b14b953032af3fa6d682ce",
+    "http-green/helpers.go": "22f90ae9233a1428cd1f017b57a395433af018323e8ddd33633230497989997d",
+    "http-green/regression_test.go": "75febc96467d360158d082f20438ce2f9dbdab7b882e7874c8adb7058a3b3c89",
+    "http-green/strict_json.go": "9b71e708047af54ac1714e67ff4863613e88cc6767baa75367092e9d9992af5c",
+    "http-green/tx_submit.go": "574be12090794b99b5b5c87e47331360a9242e0b8d5abcded8eb13e79d6d45f8",
+    "http-green-result.json": "0e2679743896538910b0eede9cbe25687bb7391900bb4c42f0296f7d2ff1aadc",
+    "http-green.log": "407c31e77f6791c4dbbac6b38b46c83508cf68b3e561ea8d1559180946d64beb",
+    "http-red/go.mod": "f1d8bf4785481b7a7f292e29b00b6cdd4eb5da8098b14b953032af3fa6d682ce",
+    "http-red/helpers.go": "22f90ae9233a1428cd1f017b57a395433af018323e8ddd33633230497989997d",
+    "http-red/regression_test.go": "75febc96467d360158d082f20438ce2f9dbdab7b882e7874c8adb7058a3b3c89",
+    "http-red/tx_submit.go": "8265ef0eb3779709670c45a6f20fe68d2c2f8674777362fefe2b33da919a7c05",
+    "http-red-result.json": "fbbeec0b74a276b57cf884d3d5c90d3233d338bcc5a8802be8b9f9073f95e2ef",
+    "http-red.log": "a307064da2fd4e48828ef01ba8a0ff40237ce17eeb940643720b0281dd61dd05",
+    "prepare.py": "2889e1ebf0cc1728c2d1bbc416d08e4afe478877c5653816b943d9a2de0edbe3",
+    "prepare_durable.py": "42ce80de3489fb0931308d3e51c15d0bb477cc3ff214961f531d5a7f94ff72c8",
+    "run_guarded.py": "6d9a0748743e36811d387ced000da185afda39d38a57ee797fd7fd7efcf8fefc",
+    "source-identities.json": "5581a382f39ce0b5d2e98d5aa32fed97ce1aa615adf09495a1e8a4ca41abb10a"
+  }
+}

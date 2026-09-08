@@ -1,0 +1,25 @@
+=== RUN   TestHistoricalCaughtChildRollback
+    historical_counterexample_test.go:79: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/app/historical_counterexample_test.go:79
+        	Error:      	Should be false
+        	Test:       	TestHistoricalCaughtChildRollback
+        	Messages:   	caught child revert must discard native state
+--- FAIL: TestHistoricalCaughtChildRollback (0.04s)
+=== RUN   TestHistoricalChildCryptoGas
+=== RUN   TestHistoricalChildCryptoGas/insufficient
+Initializing KZG with path: ../trusted_setup.txt
+    historical_counterexample_test.go:130: child gas=2177439 success=1
+    historical_counterexample_test.go:131: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/app/historical_counterexample_test.go:131
+        	Error:      	Should be zero, but was 1
+        	Test:       	TestHistoricalChildCryptoGas/insufficient
+        	Messages:   	child without the full cryptographic budget must fail
+=== RUN   TestHistoricalChildCryptoGas/sufficient
+Initializing KZG with path: ../trusted_setup.txt
+    historical_counterexample_test.go:130: child gas=4000000 success=1
+--- FAIL: TestHistoricalChildCryptoGas (0.43s)
+    --- FAIL: TestHistoricalChildCryptoGas/insufficient (0.39s)
+    --- PASS: TestHistoricalChildCryptoGas/sufficient (0.05s)
+FAIL
+FAIL	polystorechain/app	1.722s
+FAIL
