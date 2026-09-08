@@ -316,14 +316,14 @@ class HealthyAuditViewsTest(unittest.TestCase):
              patch.object(artifact, "FourValidatorLifecycle") as constructor, \
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
-            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source")
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source", audit_profile="normal")
 
-    def fixture(self, *, complete=True):
+    def fixture(self, *, complete=True, counts=(1, 9, 32)):
         deal = dict(id="7", manifest_root=base64.b64encode(bytes([7]) * 32).decode(),
                     current_gen="1", start_block="5", end_block="1000")
         providers = dict(enumerate(ADDRESSES[:3]))
         values = []
-        for slot, count in enumerate((1, 9, 32)):
+        for slot, count in enumerate(counts):
             accepted = count if complete else 0
             snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=2, m=1,
                             slot=slot, metadata_mdus="2", user_mdus="1", deal_end="1000",
@@ -344,6 +344,14 @@ class HealthyAuditViewsTest(unittest.TestCase):
 
     def check(self, values, deal, providers, *, finalized=True):
         return workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=finalized)
+
+    def test_explicit_frozen_quota_rejects_valid_but_undersampled_context(self):
+        full, deal, providers = self.fixture(counts=(32, 32, 32))
+        checked = workload.healthy_audit_views(full, deal, providers, 2, 100, "polystore_260-1", finalized=True, expected_samples=min(132, 32))
+        self.assertEqual(sum(int(v["audit"]["sample_count"]) for v in checked.values()), 96)
+        values, deal, providers = self.fixture()
+        with self.assertRaisesRegex(ValueError, "sample count"):
+            workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=True, expected_samples=32)
 
     def test_all_slots_include_parity_and_use_actual_sample_denominator(self):
         values, deal, providers = self.fixture()

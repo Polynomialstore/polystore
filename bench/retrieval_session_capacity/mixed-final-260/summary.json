@@ -1,0 +1,86 @@
+{
+  "baseline": {
+    "ns/op": {
+      "median": 274637861.0,
+      "minimum": 273643083.0,
+      "maximum": 276864292.0
+    },
+    "gas/op": {
+      "median": 26155844.0,
+      "minimum": 26155844.0,
+      "maximum": 26155844.0
+    },
+    "gas/proof": {
+      "median": 502997.0,
+      "minimum": 502997.0,
+      "maximum": 502997.0
+    },
+    "generation-ns/op": {
+      "median": 6485805806.0,
+      "minimum": 6434195278.0,
+      "maximum": 6520425417.0
+    },
+    "proofs/op": {
+      "median": 52.0,
+      "minimum": 52.0,
+      "maximum": 52.0
+    },
+    "sessions/op": {
+      "median": 6.0,
+      "minimum": 6.0,
+      "maximum": 6.0
+    },
+    "B/op": {
+      "median": 145669.0,
+      "minimum": 145669.0,
+      "maximum": 145685.0
+    },
+    "allocs/op": {
+      "median": 1235.0,
+      "minimum": 1235.0,
+      "maximum": 1235.0
+    }
+  },
+  "candidate": {
+    "ns/op": {
+      "median": 45208597.0,
+      "minimum": 43973194.0,
+      "maximum": 45871278.0
+    },
+    "gas/op": {
+      "median": 26155844.0,
+      "minimum": 26155844.0,
+      "maximum": 26155844.0
+    },
+    "gas/proof": {
+      "median": 502997.0,
+      "minimum": 502997.0,
+      "maximum": 502997.0
+    },
+    "generation-ns/op": {
+      "median": 1761299293.0,
+      "minimum": 1713232389.0,
+      "maximum": 1780035417.0
+    },
+    "proofs/op": {
+      "median": 52.0,
+      "minimum": 52.0,
+      "maximum": 52.0
+    },
+    "sessions/op": {
+      "median": 6.0,
+      "minimum": 6.0,
+      "maximum": 6.0
+    },
+    "B/op": {
+      "median": 168645.0,
+      "minimum": 168645.0,
+      "maximum": 168650.0
+    },
+    "allocs/op": {
+      "median": 1143.0,
+      "minimum": 1143.0,
+      "maximum": 1143.0
+    }
+  }
+}

@@ -205,6 +205,20 @@ exec(compile(code, "<benchmark home>", "exec"))
 
 
 class BenchmarkArtifactTest(unittest.TestCase):
+    def test_committed_block_pairs_real_payload_hash_with_ordered_results(self):
+        block = dict(block_id=dict(hash="ab" * 32), block=dict(header=dict(height="7", chain_id="bench", app_hash="cd" * 32, time="2026-09-08T00:00:00Z"), data=dict(txs=[base64.b64encode(b"transaction").decode()])))
+        results = dict(height="7", txs_results=[dict(code=1, gas_wanted="100", gas_used="90")])
+        row = artifact.committed_block_summary(block, results, 7, "bench")
+        self.assertEqual(row["tx_payload_bytes"], 11)
+        self.assertEqual(row["transactions"][0]["txhash"], hashlib.sha256(b"transaction").hexdigest().upper())
+        self.assertEqual(row["transactions"][0]["code"], 1)
+        for bad in (dict(results, height="8"), dict(results, txs_results=[]), dict(results, txs_results=[dict(code=0, gas_used="90")])):
+            with self.assertRaises((ValueError, KeyError)):
+                artifact.committed_block_summary(block, bad, 7, "bench")
+        block["block"]["data"]["txs"] = ["invalid base64"]
+        with self.assertRaises(ValueError):
+            artifact.committed_block_summary(block, results, 7, "bench")
+
     def test_abort_retains_outcomes_and_specific_unknown_status(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.json"
@@ -1388,6 +1402,16 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertTrue((home / "restart.log").exists())
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
         self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
+
+    def test_c6_audit_profile_is_explicit_and_frozen_before_validation(self):
+        self.runner.home.mkdir(mode=0o700)
+        self.runner.prepare(audit_profile="c6")
+        self.assertEqual(self.runner.doc["profile"]["audit_profile"], "c6")
+        for node in self.runner.nodes:
+            genesis = json.loads((Path(node["home"]) / "config/genesis.json").read_text())
+            params = genesis["app_state"]["nilchain"]["params"]
+            self.assertEqual((params["quota_min_blobs"], params["quota_max_blobs"]), ("132", "132"))
+            self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"), self.runner.doc["genesis_sha256"])
 
     def test_owned_child_peak_memory_survives_normal_and_forced_stop(self):
         # Touch actual pages, then release them before exit: wait4 retains the
