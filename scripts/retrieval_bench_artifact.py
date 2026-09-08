@@ -1,7 +1,7 @@
 """Validation/accounting for bench_retrieval_sessions.sh; Python stdlib only.
 
-Legacy fixture instrumentation and offline C3/C6 planning arithmetic; neither is
-a v2 challenge generator or capacity qualification. Malformed query responses
+Legacy fixture instrumentation, offline C3/C6 arithmetic and bounded v2 proof
+preparation; these do not establish capacity qualification. Malformed query responses
 never provide completion evidence. Print the offline report without a node:
     python3 scripts/retrieval_bench_artifact.py arithmetic
 """
@@ -362,6 +362,49 @@ def execute_scheduled_transaction(job):
     result = scheduled_transaction(command_job)
     return dict(result, session_id=state["session_id"], context_hash=prepared["context_hash"], seed=prepared["seed"],
                 preparation_latency_ns=preparation_ns)
+
+
+def fresh_session_proof_builder(config, output_directory):
+    """Build the existing lifecycle callback; no signing authority in the child.
+
+    config supplies owned rpc/api URLs, node_id, library, setup and Go fixture
+    directory. Each operation supplies proof_expectation (the pinned intent
+    documented in retrieval_fresh_proof.frozen_context) and proof_submit argv
+    containing one {proof_path}. Outputs live in a newly owned private directory.
+    Native setup/loading, node queries and file writes share the stage deadline.
+    """
+    config = dict(config)
+    for name in ("library", "setup", "fixture"):
+        config[name] = str(Path(config[name]).resolve(strict=True))
+    output_directory = Path(output_directory).absolute()
+    output_directory.mkdir(mode=0o700)
+
+    def prepare_session_proof(operation, session_id, deadline_ns):
+        if not isinstance(session_id, str) or not re.fullmatch(r"[0-9a-f]{64}", session_id):
+            raise ValueError("invalid committed session ID")
+        argv = operation["proof_submit"]
+        if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) or not arg for arg in argv) or argv.count("{proof_path}") != 1:
+            raise ValueError("proof_submit requires exactly one standalone {proof_path}")
+        expected = operation["proof_expectation"]
+        if expected["session"]["authorized_proof_provider"] != operation["submit-proof"]["signer"]:
+            raise ValueError("frozen proof authority differs from scheduled signer")
+        if expected["session"]["owner"] != operation["open-session"]["signer"] or expected["session"]["owner"] != operation["confirm"]["signer"]:
+            raise ValueError("frozen owner differs from scheduled lifecycle signer")
+        output = output_directory / (session_id + ".json")
+        request = dict(config=config, expected=expected, session_id=session_id,
+                       deadline=deadline_ns, output=str(output))
+        encoded = json.dumps(request, separators=(",", ":"))
+        if len(encoded.encode()) > 65536:
+            raise ValueError("proof preparation request exceeds 64 KiB")
+        result = run_bounded_command([sys.executable, str(Path(__file__).with_name("retrieval_fresh_proof.py")), encoded], deadline_ns)
+        if result.returncode:
+            raise ValueError("native proof preparation failed: " + result.stderr[-8192:])
+        prepared = json.loads(result.stdout.strip().splitlines()[-1])
+        if prepared.get("session_id") != session_id or not output.is_file():
+            raise ValueError("producer did not retain the expected proof")
+        return dict(prepared, submit=[str(output) if arg == "{proof_path}" else arg for arg in argv])
+
+    return prepare_session_proof
 
 
 class RetrievalLifecycleJournal:
@@ -855,6 +898,7 @@ def command(*args):
 def provenance(root, binary, library):
     root = Path(root)
     paths = ["scripts/bench_retrieval_sessions.sh", "scripts/retrieval_bench_artifact.py",
+             "scripts/retrieval_fresh_proof.py",
              "scripts/retrieval_consensus_profile.json", "scripts/chain_go.sh",
              "polystorechain/x/polystorechain/keeper/retrieval_session_bench_test.go",
              "polystorechain/x/polystorechain/keeper/retrieval_fixture_metadata_test.go"]
