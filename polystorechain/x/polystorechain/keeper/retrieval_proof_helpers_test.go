@@ -47,12 +47,13 @@ func commitValidMode2ContentAndProof(
 	require.Equal(t, root, root2)
 
 	_, err = msgServer.UpdateDealContent(ctx, &types.MsgUpdateDealContent{
-		Creator:     owner,
-		DealId:      dealID,
-		Cid:         polyfsCid,
-		Size_:       8 * 1024 * 1024,
-		TotalMdus:   4,
-		WitnessMdus: 1,
+		Creator:              owner,
+		PreviousManifestRoot: hexEncode(dealAfterCreate.ManifestRoot),
+		DealId:               dealID,
+		Cid:                  polyfsCid,
+		Size_:                8 * 1024 * 1024,
+		TotalMdus:            4,
+		WitnessMdus:          1,
 	})
 	require.NoError(t, err)
 

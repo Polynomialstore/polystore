@@ -6,11 +6,11 @@ import (
 
 	errorsmod "cosmossdk.io/errors"
 
-    "polystorechain/x/polystorechain/types"
+	"polystorechain/x/polystorechain/types"
 )
 
 func (k msgServer) UpdateParams(ctx context.Context, req *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
-	authority, err := k.addressCodec.StringToBytes(req.Authority);
+	authority, err := k.addressCodec.StringToBytes(req.Authority)
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "invalid authority address")
 	}
@@ -24,7 +24,7 @@ func (k msgServer) UpdateParams(ctx context.Context, req *types.MsgUpdateParams)
 		return nil, err
 	}
 
-	if err := k.Params.Set(ctx, req.Params); err != nil {
+	if err := k.SetParams(ctx, req.Params); err != nil {
 		return nil, err
 	}
 

@@ -25,6 +25,9 @@ var (
 
 func (k Keeper) BeginBlock(goCtx context.Context) error {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	if err := k.processRetrievalChallengeState(ctx); err != nil {
+		return err
+	}
 	params := k.GetParams(ctx)
 	if params.EpochLenBlocks == 0 {
 		return nil

@@ -58,6 +58,17 @@ type Keeper struct {
 	RetrievalSessionsByProvider      collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider    collections.Map[[]byte, string]
+	RetrievalV2ActivatedHeight       collections.Item[uint64]
+	ChallengeAnchors                 collections.Map[uint64, types.ChallengeAnchor]
+	ChallengePendingAnchors          collections.Map[uint64, bool]
+	RetrievalSessionExpiryRefs       collections.Map[collections.Pair[uint64, []byte], bool]
+	RetrievalSessionExpiryCounts     collections.Map[uint64, uint64]
+	RetrievalSessionOpenCounts       collections.Map[uint64, uint64]
+	RetrievalSessionLiveCount        collections.Item[uint64]
+	RetrievalSessionGenerationRefs   collections.Map[collections.Pair[uint64, uint64], uint64]
+	RetrievalSessionGenerationCounts collections.Map[uint64, uint64]
+	RetrievalSessionGenerationCount  collections.Item[uint64]
+
 	VoucherUsedNonces                collections.Map[collections.Pair[uint64, uint64], bool]
 	AuditTasks                       collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
 	VirtualStripes                   collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
@@ -162,7 +173,18 @@ func NewKeeper(
 			collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.StringKey),
 			collections.Uint64Value,
 		),
-		RetrievalSessionProofProvider: collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
+		RetrievalSessionProofProvider:    collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
+		RetrievalV2ActivatedHeight:       collections.NewItem(sb, types.RetrievalV2ActivatedHeightKey, "retrieval_v2_activated_height", collections.Uint64Value),
+		ChallengeAnchors:                 collections.NewMap(sb, types.ChallengeAnchorsKey, "challenge_anchors", collections.Uint64Key, codec.CollValue[types.ChallengeAnchor](cdc)),
+		ChallengePendingAnchors:          collections.NewMap(sb, types.ChallengePendingAnchorsKey, "challenge_pending_anchors", collections.Uint64Key, collections.BoolValue),
+		RetrievalSessionExpiryRefs:       collections.NewMap(sb, types.RetrievalSessionExpiryRefsKey, "retrieval_session_expiry_refs", collections.PairKeyCodec(collections.Uint64Key, collections.BytesKey), collections.BoolValue),
+		RetrievalSessionExpiryCounts:     collections.NewMap(sb, types.RetrievalSessionExpiryCountsKey, "retrieval_session_expiry_counts", collections.Uint64Key, collections.Uint64Value),
+		RetrievalSessionOpenCounts:       collections.NewMap(sb, types.RetrievalSessionOpenCountsKey, "retrieval_session_open_counts", collections.Uint64Key, collections.Uint64Value),
+		RetrievalSessionLiveCount:        collections.NewItem(sb, types.RetrievalSessionLiveCountKey, "retrieval_session_live_count", collections.Uint64Value),
+		RetrievalSessionGenerationRefs:   collections.NewMap(sb, types.RetrievalSessionGenerationRefsKey, "retrieval_session_generation_refs", collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key), collections.Uint64Value),
+		RetrievalSessionGenerationCounts: collections.NewMap(sb, types.RetrievalSessionGenerationCountsKey, "retrieval_session_generation_counts", collections.Uint64Key, collections.Uint64Value),
+		RetrievalSessionGenerationCount:  collections.NewItem(sb, types.RetrievalSessionGenerationCountKey, "retrieval_session_generation_count", collections.Uint64Value),
+
 		VoucherUsedNonces: collections.NewMap(
 			sb,
 			types.VoucherUsedNonceKey,
@@ -451,11 +473,23 @@ func (k Keeper) RecordDealActivity(ctx sdk.Context, dealID uint64, bytesServed u
 	}
 	// If not found, it's zero-value (empty struct), which is fine for proto3.
 
-	state.BytesServedTotal += bytesServed
+	nextBytes, overflow := addUint64(state.BytesServedTotal, bytesServed)
+	if overflow {
+		return fmt.Errorf("deal served-byte counter overflow")
+	}
+	state.BytesServedTotal = nextBytes
 	if failed {
-		state.FailedChallengesTotal += 1
+		next, overflow := addUint64(state.FailedChallengesTotal, 1)
+		if overflow {
+			return fmt.Errorf("deal failed-challenge counter overflow")
+		}
+		state.FailedChallengesTotal = next
 	} else {
-		state.SuccessfulRetrievalsTotal += 1
+		next, overflow := addUint64(state.SuccessfulRetrievalsTotal, 1)
+		if overflow {
+			return fmt.Errorf("deal retrieval counter overflow")
+		}
+		state.SuccessfulRetrievalsTotal = next
 	}
 	state.LastUpdateHeight = ctx.BlockHeight()
 

@@ -439,6 +439,10 @@ message MsgOpenRetrievalSession {
 
   uint64 nonce = 8;
   uint64 expires_at = 9; // block height (0 = no expiry)
+  // Version 2 binds the effective registered responder before its future challenge.
+  string authorized_proof_provider = 10 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint32 challenge_version = 11;
+
 }
 
 message MsgOpenRetrievalSessionResponse {
@@ -491,6 +495,10 @@ message MsgOpenRetrievalSessionSponsored {
     AllowlistProof allowlist_proof = 11;
     VoucherAuth voucher = 12;
   }
+  // Version 2 binds the effective registered responder before its future challenge.
+  string authorized_proof_provider = 13 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint32 challenge_version = 14;
+
 }
 
 message MsgOpenRetrievalSessionSponsoredResponse {
@@ -530,6 +538,10 @@ message MsgOpenProtocolRetrievalSession {
     AuditTaskRef audit_task = 12;
     RepairAuth repair = 13;
   }
+  // Version 2 binds the effective registered responder before its future challenge.
+  string authorized_proof_provider = 14 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint32 challenge_version = 15;
+
 }
 
 message MsgOpenProtocolRetrievalSessionResponse {

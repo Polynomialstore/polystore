@@ -410,6 +410,12 @@ message QueryGetRetrievalSessionRequest {
 
 message QueryGetRetrievalSessionResponse {
   RetrievalSession session = 1 [(gogoproto.nullable) = false];
+  // Computed from immutable session state; absent for legacy sessions.
+  bytes challenge_context = 2;
+  bytes challenge_context_hash = 3;
+  // Exactly 32 bytes when captured and retained, otherwise empty. Never a fallback.
+  bytes challenge_seed = 4;
+
 }
 
 message QueryListRetrievalSessionsByOwnerRequest {
