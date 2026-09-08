@@ -92,6 +92,23 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
   // its authorized provider request. One deadline bounds the entire wave,
   // including the maximum 64 sessions; later requests stop at that deadline.
   const proofSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  for (const session of sessions) outcomes.push(await requestProof(session, base, { ...options, signal: proofSignal }))
+  // Providers verify that the frozen payee is their actual signing account.
+  // Different payees can submit concurrently; a shared deputy stays serial.
+  const byPayee = new Map<string, number[]>()
+  sessions.forEach((session, index) => {
+    const indexes = byPayee.get(session.payee) ?? []
+    indexes.push(index)
+    byPayee.set(session.payee, indexes)
+  })
+  const groups = Array.from(byPayee.values())
+  let nextGroup = 0
+  const worker = async () => {
+    while (nextGroup < groups.length) {
+      for (const index of groups[nextGroup++]) {
+        outcomes[index] = await requestProof(sessions[index], base, { ...options, signal: proofSignal })
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, groups.length) }, worker))
   return outcomes
 }
