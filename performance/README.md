@@ -158,3 +158,45 @@ proof-only and full-lifecycle sustained-load phases, backlog/block-fill/transact
 byte and execution/RSS measurements. V2 fixtures and provider delivery require
 #255–#257. Fifteen-minute and four-validator qualification runs remain gated on
 those prerequisites; this serial smoke provides no capacity or activation claim.
+
+
+## Streamed browser retrieval gate (#260)
+
+The existing twelve-provider browser harness has an opt-in untransformed payload
+check. It streams file creation and downloaded-byte hashing, verifies the exact
+K8 layout and canonical COMPLETED sessions, and removes the generated file and
+browser download afterward. It retains small logs/summaries, not payload blobs.
+Run from a topic checkout after building/testing its compatible native code:
+
+```sh
+E2E_MODE2_STREAMED=1 E2E_MODE2_STREAMED_BYTES=16252928 \
+  PLAYWRIGHT_SKIP_INSTALL=1 scripts/e2e_mode2_stripe_multi_sp.sh
+```
+
+This uses two raw MDUs (16,252,928 bytes), 128 blobs and 16 sessions. Select
+`E2E_MODE2_STREAMED_BYTES=1073741824` for exactly 1 GiB: 133 MDUs, 8,457 blobs and
+1,064 sessions. `E2E_MODE2_STREAMED_ROUTE=provider` selects direct provider fetch;
+the default uses the user-gateway. The existing heavy workflow's
+`run_mode2_large` manual input selects the 1 GiB gateway run. Large runs require
+at least 12 GiB available scratch space after builds and before funding; all runs
+stop if available space falls below 2 GiB while downloading. A failed storage
+check is unavailable infrastructure, not successful delivery.
+
+[The retained two-MDU diagnostic](../bench/retrieval_session_capacity/browser-streamed/two-mdu-diagnostic.json)
+compares serial and four-payee proof submission on reset local stacks. Both runs
+verify the same nonconstant AES-CTR fixture hash, exact downloaded bytes, 16
+unique COMPLETED sessions and 128 blobs. Binary, native library, setup and test
+harness hashes match; only the settlement helper differs. Retrieval took 170,079
+ms serial and 109,451 ms parallel (35.6% lower in this one pair). Upload timings
+are separate. The candidate uses at most four independent frozen payees in
+parallel, keeps each payee serial, and preserves one shared 95-second post-ACK
+proof deadline and unknown-outcome recovery.
+
+For this local diagnostic, services used the cached #257 checkout while Vite and
+Playwright used the recorded harness checkout. The serial helper was exactly
+`d4ecc5f0:polystore-website/src/lib/retrievalSettlement.ts`; the candidate was
+`988cf4c6`'s helper. Each stack started fresh with identical environment and the
+recorded binaries. Source hashes and request timings are retained in the JSON.
+This is one controlled pair with system liveness disabled for the isolated E2E
+profile, not warmed repeated performance, healthy storage-audit, capacity, WAN,
+or 1 GiB qualification. The current local machine lacks the 1 GiB scratch budget.
