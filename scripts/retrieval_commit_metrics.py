@@ -14,6 +14,7 @@ import argparse
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, localcontext
 import json
 import math
+import os
 import re
 import time
 import urllib.parse
@@ -290,6 +291,28 @@ def summarize_commit_metrics(samples, *, start_committed_height, end_committed_h
             "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"}
 
 
+def stream_commit_metrics(url, chain_id, output, seconds, timeout=2.0):
+    """Retain frequent raw samples; the driver still owns hard timeout/fences.
+
+    No per-block timing is inferred here. Missed observations remain grouped
+    upper bounds in summarize_commit_metrics rather than invented samples.
+    """
+    if type(seconds) is not int or not 1 <= seconds <= 1100 or not os.path.isabs(output):
+        raise ValueError("stream requires absolute new output and 1..1100 seconds")
+    end = time.clock_gettime_ns(time.CLOCK_MONOTONIC) + seconds * 10**9
+    count = 0
+    with open(output, "x", opener=lambda path, flags: os.open(path, flags, 0o600)) as target:
+        while time.clock_gettime_ns(time.CLOCK_MONOTONIC) < end:
+            value = capture_commit_metrics(url, chain_id, timeout)
+            target.write(json.dumps(value, sort_keys=True) + "\n")
+            target.flush()
+            count += 1
+            remaining = (end - time.clock_gettime_ns(time.CLOCK_MONOTONIC)) / 1e9
+            if remaining > 0:
+                time.sleep(min(0.2, remaining))
+    return dict(path=output, samples=count, qualification=False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url")
@@ -298,9 +321,15 @@ if __name__ == "__main__":
     parser.add_argument("--rpc-url")
     parser.add_argument("--node-id")
     parser.add_argument("--process-initial-height", type=int)
+    parser.add_argument("--stream-output")
+    parser.add_argument("--stream-seconds", type=int)
     args = parser.parse_args()
     fenced = (args.rpc_url, args.node_id, args.process_initial_height)
-    if any(value is not None for value in fenced):
+    if args.stream_output is not None or args.stream_seconds is not None:
+        if args.stream_output is None or args.stream_seconds is None or any(value is not None for value in fenced):
+            parser.error("stream requires output/seconds and excludes per-scrape fences")
+        result = stream_commit_metrics(args.url, args.chain_id, args.stream_output, args.stream_seconds, args.timeout)
+    elif any(value is not None for value in fenced):
         if any(value is None for value in fenced):
             parser.error("fenced capture requires RPC URL, node ID and process initial height")
         result = capture_fenced_commit_metrics(args.url, args.chain_id, *fenced, args.timeout)

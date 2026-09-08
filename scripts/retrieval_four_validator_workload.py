@@ -3,7 +3,8 @@
 
 Settlement smoke uses exported K8/K2 fixtures without provider transport.
 Healthy-providers uses canonical K2 ingest and three provider-daemons to check
-normal storage audits. Neither mode verifies delivered files. Owned services
+normal storage audits. Sustained-providers adds finite real-artifact proof load.
+No mode verifies delivered files. Owned services
 start only when this command is explicitly invoked.
 """
 import argparse
@@ -625,7 +626,7 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     return lifecycle.home / "evidence.json"
 
 
-def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized):
+def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized, expected_samples=None):
     """Check committed inventory/coverage without treating absent audits as success."""
     found = {}
     for view in value:
@@ -645,7 +646,7 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
                 producer.uint(snapshot["deal_end"]) != producer.uint(deal["end_block"])):
             raise ValueError("audit differs from the committed K2 assignment")
         count = producer.uint(audit["sample_count"])
-        if not 1 <= count <= 32:  # One K2 user MDU has 32 distinct rows per slot.
+        if not 1 <= count <= 32 or (expected_samples is not None and count != expected_samples):  # One K2 user MDU has 32 distinct rows per slot.
             raise ValueError("invalid audit sample count")
         coverage = producer.b64(audit["coverage"], (count + 7) // 8)
         accepted = producer.uint(audit.get("accepted_count", 0))
@@ -674,8 +675,345 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
     return found
 
 
-def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
-    """Real canonical ingest and normal audit diagnostic; no retrieval/capacity claim."""
+def sustained_offsets(step_seconds):
+    """Five fixed offered-rate steps; pilot scales duration, never the rates."""
+    artifact.integer(step_seconds, "step seconds", 4, 180)
+    return [(step * step_seconds * 10**9 + index * interval)
+            for step, interval in enumerate((4_000_000_000, 2_000_000_000, 1_000_000_000, 500_000_000, 250_000_000))
+            for index in range((step_seconds * 10**9 + interval - 1) // interval)]
+
+
+def open_session_batch(lifecycle, operations, directory, command):
+    """SDK append signs one atomic transaction with one owner sequence."""
+    if not 1 <= len(operations) <= 64:
+        raise ValueError("open batch must contain 1..64 sessions")
+    owner = operations[0]["open-session"]["signer"]
+    if any(op["open-session"]["signer"] != owner for op in operations):
+        raise ValueError("atomic batch requires one owner")
+    unsigned, signed = directory / "unsigned.jsonl", directory / "signed.json"
+    directory.mkdir(mode=0o700)
+    with unsigned.open("x") as output:
+        for operation in operations:
+            args = operation["open-session"]["submit"] + ["--generate-only"]
+            tx = json.loads(command(args))
+            messages = tx["body"]["messages"]
+            if len(messages) != 1 or messages[0]["@type"] != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSession":
+                raise ValueError("generated open transaction has unexpected messages")
+            message, expected = messages[0], operation["proof_expectation"]["session"]
+            if (message["creator"] != owner or message["provider"] != expected["provider"] or
+                    message["authorized_proof_provider"] != expected["authorized_proof_provider"] or
+                    producer.b64(message["manifest_root"], 32).hex() != expected["manifest_root"] or
+                    producer.uint(message["challenge_version"]) != 2 or any(
+                        producer.uint(message.get(key, 0)) != producer.uint(expected[key]) for key in
+                        ("deal_id", "start_mdu_index", "start_blob_index", "blob_count", "nonce", "expires_at"))):
+                raise ValueError("generated open transaction differs from independent session intent")
+            output.write(json.dumps(tx, separators=(",", ":")) + "\n")
+    node = lifecycle.nodes[0]
+    common = ["--home", node["home"], "--node", f'http://127.0.0.1:{node["rpc"]}',
+              "--keyring-backend", "test", "--chain-id", lifecycle.chain]
+    command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append", "--from", owner,
+             *common, "--output-document", str(signed)])
+    value = json.loads(signed.read_text())
+    original = [json.loads(line)["body"]["messages"][0] for line in unsigned.read_text().splitlines()]
+    if value["body"]["messages"] != original or len(value["signatures"]) != 1:
+        raise ValueError("signed batch differs from ordered open intent")
+    job = dict(operations[0]["open-session"], kind="open-session-batch",
+               submit=[str(lifecycle.binary), "tx", "broadcast", str(signed), *common,
+                       "--broadcast-mode", "sync", "--output", "json"])
+    result = artifact.scheduled_transaction(job)
+    lifecycle.doc.setdefault("preparation_transactions", []).append(result)
+    lifecycle.save()
+    if result["outcome"] != "committed_success":
+        raise ValueError("atomic open failed or ambiguous; owner quarantined, no retry")
+    return artifact.opened_session_ids(result, len(operations)), result["height"]
+
+
+def start_commit_streams(lifecycle, seconds, processes):
+    """The caller owns every unreaped collector until group cleanup."""
+    rows = lifecycle.doc["commit_streams"] = []
+    for node in lifecycle.nodes:
+        path = lifecycle.home / f'commit-{node["node_id"]}.jsonl'
+        log = path.with_suffix(".log")
+        argv = [sys.executable, commit_metrics.__file__, f'http://127.0.0.1:{node["metrics"]}/metrics',
+                lifecycle.chain, "--stream-output", str(path), "--stream-seconds", str(seconds)]
+        with log.open("xb") as output:
+            process = subprocess.Popen(argv, env=lifecycle.env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+        processes.append(process)
+        rows.append(dict(node_id=node["node_id"], path=str(path), log=str(log), pid=process.pid, command=argv))
+    return rows
+
+
+def reconcile_sustained_blocks(lifecycle, journal):
+    """Retain bounded public block summaries and verify every committed workload tx."""
+    phases = lifecycle.doc["commit_step_metrics"]["phases"]
+    before, after = phases["sustained_before"], phases["sustained_after"]
+    if not before["complete"] or not after["complete"] or len(before["nodes"]) != 4 or len(after["nodes"]) != 4:
+        raise ValueError("four complete metric boundaries required")
+    first = min(row["sample"]["committed_height"] for row in before["nodes"]) + 1
+    last = max(row["sample"]["committed_height"] for row in after["nodes"])
+    artifact.integer(last - first + 1, "fenced block count", 1, 1200)
+    with sqlite3.connect(f"file:{journal}?mode=ro", uri=True) as db:
+        results = [json.loads(row[0]) for row in db.execute("SELECT result FROM transactions")]
+    committed = [row for row in results if row["outcome"] in ("committed_success", "committed_failure")]
+    expected = {row["txhash"]: row for row in committed}
+    if len(expected) != len(committed):
+        raise ValueError("journal repeats a committed transaction hash")
+    path = lifecycle.home / "sustained-blocks.jsonl"
+    matched = set()
+    with path.open("x") as output:
+        for height in range(first, last + 1):
+            lifecycle.remaining()
+            node = lifecycle.nodes[0]
+            block = lifecycle.query(node, f"/block?height={height}")
+            summary = artifact.committed_block_summary(block,
+                lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+            for node in lifecycle.nodes:
+                signed = lifecycle.query(node, f"/commit?height={height}")
+                header, commit = signed["signed_header"]["header"], signed["signed_header"]["commit"]
+                if (signed.get("canonical") is not True or producer.uint(header["height"]) != height or
+                        producer.uint(commit["height"]) != height or header["chain_id"] != lifecycle.chain or
+                        header["time"] != summary["time"] or header["app_hash"].upper() != summary["preceding_app_hash"] or
+                        commit["block_id"]["hash"].upper() != summary["block_hash"]):
+                    raise ValueError("validators disagree on committed block/application hash or header identity")
+            for node in lifecycle.nodes[1:]:
+                other = artifact.committed_block_summary(block,
+                    lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+                if other["transactions"] != summary["transactions"]:
+                    raise ValueError("validators disagree on committed transaction results")
+            for tx in summary["transactions"]:
+                if tx["txhash"] not in expected:
+                    continue
+                row = expected[tx["txhash"]]
+                if tx["txhash"] in matched or row["height"] != height or any(row[key] != tx[key] for key in ("code", "gas_used", "gas_wanted")):
+                    raise ValueError("committed workload transaction differs from retained journal")
+                tx["operation_id"] = row["operation_id"]
+                matched.add(tx["txhash"])
+            output.write(json.dumps(summary, sort_keys=True) + "\n")
+    if matched != set(expected):
+        raise ValueError("fenced blocks omit a committed workload transaction")
+    lifecycle.doc["committed_block_reconciliation"] = dict(path=str(path), sha256=artifact.sha256(path),
+        first_height=first, last_height=last, committed_workload_transactions=len(matched),
+        all_four_headers_agree=True, all_four_results_agree=True, qualification=False)
+
+
+def summarize_commit_streams(lifecycle, processes):
+    """Filter raw observations strictly between the independently pinned fences."""
+    phases = lifecycle.doc["commit_step_metrics"]["phases"]
+    before = {row["node_id"]: row["sample"] for row in phases["sustained_before"]["nodes"]}
+    after = {row["node_id"]: row["sample"] for row in phases["sustained_after"]["nodes"]}
+    rows = lifecycle.doc["commit_streams"]
+    if len(rows) != 4 or len(processes) != 4 or set(before) != set(after) or {row["node_id"] for row in rows} != set(before):
+        raise ValueError("four distinct Commit collectors and matching fences required")
+    for row, process in zip(rows, processes):
+        row["returncode"] = process.returncode
+        if process.returncode not in (0, -signal.SIGTERM):
+            raise ValueError("Commit metric collector failed; inspect retained log")
+        path = Path(row["path"])
+        if path.stat().st_size > 32 * 1024 * 1024:
+            raise ValueError("Commit stream exceeds bounded capture size")
+        start, end = before[row["node_id"]], after[row["node_id"]]
+        samples, count = [start], 0
+        with path.open() as source:
+            for line in source:
+                if len(line) > 16384 or count >= 12000:
+                    raise ValueError("Commit stream line/count exceeds capture bound")
+                sample = json.loads(line)
+                count += 1
+                if sample["chain_id"] != lifecycle.chain:
+                    raise ValueError("Commit stream belongs to another chain")
+                if sample["monotonic_start_ns"] >= start["monotonic_end_ns"] and sample["monotonic_end_ns"] <= end["monotonic_start_ns"]:
+                    samples.append(sample)
+        if count == 0:
+            raise ValueError("Commit collector produced no samples")
+        samples.append(end)
+        row.update(sha256=artifact.sha256(path), raw_samples=count, fenced_samples=len(samples),
+            summary=commit_metrics.summarize_commit_metrics(samples,
+                start_committed_height=start["committed_height"], end_committed_height=end["committed_height"],
+                boundaries_reconciled=True))
+        if row["summary"]["qualified"] is not True:
+            raise ValueError("Commit samples do not cover the fenced workload blocks")
+
+
+def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas):
+    """Real slot-zero inventory and bounded existing scheduler; no client ACK claim."""
+    import threading
+    offsets = sustained_offsets(step_seconds)
+    duration = step_seconds * 5
+    exporter = Path(exporter).resolve(strict=True)
+    if not exporter.is_file() or not os.access(exporter, os.X_OK):
+        raise ValueError("proof exporter must be executable")
+    artifact.integer(proof_gas, "proof gas", 1, 64000000)
+    for i in range(3, 11):  # Registration follows content placement; these own no storage slots.
+        send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", "/ip4/127.0.0.1/tcp/1/http"])
+    deputies = [lifecycle.signers[f"provider{i}"] for i in range(3, 11)]
+    doc = lifecycle.doc
+    doc.update(mode="four-validator-sustained-retrieval", workload="real K2 slot-zero, 32 fresh openings/session; eight deputy signers",
+        sustained_profile=dict(step_seconds=step_seconds, measurement_seconds=duration, rates=[0.25, 0.5, 1, 2, 4],
+            inventory=len(offsets) + 8, warmup_sessions=8, measured_sessions=len(offsets), proofs_per_session=32, max_in_flight=8, max_queued=128,
+            max_queued_per_signer=16, proof_gas=proof_gas, qualification=False),
+        limits=["Proof acceptance capacity only; no delivered bytes or client ACKs",
+                "Normal mint retained; raw economics are not a conservation assertion",
+                "Four local processes do not establish WAN capacity", "No restart qualification"])
+    epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
+    monitor_stop, failures = threading.Event(), []
+    streams = []
+    observations = lifecycle.home / "sustained-audits.jsonl"
+    def monitor():
+        last = None
+        try:
+            with observations.open("x") as output:
+                while not monitor_stop.is_set():
+                    heights = []
+                    for node in lifecycle.nodes:
+                        status = lifecycle.query(node, "/status")
+                        if status["node_info"]["id"] != node["node_id"] or status["node_info"]["network"] != lifecycle.chain:
+                            raise ValueError("audit monitor RPC node identity mismatch")
+                        heights.append(producer.uint(status["sync_info"]["latest_block_height"]))
+                    height = min(heights) - 1
+                    epoch = (height - 1) // epoch_length + 1
+                    if height >= (epoch - 1) * epoch_length + 2 and epoch != last:
+                        if last is not None and epoch > last + 1:
+                            raise ValueError("audit monitor missed an epoch retention window")
+                        row = dict(height=height, epoch=epoch, current=audits(height, False, epoch),
+                                   previous=audits(height, True, epoch - 1))
+                        output.write(json.dumps(row) + "\n")
+                        output.flush()
+                        last = epoch
+                    monitor_stop.wait(5)
+        except BaseException as error:
+            failures.append(error)
+    worker = threading.Thread(target=monitor, name="sustained-audit-monitor")
+    worker.start()
+    try:
+        minimum = lifecycle.wait_height(3)
+        # Keep all expiry buckets below128 and TTL <=4096 at every open.
+        expiry = minimum + 4000
+        if expiry + (len(offsets) + 7) // 128 >= producer.uint(deal["end_block"]):
+            raise ValueError("insufficient deal lifetime for inventory")
+        price = producer.uint(doc["frozen_module_params"]["retrieval_price_per_blob"]["amount"], 256)
+        owner, assigned = lifecycle.signers["owner0"], providers[0]
+        root = producer.b64(deal["manifest_root"], 32).hex()
+        directory = next(Path(row["directory"]) for row in doc["providers"] if row["address"] == assigned) / "deals" / str(deal["id"]) / root
+        operations = []
+        for index, offset in enumerate([0] * 8 + offsets):
+            payee, end = deputies[index % len(deputies)], expiry + index // 128
+            opening = transaction_job(lifecycle, owner, ["open-retrieval-session", "--deal-id", deal["id"],
+                "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", "0",
+                "--blob-count", "32", "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
+                "--authorized-proof-provider", payee], kind="open-session", gas="300000")
+            proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
+            operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < 8 else "measurement", offered_offset_ns=offset,
+                **{"open-session": opening, "submit-proof": proof},
+                proof_expectation=dict(minimum_opened_height=minimum,
+                    session=dict(deal_id=deal["id"], owner=owner, provider=assigned, authorized_proof_provider=payee,
+                        manifest_root=root, nonce=index + 1, expires_at=end, start_mdu_index=2, start_blob_index=0,
+                        blob_count=32, total_bytes=4194304, funding=1, locked_fee=str(price * 32)),
+                    snapshot=dict(chain_id=lifecycle.chain, setup_digest=producer.SETUP_DIGEST, generation=deal.get("current_gen", "0"),
+                        layout=2, k=2, m=1, slot=0, metadata_mdus=2, user_mdus=1, deal_end=deal["end_block"]))))
+        inventory = lifecycle.home / "inventory"
+        inventory.mkdir(mode=0o700)
+        requests = []
+        for start in range(0, len(operations), 64):
+            if failures:
+                raise failures[0]
+            batch = operations[start:start + 64]
+            ids, opened_height = open_session_batch(lifecycle, batch, inventory / f"batch-{start}", command)
+            wait(opened_height + 3)
+            for operation, sid in zip(batch, ids):
+                path = str(inventory / (sid + ".json"))
+                operation.pop("open-session")
+                operation["submit-proof"]["submit"][4] = path
+                evidence = read_session_evidence(lifecycle, operation, sid, None, lifecycle.deadline)
+                operation["prepared"] = dict(session_id=sid, proof_path=path, evidence=evidence)
+                artifact.prepared_session_pin(operation, evidence)
+                requests.append(dict(artifact_directory=str(directory), evidence=evidence, expected=operation["proof_expectation"],
+                                     session_id=sid, output_path=path))
+        manifest = inventory / "manifest.json"
+        manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain, trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"],
+            deadline_unix_ms=int(time.time() * 1000 + (lifecycle.deadline - artifact.monotonic_ns()) / 1e6), sessions=requests)))
+        env = dict(lifecycle.env, POLYSTORE_RETRIEVAL_EXPORT_MANIFEST=str(manifest))
+        result = artifact.run_bounded_command([str(exporter), "-test.run=^TestExportFrozenRetrievalInventory$", "-test.timeout=7200s"], lifecycle.deadline, env=env)
+        (inventory / "exporter.log").write_text(result.stdout + result.stderr)
+        if result.returncode or failures:
+            raise ValueError("real inventory export or audit monitor failed")
+        results = json.loads(Path(str(manifest) + ".result.json").read_text())["proofs"]
+        if len(results) != len(operations):
+            raise ValueError("exporter returned incomplete inventory")
+        for operation, result in zip(operations, results):
+            prepared = operation["prepared"]
+            pin = artifact.prepared_session_pin(operation, prepared["evidence"])
+            if any(result[key] != value for key, value in dict(session_id=prepared["session_id"], proof_path=prepared["proof_path"],
+                    context_hash=pin["context_hash"], seed=pin["seed"]).items()):
+                raise ValueError("exporter changed ordered session intent")
+            prepared["proof_sha256"] = result["proof_sha256"]
+            artifact.validate_prepared_proof_file(operation, pin)
+        warmup, operations = operations[:8], operations[8:]
+        warmup_journal = lifecycle.home / "warmup.sqlite"
+        warmup_deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
+        for operation in warmup:
+            operation["submit-proof"]["_deadline_ns"] = warmup_deadline
+        doc["warmup_scheduler"] = artifact.schedule_retrieval_lifecycles(warmup,
+            journal_path=warmup_journal, signers=deputies, max_in_flight=8, max_queued=8,
+            max_queued_per_signer=1, mode="prepared-proof-only",
+            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
+        _, warmup_transactions = journal_results(warmup_journal, warmup, proof_only=True)
+        doc["warmup"] = dict(journal=str(warmup_journal), sessions=8, proofs=256,
+                             committed_transactions=warmup_transactions, all_committed=True)
+        # One-second minimum local block time gives a conservative remaining-height floor.
+        current = lifecycle.wait_height(3)
+        if current + duration + 120 >= expiry or (lifecycle.deadline - artifact.monotonic_ns()) / 1e9 < duration + 120:
+            raise ValueError("prepared inventory cannot cover measurement and bounded drain before expiry/deadline")
+        doc["inventory"] = dict(manifest=str(manifest), sha256=artifact.sha256(manifest), exporter_sha256=artifact.sha256(exporter),
+                                 first_expiry=expiry, ready_height=current)
+        doc["economics_before"] = lifecycle.snapshot(current - 1)
+        capture_workload_metrics(lifecycle, "sustained_before", fenced=True)
+        lifecycle.save()
+        start_commit_streams(lifecycle, duration + 120, streams)
+        started = artifact.monotonic_ns()
+        for operation in operations:
+            operation["submit-proof"]["_deadline_ns"] = min(lifecycle.deadline, started + (duration + 120) * 10**9)
+        doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations,
+            journal_path=lifecycle.home / "sustained.sqlite", signers=deputies,
+            max_in_flight=8, max_queued=128, max_queued_per_signer=16, mode="prepared-proof-only",
+            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
+        # The last offered operation precedes the declared end by one interval.
+        while artifact.monotonic_ns() < started + duration * 10**9:
+            time.sleep(min(0.2, lifecycle.remaining()))
+        doc["offered_window_ns"] = duration * 10**9
+        doc["scheduler_and_drain_elapsed_ns"] = artifact.monotonic_ns() - started
+        capture_workload_metrics(lifecycle, "sustained_after", fenced=True)
+        stopped, streams = streams, []
+        artifact.stop_owned_process_groups(stopped)
+        reconcile_sustained_blocks(lifecycle, lifecycle.home / "sustained.sqlite")
+        summarize_commit_streams(lifecycle, stopped)
+        end_height = lifecycle.wait_height(3) - 1
+        doc["economics_after"] = lifecycle.snapshot(end_height)
+        measured_epoch = (end_height - 1) // epoch_length + 1
+        final_height = measured_epoch * epoch_length + 1
+        wait(final_height + 1)
+        doc["final_measured_epoch_audit"] = dict(height=final_height, epoch=measured_epoch,
+                                                audits=audits(final_height, True, measured_epoch))
+        if failures:
+            raise failures[0]
+        doc.update(status="sustained_retrieval_diagnostic_finished", audit_observations=str(observations), qualification=False)
+    finally:
+        owned, streams = streams, []
+        try:
+            artifact.stop_owned_process_groups(owned)
+        finally:
+            monitor_stop.set()
+            # A capture can have twelve bounded LCD reads plus four anchor reads.
+            stop_deadline = artifact.monotonic_ns() + 90 * 10**9
+            while worker.is_alive() and artifact.monotonic_ns() < stop_deadline:
+                worker.join(timeout=1)
+            if worker.is_alive():
+                raise TimeoutError("audit monitor did not stop")
+            if failures:
+                raise ValueError("audit monitor failed: " + str(failures[0]))
+
+
+def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None, audit_profile="normal"):
+    """Real canonical ingest and normal audits; optional bounded retrieval workload."""
     gateway = Path(gateway_binary).resolve(strict=True)
     cli = Path(cli_binary).resolve(strict=True)
     source = Path(product_source).resolve(strict=True)
@@ -684,6 +1022,12 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
             raise ValueError("gateway and native CLI binaries must be executable")
     if not (source / "polystore_cli/src/main.rs").is_file():
         raise ValueError("product-source must identify the supplied product source checkout")
+    if sustained is not None:
+        export_binary = Path(sustained["exporter"]).resolve(strict=True)
+        if not export_binary.is_file() or not os.access(export_binary, os.X_OK):
+            raise ValueError("proof exporter must be executable")
+        artifact.integer(sustained["proof_gas"], "proof gas", 1, 64000000)
+        sustained_offsets(sustained["step_seconds"])
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
@@ -730,6 +1074,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
             time.sleep(min(0.2, lifecycle.remaining()))
     try:
         require_retrieval_cli(lifecycle)
+        if sustained is not None and "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
+            raise ValueError("sustained workload requires SDK sign-batch --append")
         lifecycle.reserve_ports()
         for i in range(3):
             reservation = socket.socket()
@@ -750,7 +1096,16 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
             artifact_source_match="supplied binaries/library; build correspondence not attested")
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
-        lifecycle.prepare()  # Do not call smoke_genesis: normal mint/audit defaults remain intact.
+        lifecycle.prepare(audit_profile=audit_profile)  # Normal mint retained for both explicit audit profiles.
+        quotas = {min(32, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
+                      max(producer.uint(doc["frozen_module_params"]["quota_min_blobs"]),
+                          (32 * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
+                  for key in ("quota_bps_per_epoch_hot", "quota_bps_per_epoch_cold")}
+        if len(quotas) != 1 or not 1 <= next(iter(quotas)) <= 32:
+            raise ValueError("K2 diagnostic requires an unambiguous nonzero frozen audit quota")
+        expected_samples = quotas.pop()
+        doc["audit_sampling_profile"] = dict(name=audit_profile, population_per_slot=32, samples_per_slot=expected_samples,
+            samples_per_epoch=3 * expected_samples, qualification=False)
         genesis = json.loads((Path(lifecycle.nodes[0]["home"]) / "config/genesis.json").read_text())
         doc["normal_mint_profile"] = genesis["app_state"]["mint"]
         epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
@@ -849,14 +1204,15 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
                 doc["canonical_artifacts"].append(dict(slot=slot, provider=address, path=str(path),
                     bytes=size, sha256=artifact.sha256(path)))
         epoch = (height - 1) // epoch_length + 2
-        def audits(at, finalized):
+        def audits(at, finalized, observed_epoch=None):
+            selected_epoch = epoch if observed_epoch is None else observed_epoch
             rows = []
             for node in lifecycle.nodes:
                 values = []
                 for address in providers.values():
                     values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
-                checked = healthy_audit_views(values, deal, providers, epoch, epoch_length, lifecycle.chain, finalized=finalized)
-                anchor_height = (epoch - 1) * epoch_length + 1
+                checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain, finalized=finalized, expected_samples=expected_samples)
+                anchor_height = (selected_epoch - 1) * epoch_length + 1
                 anchor = lifecycle.query(node, f"/block?height={anchor_height}")
                 if (producer.uint(anchor["block"]["header"]["height"]) != anchor_height or
                         anchor["block"]["header"]["chain_id"] != lifecycle.chain or
@@ -887,6 +1243,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
                 raise ValueError("healthy audit changed active placement/content")
         check_providers()
         doc.update(status="healthy_provider_audit_diagnostic_passed", audit_coverage_verified=True)
+        if sustained is not None:
+            run_sustained(lifecycle, deal, providers, send, command, audits, wait, **sustained)
     except BaseException as error:
         doc.update(status="failed", error=str(error)[-8192:])
         raise
@@ -916,22 +1274,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ("binary", "library", "home"):
         parser.add_argument("--" + flag, required=True)
-    for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source"):
+    for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source", "proof-exporter"):
         parser.add_argument("--" + flag)
-    parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers"), default="settlement-smoke")
+    parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
+    parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
+    parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per32proof transaction")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
     mode, gateway = options.pop("mode"), options.pop("gateway_binary")
+    audit_profile = options.pop("audit_profile")
     cli, source = options.pop("cli_binary"), options.pop("product_source")
-    if mode == "healthy-providers":
+    exporter = options.pop("proof_exporter")
+    step_seconds, proof_gas = options.pop("step_seconds"), options.pop("proof_gas")
+    if mode == "sustained-providers":
+        if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
+            parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
+        print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
+            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas), audit_profile=audit_profile))
+    elif exporter or proof_gas is not None or step_seconds != 180:
+        parser.error("exporter, proof gas and pilot duration require sustained-providers")
+    elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
             parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")
-        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source))
+        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source, audit_profile=audit_profile))
     else:
-        if not k8 or not k2 or gateway or cli or source:
+        if not k8 or not k2 or gateway or cli or source or audit_profile != "normal":
             parser.error("settlement-smoke requires both fixtures and excludes --gateway-binary")
         print(run(artifact.FourValidatorLifecycle(**options), k8, k2, proof_only=proof_only))
 

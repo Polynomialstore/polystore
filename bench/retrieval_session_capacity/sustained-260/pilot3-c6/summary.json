@@ -1,0 +1,990 @@
+{
+  "status": "sustained_retrieval_diagnostic_finished",
+  "qualification": false,
+  "audit_sampling_profile": {
+    "name": "c6",
+    "population_per_slot": 32,
+    "samples_per_slot": 32,
+    "samples_per_epoch": 96,
+    "qualification": false
+  },
+  "warmup_committed": 8,
+  "measured_outcomes": {
+    "committed_success": 31
+  },
+  "gas_used_range": [
+    16314267,
+    16314282
+  ],
+  "commit_p95_upper_bound_ms": [
+    301.7144580010173,
+    380.35883300104496,
+    290.44050000104465,
+    337.3419160009907
+  ],
+  "offered_window_ns": 20000000000,
+  "scheduler_and_drain_elapsed_ns": 25074744000,
+  "block_reconciliation": {
+    "path": "blocks.jsonl",
+    "sha256": "074815322da431e5a518b74a2ba681221b5d3b441309632aaf19327c18bc327d",
+    "first_height": 271,
+    "last_height": 289,
+    "committed_workload_transactions": 31,
+    "all_four_headers_agree": true,
+    "qualification": false
+  },
+  "validator_peak_rss_bytes": [
+    245940224,
+    237879296,
+    240254976,
+    241942528
+  ],
+  "final_epoch": 3,
+  "final_accepted_samples": 96,
+  "final_required_samples": 96,
+  "source_commit": "ae99e847110869ff7f9ae5e99ef7fa37433f9781",
+  "source_status": "?? scripts/__pycache__/\n",
+  "artifacts": {
+    "chain": {
+      "path": "/tmp/polystore-254-execution/260-saturation-polystorechaind",
+      "sha256": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba"
+    },
+    "gateway": {
+      "path": "/tmp/polystore-254-execution/260-saturation-gateway",
+      "sha256": "dcdafc61ad6e49334095fa573399728675b3979a5706517d6dbe400380f4ebf1"
+    },
+    "exporter": {
+      "path": "/tmp/polystore-254-execution/260-saturation-exporter.test",
+      "sha256": "332ad773359ca376a5a030a2835d7c431e55f2cb4e6525f9f2572d2297c00ce8"
+    },
+    "library": {
+      "path": "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+      "sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b"
+    },
+    "cli": {
+      "path": "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_cli/target/release/polystore_cli",
+      "sha256": "a45898dbe96187bbd2cf861978394e254317faac212c1d12077af0216b8e1460"
+    }
+  },
+  "source_note": "Pilot2 used merged runtime fixes; pilot3 added explicit C6 profile. Later docs-only commits did not change running code.",
+  "original_evidence_path": "/tmp/polystore-254-execution/260-saturation-pilot3-c6/evidence.json",
+  "original_evidence_sha256": "8dac7aaf485a03d5b17bc18274c43f84c2eeba6c2b625094c9ac24f0391c5768",
+  "validation_scope": "Committed code/gas checked against node0 block_results; all four nodes agreed on headers and application hashes. Four-node result comparison was added after these pilots, not exercised here.",
+  "total_proof_transactions_committed": 39,
+  "guardian": {
+    "initial_free_bytes": 2244644864,
+    "minimum_free_bytes": 2116276224,
+    "disk_floor_bytes": 805306368,
+    "returncode": 0
+  },
+  "commit_metric_fences": {
+    "sustained_before": {
+      "complete": true,
+      "nodes": [
+        {
+          "node_id": "4918932fcd44ebfff171276050b7bf42e709ee36",
+          "endpoint": "http://127.0.0.1:26660/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395361579000, \"monotonic_start_ns\": 659395358542000, \"sum_seconds\": \"13.990880583999996\", \"wall_time_ns\": 1788884862411183000}, {\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395365345000, \"monotonic_start_ns\": 659395364638000, \"sum_seconds\": \"13.990880583999996\", \"wall_time_ns\": 1788884862417279000}], \"fully_observed\": true, \"node_id\": \"4918932fcd44ebfff171276050b7bf42e709ee36\", \"process_initial_height\": 0, \"status_heights\": [270, 270, 270]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 270, \"count\": 270, \"monotonic_end_ns\": 659395365345000, \"monotonic_start_ns\": 659395364638000, \"sum_seconds\": \"13.990880583999996\", \"wall_time_ns\": 1788884862417279000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395361579000,
+                  "monotonic_start_ns": 659395358542000,
+                  "sum_seconds": "13.990880583999996",
+                  "wall_time_ns": 1788884862411183000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395365345000,
+                  "monotonic_start_ns": 659395364638000,
+                  "sum_seconds": "13.990880583999996",
+                  "wall_time_ns": 1788884862417279000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "4918932fcd44ebfff171276050b7bf42e709ee36",
+              "process_initial_height": 0,
+              "status_heights": [
+                270,
+                270,
+                270
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 270,
+            "count": 270,
+            "monotonic_end_ns": 659395365345000,
+            "monotonic_start_ns": 659395364638000,
+            "sum_seconds": "13.990880583999996",
+            "wall_time_ns": 1788884862417279000
+          }
+        },
+        {
+          "node_id": "5e6e89950c78da3d356f82c2dcebb2d72b39c0d2",
+          "endpoint": "http://127.0.0.1:26661/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395424291000, \"monotonic_start_ns\": 659395422313000, \"sum_seconds\": \"14.570847546999996\", \"wall_time_ns\": 1788884862474954000}, {\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395427481000, \"monotonic_start_ns\": 659395426614000, \"sum_seconds\": \"14.570847546999996\", \"wall_time_ns\": 1788884862479256000}], \"fully_observed\": true, \"node_id\": \"5e6e89950c78da3d356f82c2dcebb2d72b39c0d2\", \"process_initial_height\": 0, \"status_heights\": [270, 270, 270]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 270, \"count\": 270, \"monotonic_end_ns\": 659395427481000, \"monotonic_start_ns\": 659395426614000, \"sum_seconds\": \"14.570847546999996\", \"wall_time_ns\": 1788884862479256000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395424291000,
+                  "monotonic_start_ns": 659395422313000,
+                  "sum_seconds": "14.570847546999996",
+                  "wall_time_ns": 1788884862474954000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395427481000,
+                  "monotonic_start_ns": 659395426614000,
+                  "sum_seconds": "14.570847546999996",
+                  "wall_time_ns": 1788884862479256000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "5e6e89950c78da3d356f82c2dcebb2d72b39c0d2",
+              "process_initial_height": 0,
+              "status_heights": [
+                270,
+                270,
+                270
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 270,
+            "count": 270,
+            "monotonic_end_ns": 659395427481000,
+            "monotonic_start_ns": 659395426614000,
+            "sum_seconds": "14.570847546999996",
+            "wall_time_ns": 1788884862479256000
+          }
+        },
+        {
+          "node_id": "696e5f716ddea7892247450639bb9b00c66d9e71",
+          "endpoint": "http://127.0.0.1:26662/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395484868000, \"monotonic_start_ns\": 659395483904000, \"sum_seconds\": \"14.339108451000003\", \"wall_time_ns\": 1788884862536545000}, {\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395486856000, \"monotonic_start_ns\": 659395486135000, \"sum_seconds\": \"14.339108451000003\", \"wall_time_ns\": 1788884862538776000}], \"fully_observed\": true, \"node_id\": \"696e5f716ddea7892247450639bb9b00c66d9e71\", \"process_initial_height\": 0, \"status_heights\": [270, 270, 270]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 270, \"count\": 270, \"monotonic_end_ns\": 659395486856000, \"monotonic_start_ns\": 659395486135000, \"sum_seconds\": \"14.339108451000003\", \"wall_time_ns\": 1788884862538776000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395484868000,
+                  "monotonic_start_ns": 659395483904000,
+                  "sum_seconds": "14.339108451000003",
+                  "wall_time_ns": 1788884862536545000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395486856000,
+                  "monotonic_start_ns": 659395486135000,
+                  "sum_seconds": "14.339108451000003",
+                  "wall_time_ns": 1788884862538776000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "696e5f716ddea7892247450639bb9b00c66d9e71",
+              "process_initial_height": 0,
+              "status_heights": [
+                270,
+                270,
+                270
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 270,
+            "count": 270,
+            "monotonic_end_ns": 659395486856000,
+            "monotonic_start_ns": 659395486135000,
+            "sum_seconds": "14.339108451000003",
+            "wall_time_ns": 1788884862538776000
+          }
+        },
+        {
+          "node_id": "966cd89682f45adb323d51ae8b530fabd6abfd7c",
+          "endpoint": "http://127.0.0.1:26663/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395545577000, \"monotonic_start_ns\": 659395544648000, \"sum_seconds\": \"13.758998584999997\", \"wall_time_ns\": 1788884862597289000}, {\"chain_id\": \"polystore_260-1\", \"count\": 270, \"monotonic_end_ns\": 659395547583000, \"monotonic_start_ns\": 659395546853000, \"sum_seconds\": \"13.758998584999997\", \"wall_time_ns\": 1788884862599495000}], \"fully_observed\": true, \"node_id\": \"966cd89682f45adb323d51ae8b530fabd6abfd7c\", \"process_initial_height\": 0, \"status_heights\": [270, 270, 270]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 270, \"count\": 270, \"monotonic_end_ns\": 659395547583000, \"monotonic_start_ns\": 659395546853000, \"sum_seconds\": \"13.758998584999997\", \"wall_time_ns\": 1788884862599495000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395545577000,
+                  "monotonic_start_ns": 659395544648000,
+                  "sum_seconds": "13.758998584999997",
+                  "wall_time_ns": 1788884862597289000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 270,
+                  "monotonic_end_ns": 659395547583000,
+                  "monotonic_start_ns": 659395546853000,
+                  "sum_seconds": "13.758998584999997",
+                  "wall_time_ns": 1788884862599495000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "966cd89682f45adb323d51ae8b530fabd6abfd7c",
+              "process_initial_height": 0,
+              "status_heights": [
+                270,
+                270,
+                270
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 270,
+            "count": 270,
+            "monotonic_end_ns": 659395547583000,
+            "monotonic_start_ns": 659395546853000,
+            "sum_seconds": "13.758998584999997",
+            "wall_time_ns": 1788884862599495000
+          }
+        }
+      ]
+    },
+    "sustained_after": {
+      "complete": true,
+      "nodes": [
+        {
+          "node_id": "4918932fcd44ebfff171276050b7bf42e709ee36",
+          "endpoint": "http://127.0.0.1:26660/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420709449000, \"monotonic_start_ns\": 659420708316000, \"sum_seconds\": \"16.138248708999996\", \"wall_time_ns\": 1788884887760957000}, {\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420712152000, \"monotonic_start_ns\": 659420711134000, \"sum_seconds\": \"16.138248708999996\", \"wall_time_ns\": 1788884887763775000}], \"fully_observed\": true, \"node_id\": \"4918932fcd44ebfff171276050b7bf42e709ee36\", \"process_initial_height\": 0, \"status_heights\": [289, 289, 289]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 289, \"count\": 289, \"monotonic_end_ns\": 659420712152000, \"monotonic_start_ns\": 659420711134000, \"sum_seconds\": \"16.138248708999996\", \"wall_time_ns\": 1788884887763775000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420709449000,
+                  "monotonic_start_ns": 659420708316000,
+                  "sum_seconds": "16.138248708999996",
+                  "wall_time_ns": 1788884887760957000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420712152000,
+                  "monotonic_start_ns": 659420711134000,
+                  "sum_seconds": "16.138248708999996",
+                  "wall_time_ns": 1788884887763775000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "4918932fcd44ebfff171276050b7bf42e709ee36",
+              "process_initial_height": 0,
+              "status_heights": [
+                289,
+                289,
+                289
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 289,
+            "count": 289,
+            "monotonic_end_ns": 659420712152000,
+            "monotonic_start_ns": 659420711134000,
+            "sum_seconds": "16.138248708999996",
+            "wall_time_ns": 1788884887763775000
+          }
+        },
+        {
+          "node_id": "5e6e89950c78da3d356f82c2dcebb2d72b39c0d2",
+          "endpoint": "http://127.0.0.1:26661/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420785392000, \"monotonic_start_ns\": 659420784358000, \"sum_seconds\": \"17.054979294999992\", \"wall_time_ns\": 1788884887836999000}, {\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420787620000, \"monotonic_start_ns\": 659420786824000, \"sum_seconds\": \"17.054979294999992\", \"wall_time_ns\": 1788884887839466000}], \"fully_observed\": true, \"node_id\": \"5e6e89950c78da3d356f82c2dcebb2d72b39c0d2\", \"process_initial_height\": 0, \"status_heights\": [289, 289, 289]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 289, \"count\": 289, \"monotonic_end_ns\": 659420787620000, \"monotonic_start_ns\": 659420786824000, \"sum_seconds\": \"17.054979294999992\", \"wall_time_ns\": 1788884887839466000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420785392000,
+                  "monotonic_start_ns": 659420784358000,
+                  "sum_seconds": "17.054979294999992",
+                  "wall_time_ns": 1788884887836999000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420787620000,
+                  "monotonic_start_ns": 659420786824000,
+                  "sum_seconds": "17.054979294999992",
+                  "wall_time_ns": 1788884887839466000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "5e6e89950c78da3d356f82c2dcebb2d72b39c0d2",
+              "process_initial_height": 0,
+              "status_heights": [
+                289,
+                289,
+                289
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 289,
+            "count": 289,
+            "monotonic_end_ns": 659420787620000,
+            "monotonic_start_ns": 659420786824000,
+            "sum_seconds": "17.054979294999992",
+            "wall_time_ns": 1788884887839466000
+          }
+        },
+        {
+          "node_id": "696e5f716ddea7892247450639bb9b00c66d9e71",
+          "endpoint": "http://127.0.0.1:26662/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420855362000, \"monotonic_start_ns\": 659420854447000, \"sum_seconds\": \"16.604447118\", \"wall_time_ns\": 1788884887907089000}, {\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420857483000, \"monotonic_start_ns\": 659420856670000, \"sum_seconds\": \"16.604447118\", \"wall_time_ns\": 1788884887909312000}], \"fully_observed\": true, \"node_id\": \"696e5f716ddea7892247450639bb9b00c66d9e71\", \"process_initial_height\": 0, \"status_heights\": [289, 289, 289]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 289, \"count\": 289, \"monotonic_end_ns\": 659420857483000, \"monotonic_start_ns\": 659420856670000, \"sum_seconds\": \"16.604447118\", \"wall_time_ns\": 1788884887909312000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420855362000,
+                  "monotonic_start_ns": 659420854447000,
+                  "sum_seconds": "16.604447118",
+                  "wall_time_ns": 1788884887907089000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420857483000,
+                  "monotonic_start_ns": 659420856670000,
+                  "sum_seconds": "16.604447118",
+                  "wall_time_ns": 1788884887909312000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "696e5f716ddea7892247450639bb9b00c66d9e71",
+              "process_initial_height": 0,
+              "status_heights": [
+                289,
+                289,
+                289
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 289,
+            "count": 289,
+            "monotonic_end_ns": 659420857483000,
+            "monotonic_start_ns": 659420856670000,
+            "sum_seconds": "16.604447118",
+            "wall_time_ns": 1788884887909312000
+          }
+        },
+        {
+          "node_id": "966cd89682f45adb323d51ae8b530fabd6abfd7c",
+          "endpoint": "http://127.0.0.1:26663/metrics",
+          "stdout": "{\"boundary_fence\": {\"captures\": [{\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420956444000, \"monotonic_start_ns\": 659420955201000, \"sum_seconds\": \"16.094588168999998\", \"wall_time_ns\": 1788884888007842000}, {\"chain_id\": \"polystore_260-1\", \"count\": 289, \"monotonic_end_ns\": 659420958939000, \"monotonic_start_ns\": 659420957959000, \"sum_seconds\": \"16.094588168999998\", \"wall_time_ns\": 1788884888010601000}], \"fully_observed\": true, \"node_id\": \"966cd89682f45adb323d51ae8b530fabd6abfd7c\", \"process_initial_height\": 0, \"status_heights\": [289, 289, 289]}, \"chain_id\": \"polystore_260-1\", \"committed_height\": 289, \"count\": 289, \"monotonic_end_ns\": 659420958939000, \"monotonic_start_ns\": 659420957959000, \"sum_seconds\": \"16.094588168999998\", \"wall_time_ns\": 1788884888010601000}\n",
+          "stderr": "",
+          "returncode": 0,
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420956444000,
+                  "monotonic_start_ns": 659420955201000,
+                  "sum_seconds": "16.094588168999998",
+                  "wall_time_ns": 1788884888007842000
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 289,
+                  "monotonic_end_ns": 659420958939000,
+                  "monotonic_start_ns": 659420957959000,
+                  "sum_seconds": "16.094588168999998",
+                  "wall_time_ns": 1788884888010601000
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "966cd89682f45adb323d51ae8b530fabd6abfd7c",
+              "process_initial_height": 0,
+              "status_heights": [
+                289,
+                289,
+                289
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 289,
+            "count": 289,
+            "monotonic_end_ns": 659420958939000,
+            "monotonic_start_ns": 659420957959000,
+            "sum_seconds": "16.094588168999998",
+            "wall_time_ns": 1788884888010601000
+          }
+        }
+      ]
+    }
+  },
+  "commit_streams": [
+    {
+      "node_id": "4918932fcd44ebfff171276050b7bf42e709ee36",
+      "sha256": "8632a7395112fff7dc491d0e4ad8f674bac8b4832aac7bb343f2cf37ad375da8",
+      "raw_samples": 123,
+      "fenced_samples": 124,
+      "returncode": -15,
+      "summary": {
+        "boundary": "commit-step execution upper bound",
+        "chain_id": "polystore_260-1",
+        "start_committed_height": 270,
+        "end_committed_height": 289,
+        "observed_blocks": 19,
+        "qualified": true,
+        "qualification_reasons": [],
+        "intervals": [
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04656508300085502303638408557938342900588417203097081904314354282212223604315061640046754261830188",
+            "from_monotonic_start_ns": 659396034155000,
+            "to_monotonic_end_ns": 659396240718000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.14006200000086336140131727724185764711188638748362466694794061539251360492356548422310311629348202",
+            "from_monotonic_start_ns": 659397395596000,
+            "to_monotonic_end_ns": 659397599153000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04270745900087247101173316905591920689149319250039548994308376825276039409646462330786337023208490",
+            "from_monotonic_start_ns": 659398609239000,
+            "to_monotonic_end_ns": 659398813897000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03966404100087741979567025574377755991917419222126519517240425788201493853430617735182115917936600",
+            "from_monotonic_start_ns": 659400038626000,
+            "to_monotonic_end_ns": 659400243564000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.07239162500088391349433104809632471426513434765399429563684977087499800016516975971158633418374788",
+            "from_monotonic_start_ns": 659401460299000,
+            "to_monotonic_end_ns": 659401667743000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05890108300089161104961733838132977035096772330258954333594959465913644318307158313229964527071981",
+            "from_monotonic_start_ns": 659402681264000,
+            "to_monotonic_end_ns": 659402884465000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04954520900089757980140393880775707780078912066497315447962803051300943825209781310175854334410934",
+            "from_monotonic_start_ns": 659404097426000,
+            "to_monotonic_end_ns": 659404304364000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.06406450000090526563171124139113405807634156366786241301088749060143562936851565721003262354611968",
+            "from_monotonic_start_ns": 659405526220000,
+            "to_monotonic_end_ns": 659405731944000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.06497545800091115593683778509054391886793923074684947580193195500391772953578468243118490517889318",
+            "from_monotonic_start_ns": 659406747120000,
+            "to_monotonic_end_ns": 659406950822000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08656795800091972443089784246859736309901868363572807468155722788340993965032859384771209627718612",
+            "from_monotonic_start_ns": 659408173803000,
+            "to_monotonic_end_ns": 659408378997000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08191512500092854528861709210340760235734597722134599556540124474786011335394753851303544475021544",
+            "from_monotonic_start_ns": 659409400953000,
+            "to_monotonic_end_ns": 659409609151000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.21580175000094184483277749802269045191189668485558403256503520604918987751275915519566737062257492",
+            "from_monotonic_start_ns": 659410833555000,
+            "to_monotonic_end_ns": 659411043915000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.11018450000095561957479119294960277160744719360962715639273038102871099513376918644065504529125175",
+            "from_monotonic_start_ns": 659412060661000,
+            "to_monotonic_end_ns": 659412269061000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.14549295800096649157601470962768847405691849383138182852708407966524050042460213464205414819874282",
+            "from_monotonic_start_ns": 659413500083000,
+            "to_monotonic_end_ns": 659413709620000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.20794954200098071444821935996253334405314378214879434764329485465954401263598361765603477243531267",
+            "from_monotonic_start_ns": 659415151461000,
+            "to_monotonic_end_ns": 659415358302000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.21353604200099737872373730162849442852225171040864434004969997839193802278916099259939229131415131",
+            "from_monotonic_start_ns": 659416394636000,
+            "to_monotonic_end_ns": 659416663330000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.30171445800101731926235517061107531170534360941702491453354033009178887803903967724240118416441221",
+            "from_monotonic_start_ns": 659417917884000,
+            "to_monotonic_end_ns": 659418127099000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.14187608400103560944007265460053385750385704587329668344547077069585715465781721594517758165606097",
+            "from_monotonic_start_ns": 659418949569000,
+            "to_monotonic_end_ns": 659419162755000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.06345325000104455294655693716182246321981321952354208259073217748739606328637238587903721499826717",
+            "from_monotonic_start_ns": 659420232267000,
+            "to_monotonic_end_ns": 659420440560000
+          }
+        ],
+        "p95_upper_bound_seconds": "0.30171445800101731926235517061107531170534360941702491453354033009178887803903967724240118416441221",
+        "within_700ms_budget": true,
+        "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"
+      },
+      "path": "commit-0.jsonl"
+    },
+    {
+      "node_id": "5e6e89950c78da3d356f82c2dcebb2d72b39c0d2",
+      "sha256": "3aa5696b2583b17f0beb7143e81839849c03b1d001afa27c2eb6a213d48eca31",
+      "raw_samples": 123,
+      "fenced_samples": 124,
+      "returncode": -15,
+      "summary": {
+        "boundary": "commit-step execution upper bound",
+        "chain_id": "polystore_260-1",
+        "start_committed_height": 270,
+        "end_committed_height": 289,
+        "observed_blocks": 19,
+        "qualified": true,
+        "qualification_reasons": [],
+        "intervals": [
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04048329200088868520353048378464759035153845372656874208169201516050867557862972550778758720991496",
+            "from_monotonic_start_ns": 659396033455000,
+            "to_monotonic_end_ns": 659396238209000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.12346129100089752379616538058984814779531299123291973406334809959034600681285015045922171937326886",
+            "from_monotonic_start_ns": 659397394975000,
+            "to_monotonic_end_ns": 659397598562000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04039120800090673406718201604724553388679676665108320970183339474230810371291331390509669402247302",
+            "from_monotonic_start_ns": 659398611388000,
+            "to_monotonic_end_ns": 659398816031000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03700712500091213494150423070391928265981472288675463818355492970739631988913536010975765890631799",
+            "from_monotonic_start_ns": 659400039600000,
+            "to_monotonic_end_ns": 659400243115000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.07861658300091892971501163234470424851857903169719247492272948175000747867455506358447202453081532",
+            "from_monotonic_start_ns": 659401459040000,
+            "to_monotonic_end_ns": 659401672037000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04240862500092566329020928078812765578567512316074689199419967868538586094287630655736193328226748",
+            "from_monotonic_start_ns": 659402690241000,
+            "to_monotonic_end_ns": 659402894138000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03468012500093068152324306315320732330402727727059688849763046207616061880945922206061120351276591",
+            "from_monotonic_start_ns": 659404111840000,
+            "to_monotonic_end_ns": 659404318269000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.07569212500093772339053700760105791892591382998658132129982715563727460850985062795055809100865851",
+            "from_monotonic_start_ns": 659405340937000,
+            "to_monotonic_end_ns": 659405547343000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05001162500094500145855659715273797813287637130054344176602503217326996594950370265284518539147675",
+            "from_monotonic_start_ns": 659406768981000,
+            "to_monotonic_end_ns": 659406975129000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08050920800095317359597647911061240597621604495128130172236146518748463017034515255490429862315020",
+            "from_monotonic_start_ns": 659408196677000,
+            "to_monotonic_end_ns": 659408404443000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.09922166600096175526688881252737063581585344234574206992854933789172790537854767737366506888040750",
+            "from_monotonic_start_ns": 659409417613000,
+            "to_monotonic_end_ns": 659409625537000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.20549408300097436385928763455762819532776329096492899108297789319887970610109156036957132891554814",
+            "from_monotonic_start_ns": 659410850665000,
+            "to_monotonic_end_ns": 659411060405000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.13068804200098803324306663726858117288108301566639637620749552910275175131136228564408289621783059",
+            "from_monotonic_start_ns": 659412081409000,
+            "to_monotonic_end_ns": 659412293014000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.24746529200100372710896214283836651905235539629782721538598183859807750944983561910933575657608905",
+            "from_monotonic_start_ns": 659413526460000,
+            "to_monotonic_end_ns": 659413733299000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.22419016700102270735708433438518558892575697918972202107251290417274698817067778866897887595929308",
+            "from_monotonic_start_ns": 659414974397000,
+            "to_monotonic_end_ns": 659415211103000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.38035883300104492702863169811259355071787561186777426890314223376041587802732173454551162240852914",
+            "from_monotonic_start_ns": 659416657318000,
+            "to_monotonic_end_ns": 659416863455000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.30621525000107277577954780260819598604237514589300109588774787733278105919120600212875756669778880",
+            "from_monotonic_start_ns": 659417898028000,
+            "to_monotonic_end_ns": 659418149924000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.20516041700109027839698918129882392935157078040679492542583612265277824781426536575862770508869199",
+            "from_monotonic_start_ns": 659419174798000,
+            "to_monotonic_end_ns": 659419435734000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08207679100110367681082425652639070834969715701100326825529821174334129284691121537321397459975793",
+            "from_monotonic_start_ns": 659420261282000,
+            "to_monotonic_end_ns": 659420483312000
+          }
+        ],
+        "p95_upper_bound_seconds": "0.38035883300104492702863169811259355071787561186777426890314223376041587802732173454551162240852914",
+        "within_700ms_budget": true,
+        "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"
+      },
+      "path": "commit-1.jsonl"
+    },
+    {
+      "node_id": "696e5f716ddea7892247450639bb9b00c66d9e71",
+      "sha256": "bdccaf1205c59f7e24454f35fce90930f404cb13f9bc7b0efb84363901fa35f2",
+      "raw_samples": 123,
+      "fenced_samples": 124,
+      "returncode": -15,
+      "summary": {
+        "boundary": "commit-step execution upper bound",
+        "chain_id": "polystore_260-1",
+        "start_committed_height": 270,
+        "end_committed_height": 289,
+        "observed_blocks": 19,
+        "qualified": true,
+        "qualification_reasons": [],
+        "intervals": [
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05097504200087479161186955448711159208289969350689109070015298206975484660213620717895581104136136",
+            "from_monotonic_start_ns": 659396049614000,
+            "to_monotonic_end_ns": 659396254885000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.12370850000088341231204082369387284450661942855351381559159906546345017668676961473161661894896074",
+            "from_monotonic_start_ns": 659397394323000,
+            "to_monotonic_end_ns": 659397599283000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05091137500089273675552049847271024033277941952204029881138778066605791910944599424157659333651130",
+            "from_monotonic_start_ns": 659398612386000,
+            "to_monotonic_end_ns": 659398815101000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04241737500089817229914525300019626485033787590256619611397987826237930162965023505385152477221243",
+            "from_monotonic_start_ns": 659400040180000,
+            "to_monotonic_end_ns": 659400243875000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05180845900090498510491966747868171659732201578276017939170162521889267338881429660730803844331822",
+            "from_monotonic_start_ns": 659401262115000,
+            "to_monotonic_end_ns": 659401467227000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03818595800091062847283020260071889430488867910196655127241205679909427432198665355597941848062244",
+            "from_monotonic_start_ns": 659402686336000,
+            "to_monotonic_end_ns": 659402889208000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.01852625000091670942403811236914240847486016457455499563797650578567648624832899851692349443989068",
+            "from_monotonic_start_ns": 659404103756000,
+            "to_monotonic_end_ns": 659404310498000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.06678454200092251317796000838392804359708008959056706665522201380982257706692665262191403554515030",
+            "from_monotonic_start_ns": 659405336355000,
+            "to_monotonic_end_ns": 659405540386000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04692991700092867277997922638649509343246451247979965158206048259992403989588504181336912366188573",
+            "from_monotonic_start_ns": 659406760512000,
+            "to_monotonic_end_ns": 659406964750000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.10742079200093609972850873632853992573554089924954216030696319701162825605774966625698495456644402",
+            "from_monotonic_start_ns": 659408189474000,
+            "to_monotonic_end_ns": 659408397268000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.10396612500094633627264852208205054196367409692166268286424340042791642112133598760080037895153780",
+            "from_monotonic_start_ns": 659409410411000,
+            "to_monotonic_end_ns": 659409614388000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.21233183300096058932327426784149838822638437912468990483356476137932713006055428784375829198948542",
+            "from_monotonic_start_ns": 659410841435000,
+            "to_monotonic_end_ns": 659411049552000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.14903479200097522302992282723596307987703458247284367371695298138138698789908521819521600001495163",
+            "from_monotonic_start_ns": 659412067723000,
+            "to_monotonic_end_ns": 659412273552000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.20302408300099047220835015100992265939263697574228441739440404160790875423839490734497984426977233",
+            "from_monotonic_start_ns": 659413539358000,
+            "to_monotonic_end_ns": 659413748131000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.17632675000100474176987088130887424830693794969394026801915653767809399776427093809923701687512036",
+            "from_monotonic_start_ns": 659415016196000,
+            "to_monotonic_end_ns": 659415225738000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.28356520800102243955360627476242210063954672309355824121543199715423590619624664359325354912511669",
+            "from_monotonic_start_ns": 659416461535000,
+            "to_monotonic_end_ns": 659416673194000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.29044050000104463226925501403657845397604459863993626640085959172483483206384448338913974657963945",
+            "from_monotonic_start_ns": 659417918830000,
+            "to_monotonic_end_ns": 659418131450000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.14601729100106307354100955773031567353025101044461348119440420482567226616957796447262717483899743",
+            "from_monotonic_start_ns": 659418956024000,
+            "to_monotonic_end_ns": 659419175968000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.10296387500107545954903033956352546723799681329393860721499000815405166079047382624439041277852446",
+            "from_monotonic_start_ns": 659420257239000,
+            "to_monotonic_end_ns": 659420464046000
+          }
+        ],
+        "p95_upper_bound_seconds": "0.29044050000104463226925501403657845397604459863993626640085959172483483206384448338913974657963945",
+        "within_700ms_budget": true,
+        "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"
+      },
+      "path": "commit-2.jsonl"
+    },
+    {
+      "node_id": "966cd89682f45adb323d51ae8b530fabd6abfd7c",
+      "sha256": "88ceb95c83d9f59cd71773c073dac3a82b54ae6172d4714b200b51db01d4f361",
+      "raw_samples": 123,
+      "fenced_samples": 125,
+      "returncode": -15,
+      "summary": {
+        "boundary": "commit-step execution upper bound",
+        "chain_id": "polystore_260-1",
+        "start_committed_height": 270,
+        "end_committed_height": 289,
+        "observed_blocks": 19,
+        "qualified": true,
+        "qualification_reasons": [],
+        "intervals": [
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03434879200083908303186731747172051399599481405349111282750734089913772757979052200063933065481064",
+            "from_monotonic_start_ns": 659396039114000,
+            "to_monotonic_end_ns": 659396243121000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08488775000084642512729073031417291302978877199432834577244056636937741002968600326946809270461596",
+            "from_monotonic_start_ns": 659397389628000,
+            "to_monotonic_end_ns": 659397596887000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05553187500085355292107692955432681470249392228209070280225232531958150326584650622936551380135609",
+            "from_monotonic_start_ns": 659398610470000,
+            "to_monotonic_end_ns": 659398815008000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05355450000086083060381160404117503768942870183598042246949277176448181987536303088939317232246472",
+            "from_monotonic_start_ns": 659400038629000,
+            "to_monotonic_end_ns": 659400243796000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.07229283300086776306881088059740443971820580802684841539567636366386065105870751855379326623838546",
+            "from_monotonic_start_ns": 659401460302000,
+            "to_monotonic_end_ns": 659401671384000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.04990895900087380919993686148565919394614418391074997808262137563419154878854036513095430128165726",
+            "from_monotonic_start_ns": 659402688530000,
+            "to_monotonic_end_ns": 659402891655000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.03409433400088046884632710070788873215075708441457203201086384156732047657940702857336026859953206",
+            "from_monotonic_start_ns": 659404103758000,
+            "to_monotonic_end_ns": 659404307497000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.06591304100088606834374772837378968964751004630600959210717922852782033122137260885390584324460438",
+            "from_monotonic_start_ns": 659405531358000,
+            "to_monotonic_end_ns": 659405739930000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.05149500000089212802400874538224393428680416997896029429143973287045662460480547932171847497832522",
+            "from_monotonic_start_ns": 659406957859000,
+            "to_monotonic_end_ns": 659407165279000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08625591700090123861541248372151135362401932371692132319349331876582029996100459876006723164524293",
+            "from_monotonic_start_ns": 659408184229000,
+            "to_monotonic_end_ns": 659408396779000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.10700691700090937399300940234522032788410334674723991189163979051561680623422202336846150014090378",
+            "from_monotonic_start_ns": 659409417605000,
+            "to_monotonic_end_ns": 659409625655000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.17278391700092208426558783377724695477494155648479776384348940161117074638638270799548794776388854",
+            "from_monotonic_start_ns": 659410849060000,
+            "to_monotonic_end_ns": 659411055944000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.12214187500093491492045684561115525869749399471111463093807404761843907149518343935322229750823111",
+            "from_monotonic_start_ns": 659412075354000,
+            "to_monotonic_end_ns": 659412281082000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.26636375000095008480412163555596615734568735826699844339655568992326954295012191428773281622130399",
+            "from_monotonic_start_ns": 659413522368000,
+            "to_monotonic_end_ns": 659413732309000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.23082133300096904181510938826817944350224385212586732877322298854093205464613465870892347231614486",
+            "from_monotonic_start_ns": 659415177474000,
+            "to_monotonic_end_ns": 659415385302000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.33734191600099067080925664898158988297939931796461159956016481343343916054079346220163796864948831",
+            "from_monotonic_start_ns": 659416620191000,
+            "to_monotonic_end_ns": 659416830049000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.30096950000101571463154860854055080522602374906527474963887112151466190651638575154546078154164467",
+            "from_monotonic_start_ns": 659417863000000,
+            "to_monotonic_end_ns": 659418073265000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.12579895800103119359743410468793309519167257154144505300315206880922657103610729181482700329730276",
+            "from_monotonic_start_ns": 659419094623000,
+            "to_monotonic_end_ns": 659419310232000
+          },
+          {
+            "count": 1,
+            "upper_bound_seconds": "0.08407841700104321338361547688386200614439732611443101776415713499060626672610696972927607844317618",
+            "from_monotonic_start_ns": 659420230727000,
+            "to_monotonic_end_ns": 659420441229000
+          }
+        ],
+        "p95_upper_bound_seconds": "0.33734191600099067080925664898158988297939931796461159956016481343343916054079346220163796864948831",
+        "within_700ms_budget": true,
+        "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"
+      },
+      "path": "commit-3.jsonl"
+    }
+  ]
+}

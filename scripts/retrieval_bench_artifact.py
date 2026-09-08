@@ -192,6 +192,42 @@ def committed_tx(value, expected_hash):
     return value
 
 
+def committed_block_summary(block, results, height, chain):
+    """Reconcile every ordered transaction with committed ABCI results.
+
+    Transaction payload bytes exclude block headers, evidence and framing; they
+    are not a claim about full protobuf block size or delivered user bytes.
+    """
+    integer(height, "block height", 1)
+    header = block["block"]["header"]
+    if integer(header["height"], "header height", 1) != height or integer(results["height"], "result height", 1) != height or header["chain_id"] != chain:
+        raise ValueError("committed block identity mismatch")
+    for digest in (block["block_id"]["hash"], header["app_hash"]):
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            raise ValueError("invalid committed block or application hash")
+    encoded, responses = block["block"]["data"]["txs"], results["txs_results"]
+    encoded = [] if encoded is None else encoded
+    responses = [] if responses is None else responses
+    if not isinstance(encoded, list) or not isinstance(responses, list) or len(encoded) != len(responses) or len(encoded) > 65536:
+        raise ValueError("committed transaction/result count mismatch")
+    rows, total = [], 0
+    for tx, response in zip(encoded, responses):
+        if not isinstance(tx, str) or len(tx) > 4 * 1024 * 1024:
+            raise ValueError("oversized or malformed block transaction")
+        raw = base64.b64decode(tx, validate=True)
+        total += len(raw)
+        if not raw or total > 2 * 1024 * 1024:
+            raise ValueError("transaction payload exceeds finite block byte profile")
+        rows.append(dict(txhash=hashlib.sha256(raw).hexdigest().upper(), bytes=len(raw),
+            code=integer(response["code"], "transaction code"),
+            gas_wanted=integer(response["gas_wanted"], "gas wanted"),
+            gas_used=integer(response["gas_used"], "gas used")))
+    return dict(height=height, time=header["time"], block_hash=block["block_id"]["hash"].upper(),
+                preceding_app_hash=header["app_hash"].upper(), transactions=rows,
+                tx_payload_bytes=total, gas_wanted=sum(row["gas_wanted"] for row in rows),
+                gas_used=sum(row["gas_used"] for row in rows))
+
+
 def signal_owned_process_group(pid, sig):
     """Signal a start_new_session group whose leader has not been reaped."""
     try:
@@ -767,8 +803,9 @@ def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_
     requests current state, otherwise exactly that committed height. The callback
     must honor the shared absolute deadline and cannot broadcast. Pre-opening and
     proof generation are excluded; fresh state reads and digest checks are included.
-    Prepared inputs retain the producer's maintained slot-zero K8/K2 fixture
-    restrictions. This mode does not qualify delivered bytes or storage audits.
+    Prepared inputs retain the producer's slot-zero K8/K2 geometry restrictions;
+    payloads may come from authenticated real artifacts. This scheduler alone
+    does not qualify delivered bytes or storage audits.
     """
     lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof,
                                           mode=mode, read_session_evidence=read_session_evidence)
@@ -1095,21 +1132,28 @@ def summarize(doc, start, end):
             "wall_seconds": wall}
 
 
-def opened_session_id(tx):
-    # Pinned Cosmos TxMsgData: exactly one field-2 Any, the owning response type,
-    # and exactly its field-1 bytes32 session_id. All lengths fit one-byte varints.
-    # Reject extra responses/fields, stale MsgData, malformed lengths, and guesses
-    # from arbitrary trailing bytes; schema changes require an explicit update.
+def opened_session_ids(tx, count):
+    """Decode exactly count ordered, typed responses from an atomic SDK batch."""
+    integer(count, "open response count", 1, 64)
     response_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionResponse"
     any_value = b"\x0a" + bytes([len(response_type)]) + response_type + b"\x12\x22\x0a\x20"
     prefix = b"\x12" + bytes([len(any_value) + 32]) + any_value
     data = tx.get("data", "")
-    if not isinstance(data, str) or len(data) != (len(prefix) + 32) * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data):
+    width = len(prefix) + 32
+    if not isinstance(data, str) or len(data) != width * count * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data):
         raise ValueError("invalid open-session TxMsgData encoding")
-    raw = bytes.fromhex(data)
-    if not raw.startswith(prefix):
-        raise ValueError("expected exactly one MsgOpenRetrievalSessionResponse")
-    return raw[len(prefix):].hex()
+    raw, ids = bytes.fromhex(data), []
+    for offset in range(0, len(raw), width):
+        if raw[offset:offset + len(prefix)] != prefix:
+            raise ValueError("expected ordered MsgOpenRetrievalSessionResponse values")
+        ids.append(raw[offset + len(prefix):offset + width].hex())
+    if len(set(ids)) != count or "00" * 32 in ids:
+        raise ValueError("duplicate or zero open-session response")
+    return ids
+
+
+def opened_session_id(tx):
+    return opened_session_ids(tx, 1)[0]
 
 
 def abort_run(path, exit_code):
@@ -1184,7 +1228,7 @@ def set_toml_value(text, section, key, value):
 class FourValidatorLifecycle:
     """Owned local startup/persistence evidence, not a transaction load driver."""
 
-    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2):
+    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2, *, sustained=False):
         self.root = Path(__file__).resolve().parent.parent
         self.binary, self.library = Path(binary).resolve(strict=True), Path(library).resolve(strict=True)
         if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
@@ -1197,7 +1241,7 @@ class FourValidatorLifecycle:
         # including on failure; multi-node receives only a new child directory.
         if os.path.lexists(self.home):
             raise ValueError("home must not already exist: " + str(self.home))
-        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 900) * 10**9
+        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 7200 if sustained else 900) * 10**9
         self.env = dict(os.environ, GOMAXPROCS=str(integer(gomaxprocs, "gomaxprocs", 1, 64)),
                         POLYSTORE_TRUSTED_SETUP=str(self.root / "polystorechain/trusted_setup.txt"))
         for variable in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
@@ -1245,7 +1289,9 @@ class FourValidatorLifecycle:
                 reservation.bind(("127.0.0.1", node[name]))
                 reservation.listen(1)
 
-    def prepare(self):
+    def prepare(self, *, audit_profile="normal"):
+        if audit_profile not in ("normal", "c6"):
+            raise ValueError("unknown benchmark audit profile")
         self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",
                  "--node-dir-prefix", "validator", "--chain-id", self.chain,
                  "--starting-ip-address", "127.0.0.1", "--list-ports", "26657,26654,26651,26648",
@@ -1273,6 +1319,8 @@ class FourValidatorLifecycle:
         if "retrieval_v2_activation_height" not in params:
             raise ValueError("binary genesis does not expose v2 activation")
         params["retrieval_v2_activation_height"] = "1"
+        if audit_profile == "c6":
+            params.update(quota_min_blobs="132", quota_max_blobs="132")
         metadata = genesis["app_state"]["bank"].setdefault("denom_metadata", [])
         if any(item.get("base") == "aatom" for item in metadata):
             raise ValueError("aatom metadata already present; review generated defaults")
@@ -1309,7 +1357,7 @@ class FourValidatorLifecycle:
         if len({node["node_id"] for node in self.nodes}) != 4 or len({json.dumps(node["validator_key"], sort_keys=True) for node in self.nodes}) != 4:
             raise ValueError("expected four independent node and voting keys")
         self.doc.update(genesis_sha256=sha256(first / "config/genesis.json"), frozen_module_params=params,
-                        profile={"consensus": consensus, "timeout_commit": "1s", "execution_budget_ms": 700,
+                        profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"]})
 
