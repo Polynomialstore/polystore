@@ -1,0 +1,113 @@
+{
+  "baseline": {
+    "generation_ns": {
+      "median": 6310653583.0,
+      "min": 6255190960.0,
+      "max": 6351989375.0
+    },
+    "per_opening_ms": {
+      "median": 121.35872275,
+      "min": 120.29213384615385,
+      "max": 122.15364182692308
+    },
+    "real_s": {
+      "median": 13.59,
+      "min": 13.5,
+      "max": 13.64
+    },
+    "user_s": {
+      "median": 13.69,
+      "min": 13.48,
+      "max": 13.71
+    },
+    "system_s": {
+      "median": 0.08,
+      "min": 0.07,
+      "max": 0.08
+    },
+    "max_rss_bytes": {
+      "median": 118128640,
+      "min": 115703808,
+      "max": 118505472
+    },
+    "sampled_thread_max": {
+      "median": 14,
+      "min": 14,
+      "max": 14
+    }
+  },
+  "batch": {
+    "generation_ns": {
+      "median": 3723050417.0,
+      "min": 3717471083.0,
+      "max": 3759234208.0
+    },
+    "per_opening_ms": {
+      "median": 71.59712340384615,
+      "min": 71.48982851923077,
+      "max": 72.29296553846153
+    },
+    "real_s": {
+      "median": 8.37,
+      "min": 8.32,
+      "max": 8.79
+    },
+    "user_s": {
+      "median": 8.48,
+      "min": 8.46,
+      "max": 8.49
+    },
+    "system_s": {
+      "median": 0.06,
+      "min": 0.06,
+      "max": 0.07
+    },
+    "max_rss_bytes": {
+      "median": 118587392,
+      "min": 117882880,
+      "max": 119095296
+    },
+    "sampled_thread_max": {
+      "median": 14,
+      "min": 14,
+      "max": 14
+    }
+  },
+  "serial": {
+    "generation_ns": {
+      "median": 1702109875.0,
+      "min": 1698315707.0,
+      "max": 1708558208.0
+    },
+    "per_opening_ms": {
+      "median": 32.73288221153846,
+      "min": 32.659917442307695,
+      "max": 32.85688861538462
+    },
+    "real_s": {
+      "median": 4.25,
+      "min": 4.21,
+      "max": 4.6
+    },
+    "user_s": {
+      "median": 4.37,
+      "min": 4.36,
+      "max": 4.38
+    },
+    "system_s": {
+      "median": 0.06,
+      "min": 0.05,
+      "max": 0.07
+    },
+    "max_rss_bytes": {
+      "median": 118079488,
+      "min": 117932032,
+      "max": 118407168
+    },
+    "sampled_thread_max": {
+      "median": 14,
+      "min": 14,
+      "max": 14
+    }
+  }
+}

@@ -4,12 +4,10 @@ use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scal
 mod session_batch;
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
-#[cfg(target_arch = "wasm32")]
 use blst::blst_p1;
 use blst::{BLST_ERROR, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
-#[cfg(target_arch = "wasm32")]
 use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb_t};
-use ff::{Field, PrimeField};
+use ff::{BatchInverter, Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
 pub use session_batch::{SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_PROOFS};
@@ -675,6 +673,16 @@ impl KzgContext {
             }
         }
 
+        let mut q_evals: Vec<_> = domain.iter().map(|xi| xi - z).collect();
+        // Reuse the domain allocation as inversion scratch, then restore its
+        // cheap powers. Zero denominators remain zero for the in-domain case.
+        BatchInverter::invert_with_external_scratch(&mut q_evals, &mut domain);
+        let mut x = Scalar::one();
+        for xi in &mut domain {
+            *xi = x;
+            x *= omega;
+        }
+
         let y = if let Some(k) = z_domain_index {
             evals[k]
         } else {
@@ -682,11 +690,8 @@ impl KzgContext {
             // weights w_i = x_i / n, but the constant factor cancels, so we use w_i = x_i.
             let mut num = Scalar::zero();
             let mut den = Scalar::zero();
-            for (fi, xi) in evals.iter().zip(domain.iter()) {
-                let inv = Option::<Scalar>::from((z - xi).invert()).ok_or_else(|| {
-                    KzgError::Internal("z unexpectedly equals a domain point".into())
-                })?;
-                let t = *xi * inv;
+            for ((fi, xi), inv) in evals.iter().zip(&domain).zip(&q_evals) {
+                let t = -*xi * inv; // Interpolation uses (z - xi), the opposite sign.
                 den += t;
                 num += *fi * t;
             }
@@ -696,17 +701,13 @@ impl KzgContext {
             num * den_inv
         };
 
-        let mut q_evals = vec![Scalar::zero(); 4096];
         if let Some(k) = z_domain_index {
             let mut sum = Scalar::zero();
             for i in 0..4096 {
                 if i == k {
                     continue;
                 }
-                let inv = Option::<Scalar>::from((domain[i] - z).invert()).ok_or_else(|| {
-                    KzgError::Internal("unexpected zero denominator in q_evals".into())
-                })?;
-                let qi = (evals[i] - y) * inv;
+                let qi = (evals[i] - y) * q_evals[i];
                 q_evals[i] = qi;
                 sum += qi * domain[i];
             }
@@ -717,16 +718,43 @@ impl KzgContext {
             q_evals[k] = -sum * inv_z;
         } else {
             for i in 0..4096 {
-                let inv = Option::<Scalar>::from((domain[i] - z).invert()).ok_or_else(|| {
-                    KzgError::Internal("unexpected zero denominator in q_evals".into())
-                })?;
-                q_evals[i] = (evals[i] - y) * inv;
+                q_evals[i] *= evals[i] - y;
             }
         }
 
+        #[cfg(target_arch = "wasm32")]
         let proof = msm_pippenger_g1(&self.g1_points, &q_evals)
             .to_affine()
             .to_compressed();
+        #[cfg(not(target_arch = "wasm32"))]
+        let proof = {
+            // Call the serial primitive directly: MultiPoint::mult uses the
+            // dependency's thread pool for this size. All scratch is local.
+            let n = q_evals.len();
+            let scalar_bytes: Vec<_> = q_evals.iter().map(Scalar::to_bytes).collect();
+            let points = [self.g1_points_blst.as_ptr(), std::ptr::null()];
+            let scalars = [scalar_bytes.as_ptr().cast::<u8>(), std::ptr::null()];
+            let mut out = blst_p1::default();
+            let mut proof = [0u8; 48];
+            // The approved setup and domain both contain exactly 4096 points;
+            // Vec<[u8;32]> is contiguous canonical LE scalars. The null second
+            // pointer selects blst's contiguous-array convention. Sized limb
+            // scratch provides its required alignment and remains live here.
+            unsafe {
+                let size = blst_p1s_mult_pippenger_scratch_sizeof(n);
+                let mut scratch = vec![0 as limb_t; size.div_ceil(std::mem::size_of::<limb_t>())];
+                blst_p1s_mult_pippenger(
+                    &mut out,
+                    points.as_ptr(),
+                    n,
+                    scalars.as_ptr(),
+                    256,
+                    scratch.as_mut_ptr(),
+                );
+                blst_p1_compress(proof.as_mut_ptr(), &out);
+            }
+            proof
+        };
 
         let mut y_le = y.to_repr();
         let mut y_be = [0u8; 32];
