@@ -727,30 +727,22 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
     finally:
         try:
             try:
-                for process in processes:
-                    try:
-                        os.killpg(process.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                if processes:
-                    time.sleep(1)
-                for process in processes:
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                for process in processes:
-                    process.wait(timeout=5)
+                artifact.stop_owned_process_groups(processes)
             finally:
                 try:
                     lifecycle.stop()
                 finally:
                     for reservation in reservations + lifecycle.reservations:
                         reservation.close()
-                    lifecycle.save()
+        except BaseException as error:
+            doc.update(status="failed", cleanup_error=str(error)[-8192:])
+            raise
         finally:
-            for sig, handler in previous.items():
-                signal.signal(sig, handler)
+            try:
+                lifecycle.save()
+            finally:
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
     return lifecycle.home / "evidence.json"
 
 
