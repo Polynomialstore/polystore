@@ -312,6 +312,103 @@ def prepared_cohort(lifecycle, operations, prepare):
     return prepared
 
 
+def assert_unchanged_retrieval(before, after):
+    """Failed messages and terminal retries cannot change stake liabilities/credit.
+
+    Ante fees and sequences use aatom and may change even for failed execution.
+    Zero mint is an explicit prerequisite of this isolated smoke assertion.
+    """
+    def stake(snapshot):
+        return {key: value for key, value in snapshot["bank"]["balances"].items() if key.endswith(":stake")}
+    if (before["retrieval"] != after["retrieval"] or stake(before) != stake(after) or
+            before["bank"]["supply"]["stake"] != after["bank"]["supply"]["stake"]):
+        raise ValueError("rejected message or terminal retry changed retrieval state/stake")
+
+
+def verify_transaction_nodes(lifecycle, result):
+    """Independently bind all four committed outcomes to the actual signed bytes."""
+    if len(lifecycle.nodes) != 4 or len({node["node_id"] for node in lifecycle.nodes}) != 4:
+        raise ValueError("four distinct validators required")
+    expected = artifact.committed_tx(result, result["txhash"])
+    observed = []
+    for node in lifecycle.nodes:
+        response = lifecycle.query(node, "/tx?hash=0x" + expected["txhash"])
+        raw = base64.b64decode(response["tx"], validate=True)
+        if not raw or len(raw) > 1048576 or hashlib.sha256(raw).hexdigest().upper() != expected["txhash"].upper():
+            raise ValueError("validator returned different committed transaction bytes")
+        row = dict(txhash=response["hash"], height=response["height"], **{
+            key: response["tx_result"].get(key, 0) if key == "code" else response["tx_result"][key]
+            for key in ("code", "gas_wanted", "gas_used")})
+        artifact.committed_tx(row, expected["txhash"])
+        if any(producer.uint(row[key]) != producer.uint(expected[key]) for key in ("height", "code", "gas_wanted", "gas_used")):
+            raise ValueError("validators disagree on committed transaction outcome/gas")
+        observed.append(dict(node_id=node["node_id"], **row))
+    return observed
+
+
+def run_adversarial_phase(lifecycle, deals, prepared, *, completed=False):
+    """Five rejected transactions before proofs; four terminal idempotent retries."""
+    phase = "after-settlement" if completed else "before-proof"
+    directory = lifecycle.home / phase
+    directory.mkdir(mode=0o700)
+    record = dict(transactions=[], qualification=False,
+                  economics_scope="zero-mint stake liabilities; aatom ante fees excluded")
+    lifecycle.doc.setdefault("adversarial_phases", {})[phase] = record
+    ids = [op["prepared"]["session_id"] for op in prepared]
+    before = retrieval_snapshot(lifecycle, lifecycle.wait_height(3) - 1, deals, ids)
+    record["before"] = before
+    def payload(op):
+        return json.loads(Path(op["prepared"]["proof_path"]).read_text())
+    def changed_scalar(value):
+        old = producer.b64(value, 32)
+        return base64.b64encode(bytes(32) if any(old) else bytes([1]) + bytes(31)).decode()
+    cases = []
+    for k in (8, 2):
+        op = next(op for op in prepared if op["proof_expectation"]["snapshot"]["k"] == k)
+        payee = op["proof_expectation"]["session"]["authorized_proof_provider"]
+        if completed:
+            cases += [(f"duplicate-proof-k{k}", payee, payload(op), "", None),
+                      (f"duplicate-confirm-k{k}", op["proof_expectation"]["session"]["owner"], None, "", op["prepared"]["session_id"])]
+        else:
+            wrong = payload(op)
+            wrong["proofs"][0]["z_value"] = changed_scalar(wrong["proofs"][0]["z_value"])
+            cases += [(f"wrong-signer-k{k}", lifecycle.signers["control"], payload(op), "authorized proof provider", None),
+                      (f"wrong-z-k{k}", payee, wrong, "exact session challenge tuple and z", None)]
+    if not completed:
+        first, second = [op for op in prepared if op["proof_expectation"]["snapshot"]["k"] == 8][:2]
+        payee = first["proof_expectation"]["session"]["authorized_proof_provider"]
+        if second["proof_expectation"]["session"]["authorized_proof_provider"] != payee:
+            raise ValueError("rollback test requires two distinct sessions with one signer")
+        bad = payload(second)
+        bad["proofs"][0]["y_value"] = changed_scalar(bad["proofs"][0]["y_value"])
+        cases.append(("later-native-failure", payee, dict(sessions=[payload(first), bad]), "invalid retrieval proof", None))
+    for name, signer, body, reason, sid in cases:
+        if body is None:
+            args = ["confirm-retrieval-session", "--session-id", sid]
+        else:
+            path = directory / (name + ".json")
+            with path.open("x") as target:
+                json.dump(body, target)
+            args = ["submit-retrieval-proof", str(path)]
+        # Fixed gas forces actual execution: auto simulation must not replace rejection evidence.
+        job = transaction_job(lifecycle, signer, args, kind=name, gas="20000000")
+        result = artifact.scheduled_transaction(job)
+        row = dict(result, kind=name, signer=signer, submit=job["submit"])
+        record["transactions"].append(row)
+        lifecycle.save()
+        expected = "committed_success" if completed else "committed_failure"
+        if result["outcome"] != expected or (reason and reason not in result.get("error", "")):
+            raise ValueError("unexpected adversarial outcome; no retry: " + name)
+        lifecycle.wait_height(result["height"] + 1)
+        row["validators"] = verify_transaction_nodes(lifecycle, result)
+        after = retrieval_snapshot(lifecycle, result["height"], deals, ids)
+        assert_unchanged_retrieval(before, after)
+        row["state_unchanged"] = True
+        record["after"] = after
+        lifecycle.save()
+    return record["after"]
+
+
 def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     lifecycle.home.mkdir(mode=0o700)
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -384,6 +481,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
         doc["workload_journal"] = str(journal)
         lifecycle.save()
         scheduled = prepared_cohort(lifecycle, operations, prepare) if proof_only else operations
+        if proof_only:
+            run_adversarial_phase(lifecycle, deals, scheduled)
         doc["measurement_mode"] = "prepared-proof-only" if proof_only else "lifecycle"
         lifecycle.save()
         capture_workload_metrics(lifecycle, "before_workload", fenced=proof_only)
@@ -430,6 +529,12 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
         after = retrieval_snapshot(lifecycle, height, deals, ids)
         doc["settlement"] = verify_settlement(before, after, operations, results, transactions, lifecycle.signers)
         doc["after_workload"] = after
+        if proof_only:
+            after = run_adversarial_phase(lifecycle, deals, scheduled, completed=True)
+            height = after["bank"]["height"]
+            doc["after_adversarial_retries"] = after
+            doc["transactions_submitted"] += sum(len(phase["transactions"]) for phase in doc["adversarial_phases"].values())
+        doc["workload_transaction_validators"] = [verify_transaction_nodes(lifecycle, row) for row in transactions]
         lifecycle.save()
         lifecycle.stop()
         lifecycle.reserve_ports()
@@ -754,7 +859,7 @@ def main():
         parser.add_argument("--" + flag)
     parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
-    parser.add_argument("--proof-only", action="store_true", help="Prepare the six smoke sessions before timing proof submission")
+    parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
