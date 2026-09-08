@@ -1253,6 +1253,13 @@ func livenessTierForLatency(latency int64) (uint32, string, math.LegacyDec) {
 // ProveLiveness handles MsgProveLiveness to verify KZG proofs and process rewards.
 func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiveness) (*types.MsgProveLivenessResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	v2, err := k.RetrievalV2Active(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, system := msg.ProofType.(*types.MsgProveLiveness_SystemProof); v2 && system {
+		return k.proveFrozenStorageAudit(ctx, msg)
+	}
 
 	params := k.GetParams(ctx)
 	if params.EpochLenBlocks == 0 {
@@ -1438,6 +1445,9 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	}
 
 	storageReward := math.LegacyNewDecFromInt(decayedReward).Mul(rewardMultiplier).TruncateInt()
+	if v2 {
+		storageReward = math.ZeroInt()
+	}
 
 	var bandwidthBytes uint64
 	var isUserReceipt bool
@@ -1842,7 +1852,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	// Update reputation only after proof validation succeeds and the provider
 	// remains reward-eligible. Invalid or delinquent/jailed proofs can still be
 	// recorded as evidence, but they must not earn reputation.
-	if tier < 3 && rewardExclusionReason == "" {
+	if !v2 && tier < 3 && rewardExclusionReason == "" {
 		provider, errGet := k.Providers.Get(ctx, creator)
 		if errGet == nil {
 			provider.ReputationScore += 1
@@ -1946,6 +1956,10 @@ func (k msgServer) recordProofSummary(ctx sdk.Context, creator string, msg *type
 // failure counter and logs when a pair would be considered "degraded" under a
 // full HealthState-based eviction policy.
 func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider string, proofOK bool) {
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil || active {
+		return
+	}
 	key := collections.Join(dealID, provider)
 
 	if proofOK {

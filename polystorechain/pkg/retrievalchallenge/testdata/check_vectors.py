@@ -38,7 +38,7 @@ def challenge(ctx, ordinal, mdu, leaf):
     raise ValueError('exhausted')
 
 vectors = {'schema': SCHEMA, 'vectors': {}}
-for name, override in [('session', {}), ('audit', SCHEMA['audit_override'])]:
+for name, override in [('session', {}), ('audit', SCHEMA['audit_override']), ('repair', dict(SCHEMA['audit_override'], kind=3))]:
     values = {field: default for field, kind, default in SCHEMA['fields']}
     values.update(override)
     for field, kind, _ in SCHEMA['fields']:
@@ -84,4 +84,4 @@ for name, override in [('session', {}), ('audit', SCHEMA['audit_override'])]:
     vectors['vectors'][name] = {'context_hex': wire.hex(), 'context_hash': ctx.hex(), 'population': population, 'samples': samples}
 
 assert vectors == GOLDEN, 'independent v2 transcript/sample/point vectors drifted'
-print('independent v2 session and audit vectors match')
+print('independent v2 session, audit and repair vectors match')

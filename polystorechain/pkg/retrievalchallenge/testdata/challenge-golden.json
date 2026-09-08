@@ -274,6 +274,85 @@
           "position_counter": 0
         }
       ]
+    },
+    "repair": {
+      "context_hex": "0000001e706f6c7973746f72652f6368616c6c656e67652d636f6e746578742f76320000000200000010706f6c7973746f72652d746573742d31000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f03000000000000000000000000000000000000000000000000000000000000000000200000000000010000000000000007404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273606162636465666768696a6b6c6d6e6f707172730200000008000000040000000300000000000000020000000000000085000000000000000000000000000000000000000000000000000000020000000000000064000000000000000800000000000000640000000000000065000000000000006600000000000000c700000000000000c8",
+      "context_hash": "c9dfd69801a0f2e02631c60fa8f0579b6c50006b4136233552967181fd643c9a",
+      "population": 1064,
+      "samples": [
+        {
+          "ordinal": 0,
+          "mdu_index": 78,
+          "leaf_index": 25,
+          "z": "51b012a36483061bfa1cf4fdbc5f63338f9de8171f33b7f2cc65ad7a00a642b3",
+          "scalar_counter": 0,
+          "population_index": 609,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 1,
+          "mdu_index": 42,
+          "leaf_index": 29,
+          "z": "543b22bc27d59ddc02cfd382b3b0bd805da82d7bd9f2eba28b6a52af7b7380d2",
+          "scalar_counter": 2,
+          "population_index": 325,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 2,
+          "mdu_index": 62,
+          "leaf_index": 27,
+          "z": "2034c98b529369cb8c20463da84c274a19c5f373f098c439cb8b4c65d9125bf2",
+          "scalar_counter": 1,
+          "population_index": 483,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 3,
+          "mdu_index": 82,
+          "leaf_index": 28,
+          "z": "5144352b6a50a8fb309d8edab6e1ce9ac8637ea4dd4872b094f8924f83b96e36",
+          "scalar_counter": 1,
+          "population_index": 644,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 4,
+          "mdu_index": 12,
+          "leaf_index": 31,
+          "z": "3df3d0e240f1a2ae7f04e0ab5cbfe4fefe8e0493fb3573d5a60ed4b147e705da",
+          "scalar_counter": 0,
+          "population_index": 87,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 5,
+          "mdu_index": 118,
+          "leaf_index": 25,
+          "z": "24fdac02d1aa31c33cacf7d700f02d9724c57aae1eed8db4ec6afe7f4f049fc9",
+          "scalar_counter": 1,
+          "population_index": 929,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 6,
+          "mdu_index": 77,
+          "leaf_index": 27,
+          "z": "56f87df861fed1d9217d3ca0794f0cc9ba00bd448a4b72253a9a55f480a104bc",
+          "scalar_counter": 7,
+          "population_index": 603,
+          "position_counter": 0
+        },
+        {
+          "ordinal": 7,
+          "mdu_index": 97,
+          "leaf_index": 24,
+          "z": "2c43e827143732c73a5f308a68fb1af83fd09328159065c56ddbcb24bd8f9bd4",
+          "scalar_counter": 5,
+          "population_index": 760,
+          "position_counter": 0
+        }
+      ]
     }
   }
 }

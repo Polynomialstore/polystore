@@ -100,3 +100,11 @@ var (
 	SyntheticSeenKey              = collections.NewPrefix("SyntheticSeen/value/")
 	DeputySeenKey                 = collections.NewPrefix("DeputySeen/value/")
 )
+
+var (
+	StorageAuditAssignmentsKey    = collections.NewPrefix("StorageAuditAssignments/value/")
+	StorageAuditEpochsKey         = collections.NewPrefix("StorageAuditEpochs/value/")
+	StorageAuditsKey              = collections.NewPrefix("StorageAudits/value/")
+	StorageAuditEpochLengthKey    = collections.NewPrefix("StorageAuditEpochLength/value/")
+	StorageAuditGenerationRefsKey = collections.NewPrefix("StorageAuditGenerationRefs/value/")
+)

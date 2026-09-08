@@ -66,13 +66,15 @@ func (k Keeper) activateRetrievalV2(ctx sdk.Context) error {
 	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalV2BlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
 		return fmt.Errorf("retrieval v2 activation requires bounded consensus gas and bytes within the qualified candidate profile")
 	}
-	// C4 integration must add its bounded assignment preflight here before
-	// coordinated activation. Merging this session slice does not qualify it.
+	if err := k.preflightStorageAudits(ctx, params); err != nil {
+		return err
+	}
 	return k.RetrievalV2ActivatedHeight.Set(ctx, params.RetrievalV2ActivationHeight)
 }
 
 // processRetrievalChallengeState does at most 128 expiry-reference releases and
-// captures at most one height anchor. It never scans sessions or changes their
+// freezes/prunes at most 64 audit records per epoch boundary, and captures one
+// height anchor. It never scans sessions or changes their
 // economic/status records. Admission reserves these finite future operations.
 func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 	if err := k.activateRetrievalV2(ctx); err != nil {
@@ -82,7 +84,10 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 	if err != nil || !active {
 		return err
 	}
-	if ctx.BlockHeight() < 2 {
+	if err := k.processStorageAudits(ctx); err != nil {
+		return err
+	}
+	if ctx.BlockHeight() < 1 {
 		return nil
 	}
 	height := uint64(ctx.BlockHeight())

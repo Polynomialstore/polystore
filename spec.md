@@ -621,7 +621,23 @@ PolyStore recognizes several classes of evidence derived from retrievals and syn
 
 These evidence types collectively support the retrievability invariant: for each `(Deal, Provider)`, data is either retrievable under protocol rules or there exists high‑probability, verifiable evidence of failure that can be used to punish and eventually evict the Provider.
 
-### 7.6 Proof Demand Policy (Planned, Parameters TBD)
+### 7.6 Proof Demand Policy
+
+**V2 candidate, disabled by default:** the
+[frozen storage obligation contract](docs/retrieval-v2-storage-audits.md) supersedes
+organic credit subtraction and storage/health equivalence in §7.2/§7.5 when v2
+is activated. ACTIVE assignments freeze independent `Q=min(U,snapshot_quota)`
+challenges before the epoch anchor; metadata is excluded and each selected
+position requires its exact off-domain evaluation. Population U counts assigned
+user blob positions, including allocated padding/parity, not the caller's reported
+bytes. A small population is sampled completely when U<Q. Empty windows, U=0,
+disabled quotas and unavailable seeds cannot create provider failures or fulfilled
+rewards. Pending repair uses distinct kind 3 solely for its explicit readiness
+workflow. Organic/session/deputy activity earns no ACTIVE coverage, storage reward,
+health or readiness credit. This candidate retains proposer-influence and delivery
+trust limits; it is not a formal proof of retrievability or release qualification.
+
+The following is the historical v1 policy, not the v2 credit rule:
 
 The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval sessions reduce synthetic proof demand**.
 

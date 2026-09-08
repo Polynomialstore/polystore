@@ -15,6 +15,13 @@ import (
 // CheckMissedProofs iterates over all deals and slashes providers who have missed their proof window.
 func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	active, err := k.RetrievalV2Active(sdkCtx)
+	if err != nil {
+		return err
+	}
+	if active {
+		return k.finalizeStorageAuditEpoch(sdkCtx)
+	}
 	params := k.GetParams(sdkCtx)
 	if params.EpochLenBlocks == 0 {
 		return nil
@@ -28,7 +35,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	}
 	height := uint64(sdkCtx.BlockHeight())
 
-	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
+	err = k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
 		// end_block is exclusive: once height >= end_block, the deal is expired.
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
@@ -340,108 +347,12 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				}
 
 				if total < quota {
-					prev, err := k.Mode2MissedEpochs.Get(ctx, missedKey)
-					if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					changed, err := k.applyMode2QuotaShortfall(sdkCtx, params, &deal, slot, epochID, quota, credits, synth)
+					if err != nil {
 						return false, err
 					}
-					nextMissed := prev + 1
-					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
-						return false, err
-					}
-					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, "quota_miss_recorded", nextMissed); err != nil {
-						return false, err
-					}
-					healthKind := "provider_degraded"
-					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
-						healthKind = "provider_delinquent"
-					}
-					if err := k.recordMode2SoftFaultEvidence(sdkCtx, deal, dealID, slot, epochID, healthKind, nextMissed); err != nil {
-						return false, err
-					}
-					sdkCtx.Logger().Info(
-						"quota missed (mode2)",
-						"epoch", epochID,
-						"deal", dealID,
-						"slot", slotIdx,
-						"quota", quota,
-						"credits", credits,
-						"synthetic", synth,
-						"missed_epochs", nextMissed,
-					)
+					dealChanged = dealChanged || changed
 
-					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
-						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
-							continue
-						}
-						entry := deal.Mode2Slots[slot]
-						if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
-							continue
-						}
-						if strings.TrimSpace(entry.PendingProvider) != "" {
-							continue
-						}
-						coolingDown, attemptState, err := k.repairAttemptCooldownActive(sdkCtx, dealID, slot, epochID)
-						if err != nil {
-							return false, err
-						}
-						if coolingDown {
-							sdkCtx.Logger().Info(
-								"slot repair skipped during cooldown",
-								"deal", dealID,
-								"slot", slotIdx,
-								"provider", entry.Provider,
-								"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
-							)
-							continue
-						}
-
-						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
-						if err != nil {
-							sdkCtx.Logger().Error(
-								"failed to select replacement provider",
-								"deal", dealID,
-								"slot", slotIdx,
-								"error", err,
-							)
-							if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
-								sdkCtx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
-							}
-							continue
-						}
-
-						entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
-						entry.PendingProvider = strings.TrimSpace(pending)
-						entry.StatusSinceHeight = sdkCtx.BlockHeight()
-						entry.RepairTargetGen = deal.CurrentGen
-						if err := k.clearMode2RepairReadiness(sdkCtx, dealID, slot); err != nil {
-							return false, err
-						}
-						deal.Mode2Slots[slot] = entry
-						dealChanged = true
-						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
-
-						extra := make([]byte, 0, 4)
-						extra = binary.BigEndian.AppendUint32(extra, slot)
-						eid := deriveEvidenceID("quota_miss_repair_started", dealID, epochID, extra)
-						if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "quota_miss_repair_started", eid[:], "chain", false); err != nil {
-							sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
-						}
-						caseID, err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "quota_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen)
-						if err != nil {
-							sdkCtx.Logger().Error("failed to record structured repair evidence", "error", err)
-						} else if err := k.recordRepairAttemptStarted(sdkCtx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "quota_miss_repair_started", entry.RepairTargetGen, caseID); err != nil {
-							sdkCtx.Logger().Error("failed to record repair attempt state", "error", err)
-						}
-
-						sdkCtx.Logger().Info(
-							"slot repair started",
-							"deal", dealID,
-							"slot", slotIdx,
-							"provider", entry.Provider,
-							"pending_provider", entry.PendingProvider,
-							"repair_target_gen", entry.RepairTargetGen,
-						)
-					}
 				} else {
 					if err := k.Mode2MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
@@ -591,10 +502,13 @@ func (k Keeper) recordMode2SoftFaultEvidence(
 		return nil
 	}
 	provider := strings.TrimSpace(entry.Provider)
+	return k.recordMode2SoftFaultForAssignment(ctx, provider, dealID, slot, epochID, kind, missedEpochs, true)
+}
+
+func (k Keeper) recordMode2SoftFaultForAssignment(ctx sdk.Context, provider string, dealID uint64, slot uint32, epochID uint64, kind string, missedEpochs uint64, updateSlot bool) error {
 	if provider == "" {
 		return nil
 	}
-
 	extra := make([]byte, 0, 4+8)
 	extra = binary.BigEndian.AppendUint32(extra, slot)
 	extra = binary.BigEndian.AppendUint64(extra, missedEpochs)
@@ -624,6 +538,9 @@ func (k Keeper) recordMode2SoftFaultEvidence(
 		return err
 	}
 
+	if !updateSlot {
+		return nil
+	}
 	health := types.SlotHealthStatus_SLOT_HEALTH_STATUS_SUSPECT
 	if softFaultEvidenceStatus(kind) == types.EvidenceCaseStatus_EVIDENCE_CASE_STATUS_CONVICTED {
 		health = types.SlotHealthStatus_SLOT_HEALTH_STATUS_DELINQUENT
@@ -666,4 +583,117 @@ func softFaultConsequence(kind string) string {
 		return "repair and reward exclusion; no soft-fault slash by default"
 	}
 	return "health decay and operator alert; no slash"
+}
+
+// applyMode2QuotaShortfall is the existing soft quota policy shared by legacy
+// accounting and exact frozen ACTIVE obligations. It never consumes telemetry.
+func (k Keeper) applyMode2QuotaShortfall(sdkCtx sdk.Context, params types.Params, deal *types.Deal, slot uint32, epochID, quota, credits, synth uint64) (bool, error) {
+	ctx := sdkCtx
+	dealID := deal.Id
+	missedKey := collections.Join(dealID, slot)
+	changed := false
+
+	prev, err := k.Mode2MissedEpochs.Get(ctx, missedKey)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return false, err
+	}
+	nextMissed := prev + 1
+	if err := k.Mode2MissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
+		return false, err
+	}
+	if err := k.recordMode2SoftFaultEvidence(sdkCtx, *deal, dealID, slot, epochID, "quota_miss_recorded", nextMissed); err != nil {
+		return false, err
+	}
+	healthKind := "provider_degraded"
+	if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+		healthKind = "provider_delinquent"
+	}
+	if err := k.recordMode2SoftFaultEvidence(sdkCtx, *deal, dealID, slot, epochID, healthKind, nextMissed); err != nil {
+		return false, err
+	}
+	sdkCtx.Logger().Info(
+		"quota missed (mode2)",
+		"epoch", epochID,
+		"deal", dealID,
+		"slot", slot,
+		"quota", quota,
+		"credits", credits,
+		"synthetic", synth,
+		"missed_epochs", nextMissed,
+	)
+
+	if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+		if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
+			return false, nil
+		}
+		entry := deal.Mode2Slots[slot]
+		if entry == nil || entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+			return false, nil
+		}
+		if strings.TrimSpace(entry.PendingProvider) != "" {
+			return false, nil
+		}
+		coolingDown, attemptState, err := k.repairAttemptCooldownActive(sdkCtx, dealID, slot, epochID)
+		if err != nil {
+			return false, err
+		}
+		if coolingDown {
+			sdkCtx.Logger().Info(
+				"slot repair skipped during cooldown",
+				"deal", dealID,
+				"slot", slot,
+				"provider", entry.Provider,
+				"cooldown_until_epoch", attemptState.CooldownUntilEpoch,
+			)
+			return false, nil
+		}
+
+		pending, err := k.selectMode2ReplacementProvider(sdkCtx, *deal, slot, epochID)
+		if err != nil {
+			sdkCtx.Logger().Error(
+				"failed to select replacement provider",
+				"deal", dealID,
+				"slot", slot,
+				"error", err,
+			)
+			if errEvidence := k.recordRepairBackoff(sdkCtx, dealID, entry.Provider, slot, epochID, err); errEvidence != nil {
+				sdkCtx.Logger().Error("failed to record repair backoff evidence", "error", errEvidence)
+			}
+			return false, nil
+		}
+
+		entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+		entry.PendingProvider = strings.TrimSpace(pending)
+		entry.StatusSinceHeight = sdkCtx.BlockHeight()
+		entry.RepairTargetGen = deal.CurrentGen
+		if err := k.clearMode2RepairReadiness(sdkCtx, dealID, slot); err != nil {
+			return false, err
+		}
+		deal.Mode2Slots[slot] = entry
+		changed = true
+		_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+		extra := make([]byte, 0, 4)
+		extra = binary.BigEndian.AppendUint32(extra, slot)
+		eid := deriveEvidenceID("quota_miss_repair_started", dealID, epochID, extra)
+		if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "quota_miss_repair_started", eid[:], "chain", false); err != nil {
+			sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+		}
+		caseID, err := k.recordMode2RepairStartedEvidence(sdkCtx, dealID, entry.Provider, slot, epochID, "quota_miss_repair_started", eid[:], entry.PendingProvider, entry.RepairTargetGen)
+		if err != nil {
+			sdkCtx.Logger().Error("failed to record structured repair evidence", "error", err)
+		} else if err := k.recordRepairAttemptStarted(sdkCtx, dealID, slot, entry.Provider, entry.PendingProvider, epochID, "quota_miss_repair_started", entry.RepairTargetGen, caseID); err != nil {
+			sdkCtx.Logger().Error("failed to record repair attempt state", "error", err)
+		}
+
+		sdkCtx.Logger().Info(
+			"slot repair started",
+			"deal", dealID,
+			"slot", slot,
+			"provider", entry.Provider,
+			"pending_provider", entry.PendingProvider,
+			"repair_target_gen", entry.RepairTargetGen,
+		)
+	}
+	return changed, nil
 }

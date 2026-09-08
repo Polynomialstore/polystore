@@ -435,6 +435,10 @@ func (k Keeper) epochSeed(ctx sdk.Context, epochID uint64) ([32]byte, error) {
 }
 
 func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types.Deal, stripe stripeParams, provider string, mduIndex uint64, blobIndex uint32) error {
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil || active {
+		return err
+	}
 	if epochID == 0 {
 		return nil
 	}
