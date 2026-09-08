@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -45,14 +46,14 @@ def check(binary, setup):
             "identity": ("2\n2\n" + "\n".join([identity_g1] * 2 + [identity_g2] * 2) + "\n").encode(),
         }
 
-        def run(arguments, path, home):
+        def run(arguments, path, home, executable=binary, cwd=root):
             env = dict(os.environ)
             if path is None:
                 env.pop("POLYSTORE_TRUSTED_SETUP", None)
             else:
                 env["POLYSTORE_TRUSTED_SETUP"] = str(path)
             return subprocess.run(
-                [str(binary), "--home", str(home), *arguments], cwd=root,
+                [str(executable), "--home", str(home), *arguments], cwd=cwd,
                 env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, text=True, timeout=30,
             )
@@ -89,6 +90,49 @@ def check(binary, setup):
         if result.returncode == 0 or SETUP_ERROR not in result.stdout or not server_untouched(home):
             raise AssertionError(f"missing default setup was not rejected before initialization:\n{result.stdout}")
         print("PASS missing default setup: start")
+
+        # Use the actual release layout and daemon, including a symlink launched
+        # from an unrelated directory. No environment override supplies the path.
+        archive = root / "release"
+        (archive / "bin").mkdir(parents=True)
+        (archive / "config").mkdir()
+        packaged_binary = archive / "bin" / "polystorechaind"
+        shutil.copy2(binary, packaged_binary)
+        packaged_setup = archive / "config" / "trusted_setup.txt"
+        packaged_setup.write_bytes(approved)
+        linked_binary = root / "linked-polystorechaind"
+        linked_binary.symlink_to(packaged_binary)
+        source_tree = root / "source-tree"
+        (source_tree / "polystorechain").mkdir(parents=True)
+        source_setup = source_tree / "polystorechain" / "trusted_setup.txt"
+        source_setup.write_bytes(approved)
+        for name, executable, cwd in (("archive-root", packaged_binary, archive),
+                                      ("archive-symlink", linked_binary, root),
+                                      ("source-tree", packaged_binary, source_tree)):
+            result = run(["start", "--pruning", "startup-test-invalid"], None,
+                         root / name, executable, cwd)
+            if result.returncode == 0 or "unknown pruning strategy startup-test-invalid" not in result.stdout or SETUP_ERROR in result.stdout:
+                raise AssertionError(f"{name} setup discovery failed:\n{result.stdout}")
+            print(f"PASS {name}: default setup admission")
+        for name, override in (("explicit-missing", root / "missing.txt"),
+                               ("explicit-substituted", root / "substituted.txt")):
+            home = root / name
+            result = run(["start"], override, home, packaged_binary, archive)
+            if result.returncode == 0 or SETUP_ERROR not in result.stdout or not server_untouched(home):
+                raise AssertionError(f"{name} fell back to the bundled setup:\n{result.stdout}")
+            print(f"PASS {name}: no bundled fallback")
+        source_setup.write_bytes(substituted)
+        home = root / "source-substituted"
+        result = run(["start"], None, home, packaged_binary, source_tree)
+        if result.returncode == 0 or SETUP_ERROR not in result.stdout or not server_untouched(home):
+            raise AssertionError(f"invalid source setup fell back to the bundled setup:\n{result.stdout}")
+        print("PASS source-substituted: no bundled fallback")
+        packaged_setup.write_bytes(substituted)
+        home = root / "archive-substituted"
+        result = run(["start"], None, home, packaged_binary, archive)
+        if result.returncode == 0 or SETUP_ERROR not in result.stdout or not server_untouched(home):
+            raise AssertionError(f"substituted bundled setup was accepted:\n{result.stdout}")
+        print("PASS archive-substituted: default setup rejected")
 
         for arguments in (["--help"], ["version"]):
             result = run(arguments, root / "missing.txt", root / "read-only")

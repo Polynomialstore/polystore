@@ -16,6 +16,10 @@ are checked. A later initialization request rechecks its supplied file/bytes;
 an existing singleton cannot make a missing or substituted setup succeed.
 Validator `start` and `in-place-testnet` fail on initialization errors. Read-only
 CLI commands do not require setup. Chain, browser and demos use this same digest.
+The daemon uses an explicit `POLYSTORE_TRUSTED_SETUP` without fallback. Otherwise
+it uses `polystorechain/trusted_setup.txt` from the working directory when present,
+or `../config/trusted_setup.txt` relative to the resolved executable, matching
+`release.sh` archives even when launched through a symlink from another directory.
 The repository marks `trusted_setup.txt` as `-text` so Git preserves the approved
 bytes even with `core.autocrlf=true`; verification never normalizes received bytes.
 

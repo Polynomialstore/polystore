@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/depinject"
@@ -62,10 +63,7 @@ func NewRootCmd() *cobra.Command {
 			// opening stores or listeners. Other CLI commands do not need KZG;
 			// local proof-generating commands initialize their explicit setup.
 			if cmd.Name() == "start" || cmd.Name() == "in-place-testnet" {
-				tsPath := os.Getenv("POLYSTORE_TRUSTED_SETUP")
-				if tsPath == "" {
-					tsPath = "polystorechain/trusted_setup.txt"
-				}
+				tsPath := validatorTrustedSetupPath()
 				if err := crypto_ffi.Init(tsPath); err != nil {
 					return fmt.Errorf("initialize validator KZG trusted setup %q: %w", tsPath, err)
 				}
@@ -117,6 +115,24 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	return rootCmd
+}
+
+func validatorTrustedSetupPath() string {
+	if path := os.Getenv("POLYSTORE_TRUSTED_SETUP"); path != "" {
+		return path
+	}
+	path := "polystorechain/trusted_setup.txt"
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return path
+	}
+	// release.sh packages bin/polystorechaind beside config/trusted_setup.txt.
+	// Resolve a symlinked executable so launching outside the archive also works.
+	if executable, err := os.Executable(); err == nil {
+		if executable, err = filepath.EvalSymlinks(executable); err == nil {
+			return filepath.Join(filepath.Dir(executable), "..", "config", "trusted_setup.txt")
+		}
+	}
+	return path
 }
 
 // ProvideClientContext creates and provides a fully initialized client.Context,
