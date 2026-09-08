@@ -24,7 +24,7 @@ ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LI
 COUNTS = (1, 2, 8)
 
 
-def capture_workload_metrics(lifecycle, phase):
+def capture_workload_metrics(lifecycle, phase, *, fenced=False):
     """Retain raw per-node captures, with one hard deadline for the whole phase."""
     evidence = lifecycle.doc.setdefault("commit_step_metrics", dict(
         boundary=commit_metrics.BOUNDARY, qualification=False, boundaries_reconciled=False,
@@ -39,9 +39,15 @@ def capture_workload_metrics(lifecycle, phase):
         row = dict(node_id=node["node_id"], endpoint=endpoint)
         capture["nodes"].append(row)
         try:
-            result = artifact.run_bounded_command(
-                [sys.executable, commit_metrics.__file__, endpoint, lifecycle.chain, "--timeout", "2"],
-                deadline, env=lifecycle.env)
+            argv = [sys.executable, commit_metrics.__file__, endpoint, lifecycle.chain, "--timeout", "2"]
+            if fenced:
+                argv += ["--rpc-url", f'http://127.0.0.1:{node["rpc"]}/status', "--node-id", node["node_id"],
+                         "--process-initial-height", "0"]  # Only the initial fresh process, before restart.
+            while True:
+                result = artifact.run_bounded_command(argv, deadline, env=lifecycle.env)
+                if result.returncode == 0 or not fenced or "boundary is moving or not fully observed" not in result.stderr:
+                    break
+                lifecycle.remaining()
             row.update(stdout=result.stdout, stderr=result.stderr, returncode=result.returncode)
             if result.returncode != 0:
                 raise ValueError("Commit metric capture command failed")
@@ -176,13 +182,15 @@ def build_operations(lifecycle, fixtures, deals, minimum_height):
     return operations
 
 
-def journal_results(path, operations):
+def journal_results(path, operations, *, proof_only=False):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         rows = {identity: json.loads(result) if result else None for identity, result in db.execute("SELECT id, result FROM operations")}
         transactions = [json.loads(row[0]) for row in db.execute("SELECT result FROM transactions ORDER BY rowid")]
     if set(rows) != {op["operation_id"] for op in operations} or any(not row or row.get("all_transactions_committed") is not True for row in rows.values()):
         raise ValueError("lifecycle did not commit every open/proof/confirmation; inspect retained journal")
-    if len(transactions) != 3 * len(operations) or any(row["outcome"] != "committed_success" for row in transactions):
+    if (len(transactions) != (1 if proof_only else 3) * len(operations) or
+            any(row["outcome"] != "committed_success" for row in transactions) or
+            (proof_only and any(row.get("proof_submitted") is not True for row in rows.values()))):
         raise ValueError("unexpected transaction outcomes")
     ids = [row["session_id"] for row in rows.values()]
     if len(set(ids)) != len(ids):
@@ -262,7 +270,43 @@ def verify_settlement(before, after, operations, results, transactions, signers)
                 byte_counter_scope="protocol counters; no network-delivered bytes verified")
 
 
-def run(lifecycle, fixture_k8, fixture_k2):
+def read_session_evidence(lifecycle, operation, sid, height, deadline):
+    node = lifecycle.nodes[0]
+    deadline = min(deadline, lifecycle.deadline)
+    request = dict(action="evidence", config=dict(rpc=f'http://127.0.0.1:{node["rpc"]}',
+        api=f'http://127.0.0.1:{node["api"]}', node_id=node["node_id"]),
+        expected=operation["proof_expectation"], session_id=sid, height=height, deadline=deadline)
+    result = artifact.run_bounded_command([sys.executable, producer.__file__, json.dumps(request)],
+                                         min(deadline, lifecycle.deadline), env=lifecycle.env)
+    if result.returncode:
+        raise ValueError("committed proof evidence read failed: " + result.stderr[-8192:])
+    return json.loads(result.stdout)
+
+
+def prepared_cohort(lifecycle, operations, prepare):
+    """Prepare this bounded smoke inventory before the measured proof-only stage."""
+    prepared = []
+    transactions = lifecycle.doc["preparation_transactions"] = []
+    for operation in operations:
+        result = artifact.scheduled_transaction(operation["open-session"])
+        result.update(operation_id=operation["operation_id"], kind="open-session")
+        transactions.append(result)
+        lifecycle.save()
+        if result["outcome"] != "committed_success":
+            raise ValueError("prepared cohort open failed or ambiguous; no signer retry")
+        sid = artifact.opened_session_id(result)
+        proof = prepare(operation, sid, lifecycle.deadline)
+        path = proof["submit"][4]
+        item = {key: value for key, value in operation.items() if key not in ("open-session", "confirm", "proof_submit")}
+        item["submit-proof"] = dict(operation["submit-proof"], submit=proof["submit"])
+        item["prepared"] = dict(session_id=sid, proof_path=path, proof_sha256=artifact.sha256(path),
+            evidence=read_session_evidence(lifecycle, operation, sid, None, lifecycle.deadline))
+        artifact.prepared_session_pin(item, item["prepared"]["evidence"])
+        prepared.append(item)
+    return prepared
+
+
+def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     lifecycle.home.mkdir(mode=0o700)
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
     def interrupted(signum, frame):
@@ -333,14 +377,42 @@ def run(lifecycle, fixture_k8, fixture_k2):
         journal = lifecycle.home / "workload.sqlite"
         doc["workload_journal"] = str(journal)
         lifecycle.save()
-        capture_workload_metrics(lifecycle, "before_workload")
-        doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations, journal_path=journal,
+        scheduled = prepared_cohort(lifecycle, operations, prepare) if proof_only else operations
+        doc["measurement_mode"] = "prepared-proof-only" if proof_only else "lifecycle"
+        lifecycle.save()
+        capture_workload_metrics(lifecycle, "before_workload", fenced=proof_only)
+        doc["scheduler"] = artifact.schedule_retrieval_lifecycles(scheduled, journal_path=journal,
             signers=list(lifecycle.signers.values()), prepare_session_proof=prepare,
+            mode=doc["measurement_mode"], read_session_evidence=lambda op, sid, h, d: read_session_evidence(lifecycle, op, sid, h, d),
             max_in_flight=2, max_queued=16, max_queued_per_signer=8)
-        results, transactions = journal_results(journal, operations)
-        doc.update(operation_results=results, workload_transactions=transactions,
-                   transactions_submitted=len(doc["setup_transactions"]) + len(transactions))
-        capture_workload_metrics(lifecycle, "after_workload")
+        results, transactions = journal_results(journal, operations, proof_only=proof_only)
+        doc.update(operation_results=results, workload_transactions=transactions)
+        capture_workload_metrics(lifecycle, "after_workload", fenced=proof_only)
+        if proof_only:
+            doc["commit_step_metrics"]["boundaries_reconciled"] = True
+            doc["commit_step_metrics"]["limitation"] = "Proof-only smoke; per-node fenced intervals, no sustained-load or capacity qualification"
+            doc["commit_step_metrics"]["node_intervals"] = []
+            for index in range(4):
+                samples = [doc["commit_step_metrics"]["phases"][phase]["nodes"][index]["sample"]
+                           for phase in ("before_workload", "after_workload")]
+                if not all(samples[0]["committed_height"] < row["height"] <= samples[-1]["committed_height"] for row in transactions):
+                    raise ValueError("proof workload transactions fall outside fenced measurement blocks")
+                doc["commit_step_metrics"]["node_intervals"].append(dict(node_id=lifecycle.nodes[index]["node_id"],
+                    **commit_metrics.summarize_commit_metrics(samples,
+                        start_committed_height=samples[0]["committed_height"], end_committed_height=samples[-1]["committed_height"],
+                        boundaries_reconciled=True)))
+            confirmations = doc["post_measurement_transactions"] = []
+            for op in operations:
+                job = dict(op["confirm"], submit=[arg.replace("{session_id}", results[op["operation_id"]]["session_id"])
+                                                for arg in op["confirm"]["submit"]])
+                result = artifact.scheduled_transaction(job)
+                result.update(operation_id=op["operation_id"], kind="confirm")
+                confirmations.append(result)
+                lifecycle.save()
+                if result["outcome"] != "committed_success":
+                    raise ValueError("post-measurement confirmation failed or ambiguous; no signer retry")
+            transactions = doc["preparation_transactions"] + transactions + confirmations
+        doc["transactions_submitted"] = len(doc["setup_transactions"]) + len(transactions)
         doc["fresh_proof_artifacts"] = {}
         for op in operations:
             sid = results[op["operation_id"]]["session_id"]
@@ -386,9 +458,11 @@ def main():
     for flag in ("binary", "library", "home", "fixture-k8", "fixture-k2"):
         parser.add_argument("--" + flag, required=True)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--proof-only", action="store_true", help="Prepare the six smoke sessions before timing proof submission")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
-    print(run(artifact.FourValidatorLifecycle(**options), k8, k2))
+    proof_only = options.pop("proof_only")
+    print(run(artifact.FourValidatorLifecycle(**options), k8, k2, proof_only=proof_only))
 
 
 if __name__ == "__main__":

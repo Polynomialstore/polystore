@@ -145,3 +145,43 @@ K8/K2 commitments and 52 fresh openings. This integration check precedes merged
 source correspondence and final collection, so its qualification remains false.
 The wide timing captures validate instrumentation only; no p95 or capacity claim
 is derived from this smoke.
+
+
+## Prepared proof-only smoke
+
+Add `--proof-only` to the four-validator command above, with a new `--home`.
+The driver commits six opens, waits for each canonical challenge and generates
+fresh native openings before the measurement fence. The scheduler submits only
+those six proofs, verifies `PROOF_SUBMITTED` at each transaction's committed
+height, and reports zero completed lifecycles inside this interval. Confirmation,
+payout checks and restart then run outside the interval. The original complete
+lifecycle mode remains the default.
+
+Prepared inventory is bounded and pinned to session, seed, anchor, frozen payee
+and proof-file digest. It is revalidated before broadcast and cannot be reused
+under another operation ID. An empty offered inventory slot records depletion,
+not an offered transaction or completed proof. Preparation and HTTP evidence
+reads share the run's absolute deadline. Latest evidence uses `/abci_info`'s
+persisted application height: `/status` can publish a block before its state is
+queryable.
+
+Proof-only Commit measurements fence two scrapes with three stable `/status`
+reads, verify the owned node/chain and require the metric count to equal height
+minus the known process-start application height. A moving or incomplete fence
+is retried only within the existing phase deadline. Each measured proof must
+fall strictly after the starting fence and at or before the ending fence.
+These counts apply to the initial fresh process only; a restarted process needs
+its own recorded start height and series. The conservative bound covers the
+previously documented Commit boundary, not all consensus work.
+
+[`prepared-proof-smoke.json`](prepared-proof-smoke.json) retains the successful
+six-session diagnostic: proof transactions at heights 44–46 fall within all four
+node fences 43–46. The window records six submitted proofs (22 blob openings),
+zero completed lifecycles, and no depleted inventory. Subsequent confirmation
+checks the same 392 = 246 + 146 stake conservation and restart agreement. This
+uses the same diagnostic binary/library/setup identified in
+[`diagnostic-build.json`](diagnostic-build.json); its supplied-binary limitation
+remains explicit. Source hashes identify the tested dirty driver; the final
+additional node-ID labels and coverage assertion were checked against these raw
+artifacts. This short zero-mint, slot-zero run is instrumentation evidence only,
+not a sustained-load, saturation, delivery or capacity qualification.
