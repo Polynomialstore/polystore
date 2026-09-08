@@ -974,7 +974,7 @@ class FourValidatorLifecycle:
         self.doc = {"schema_version": 1, "mode": "four-validator-lifecycle", "qualification": False,
                     "status": "preparing", "topology": "four processes on one local host",
                     "workload": "none", "transactions_submitted": 0, "chain_id": self.chain,
-                    "commands": [], "nodes": self.nodes, "signers": self.signers,
+                    "commands": [], "nodes": self.nodes, "signers": self.signers, "validator_resources": [],
                     "limits": ["No retrieval, delivery, adversarial transaction or capacity qualification",
                                "Fixed-height bank state only; no retrieval economic conservation claim",
                                "Restart preserves homes; no export/import or migration claim"]}
@@ -1102,19 +1102,51 @@ class FourValidatorLifecycle:
                 process = subprocess.Popen(argv, env=self.env, stdout=log, stderr=subprocess.STDOUT,
                                            start_new_session=True)
             self.processes.append(process)
+            self.doc["validator_resources"].append({"pid": process.pid, "node_id": node["node_id"],
+                "phase": phase, "peak_rss_bytes": None, "source": "wait4 ru_maxrss"})
+
+    def poll_validator(self, process):
+        # wait4 is the sole reaper: Popen.poll/wait would discard per-child peak
+        # RSS. A child PID cannot be reused until we reap it; signals below only
+        # target still-owned children. Never infer peak memory from sampled RSS.
+        if process.returncode is None:
+            record = next(row for row in reversed(self.doc["validator_resources"]) if row["pid"] == process.pid)
+            try:
+                pid, status, usage = os.wait4(process.pid, os.WNOHANG)
+            except ChildProcessError:
+                process.returncode = 255
+                record["error"] = "child reaped elsewhere; peak memory unavailable"
+                return process.returncode
+            if pid:
+                process.returncode = os.waitstatus_to_exitcode(status)
+                system = platform.system()
+                if system in ("Darwin", "Linux") and usage.ru_maxrss > 0:
+                    record["peak_rss_bytes"] = int(usage.ru_maxrss) * (1 if system == "Darwin" else 1024)
+                    record["raw_ru_maxrss"] = usage.ru_maxrss
+                    record["raw_unit"] = "bytes" if system == "Darwin" else "KiB"
+                else:
+                    record["error"] = "unsupported or unavailable wait4 peak memory units"
+                record["returncode"] = process.returncode
+        return process.returncode
 
     def stop(self):
         # Popen objects own these children. Never discover/kill by port, name or
         # a PID from an old artifact. Reap before restart; preserve signing state.
-        for process in self.processes:
-            if process.poll() is None:
-                process.terminate()
-        for process in self.processes:
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            for process in self.processes:
+                if self.poll_validator(process) is None:
+                    try:
+                        os.kill(process.pid, sig)
+                    except ProcessLookupError:
+                        pass  # Exit raced the signal; wait4 still owns reaping.
+            deadline = monotonic_ns() + 5 * 10**9
+            while any(self.poll_validator(process) is None for process in self.processes):
+                if monotonic_ns() >= deadline:
+                    break
+                time.sleep(0.05)
+        if any(self.poll_validator(process) is None for process in self.processes):
+            self.doc.update(status="failed", error="owned validator did not exit after SIGKILL")
+            raise TimeoutError("owned validator did not exit after SIGKILL")
         self.processes.clear()
 
     def query(self, node, route, height=None):
@@ -1142,7 +1174,7 @@ class FourValidatorLifecycle:
     def wait_height(self, minimum):
         while True:
             self.remaining()
-            if any(process.poll() is not None for process in self.processes):
+            if any(self.poll_validator(process) is not None for process in self.processes):
                 raise ValueError("owned validator exited; inspect retained node logs")
             try:
                 heights = []
@@ -1233,10 +1265,12 @@ class FourValidatorLifecycle:
             raise
         finally:
             try:
-                self.stop()
-                for reservation in self.reservations:
-                    reservation.close()
-                self.save()
+                try:
+                    self.stop()
+                finally:
+                    for reservation in self.reservations:
+                        reservation.close()
+                    self.save()
             finally:
                 for sig, handler in previous.items():
                     signal.signal(sig, handler)

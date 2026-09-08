@@ -1057,6 +1057,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                     raise AssertionError("must stop owned node before waiting")
                 return self.returncode
         process = Process()
+        process.pid = 10000 + len(self.started)
         self.started.append((argv, process))
         return process
 
@@ -1064,6 +1065,8 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         self.real_popen = subprocess.Popen
         with patch.object(self.runner, "reserve_ports") as reserve, \
              patch.object(artifact.subprocess, "Popen", side_effect=self.fake_start), \
+             patch.object(self.runner, "poll_validator", side_effect=lambda process: process.poll()), \
+             patch.object(artifact.os, "kill", side_effect=lambda pid, sig: next(p for _, p in self.started if p.pid == pid).terminate()), \
              patch.object(artifact.urllib.request, "urlopen", side_effect=self.response):
             result = self.runner.run()
         self.assertEqual(reserve.call_count, 2)
@@ -1101,6 +1104,43 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertTrue((home / "restart.log").exists())
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
         self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
+
+    def test_owned_child_peak_memory_survives_normal_and_forced_stop(self):
+        # Touch actual pages, then release them before exit: wait4 retains the
+        # peak while a late process-list sample would miss this allocation.
+        for forced in (False, True):
+            with self.subTest(forced=forced):
+                code = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); " if forced else ""
+                code += "data=bytearray(32*1024*1024); del data; print('ready',flush=True); "
+                code += "time.sleep(30)" if forced else ""
+                process = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+                self.runner.processes.append(process)
+                record = {"pid": process.pid, "peak_rss_bytes": None}
+                self.runner.doc["validator_resources"].append(record)
+                try:
+                    self.assertEqual(process.stdout.readline().strip(), "ready")
+                    if forced:
+                        os.kill(process.pid, signal.SIGKILL)
+                    self.runner.stop()
+                    self.assertGreater(record["peak_rss_bytes"], 32 * 1024 * 1024)
+                    self.assertIn(record["raw_unit"], ("bytes", "KiB"))
+                    self.assertIsNotNone(process.returncode)
+                    with self.assertRaises(ChildProcessError):
+                        os.wait4(process.pid, os.WNOHANG)
+                finally:
+                    self.runner.stop()
+                    process.stdout.close()
+
+    def test_missing_child_usage_is_not_a_zero_memory_measurement(self):
+        process = subprocess.Popen([sys.executable, "-c", "pass"])
+        # Deliberate external reaping reproduces a conflicting Popen.poll/wait.
+        os.waitpid(process.pid, 0)
+        self.runner.processes.append(process)
+        record = {"pid": process.pid, "peak_rss_bytes": None}
+        self.runner.doc["validator_resources"].append(record)
+        self.runner.stop()
+        self.assertIsNone(record["peak_rss_bytes"])
+        self.assertIn("unavailable", record["error"])
 
     def test_fixed_height_and_voting_evidence_rejects_malformed_or_disagreeing_nodes(self):
         self.runner.home.mkdir(mode=0o700)
