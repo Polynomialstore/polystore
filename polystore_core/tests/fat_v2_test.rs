@@ -144,6 +144,90 @@ fn paths_and_extents_reject_before_mutation() {
 }
 
 #[test]
+fn duplicate_active_paths_reject_all_mutations_atomically() {
+    let mut b = Mdu0Builder::new(1);
+    b.append_file_record(record(b"", 100, 0)).unwrap();
+    b.append_file_record(record("dir/é.txt".as_bytes(), 10, 100))
+        .unwrap();
+    b.append_file_record(record(b"other", 10, 110)).unwrap();
+    let duplicate = record("dir/é.txt".as_bytes(), 30, 500);
+    let before = b.bytes().to_vec();
+    assert!(b.append_file_record(duplicate).is_err());
+    assert!(b.bytes() == before);
+    assert!(b.update_file_record(2, duplicate).is_err());
+    assert!(b.bytes() == before);
+    // The tombstone is before the conflicting live entry: do not mutate it
+    // early or append its split remainder before checking the entire table.
+    assert!(b.find_free_slot_and_insert(duplicate).is_err());
+    assert!(b.bytes() == before);
+    b.update_file_record(1, duplicate).unwrap(); // Same-index update is legal.
+    b.update_file_record(1, record(b"", 30, 100)).unwrap();
+    assert_eq!(b.find_free_slot_and_insert(duplicate).unwrap(), 0);
+    assert_eq!(b.get_file_record(0).unwrap().start_offset, 0);
+    // Exact stored UTF-8 identity, with no path normalization or case folding.
+    for path in ["dir/e\u{301}.txt", "DIR/é.txt", "a/b", "a//b", "a/./b"] {
+        b.append_file_record(record(path.as_bytes(), 1, 1000))
+            .unwrap();
+    }
+    validate_mdu0_v2(b.bytes()).unwrap();
+}
+
+#[test]
+fn duplicate_active_paths_reject_loaded_wire_and_legacy_staging() {
+    let rec = record(b"same", 1, 0);
+    let mut raw = Mdu0Builder::new(1).bytes().to_vec();
+    put_logical(&mut raw, 8, &2u32.to_le_bytes());
+    put_logical(&mut raw, 128, &rec.to_bytes());
+    put_logical(&mut raw, 384, &record(b"same", 2, 100).to_bytes());
+    assert!(validate_mdu0_v2(&raw).is_err());
+    assert!(Mdu0Builder::load(&raw, 1).is_err());
+    let source = legacy(&[rec, record(b"same", 2, 100)]);
+    let before = source.clone();
+    let recovery = Mdu0Builder::load_legacy_recovery(&source, 1, 64).unwrap();
+    assert_eq!(recovery.record_count(), 2);
+    assert!(Mdu0Builder::stage_v2_from_trusted_legacy(&source, 1, 64).is_err());
+    assert!(source == before);
+    assert!(recovery.bytes() == before);
+}
+
+#[test]
+fn duplicate_active_paths_at_capacity_use_exact_full_path() {
+    let mut raw = Mdu0Builder::new(1).bytes().to_vec();
+    put_logical(&mut raw, 8, &(FAT_V2_MAX_RECORDS as u32).to_le_bytes());
+    // Maximum paths differ only at the end, preventing prefix-only identity.
+    let prefix = "a".repeat(227);
+    for i in 0..FAT_V2_MAX_RECORDS {
+        let rec = record(
+            format!("{prefix}{:05}", FAT_V2_MAX_RECORDS - i).as_bytes(),
+            1,
+            i as u64,
+        );
+        put_logical(&mut raw, 128 + i * 256, &rec.to_bytes());
+    }
+    validate_mdu0_v2(&raw).unwrap();
+    let last = record(
+        format!("{prefix}{:05}", FAT_V2_MAX_RECORDS).as_bytes(),
+        2,
+        99999,
+    );
+    put_logical(
+        &mut raw,
+        128 + (FAT_V2_MAX_RECORDS - 1) * 256,
+        &last.to_bytes(),
+    );
+    assert!(validate_mdu0_v2(&raw).is_err());
+    // Deleted entries have no identity, even when several remain in the FAT.
+    for i in [0, FAT_V2_MAX_RECORDS - 1] {
+        put_logical(
+            &mut raw,
+            128 + i * 256,
+            &record(b"", 1, i as u64).to_bytes(),
+        );
+    }
+    validate_mdu0_v2(&raw).unwrap();
+}
+
+#[test]
 fn strict_load_rejects_all_noncanonical_wire_components() {
     let mut b = Mdu0Builder::new(1);
     b.append_file_record(record(b"x", 1, 0)).unwrap();
@@ -218,11 +302,19 @@ fn root_cells_are_canonical_and_raw_digest_is_reduced_once() {
 
 #[test]
 fn failed_full_table_split_preserves_bytes() {
-    let mut b = Mdu0Builder::new(1);
-    b.append_file_record(record(b"", 100, 0)).unwrap();
-    for _ in 1..FAT_V2_MAX_RECORDS {
-        b.append_file_record(record(b"x", 1, 100)).unwrap();
+    // Build the hostile full inventory independently, without paying a bounded
+    // linear mutation preflight for each fixture entry.
+    let mut raw = Mdu0Builder::new(1).bytes().to_vec();
+    put_logical(&mut raw, 8, &(FAT_V2_MAX_RECORDS as u32).to_le_bytes());
+    put_logical(&mut raw, 128, &record(b"", 100, 0).to_bytes());
+    for index in 1..FAT_V2_MAX_RECORDS {
+        put_logical(
+            &mut raw,
+            128 + index * 256,
+            &record(format!("x{index}").as_bytes(), 1, 100).to_bytes(),
+        );
     }
+    let mut b = Mdu0Builder::load(&raw, 1).unwrap();
     assert_eq!(b.record_count(), 23807);
     validate_mdu0_v2(b.bytes()).unwrap();
     let before = b.bytes().to_vec();

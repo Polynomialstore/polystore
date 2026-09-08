@@ -6,6 +6,7 @@
 use crate::kzg::encode_mdu_root_for_root_table;
 use crate::layout::{self, FileRecordV1, FileTableHeader, MAGIC_NILF};
 use bls12_381::Scalar;
+use std::cmp::Ordering;
 
 pub const MDU_SIZE: usize = 8 * 1024 * 1024;
 pub const BLOB_SIZE: usize = 128 * 1024;
@@ -91,6 +92,54 @@ fn read_record(data: &[u8], format: FatFormat, index: u32) -> Result<FileRecordV
     FileRecordV1::from_bytes(&raw)
 }
 
+fn path_offset(index: u32) -> usize {
+    FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE + 24
+}
+
+// Called only after the full record inventory and its canonical padding have
+// been validated. Compare the logical path without copying/decoding the slab.
+fn compare_paths(data: &[u8], format: FatFormat, a: u32, b: u32) -> Ordering {
+    let mut offset = 0;
+    while offset < layout::FILE_RECORD_PATH_BYTES {
+        let remaining = layout::FILE_RECORD_PATH_BYTES - offset;
+        let (a_start, a_len) = format.physical_range(path_offset(a) + offset, remaining);
+        let (b_start, b_len) = format.physical_range(path_offset(b) + offset, remaining);
+        let len = a_len.min(b_len);
+        let order = data[a_start..a_start + len].cmp(&data[b_start..b_start + len]);
+        if order != Ordering::Equal {
+            return order;
+        }
+        offset += len;
+    }
+    Ordering::Equal
+}
+
+// A 47,614-byte stack index array, no heap allocation and O(n log n) worst-case
+// comparisons via the standard in-place sort. Keep this frame out of ordinary
+// record reads/mutations. V2 capacity fits u16; callers validate count first.
+#[inline(never)]
+fn validate_unique_paths(data: &[u8], format: FatFormat, count: u32) -> Result<(), String> {
+    const { assert!(FAT_V2_MAX_RECORDS <= u16::MAX as usize) };
+    debug_assert!(count as usize <= FAT_V2_MAX_RECORDS);
+    let mut indices = [0u16; FAT_V2_MAX_RECORDS];
+    let mut active = 0;
+    for index in 0..count {
+        let (start, _) = format.physical_range(path_offset(index), 1);
+        if data[start] != 0 {
+            indices[active] = index as u16;
+            active += 1;
+        }
+    }
+    let indices = &mut indices[..active];
+    indices.sort_unstable_by(|a, b| compare_paths(data, format, u32::from(*a), u32::from(*b)));
+    if indices.windows(2).any(|pair| {
+        compare_paths(data, format, u32::from(pair[0]), u32::from(pair[1])) == Ordering::Equal
+    }) {
+        return Err("duplicate active FAT path".into());
+    }
+    Ok(())
+}
+
 fn validate(data: &[u8], format: FatFormat) -> Result<FileTableHeader, String> {
     if data.len() != MDU_SIZE {
         return Err("invalid MDU size".into());
@@ -138,6 +187,9 @@ fn validate(data: &[u8], format: FatFormat) -> Result<FileTableHeader, String> {
     let (physical, _) = format.physical_range(logical, 0);
     if data[physical..].iter().any(|b| *b != 0) {
         return Err("nonzero unused FAT bytes".into());
+    }
+    if format == FatFormat::V2 && header.record_count > 1 {
+        validate_unique_paths(data, format, header.record_count)?;
     }
     Ok(header)
 }
@@ -248,6 +300,7 @@ impl Mdu0Builder {
         if header.record_count as usize > FAT_V2_MAX_RECORDS {
             return Err("legacy FAT exceeds v2 record capacity".into());
         }
+        validate_unique_paths(data, FatFormat::LegacyRecovery, header.record_count)?;
         let mut staged = Self::new_with_commitments(max_user_mdus, commitments_per_mdu);
         for (index, cell) in data[..ROOT_TABLE_END].chunks_exact(32).enumerate() {
             staged.set_root(index as u64, cell.try_into().unwrap())?;
@@ -257,8 +310,15 @@ impl Mdu0Builder {
             if rec.path[0] == 0 {
                 rec.path.fill(0);
             }
-            staged.append_file_record(rec)?;
+            // Source records and uniqueness were preflighted before allocating
+            // the staged slab. Avoid repeating a linear append check per record.
+            staged.write_fat(
+                FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE,
+                &rec.to_bytes(),
+            );
         }
+        staged.header.record_count = header.record_count;
+        staged.flush_header();
         Ok(staged)
     }
     pub fn is_legacy_recovery(&self) -> bool {
@@ -324,12 +384,37 @@ impl Mdu0Builder {
         }
         read_record(&self.buffer, self.format, index)
     }
+    fn check_unique_path(&self, rec: &FileRecordV1, except: Option<u32>) -> Result<(), String> {
+        if rec.path[0] == 0 {
+            return Ok(()); // Tombstones have no active path identity.
+        }
+        for index in 0..self.header.record_count {
+            if except == Some(index) {
+                continue;
+            }
+            let mut offset = 0;
+            while offset < rec.path.len() {
+                let (start, len) = self
+                    .format
+                    .physical_range(path_offset(index) + offset, rec.path.len() - offset);
+                if self.buffer[start..start + len] != rec.path[offset..offset + len] {
+                    break;
+                }
+                offset += len;
+            }
+            if offset == rec.path.len() {
+                return Err("duplicate active FAT path".into());
+            }
+        }
+        Ok(())
+    }
     pub fn append_file_record(&mut self, rec: FileRecordV1) -> Result<(), String> {
         self.editable()?;
         rec.validate(false)?;
         if self.header.record_count as usize >= FAT_V2_MAX_RECORDS {
             return Err("file table full".into());
         }
+        self.check_unique_path(&rec, None)?;
         self.write_fat(
             FILE_TABLE_HEADER_SIZE + self.header.record_count as usize * FILE_RECORD_SIZE,
             &rec.to_bytes(),
@@ -344,6 +429,7 @@ impl Mdu0Builder {
             return Err("record index out of bounds".into());
         }
         rec.validate(false)?;
+        self.check_unique_path(&rec, Some(index))?;
         self.write_fat(
             FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE,
             &rec.to_bytes(),
@@ -353,6 +439,7 @@ impl Mdu0Builder {
     pub fn find_free_slot_and_insert(&mut self, mut rec: FileRecordV1) -> Result<u32, String> {
         self.editable()?;
         rec.validate(false)?;
+        self.check_unique_path(&rec, None)?;
         let (required_len, _) = layout::unpack_length_and_flags(rec.length_and_flags);
         for i in 0..self.header.record_count {
             let existing = self.get_file_record(i)?;
@@ -458,7 +545,7 @@ mod tests {
         }
         // 256 and 31 are coprime: these record counts exercise every tail
         // alignment, including the transition to the next physical scalar.
-        for _ in 0..31 {
+        for index in 0..31 {
             let logical =
                 FILE_TABLE_HEADER_SIZE + builder.record_count() as usize * FILE_RECORD_SIZE;
             let (physical, _) = FatFormat::V2.physical_range(logical, 0);
@@ -469,7 +556,7 @@ mod tests {
             }
             validate_mdu0_v2(builder.bytes()).unwrap();
             builder
-                .append_file_record(FileRecordV1::from_path("a", 1, 0, 0).unwrap())
+                .append_file_record(FileRecordV1::from_path(&format!("a{index}"), 1, 0, 0).unwrap())
                 .unwrap();
         }
     }

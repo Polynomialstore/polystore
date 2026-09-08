@@ -1,6 +1,8 @@
 //! Checks only Rust allocation requests on this test thread, not RSS or C heaps.
-use polystore_core::builder::{MDU_SIZE, Mdu0Builder, validate_mdu0_v2};
-use polystore_core::layout::FileRecordV1;
+use polystore_core::builder::{
+    FAT_V2_MAX_RECORDS, FILE_TABLE_START, MDU_SIZE, Mdu0Builder, validate_mdu0_v2,
+};
+use polystore_core::layout::{FileRecordV1, FileTableHeader};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 use std::hint::black_box;
@@ -92,5 +94,52 @@ fn borrowed_validation_and_record_access_do_not_allocate_slabs() {
     );
     eprintln!(
         "FAT allocations (bytes, largest, calls): append={append_stats:?} validate={validate_stats:?} reads1000={read_stats:?} load={load_stats:?} reject={reject_stats:?}"
+    );
+}
+
+#[test]
+fn maximum_active_inventory_uniqueness_validation_has_no_heap_allocation() {
+    let mut bytes = Mdu0Builder::new(1).bytes().to_vec();
+    let put = |bytes: &mut [u8], offset: usize, value: &[u8]| {
+        for (i, byte) in value.iter().enumerate() {
+            let logical = offset + i;
+            bytes[FILE_TABLE_START + logical / 31 * 32 + 1 + logical % 31] = *byte;
+        }
+    };
+    let header = FileTableHeader {
+        record_count: FAT_V2_MAX_RECORDS as u32,
+        ..Default::default()
+    };
+    put(&mut bytes, 0, &header.to_bytes());
+    for index in 0..FAT_V2_MAX_RECORDS {
+        // Coprime multiplier permutes every key, exercising unsorted input.
+        let rec = FileRecordV1::from_path(
+            &format!("file-{:05}", index * 7919 % FAT_V2_MAX_RECORDS),
+            1,
+            index as u64,
+            0,
+        )
+        .unwrap();
+        put(&mut bytes, 128 + index * 256, &rec.to_bytes());
+    }
+    let started = std::time::Instant::now();
+    let (result, stats) = measure(|| validate_mdu0_v2(black_box(&bytes)));
+    result.unwrap();
+    assert_eq!(stats, (0, 0, 0));
+    eprintln!(
+        "FAT maximum uniqueness validation: elapsed={:?}, allocations={stats:?}",
+        started.elapsed()
+    );
+    let duplicate = FileRecordV1::from_path("file-00000", 1, 99999, 0).unwrap();
+    put(
+        &mut bytes,
+        128 + (FAT_V2_MAX_RECORDS - 1) * 256,
+        &duplicate.to_bytes(),
+    );
+    let (result, stats) = measure(|| Mdu0Builder::load(black_box(&bytes), 1));
+    assert!(result.is_err());
+    assert!(
+        stats.1 < 256,
+        "duplicate rejection allocated a slab: {stats:?}"
     );
 }
