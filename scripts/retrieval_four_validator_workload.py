@@ -12,14 +12,47 @@ import json
 from pathlib import Path
 import signal
 import sqlite3
+import sys
 import urllib.parse
 
 import retrieval_bench_artifact as artifact
+import retrieval_commit_metrics as commit_metrics
 import retrieval_fresh_proof as producer
 
 API = "/polystorechain/polystorechain/v1"
 ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 COUNTS = (1, 2, 8)
+
+
+def capture_workload_metrics(lifecycle, phase):
+    """Retain raw per-node captures, with one hard deadline for the whole phase."""
+    evidence = lifecycle.doc.setdefault("commit_step_metrics", dict(
+        boundary=commit_metrics.BOUNDARY, qualification=False, boundaries_reconciled=False,
+        limitation="Two wide scrapes do not establish p95 or reconcile workload block boundaries; trailing observations may be missing",
+        excluded="post-persistence state-transition tail, validator-key refresh, next-round scheduling",
+        phases={}))
+    capture = dict(complete=False, nodes=[])
+    evidence["phases"][phase] = capture
+    deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 5 * 10**9)
+    for node in lifecycle.nodes:
+        endpoint = f'http://127.0.0.1:{node["metrics"]}/metrics'
+        row = dict(node_id=node["node_id"], endpoint=endpoint)
+        capture["nodes"].append(row)
+        try:
+            result = artifact.run_bounded_command(
+                [sys.executable, commit_metrics.__file__, endpoint, lifecycle.chain, "--timeout", "2"],
+                deadline, env=lifecycle.env)
+            row.update(stdout=result.stdout, stderr=result.stderr, returncode=result.returncode)
+            if result.returncode != 0:
+                raise ValueError("Commit metric capture command failed")
+            sample = json.loads(result.stdout)
+            if sample["chain_id"] != lifecycle.chain:
+                raise ValueError("Commit metric capture chain mismatch")
+            row["sample"] = sample
+        except Exception as error:
+            row["error"] = str(error)[-8192:]
+            raise ValueError(f'{phase} Commit metric capture failed for {node["node_id"]}: {error}') from error
+    capture["complete"] = True
 
 
 def require_retrieval_cli(lifecycle):
@@ -252,6 +285,7 @@ def run(lifecycle, fixture_k8, fixture_k2):
             "trusted_setup_sha256": artifact.sha256(lifecycle.env["POLYSTORE_TRUSTED_SETUP"]),
             "driver_sha256": artifact.sha256(__file__), "harness_sha256": artifact.sha256(artifact.__file__),
             "producer_sha256": artifact.sha256(producer.__file__),
+            "commit_metrics_sha256": artifact.sha256(commit_metrics.__file__),
             "working_tree_status": artifact.command("git", "-C", str(lifecycle.root), "status", "--porcelain"),
             "source_diff_sha256": hashlib.sha256(artifact.command("git", "-C", str(lifecycle.root), "diff", "HEAD", "--", "polystorechain", "polystore_core", "scripts").encode()).hexdigest(),
             "artifact_source_match": "supplied binary/library; build correspondence not attested"}
@@ -299,12 +333,14 @@ def run(lifecycle, fixture_k8, fixture_k2):
         journal = lifecycle.home / "workload.sqlite"
         doc["workload_journal"] = str(journal)
         lifecycle.save()
+        capture_workload_metrics(lifecycle, "before_workload")
         doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations, journal_path=journal,
             signers=list(lifecycle.signers.values()), prepare_session_proof=prepare,
             max_in_flight=2, max_queued=16, max_queued_per_signer=8)
         results, transactions = journal_results(journal, operations)
         doc.update(operation_results=results, workload_transactions=transactions,
                    transactions_submitted=len(doc["setup_transactions"]) + len(transactions))
+        capture_workload_metrics(lifecycle, "after_workload")
         doc["fresh_proof_artifacts"] = {}
         for op in operations:
             sid = results[op["operation_id"]]["session_id"]

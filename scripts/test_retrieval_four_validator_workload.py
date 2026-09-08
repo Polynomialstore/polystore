@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -62,6 +63,58 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_commit_captures_share_phase_deadline_and_never_qualify(self):
+        sample = dict(chain_id="polystore_260-1", count=12, sum_seconds="0.15",
+                      wall_time_ns=123, monotonic_start_ns=456, monotonic_end_ns=789)
+        raw = json.dumps(sample) + "\n"
+        for remaining in (3, 30):
+            with self.subTest(remaining=remaining):
+                life = SimpleNamespace(doc={}, chain=sample["chain_id"], env={"GOMAXPROCS": "2"},
+                    deadline=(10 + remaining) * 10**9,
+                    nodes=[dict(node_id=str(i), metrics=26660 + i) for i in range(4)])
+                with patch.object(artifact, "monotonic_ns", return_value=10 * 10**9), \
+                     patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                         returncode=0, stdout=raw, stderr="")) as command:
+                    workload.capture_workload_metrics(life, "before_workload")
+                    workload.capture_workload_metrics(life, "after_workload")
+                self.assertEqual(command.call_count, 8)
+                for index, call in enumerate(command.call_args_list):
+                    self.assertEqual(call.args[1], (10 + min(remaining, 5)) * 10**9)
+                    self.assertEqual(call.kwargs, dict(env=life.env))
+                    self.assertEqual(call.args[0], [workload.sys.executable, workload.commit_metrics.__file__,
+                        f"http://127.0.0.1:{26660 + index % 4}/metrics", life.chain, "--timeout", "2"])
+                evidence = life.doc["commit_step_metrics"]
+                self.assertFalse(evidence["qualification"])
+                self.assertFalse(evidence["boundaries_reconciled"])
+                self.assertNotIn("p95_upper_bound_seconds", evidence)
+                for phase in evidence["phases"].values():
+                    self.assertTrue(phase["complete"])
+                    self.assertEqual(len(phase["nodes"]), 4)
+                    for row in phase["nodes"]:
+                        self.assertEqual(row["stdout"], raw)
+                        self.assertEqual(row["sample"], sample)
+
+    def test_commit_capture_failure_retains_partial_evidence_and_fails_closed(self):
+        good = SimpleNamespace(returncode=0, stdout=json.dumps(dict(chain_id="polystore_260-1")), stderr="")
+        failures = [SimpleNamespace(returncode=1, stdout="", stderr="missing Commit metrics"),
+                    SimpleNamespace(returncode=0, stdout="not JSON", stderr=""),
+                    SimpleNamespace(returncode=0, stdout='{"chain_id":"wrong"}', stderr=""),
+                    subprocess.TimeoutExpired("capture", 0)]
+        for failure in failures:
+            with self.subTest(failure=failure):
+                life = SimpleNamespace(doc={}, chain="polystore_260-1", env={}, deadline=10**30,
+                    nodes=[dict(node_id=str(i), metrics=26660 + i) for i in range(4)])
+                with patch.object(artifact, "run_bounded_command", side_effect=[good, failure]) as command:
+                    with self.assertRaisesRegex(ValueError, "after_workload Commit metric capture failed for 1"):
+                        workload.capture_workload_metrics(life, "after_workload")
+                self.assertEqual(command.call_count, 2)
+                evidence = life.doc["commit_step_metrics"]
+                self.assertFalse(evidence["qualification"])
+                phase = evidence["phases"]["after_workload"]
+                self.assertFalse(phase["complete"])
+                self.assertEqual(phase["nodes"][0]["sample"]["chain_id"], life.chain)
+                self.assertIn("error", phase["nodes"][1])
+
     def test_old_cli_fails_before_bootstrap_or_transactions(self):
         with tempfile.TemporaryDirectory() as tmp:
             life = SimpleNamespace(home=Path(tmp) / "run", doc={}, reservations=[],
