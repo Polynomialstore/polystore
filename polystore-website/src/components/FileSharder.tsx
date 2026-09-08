@@ -714,7 +714,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
-  const [compressUploads, setCompressUploads] = useState(true)
+  // Secured retrieval has no bounded PolyCE decoder yet. Keep new uploads
+  // retrievable while preserving support for existing compressed allocations.
+  const [compressUploads] = useState(false)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -5547,7 +5549,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                               </label>
                             </div>
-                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-not-allowed">
                               <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
                                 {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
                               </div>
@@ -5556,10 +5558,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                 className="hidden"
                                 checked={compressUploads}
                                 data-testid="mdu-compress-toggle"
-                                disabled={processing || activeUploading}
-                                onChange={(e) => setCompressUploads(e.target.checked)}
+                                disabled
                               />
-                              <span>Compress before upload</span>
+                              <span>Compression unavailable: secured downloads do not yet support compressed files</span>
                             </label>
                           </div>
                         ) : null}
