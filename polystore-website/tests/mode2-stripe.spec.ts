@@ -940,6 +940,10 @@ test.describe('mode2 streamed retrieval', () => {
           .filter((event: Record<string, string>) => event.recipient === before.payee)
         expect(transfers).toHaveLength(1)
         expect(transfers[0].amount).toBe(`${payout}stake`)
+        const { body: { account: moduleAccount } } = await query('/cosmos/auth/v1beta1/module_accounts/nilchain', committed.height)
+        expect(moduleAccount.name).toBe('nilchain')
+        expect(moduleAccount.base_account.address).toMatch(/^nil1[0-9a-z]+$/)
+        expect(transfers[0].sender).toBe(moduleAccount.base_account.address)
         settlements.push({ ...before, txHash: committed.txhash, ackHeight: outcome.ackHeight, settledHeight: committed.height,
           status: session.status, burn: String(burn), payout: String(payout), transfer: transfers[0],
           // Normal mint/reward accounting remains enabled. Balance change is
@@ -959,7 +963,8 @@ test.describe('mode2 streamed retrieval', () => {
     await expect(fileRow).toBeVisible()
     const expectedHash = crypto.createHash('sha256').update(fileBytes).digest('hex')
     const dealView = await query(`${api}/deals/${dealId}`, primarySessions[0].height)
-    const deputy = dealView.body.deal.mode2_slots.find((slot: { provider: string }) => slot.provider !== primarySessions[0].assigned)?.provider
+    const assignedProviders = new Set(primarySessions.map((session) => session.assigned))
+    const deputy = dealView.body.deal.mode2_slots.find((slot: { provider: string }) => !assignedProviders.has(slot.provider))?.provider
     expect(deputy).toBeTruthy()
     windows.length = 0
     const deputyResult = await page.evaluate(async (input) => {
@@ -974,9 +979,10 @@ test.describe('mode2 streamed retrieval', () => {
     expect(rejectedWindow).toBeDefined()
     await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', body: Buffer.from(JSON.stringify({
       scope: '160 KiB live browser retrieval and explicit deputy; no capacity claim',
+      provenanceScope: 'checkout source and harness files only; running executable, native library and WASM identities are not recorded',
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-      runtimeTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
-      runtimeDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', '../polystorechain', '../polystore_core', '../polystore_gateway', 'src'])).digest('hex'),
+      sourceTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
+      sourceDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', '../polystorechain', '../polystore_core', '../polystore_gateway', 'src'])).digest('hex'),
       harnessSha256: await Promise.all(['tests/mode2-stripe.spec.ts', 'tests/utils/deputyRetrieval.tsx'].map(async (file) => ({ file, sha256: crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex') }))),
       fixtureBytes: fileBytes.length, fixtureSha256: expectedHash,
       gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult,
