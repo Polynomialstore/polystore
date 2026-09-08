@@ -2,8 +2,12 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/rand"
+	"os"
+	"os/exec"
+	"regexp"
 	"testing"
 	"time"
 
@@ -29,6 +33,9 @@ import (
 // keeper and FinalizeBlock commit. A later message fails after the v2 open has
 // burned its base fee and written its session, nonce and retention indexes.
 func TestRetrievalSessionSignedTransactionRollback(t *testing.T) {
+	if runGenesisTestInFreshProcess(t) {
+		return
+	}
 	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir(), "evm.evm-chain-id": evmtypes.DefaultEVMChainID}, baseapp.SetChainID(SimAppChainID))
 	key := secp256k1.GenPrivKeyFromSecret([]byte("retrieval transaction rollback owner"))
 	owner := sdk.AccAddress(key.PubKey().Address())
@@ -140,4 +147,24 @@ func TestRetrievalSessionSignedTransactionRollback(t *testing.T) {
 		require.Equal(t, int64(3), session.OpenedHeight)
 		return false, nil
 	}))
+}
+
+// Pinned cosmos/evm seals process-global coin configuration at InitGenesis.
+// Keep production configuration intact and give each full-genesis test its own
+// process; the other app tests intentionally initialize only individual modules.
+func runGenesisTestInFreshProcess(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv("POLYSTORE_GENESIS_TEST_CHILD") == t.Name() {
+		return false
+	}
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, "-test.run=^"+regexp.QuoteMeta(t.Name())+"$", "-test.count=1", "-test.v")
+	cmd.Env = append(os.Environ(), "POLYSTORE_GENESIS_TEST_CHILD="+t.Name())
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+	t.Logf("%s", output)
+	return true
 }

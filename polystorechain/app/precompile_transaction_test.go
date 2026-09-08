@@ -35,6 +35,9 @@ import (
 // The legacy route is deliberately tested before v2 activation: it exercises
 // the same shared verifier and gas boundary with a fixed nonconstant fixture.
 func TestSignedEVMProofReceiptAndBlockGas(t *testing.T) {
+	if runGenesisTestInFreshProcess(t) {
+		return
+	}
 	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir(), "evm.evm-chain-id": evmtypes.DefaultEVMChainID}, baseapp.SetChainID(SimAppChainID))
 	key, err := crypto.HexToECDSA("0123456789012345678901234567890123456789012345678901234567890123")
 	require.NoError(t, err)

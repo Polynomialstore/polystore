@@ -178,6 +178,30 @@ module genesis export omits non-parameter module state; **export/import is not a
 supported recovery path** for these liabilities or challenges. Before deployment,
 #254 must record the affected-state inventory, supported snapshot/database restore
 procedure and disposition of malformed records. No broader restore guarantee is
-made by this slice. Signed native transaction and real EVM cache/journal tests
-must qualify rollback, including later-message failure; mock bank tests establish
-accounting destinations and conservation but cannot establish transaction rollback.
+made by this slice.
+
+## Transaction evidence
+
+The app regressions use signed transactions through the production decoder, ante
+handler, message router, bank, `FinalizeBlock` and `Commit`. A native two-message
+transaction opens a funded session then fails a bank transfer: burn, escrow,
+session, nonce, capacity and application events roll back while the transaction
+fee and account sequence persist. A later transaction can open the same session
+nonce using the next account sequence.
+
+The signed EVM regression exercises three nonconstant legacy proofs through the
+shared native-action boundary. A 2177439 gas limit consumes that limit and leaves
+no proof nonce or EVM logs. With a 4000000 limit the baseline uses 2282834 gas,
+including the 677440 static component and 1500000 cryptography component. The
+receipt, ABCI transaction result, block gas meter and charged account fee agree.
+Successful-path store accounting may change that baseline; the test asserts the
+component and reconciliation contracts instead of fixing the total.
+
+Run both transaction regressions with:
+
+```sh
+scripts/chain_go.sh test -p 2 ./app -run 'Test(SignedEVMProofReceiptAndBlockGas|RetrievalSessionSignedTransactionRollback)' -count=1 -v
+```
+
+These tests complement the nested EVM revert/OOG and balance-journal regressions.
+They establish transaction accounting and rollback, not throughput or delivery.
