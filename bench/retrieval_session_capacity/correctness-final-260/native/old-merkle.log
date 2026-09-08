@@ -1,0 +1,6 @@
+{"case": "merkle", "valid": 1, "extra_sibling": 1}
+Traceback (most recent call last):
+  File "/tmp/polystore-254-execution/260-historical-native-counterexamples/probe.py", line 34, in <module>
+    assert extra != 1, 'unused sibling must be rejected'
+           ^^^^^^^^^^
+AssertionError: unused sibling must be rejected

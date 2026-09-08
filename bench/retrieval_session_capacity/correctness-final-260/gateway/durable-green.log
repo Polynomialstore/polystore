@@ -1,0 +1,7 @@
+cwd=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/durable-green
+command=['go', 'test', '-p', '2', '-count=1', '-timeout', '30s', '-v', '.']
+GOMAXPROCS=2 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTMPDIR=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/go-tmp
+=== RUN   TestLegacyCorruptProofMustRemainDurable
+--- PASS: TestLegacyCorruptProofMustRemainDurable (0.05s)
+PASS
+ok  	polystore_gateway	0.789s

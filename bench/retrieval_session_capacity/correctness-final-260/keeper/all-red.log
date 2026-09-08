@@ -1,0 +1,27 @@
+=== RUN   TestHistoricalConfirmationRequiresProofPayeePin
+Initializing KZG with path: ../../../trusted_setup.txt
+    msg_server_retrieval_fees_test.go:285: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go:285
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestHistoricalConfirmationRequiresProofPayeePin
+        	Messages:   	confirmation must reject a missing authenticated proof payee pin
+--- FAIL: TestHistoricalConfirmationRequiresProofPayeePin (0.54s)
+=== RUN   TestHistoricalZeroFeeCompletionRemovesPayeePin
+Initializing KZG with path: ../../../trusted_setup.txt
+    msg_server_retrieval_fees_test.go:369: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go:369
+        	Error:      	Should be false
+        	Test:       	TestHistoricalZeroFeeCompletionRemovesPayeePin
+        	Messages:   	zero-fee terminal settlement must remove its proof payee pin
+--- FAIL: TestHistoricalZeroFeeCompletionRemovesPayeePin (0.18s)
+=== RUN   TestHistoricalRetrievalProofRequiresAuthorizedSigner
+Initializing KZG with path: ../../../trusted_setup.txt
+    msg_server_retrieval_sessions_test.go:458: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go:458
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestHistoricalRetrievalProofRequiresAuthorizedSigner
+        	Messages:   	valid public proof must not authorize an unrelated registered signer
+--- FAIL: TestHistoricalRetrievalProofRequiresAuthorizedSigner (0.18s)
+FAIL
+FAIL	polystorechain/x/polystorechain/keeper	1.813s
+FAIL

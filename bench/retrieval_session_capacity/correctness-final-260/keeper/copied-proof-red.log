@@ -1,0 +1,70 @@
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/assignment_collateral_locks.go:8:2: cannot find module providing package cosmossdk.io/collections: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/keeper.go:10:2: cannot find module providing package cosmossdk.io/core/address: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/keeper.go:11:2: cannot find module providing package cosmossdk.io/core/store: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/msg_update_params.go:7:2: cannot find module providing package cosmossdk.io/errors: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/base_rewards.go:9:2: cannot find module providing package cosmossdk.io/math: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/keeper.go:13:2: cannot find module providing package github.com/cosmos/cosmos-sdk/codec: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/assignment_collateral_locks.go:9:2: cannot find module providing package github.com/cosmos/cosmos-sdk/types: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/msg_provider_bond.go:11:2: cannot find module providing package github.com/cosmos/cosmos-sdk/types/errors: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/query_deals_providers.go:9:2: cannot find module providing package github.com/cosmos/cosmos-sdk/types/query: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/epoch_audit.go:12:2: cannot find module providing package github.com/cosmos/cosmos-sdk/x/auth/types: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+vendor/github.com/cosmos/cosmos-sdk/x/staking/types/msg.go:8:2: cannot find module providing package github.com/cosmos/cosmos-sdk/codec/types: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+vendor/github.com/cosmos/cosmos-sdk/x/staking/types/msg.go:9:2: cannot find module providing package github.com/cosmos/cosmos-sdk/crypto/types: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/msg_server.go:18:2: cannot find module providing package github.com/ethereum/go-ethereum/common: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/msg_server.go:19:2: cannot find module providing package github.com/ethereum/go-ethereum/crypto: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/provider_identity.go:9:2: cannot find module providing package github.com/multiformats/go-multiaddr: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/query.go:10:2: cannot find module providing package google.golang.org/grpc/codes: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/keeper/query.go:11:2: cannot find module providing package google.golang.org/grpc/status: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/module.pb.go:7:2: cannot find module providing package cosmossdk.io/api/cosmos/app/v1alpha1: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/tx.pb.go:10:2: cannot find module providing package github.com/cosmos/cosmos-proto: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/codec.go:6:2: cannot find module providing package github.com/cosmos/cosmos-sdk/types/msgservice: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/genesis.pb.go:8:2: cannot find module providing package github.com/cosmos/cosmos-sdk/types/tx/amino: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/params.go:9:2: cannot find module providing package github.com/cosmos/cosmos-sdk/x/params/types: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/genesis.pb.go:9:2: cannot find module providing package github.com/cosmos/gogoproto/gogoproto: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.go:12:2: cannot find module providing package github.com/cosmos/gogoproto/grpc: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/genesis.pb.go:10:2: cannot find module providing package github.com/cosmos/gogoproto/proto: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/eip712.go:11:2: cannot find module providing package github.com/ethereum/go-ethereum/common/math: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:16:2: cannot find module providing package github.com/golang/protobuf/descriptor: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:17:2: cannot find module providing package github.com/golang/protobuf/proto: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:18:2: cannot find module providing package github.com/grpc-ecosystem/grpc-gateway/runtime: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:19:2: cannot find module providing package github.com/grpc-ecosystem/grpc-gateway/utilities: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.go:14:2: cannot find module providing package google.golang.org/genproto/googleapis/api/annotations: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.go:15:2: cannot find module providing package google.golang.org/grpc: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:22:2: cannot find module providing package google.golang.org/grpc/grpclog: import lookup disabled by -mod=vendor
+# polystorechain/x/polystorechain/keeper
+x/polystorechain/types/query.pb.gw.go:23:2: cannot find module providing package google.golang.org/grpc/metadata: import lookup disabled by -mod=vendor
+FAIL	polystorechain/x/polystorechain/keeper [setup failed]
+FAIL

@@ -1,0 +1,35 @@
+=== RUN   TestRetrievalV2DeputyConfirmFirstConservesFees
+=== RUN   TestRetrievalV2DeputyConfirmFirstConservesFees/price0_bps500
+Initializing KZG with path: ../../../trusted_setup.txt
+=== RUN   TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps0
+Initializing KZG with path: ../../../trusted_setup.txt
+=== RUN   TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps500
+Initializing KZG with path: ../../../trusted_setup.txt
+=== RUN   TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps10000
+Initializing KZG with path: ../../../trusted_setup.txt
+--- PASS: TestRetrievalV2DeputyConfirmFirstConservesFees (0.58s)
+    --- PASS: TestRetrievalV2DeputyConfirmFirstConservesFees/price0_bps500 (0.41s)
+    --- PASS: TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps0 (0.06s)
+    --- PASS: TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps500 (0.06s)
+    --- PASS: TestRetrievalV2DeputyConfirmFirstConservesFees/price3_bps10000 (0.05s)
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_CANCELED
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_EXPIRED
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_UNSPECIFIED
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_malformed
+=== RUN   TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_cosmos1jxgeryv3jxgeryv3jxgeryv3jxgeryv3attrsw
+--- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_CANCELED (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_EXPIRED (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/RETRIEVAL_SESSION_STATUS_UNSPECIFIED (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_ (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_malformed (0.00s)
+    --- PASS: TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed/pin_cosmos1jxgeryv3jxgeryv3jxgeryv3jxgeryv3attrsw (0.00s)
+=== RUN   TestRetrievalV2RejectsCopiedProofBeforePayeePin
+Initializing KZG with path: ../../../trusted_setup.txt
+--- PASS: TestRetrievalV2RejectsCopiedProofBeforePayeePin (0.24s)
+=== RUN   TestRetrievalV2LegacyLiabilityQuarantineAndZeroFeeMissingPin
+--- PASS: TestRetrievalV2LegacyLiabilityQuarantineAndZeroFeeMissingPin (0.00s)
+PASS
+ok  	polystorechain/x/polystorechain/keeper	1.614s

@@ -1,0 +1,10 @@
+Initializing KZG with path: ../../../trusted_setup.txt
+--- FAIL: TestHistoricalRetrievalProofRequiresAuthorizedSigner (0.55s)
+    msg_server_retrieval_sessions_test.go:458: 
+        	Error Trace:	/Users/michaelseiler/dev/polynomialstore/polystore/polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go:458
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestHistoricalRetrievalProofRequiresAuthorizedSigner
+        	Messages:   	valid public proof must not authorize an unrelated registered signer
+FAIL
+FAIL	polystorechain/x/polystorechain/keeper	1.424s
+FAIL

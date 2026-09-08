@@ -1,0 +1,9 @@
+cwd=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/http-red
+command=['go', 'test', '-p', '2', '-count=1', '-timeout', '30s', '-v', '.']
+GOMAXPROCS=2 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTMPDIR=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/go-tmp
+=== RUN   TestMalformedHTTP200MustNotReportCommittedSuccess
+    regression_test.go:7: unsafe committed success for HTTP200 {}: hash=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA error=<nil>
+--- FAIL: TestMalformedHTTP200MustNotReportCommittedSuccess (0.51s)
+FAIL
+FAIL	historical-http-counterexample	1.057s
+FAIL

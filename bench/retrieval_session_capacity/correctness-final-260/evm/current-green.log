@@ -1,0 +1,14 @@
+=== RUN   TestHistoricalCaughtChildRollback
+--- PASS: TestHistoricalCaughtChildRollback (0.04s)
+=== RUN   TestHistoricalChildCryptoGas
+=== RUN   TestHistoricalChildCryptoGas/insufficient
+Initializing KZG with path: ../trusted_setup.txt
+    historical_counterexample_test.go:130: child gas=2177439 success=0
+=== RUN   TestHistoricalChildCryptoGas/sufficient
+Initializing KZG with path: ../trusted_setup.txt
+    historical_counterexample_test.go:130: child gas=4000000 success=1
+--- PASS: TestHistoricalChildCryptoGas (0.43s)
+    --- PASS: TestHistoricalChildCryptoGas/insufficient (0.38s)
+    --- PASS: TestHistoricalChildCryptoGas/sufficient (0.05s)
+PASS
+ok  	polystorechain/app	1.601s

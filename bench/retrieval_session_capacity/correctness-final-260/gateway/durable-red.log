@@ -1,0 +1,11 @@
+cwd=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/durable-red
+command=['go', 'test', '-p', '2', '-count=1', '-timeout', '30s', '-v', '.']
+GOMAXPROCS=2 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTMPDIR=/tmp/polystore-254-execution/260-historical-gateway-counterexamples/go-tmp
+=== RUN   TestLegacyCorruptProofMustRemainDurable
+    regression_test.go:8: corruption overwritten: store returned success
+    regression_test.go:9: corruption became valid or absent
+    regression_test.go:10: corrupt record changed: before="[{\"mdu_index\":" after="[{\"mdu_index\":1,\"blob_index\":64}]"
+--- FAIL: TestLegacyCorruptProofMustRemainDurable (0.04s)
+FAIL
+FAIL	polystore_gateway	0.766s
+FAIL
