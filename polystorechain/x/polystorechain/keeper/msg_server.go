@@ -131,6 +131,13 @@ func isPolyFSUserDataMduTarget(deal types.Deal, mduIndex uint64) bool {
 }
 
 func validatePolyFSRetrievalRange(deal types.Deal, stripe stripeParams, startMduIndex uint64, startBlobIndex uint32, blobCount uint64) (uint64, uint64, error) {
+	if blobCount == 0 || uint64(startBlobIndex) >= stripe.leafCount {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("invalid retrieval blob range")
+	}
+	if deal.TotalMdus == 0 {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("legacy deal has no total_mdus; commit an explicit valid content layout before retrieval")
+	}
+
 	startBase, overflow := mulUint64(startMduIndex, stripe.leafCount)
 	if overflow {
 		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index overflow")
@@ -1562,7 +1569,13 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	switch pt := msg.ProofType.(type) {
 	case *types.MsgProveLiveness_SystemProof:
-		ok, err := verifyChainedProof(pt.SystemProof, true)
+		// Admission failure preserves the legacy failure/evidence response, but
+		// cannot enter either verifier without the full crypto prepayment.
+		ok := false
+		var err error
+		if proofCount != 0 {
+			ok, err = verifyChainedProof(pt.SystemProof, true)
+		}
 		if err != nil {
 			ctx.Logger().Error("Triple Proof Verification Error", "err", err)
 			ok = false
@@ -3409,8 +3422,8 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if len(msg.SessionId) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
-	if len(msg.Proofs) == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("proofs are required")
+	if err := ValidateProofCount(uint64(len(msg.Proofs))); err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
 
 	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
@@ -3471,7 +3484,10 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
 	}
-	startGlobal := session.StartMduIndex*stripe.leafCount + uint64(session.StartBlobIndex)
+	startGlobal, _, err := validatePolyFSRetrievalRange(deal, stripe, session.StartMduIndex, session.StartBlobIndex, session.BlobCount)
+	if err != nil {
+		return nil, err
+	}
 
 	activeProviderForMode2Slot := func(slot uint32) (string, bool) {
 		if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
@@ -3502,17 +3518,25 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
 	}
 
-	for i := uint64(0); i < session.BlobCount; i++ {
-		p := msg.Proofs[int(i)]
-
-		expectedGlobal := startGlobal + i
-		expectedMdu := expectedGlobal / stripe.leafCount
-		expectedBlob := expectedGlobal % stripe.leafCount
-
-		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
+	// Admit the whole legacy session list before any cryptographic work. V2's
+	// frozen challenge handler uses the same shape and prepayment functions.
+	for i := range msg.Proofs {
+		p := &msg.Proofs[i]
+		expectedGlobal := startGlobal + uint64(i)
+		if p.MduIndex != expectedGlobal/stripe.leafCount || uint64(p.BlobIndex) != expectedGlobal%stripe.leafCount {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
 		}
-
+		if err := ValidateProofTarget(deal, p); err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+		if err := ValidateChainedProofShape(deal.ManifestRoot, p, stripe.leafCount); err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+	}
+	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
+		return nil, err
+	}
+	for _, p := range msg.Proofs {
 		ok, err := verifyChainedProof(&p)
 		if err != nil {
 			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)

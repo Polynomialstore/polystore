@@ -2,11 +2,14 @@ package polystore
 
 import (
 	"encoding/binary"
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/stretchr/testify/require"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestABIAdmissionRejectsAmplification(t *testing.T) {
@@ -44,4 +47,29 @@ func TestABIAdmissionRejectsAmplification(t *testing.T) {
 	bad := append([]byte{}, data...)
 	copy(bad[96:128], bad[64:96])
 	require.LessOrEqual(t, testing.AllocsPerRun(100, func() { _ = validateABIAdmission(args, bad) }), float64(3))
+}
+
+func TestABIAdmissionBoundsNestedProofTails(t *testing.T) {
+	f := initFixture(t)
+	p, err := New(&f.keeper)
+	require.NoError(t, err)
+	data, err := os.ReadFile("../../x/polystorechain/keeper/testdata/proof_admission_k8.json")
+	require.NoError(t, err)
+	var fixture struct {
+		Proofs []types.ChainedProof `json:"proofs"`
+	}
+	require.NoError(t, json.Unmarshal(data, &fixture))
+	method := p.abi.Methods["proveRetrievalBatch"]
+	chunks := []decodedChunk{{RangeLen: 1, Proof: fixture.Proofs[0]}, {RangeLen: 1, Proof: fixture.Proofs[1]}}
+	packed, err := method.Inputs.Pack(uint64(1), "provider", "file", uint64(1), chunks)
+	require.NoError(t, err)
+	require.NoError(t, validateABIAdmission(method.Inputs, packed))
+	// The fifth argument points to the array. Aliasing tuple tails is accepted
+	// by geth, but would permit repeated nested allocations from one tail.
+	offset := int(binary.BigEndian.Uint64(packed[152:160]))
+	first := offset + 32
+	copy(packed[first+32:first+64], packed[first:first+32])
+	_, err = method.Inputs.Unpack(packed)
+	require.NoError(t, err)
+	require.ErrorContains(t, validateABIAdmission(method.Inputs, packed), "unaliased")
 }

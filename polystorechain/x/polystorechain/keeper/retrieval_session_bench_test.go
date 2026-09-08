@@ -87,7 +87,7 @@ func setupBenchRetrievalEnv(tb testing.TB) *benchRetrievalEnv {
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
 
 	// Register enough providers for placement (same pattern as lifecycle tests).
-	for i := range 10 {
+	for i := range 12 {
 		addrBz := make([]byte, 20)
 		copy(addrBz, []byte("bench_provider___"))
 		addrBz[16] = byte('A' + i)
@@ -337,7 +337,7 @@ func buildBenchSubmitPlan(
 }
 
 func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
-	for _, count := range []int{1, 8, 64} {
+	for _, count := range []int{1, 2, 8, 32, 64} {
 		b.Run(fmt.Sprintf("proofs-%d", count), func(b *testing.B) {
 			env := setupBenchRetrievalEnv(b)
 			require.GreaterOrEqual(b, env.leafCount, uint64(count))
@@ -631,7 +631,7 @@ func TestRetrievalSessionBenchCharacterization(t *testing.T) {
 	// sessions are slot-scoped, so each count is delivered via its session
 	// plan and gas is summed over every message in the plan.
 	submitGas := make(map[int]uint64)
-	for _, count := range []int{1, 8, 64} {
+	for _, count := range []int{1, 2, 8, 32, 64} {
 		plan := buildBenchSubmitPlan(t, env, uint64(count)+100, count)
 		var totalGas uint64
 		for _, step := range plan {
