@@ -22,6 +22,23 @@ ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LI
 COUNTS = (1, 2, 8)
 
 
+def require_retrieval_cli(lifecycle):
+    """Reject older binaries before fixture work, validator startup or funding."""
+    required = {
+        "open-retrieval-session": ("--challenge-version", "--authorized-proof-provider"),
+        "submit-retrieval-proof": ("[json-file]",),
+        "confirm-retrieval-session": ("--session-id",),
+    }
+    for command, flags in required.items():
+        try:
+            help_text = lifecycle.cli(lifecycle.home, "tx", "nilchain", command, "--help")
+            if any(token not in help_text.split() for token in (command, *flags)):
+                raise ValueError("missing required command or flags")
+        except (ValueError, OSError) as error:
+            raise ValueError(f"#257 compatible CLI required: {command}: {error}") from error
+    lifecycle.doc["retrieval_cli_capabilities"] = required
+
+
 def smoke_genesis(lifecycle):
     """Explicit smoke economics; consensus/audit settings remain lifecycle defaults."""
     first = Path(lifecycle.nodes[0]["home"]) / "config/genesis.json"
@@ -226,6 +243,7 @@ def run(lifecycle, fixture_k8, fixture_k2):
                        "Only slot zero; nonzero stripe slots remain outstanding", "Zero mint smoke economics; production issuance remains outstanding"],
                setup_transactions=[])
     try:
+        require_retrieval_cli(lifecycle)
         fixtures = {k: copy_fixture(path, lifecycle.home / f"fixture-k{k}", k) for k, path in ((8, fixture_k8), (2, fixture_k2))}
         doc["fixtures"] = fixtures
         lifecycle.reserve_ports()

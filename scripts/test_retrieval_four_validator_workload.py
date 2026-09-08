@@ -62,6 +62,33 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_old_cli_fails_before_bootstrap_or_transactions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            life = SimpleNamespace(home=Path(tmp) / "run", doc={}, reservations=[],
+                cli=Mock(return_value="Usage: polystorechaind tx nilchain open-retrieval-session [flags]"),
+                reserve_ports=Mock(), prepare=Mock(), start=Mock(), stop=Mock(), save=Mock())
+            with patch.object(workload, "copy_fixture") as fixtures, \
+                 patch.object(artifact, "scheduled_transaction") as submit:
+                with self.assertRaisesRegex(ValueError, "#257 compatible CLI required"):
+                    workload.run(life, "k8", "k2")
+                fixtures.assert_not_called()
+                life.reserve_ports.assert_not_called()
+                life.prepare.assert_not_called()
+                life.start.assert_not_called()
+                submit.assert_not_called()
+                life.stop.assert_called_once()
+                life.save.assert_called_once()
+                self.assertEqual(life.doc["status"], "failed")
+
+    def test_cli_capability_check_requires_all_three_commands(self):
+        life = SimpleNamespace(home=Path("/home"), doc={}, cli=Mock(side_effect=[
+            "open-retrieval-session [flags]\n --challenge-version uint\n --authorized-proof-provider string",
+            "submit-retrieval-proof [json-file] [flags]",
+            "confirm-retrieval-session [flags]\n --session-id string"]))
+        workload.require_retrieval_cli(life)
+        self.assertEqual(life.cli.call_count, 3)
+        self.assertEqual(len(life.doc["retrieval_cli_capabilities"]), 3)
+
     def test_stop_failure_still_closes_reservations_saves_evidence_and_restores_signals(self):
         events = []
         reservation = Mock()
@@ -73,6 +100,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             life = SimpleNamespace(home=Path(tmp) / "run", doc={}, reservations=[reservation],
                 stop=failed_stop, save=lambda: events.append("save"))
             with patch.object(workload, "copy_fixture", side_effect=ValueError("invalid fixture")), \
+                 patch.object(workload, "require_retrieval_cli"), \
                  patch.object(workload.signal, "getsignal", return_value="previous-handler"), \
                  patch.object(workload.signal, "signal") as set_signal:
                 with self.assertRaisesRegex(RuntimeError, "validator stop failed"):
