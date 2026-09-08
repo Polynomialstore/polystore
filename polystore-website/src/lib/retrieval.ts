@@ -125,6 +125,23 @@ export async function fetchPinnedGeneration(lcd: string, chainId: string, dealId
   return parsePinnedGeneration(result.payload, chainId, result.height, id)
 }
 
+export async function fetchRetrievalAvailability(lcd: string, height?: bigint, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<string | null> {
+  const result = await committedQuery(lcd, '/polystorechain/polystorechain/v1/params', height, signal, fetchFn)
+  const activation = protoU64(record(record(result.payload).params).retrieval_v2_activation_height)
+  // BeginBlock must activate at this height before it can commit; afterwards
+  // SetParams prevents changing the activation height or disabling v2.
+  if (!activation) return 'Verified downloads are unavailable until this network activates secured retrieval.'
+  if (activation > result.height) return `Verified downloads become available at block ${activation} (current block ${result.height}).`
+  return null
+}
+
+export async function fetchActiveRetrievalGeneration(lcd: string, chainId: string, dealId: string, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<PinnedGeneration> {
+  const pin = await fetchPinnedGeneration(lcd, chainId, dealId, signal, fetchFn)
+  const unavailable = await fetchRetrievalAvailability(lcd, pin.height, signal, fetchFn)
+  if (unavailable) throw new Error(unavailable)
+  return pin
+}
+
 export interface RetrievalFile { path: string; start_offset: bigint; size_bytes: bigint; flags: number }
 export interface RetrievalWindow {
   mduIndex: bigint; slot: number; provider: string; startBlobIndex: number; blobCount: number

@@ -153,6 +153,7 @@ interface FileRowProps {
   gatewayCached: boolean
   isBusy: boolean
   isAnyDownloading: boolean
+  retrievalUnavailable: boolean
   isOpen: boolean
   onToggleMenu: () => void
   onCloseMenu: () => void
@@ -197,6 +198,7 @@ function FileRow({
   gatewayCached,
   isBusy,
   isAnyDownloading,
+  retrievalUnavailable,
   isOpen,
   onToggleMenu,
   onCloseMenu,
@@ -319,7 +321,7 @@ function FileRow({
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoDownload}
-          disabled={isAnyDownloading || isBusy || !manifestRoot}
+          disabled={retrievalUnavailable || isAnyDownloading || isBusy || !manifestRoot}
           data-testid="deal-detail-download"
           data-file-path={file.path}
           className="bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary-foreground rounded-none shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] transition-colors hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
@@ -356,7 +358,7 @@ function FileRow({
                       </div>
                       <button
                         onClick={handleOnchainRetrieval}
-                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        disabled={retrievalUnavailable || isAnyDownloading || isBusy || !manifestRoot}
                         data-testid="deal-detail-download-sp"
                         data-file-path={file.path}
                         className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
@@ -366,7 +368,7 @@ function FileRow({
                       </button>
                       <button
                         onClick={handleGatewayProviderRetrieval}
-                        disabled={isAnyDownloading || isBusy || !manifestRoot}
+                        disabled={retrievalUnavailable || isAnyDownloading || isBusy || !manifestRoot}
                         data-testid="deal-detail-download-gateway-provider"
                         data-file-path={file.path}
                         className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
@@ -624,7 +626,7 @@ export function DealDetail({
     [committedManifestRoot, manifestInfo?.manifest_root, slab?.manifest_root],
   )
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan } = useFetch()
+  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan, unavailableReason } = useFetch()
   const {
     slab: fetchSlabLayout,
     manifestInfo: manifestInfoTransport,
@@ -1908,6 +1910,11 @@ export function DealDetail({
                     ) : null}
                   </div>
 
+                  {unavailableReason && (
+                    <div className="nil-tab-panel text-xs text-muted-foreground" role="status" data-testid="retrieval-availability">
+                      {unavailableReason}
+                    </div>
+                  )}
                   {fileActionError && (
                     <div className="nil-tab-panel border-destructive/30 bg-destructive/5 text-[10px] text-destructive font-bold uppercase tracking-widest flex items-center gap-2">
                       <XCircle className="w-3 h-3" />
@@ -1994,6 +2001,7 @@ export function DealDetail({
                               gatewayCached={f.cache_present === true}
                               isBusy={busyFilePath === f.path}
                               isAnyDownloading={downloading}
+                              retrievalUnavailable={Boolean(unavailableReason)}
                               isOpen={openMenuFilePath === f.path}
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
                               onCloseMenu={() => setOpenMenuFilePath(null)}

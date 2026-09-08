@@ -68,6 +68,24 @@ test('trusted LCD query requires exact committed height and bounds/cancels respo
   await assert.rejects(pending, /cancelled retrieval/); assert.equal(cancelled, true)
 })
 
+test('paid retrieval gates activation at the same committed height as its generation', async () => {
+  const { fetchActiveRetrievalGeneration, fetchRetrievalAvailability } = await import('./retrieval')
+  for (const activation of [undefined, '0', '11', '10', '1', '01', null, 1, '18446744073709551616']) {
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      const params = url.endsWith('/params')
+      if (params) assert.equal(new Headers(init?.headers).get('x-cosmos-block-height'), '10')
+      return Response.json(params ? { params: { retrieval_v2_activation_height: activation } } : { deal: deal() }, { headers: { 'x-cosmos-block-height': '10' } })
+    }) as typeof fetch
+    const result = fetchActiveRetrievalGeneration('https://trusted.example', 'test-1', '9007199254740993', undefined, fetchFn)
+    if (activation === '10' || activation === '1') assert.equal((await result).height, 10n)
+    else await assert.rejects(result, activation === '11' ? /block 11/ : activation === undefined || activation === '0' ? /until this network activates/ : /uint64/)
+  }
+  for (const actual of [null, '0', '9', '11']) {
+    const fetchFn = (async () => Response.json({ params: { retrieval_v2_activation_height: '1' } }, { headers: actual ? { 'x-cosmos-block-height': actual } : {} })) as typeof fetch
+    await assert.rejects(fetchRetrievalAvailability('https://trusted.example', 10n, undefined, fetchFn), /height/)
+  }
+})
+
 test('session LCD query uses exact protobuf bytes and waits from null seed to committed challenge', async () => {
   const fixture = JSON.parse(await readFile(new URL('../../../testdata/retrieval-window-v2/session.json', import.meta.url), 'utf8'))
   const generation: PinnedGeneration = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n,

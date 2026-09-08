@@ -556,6 +556,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   test('mode2 deal → shard → upload → commit → retrieve', async ({ page }) => {
     test.setTimeout(mode2FastTestTimeoutMs)
 
+    // The deployed default is disabled. The UI must wait for committed
+    // activation before offering a paid download; only this isolated chain is active.
+    const paramsRoute = '**/polystorechain/polystorechain/v1/params'
+    await page.route(paramsRoute, (route) => route.fulfill({
+      status: 200, contentType: 'application/json', headers: { 'x-cosmos-block-height': '1' },
+      body: JSON.stringify({ params: { retrieval_v2_activation_height: '0' } }),
+    }))
+
     const filePath = 'mode2-small.bin'
     const fileBytes = crypto.randomBytes(160 * 1024) // spans multiple blobs without compressing to a tiny payload
 
@@ -599,6 +607,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     const autoDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
     const routeEl = page.getByTestId('transport-route')
 
+    await expect(page.getByTestId('retrieval-availability')).toContainText('until this network activates')
+    await expect(autoDownloadBtn).toBeDisabled()
+    await page.unroute(paramsRoute)
     await expect(autoDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
     // All download actions now share the authenticated, paid window path.

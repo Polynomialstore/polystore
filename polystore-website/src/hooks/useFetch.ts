@@ -4,7 +4,7 @@ import { gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '.
 import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
-import { account, fetchPinnedGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
+import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
@@ -127,9 +127,9 @@ export function useFetch() {
     setProgress({ phase: 'idle', filePath: input.filePath, chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
     let output: Awaited<ReturnType<typeof createRetrievalOutput>> | null = null
     try {
-      payment.requireWallet()
       const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
-      const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+      const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+      payment.requireWallet()
       if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
       await workerClient.initRetrievalWasm()
       const endpoints = new Map<string, ProviderEndpoint | null>()
@@ -267,5 +267,5 @@ export function useFetch() {
       throw new Error(message)
     } finally { await output?.cleanup().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
-  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan }
+  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
 }

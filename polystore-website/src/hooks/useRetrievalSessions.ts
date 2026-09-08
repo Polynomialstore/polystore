@@ -1,9 +1,10 @@
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { useQuery } from '@tanstack/react-query'
 import type { Hex } from 'viem'
 import { appConfig } from '../config'
 import { ethToPolystoreAddress } from '../lib/address'
 import { decodeComputeRetrievalSessionIdsResult, encodeConfirmRetrievalSessionsData, encodeRetrievalV2Data, type RetrievalSessionV2Input } from '../lib/polystorePrecompile'
-import { account, fetchPinnedGeneration, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
+import { account, fetchActiveRetrievalGeneration, fetchRetrievalAvailability, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
 import { waitForRetrievalChallenge } from '../lib/retrievalFlow'
 import type { SponsoredRetrievalAuth } from './useFetch'
 
@@ -15,6 +16,11 @@ export function useRetrievalSessions() {
   const { address } = useAccount()
   const { data: wallet } = useWalletClient()
   const client = usePublicClient({ chainId: appConfig.chainId })
+  const activation = useQuery({
+    queryKey: ['retrieval-activation', appConfig.lcdBase],
+    queryFn: ({ signal }) => fetchRetrievalAvailability(appConfig.lcdBase, undefined, AbortSignal.any([signal, AbortSignal.timeout(15_000)])),
+    refetchInterval: 15_000, retry: false,
+  })
   const requireWallet = () => {
     if (!address || !wallet || !client) throw new Error('connect a wallet before retrieval')
     return { address, wallet, client, owner: ethToPolystoreAddress(address) }
@@ -29,6 +35,7 @@ export function useRetrievalSessions() {
   }
   return {
     requireWallet,
+    unavailableReason: activation.error ? 'Cannot verify network retrieval availability. Check the chain connection.' : activation.data === undefined ? 'Checking network retrieval availability…' : activation.data,
     async open(pin: PinnedGeneration, windows: readonly RetrievalWindow[], auth: SponsoredRetrievalAuth = { type: 'none' }, signal?: AbortSignal, authorizedProofProvider?: string): Promise<FrozenSession[]> {
       const { address, client, owner } = requireWallet()
       if (!owner || !windows.length || windows.length > 64) throw new Error('invalid retrieval wave')
@@ -36,7 +43,7 @@ export function useRetrievalSessions() {
       const deadline = AbortSignal.any([AbortSignal.timeout(120_000), ...(signal ? [signal] : [])])
       // Refresh before funding, preserving the original generation pin. A later
       // content update can never silently replace the authenticated FAT/root.
-      const current = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, pin.dealId.toString(), deadline)
+      const current = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, pin.dealId.toString(), deadline)
       if (current.root !== pin.root || current.generation !== pin.generation || current.layout !== pin.layout || current.k !== pin.k || current.m !== pin.m || current.metadataMdus !== pin.metadataMdus || current.userMdus !== pin.userMdus || current.owner !== pin.owner || current.endHeight !== pin.endHeight || windows.some((w) => !current.assignments[w.slot]?.active || current.assignments[w.slot].provider !== w.provider)) throw new Error('committed generation or assignment changed before payment')
       const expiry = current.height + 512n < pin.endHeight ? current.height + 512n : pin.endHeight
       if (expiry < current.height + 4n) throw new Error('deal has insufficient response time')
