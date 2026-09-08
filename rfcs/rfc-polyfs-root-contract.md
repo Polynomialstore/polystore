@@ -1,6 +1,6 @@
 # RFC: PolyFS Root Contract (MDU #0 Trust Root)
 
-**Status:** Accepted for issue #213; implementation pending.
+**Status:** Root contract implemented; canonical FAT v2 producer/reader migration tracked by #257.
 **Scope:** Deal root semantics, MDU #0 root-table proof shape, legacy alpha behavior, and devnet migration policy.
 **Depends on:** `notes/triple-proof.md`, `rfcs/rfc-blob-alignment-and-striping.md`, `rfcs/rfc-mode2-onchain-state.md`
 
@@ -163,6 +163,98 @@ Verifiers MUST derive `mdu_root_fr` from the supplied 32-byte `mdu_root` and
 compare that derived value to the root-table KZG opening result. Implementations
 MUST NOT silently reduce arbitrary bytes in different ways.
 
+### 5.1 Canonical FAT v2
+
+New MDU #0 producers use FAT **version 2**. The root table is still exactly
+2 MiB; each stored 32-byte big-endian cell must be strictly below Fr. Setting
+a root takes a raw digest and applies the existing reduction once. Loading,
+reading, or exporting a stored cell never reduces it again. A zero cell keeps
+its original index. APIs distinguish `root_table_cell_hex` from a full
+`root_hex` digest; reduction is not reversible.
+
+The last 48 blobs encode a fixed **6,094,848-byte logical FAT**. Zero-pad that
+whole logical region, then encode every 31-byte group as `0x00 || group`.
+Do not apply the variable-length payload encoder's partial-tail alignment.
+Logical offset `j` is at physical MDU0 offset:
+
+```text
+16 * 131072 + 32 * floor(j / 31) + 1 + (j mod 31)
+```
+
+The 128-byte logical header and each 256-byte record can cross scalar
+boundaries. Readers copy only the requested header/record range, not a decoded
+6 MiB table per record. All integers below are little-endian:
+
+| Header offset | Width | Value |
+| --- | ---: | --- |
+| 0 | 4 | ASCII `NILF` |
+| 4 | 1 | version `2` |
+| 5 | 1 | zero |
+| 6 | 2 | record size `256` |
+| 8 | 4 | record count, including tombstones |
+| 12 | 116 | zero |
+
+Records start at logical offset 128, with `start_offset:u64` at 0,
+`length_and_flags:u64` at 8, `timestamp:u64` at 16, and 232 path bytes at 24.
+The low 56 bits of `length_and_flags` are length; the high eight bits retain
+the existing flags. The exclusive end `start_offset + length` must fit u64.
+Wire values remain exact; a caller limited to safe JavaScript integers rejects
+unsupported values before converting or planning work.
+
+Capacity is `floor((6094848 - 128) / 256) = 23807` records. Reject record 23808
+before mutation. A tombstone split requiring an additional record must also
+preflight capacity; failure preserves all bytes. Unused logical FAT bytes,
+header reserved bytes, path suffix bytes, and every physical scalar prefix
+are zero. A full 232-byte path needs no terminator. An empty path marks a
+tombstone and all 232 path bytes must be zero.
+
+Active paths are exact valid UTF-8 of 1..232 bytes: no leading slash,
+backslash, `..` path segment, ASCII control (below 0x20 or 0x7f), embedded NUL,
+or outer Unicode White_Space. Internal empty and `.` segments are preserved;
+no Unicode normalization, trimming, basename substitution of an explicit
+record path, lossy decoding, or truncation is permitted. A local upload with
+no explicit record path may use the source filename's basename. JavaScript
+producers reject unpaired UTF-16 surrogates before UTF-8 conversion; literal
+U+FFFD and U+FEFF remain distinct valid characters.
+
+Ordinary readers validate the exact 8 MiB size, all canonical root cells,
+header/version/count, every record, reserved bytes and deterministic tail.
+Unknown versions or any malformed record reject the whole file map. Active
+layout counts come from a pinned committed `total_mdus` / `witness_mdus`,
+never from filtering zero root cells or file lengths. Metadata authentication,
+fresh session transport and paid-open admission are the next #257 slice;
+format validation by itself does not establish authority or delivery.
+
+### 5.2 Explicit legacy recovery and staged mutation
+
+Legacy raw FAT v1 has capacity 24,575 and is not a canonical v2 representation.
+There is no fallback from failed ordinary loading or commitment verification.
+Separate named core/native/WASM recovery APIs provide read-only inspection;
+bytes/export never rewrites the source and mutations on recovery builders fail.
+Legacy tombstone suffix bytes are retained during inspection and zeroed only
+in a separately staged v2 output.
+
+The owner must trust original local bytes or an independently authenticated
+raw source. The legacy KZG root alone cannot distinguish different raw FAT
+representations that reduced to the same scalars. With that explicit trust:
+
+```sh
+polystore_cli inspect-legacy-metadata original-mdu0.bin
+polystore_cli stage-legacy-metadata original-mdu0.bin --out staged-v2-mdu0.bin --trusted-source
+polystore_cli shard staged-v2-mdu0.bin --raw --out staged-v2-commitments.json
+```
+
+The first two commands need no trusted setup and perform no chain operation.
+They require a quiescent regular input of exactly 8 MiB; staging uses a new
+output path and rejects an existing path, including aliases of the input.
+Malformed or over-capacity source fails without truncation. A disk-write
+failure can leave an incomplete inactive output; the command reports failure.
+The final command recomputes the new commitments and MDU0 root with the
+canonical setup. Publish a complete staged generation and activate its new
+root only through the existing owner-authorized content-generation transaction.
+Preserve old referenced roots under the retention contract; these commands
+never delete a generation or change the active root.
+
 ## 6. Chained Proof V2 Shape
 
 The V2 proof path is:
@@ -258,7 +350,7 @@ hard-coded 64 commitments per user MDU. For a uniform user-data profile:
 ```text
 commitments_per_user_mdu = target_mdu_leaf_count(profile)
 witness_commitment_bytes = user_mdu_count * commitments_per_user_mdu * 48
-W = ceil(witness_commitment_bytes / 8 MiB)
+W = ceil(witness_commitment_bytes / RawMduPayloadBytes)
 ```
 
 For the default Mode 2 profile `K=8`, `M=4`,
