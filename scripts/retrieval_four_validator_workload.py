@@ -11,6 +11,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -95,16 +96,15 @@ def smoke_genesis(lifecycle):
                   retrieval_price_per_blob_max={"denom": "stake", "amount": "17"},
                   retrieval_burn_bps="3333")
     mint = genesis["app_state"]["mint"]
-    mint["minter"]["inflation"] = "0.000000000000000000"
-    for field in ("inflation_rate_change", "inflation_min", "inflation_max"):
-        mint["params"][field] = "0.000000000000000000"
+    if mint["params"]["mint_denom"] != "stake":
+        raise ValueError("settlement smoke requires normal stake mint denomination")
     raw = json.dumps(genesis, sort_keys=True, indent=1) + "\n"
     for node in lifecycle.nodes:
         (Path(node["home"]) / "config/genesis.json").write_text(raw)
         lifecycle.cli(node["home"], "genesis", "validate")
     lifecycle.doc.update(genesis_sha256=artifact.sha256(first), frozen_module_params=params,
                          smoke_mint_profile=mint,
-                         economics_scope="zero mint smoke profile; production mint/issuance qualification outstanding")
+                         economics_scope="normal SDK mint independently reconciled; unexpected module issuance rejected")
 
 
 def copy_fixture(source, destination, k):
@@ -228,7 +228,65 @@ def retrieval_snapshot(lifecycle, height, deals, session_ids):
     return dict(bank=bank, retrieval=rows[0])
 
 
-def verify_settlement(before, after, operations, results, transactions, signers):
+def block_issuance(result, height, mint_address):
+    """Reconcile committed bank coinbase events against the SDK mint event."""
+    if producer.uint(result["height"]) != height:
+        raise ValueError("issuance block height mismatch")
+    final = result["finalize_block_events"]
+    txs = result["txs_results"]
+    if not isinstance(final, list) or (txs is not None and not isinstance(txs, list)):
+        raise ValueError("missing committed event lists")
+    successful = [row["events"] for row in (txs or []) if producer.uint(row.get("code", 0)) == 0]
+    minted, bank = [], []
+    for source, events in [("finalize", final)] + [("transaction", events) for events in successful]:
+        if not isinstance(events, list):
+            raise ValueError("missing successful transaction events")
+        for event in events:
+            if event["type"] not in ("mint", "coinbase"):
+                continue
+            pairs = event["attributes"]
+            attrs = {pair["key"]: pair["value"] for pair in pairs}
+            if len(attrs) != len(pairs) or source != "finalize":
+                raise ValueError("duplicate mint attributes or unexpected transaction issuance")
+            if event["type"] == "mint":
+                if not isinstance(attrs["amount"], str) or not re.fullmatch(r"0|[1-9][0-9]*", attrs["amount"]):
+                    raise ValueError("malformed SDK mint amount")
+                minted.append(producer.uint(attrs["amount"], 256))
+            else:
+                if attrs["minter"] != mint_address or not isinstance(attrs["amount"], str) or not re.fullmatch(r"[1-9][0-9]*stake", attrs["amount"]):
+                    raise ValueError("unexpected mint module, denomination or amount")
+                bank.append(producer.uint(attrs["amount"][:-5], 256))
+    if len(minted) != 1 or len(bank) > 1 or sum(bank) != minted[0]:
+        raise ValueError("missing or inconsistent SDK mint/coinbase evidence")
+    return dict(height=height, issued_stake=sum(bank), finalize_block_events=final,
+                successful_transaction_events=successful)
+
+
+def collect_issuance(lifecycle, before, after):
+    """Bounded, cached four-node evidence for the exact snapshot interval."""
+    start, end = (producer.uint(row["bank"]["height"]) for row in (before, after))
+    if end < start or end - start > 4096 or len({node["node_id"] for node in lifecycle.nodes}) != 4 or len(lifecycle.nodes) != 4:
+        raise ValueError("invalid four-validator issuance interval")
+    evidence = lifecycle.doc.setdefault("mint_issuance", dict(blocks={}))
+    if "module_address" not in evidence:
+        accounts = [lifecycle.query(node, "/cosmos/auth/v1beta1/module_accounts/mint", start)["account"] for node in lifecycle.nodes]
+        if any(account != accounts[0] for account in accounts[1:]) or accounts[0]["name"] != "mint":
+            raise ValueError("validators disagree on SDK mint module")
+        producer.account(accounts[0]["base_account"]["address"])
+        evidence["module_address"] = accounts[0]["base_account"]["address"]
+        evidence["validators"] = [node["node_id"] for node in lifecycle.nodes]
+    for height in range(start + 1, end + 1):
+        key = str(height)
+        if key not in evidence["blocks"]:
+            rows = [block_issuance(lifecycle.query(node, f"/block_results?height={height}"), height,
+                                  evidence["module_address"]) for node in lifecycle.nodes]
+            if any(row != rows[0] for row in rows[1:]):
+                raise ValueError("validators disagree on committed issuance events")
+            evidence["blocks"][key] = rows[0]
+    return sum(evidence["blocks"][str(height)]["issued_stake"] for height in range(start + 1, end + 1))
+
+
+def verify_settlement(before, after, operations, results, transactions, signers, *, issued_stake=0):
     if before["retrieval"]["params"] != after["retrieval"]["params"]:
         raise ValueError("retrieval pricing changed across the smoke")
     params = after["retrieval"]["params"]
@@ -269,10 +327,10 @@ def verify_settlement(before, after, operations, results, transactions, signers)
             if delta(before["retrieval"]["activities"][identity].get(field, 0), after["retrieval"]["activities"][identity].get(field, 0)) != expected:
                 raise ValueError("retrieval activity accounting mismatch")
     if (delta(before["retrieval"]["module_stake"], after["retrieval"]["module_stake"]) != -sum(debits.values()) or
-        delta(before["bank"]["supply"]["stake"], after["bank"]["supply"]["stake"]) != -burns):
+        delta(before["bank"]["supply"]["stake"], after["bank"]["supply"]["stake"]) != producer.uint(issued_stake, 256) - burns):
         raise ValueError("module/supply conservation mismatch")
     return dict(completed_sessions=len(operations), proofs=sum(op["proof_expectation"]["session"]["blob_count"] for op in operations),
-                escrow_debits=debits, provider_payouts=payouts, burned_stake=burns,
+                escrow_debits=debits, provider_payouts=payouts, burned_stake=burns, issued_stake=issued_stake,
                 byte_counter_scope="protocol counters; no network-delivered bytes verified")
 
 
@@ -312,16 +370,16 @@ def prepared_cohort(lifecycle, operations, prepare):
     return prepared
 
 
-def assert_unchanged_retrieval(before, after):
+def assert_unchanged_retrieval(before, after, *, issued_stake=0):
     """Failed messages and terminal retries cannot change stake liabilities/credit.
 
     Ante fees and sequences use aatom and may change even for failed execution.
-    Zero mint is an explicit prerequisite of this isolated smoke assertion.
+    Independent committed SDK issuance is the only permitted stake supply change.
     """
     def stake(snapshot):
         return {key: value for key, value in snapshot["bank"]["balances"].items() if key.endswith(":stake")}
     if (before["retrieval"] != after["retrieval"] or stake(before) != stake(after) or
-            before["bank"]["supply"]["stake"] != after["bank"]["supply"]["stake"]):
+            producer.uint(after["bank"]["supply"]["stake"], 256) - producer.uint(before["bank"]["supply"]["stake"], 256) != producer.uint(issued_stake, 256)):
         raise ValueError("rejected message or terminal retry changed retrieval state/stake")
 
 
@@ -352,7 +410,7 @@ def run_adversarial_phase(lifecycle, deals, prepared, *, completed=False):
     directory = lifecycle.home / phase
     directory.mkdir(mode=0o700)
     record = dict(transactions=[], qualification=False,
-                  economics_scope="zero-mint stake liabilities; aatom ante fees excluded")
+                  economics_scope="normal SDK mint reconciled; stake liabilities unchanged; aatom ante fees excluded")
     lifecycle.doc.setdefault("adversarial_phases", {})[phase] = record
     ids = [op["prepared"]["session_id"] for op in prepared]
     before = retrieval_snapshot(lifecycle, lifecycle.wait_height(3) - 1, deals, ids)
@@ -402,7 +460,8 @@ def run_adversarial_phase(lifecycle, deals, prepared, *, completed=False):
         lifecycle.wait_height(result["height"] + 1)
         row["validators"] = verify_transaction_nodes(lifecycle, result)
         after = retrieval_snapshot(lifecycle, result["height"], deals, ids)
-        assert_unchanged_retrieval(before, after)
+        row["issued_stake_since_phase_start"] = collect_issuance(lifecycle, before, after)
+        assert_unchanged_retrieval(before, after, issued_stake=row["issued_stake_since_phase_start"])
         row["state_unchanged"] = True
         record["after"] = after
         lifecycle.save()
@@ -527,7 +586,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
         height = lifecycle.wait_height(max(row["height"] for row in transactions) + 1) - 1
         ids = [row["session_id"] for row in results.values()]
         after = retrieval_snapshot(lifecycle, height, deals, ids)
-        doc["settlement"] = verify_settlement(before, after, operations, results, transactions, lifecycle.signers)
+        doc["settlement"] = verify_settlement(before, after, operations, results, transactions, lifecycle.signers,
+            issued_stake=collect_issuance(lifecycle, before, after))
         doc["after_workload"] = after
         if proof_only:
             after = run_adversarial_phase(lifecycle, deals, scheduled, completed=True)
@@ -545,7 +605,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
             raise ValueError("restart changed the fixed-height settlement state")
         doc["after_restart_original_height"] = restarted
         doc["after_restart_later_height"] = retrieval_snapshot(lifecycle, later, deals, ids)
-        verify_settlement(before, doc["after_restart_later_height"], operations, results, transactions, lifecycle.signers)
+        verify_settlement(before, doc["after_restart_later_height"], operations, results, transactions, lifecycle.signers,
+            issued_stake=collect_issuance(lifecycle, before, doc["after_restart_later_height"]))
         doc["status"] = "settlement_smoke_passed"
     except BaseException as error:
         doc.update(status="failed", error=str(error)[-8192:])

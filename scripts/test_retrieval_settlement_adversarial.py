@@ -81,6 +81,7 @@ class AdversarialSettlementTest(unittest.TestCase):
                     error=reason, height=19, txhash='AB'*32, code=0 if label.startswith('duplicate') else 4)
             with patch.object(workload.artifact, 'scheduled_transaction', side_effect=submit), \
                  patch.object(workload, 'retrieval_snapshot', return_value=snapshot), \
+                 patch.object(workload, 'collect_issuance', return_value=0), \
                  patch.object(workload, 'verify_transaction_nodes', return_value=[{}]*4):
                 workload.run_adversarial_phase(life, deals, prepared)
                 self.assertEqual(len(submitted), 5)
