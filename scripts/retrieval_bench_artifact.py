@@ -767,8 +767,9 @@ def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_
     requests current state, otherwise exactly that committed height. The callback
     must honor the shared absolute deadline and cannot broadcast. Pre-opening and
     proof generation are excluded; fresh state reads and digest checks are included.
-    Prepared inputs retain the producer's maintained slot-zero K8/K2 fixture
-    restrictions. This mode does not qualify delivered bytes or storage audits.
+    Prepared inputs retain the producer's slot-zero K8/K2 geometry restrictions;
+    payloads may come from authenticated real artifacts. This scheduler alone
+    does not qualify delivered bytes or storage audits.
     """
     lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof,
                                           mode=mode, read_session_evidence=read_session_evidence)
@@ -1095,21 +1096,28 @@ def summarize(doc, start, end):
             "wall_seconds": wall}
 
 
-def opened_session_id(tx):
-    # Pinned Cosmos TxMsgData: exactly one field-2 Any, the owning response type,
-    # and exactly its field-1 bytes32 session_id. All lengths fit one-byte varints.
-    # Reject extra responses/fields, stale MsgData, malformed lengths, and guesses
-    # from arbitrary trailing bytes; schema changes require an explicit update.
+def opened_session_ids(tx, count):
+    """Decode exactly count ordered, typed responses from an atomic SDK batch."""
+    integer(count, "open response count", 1, 64)
     response_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionResponse"
     any_value = b"\x0a" + bytes([len(response_type)]) + response_type + b"\x12\x22\x0a\x20"
     prefix = b"\x12" + bytes([len(any_value) + 32]) + any_value
     data = tx.get("data", "")
-    if not isinstance(data, str) or len(data) != (len(prefix) + 32) * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data):
+    width = len(prefix) + 32
+    if not isinstance(data, str) or len(data) != width * count * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data):
         raise ValueError("invalid open-session TxMsgData encoding")
-    raw = bytes.fromhex(data)
-    if not raw.startswith(prefix):
-        raise ValueError("expected exactly one MsgOpenRetrievalSessionResponse")
-    return raw[len(prefix):].hex()
+    raw, ids = bytes.fromhex(data), []
+    for offset in range(0, len(raw), width):
+        if raw[offset:offset + len(prefix)] != prefix:
+            raise ValueError("expected ordered MsgOpenRetrievalSessionResponse values")
+        ids.append(raw[offset + len(prefix):offset + width].hex())
+    if len(set(ids)) != count or "00" * 32 in ids:
+        raise ValueError("duplicate or zero open-session response")
+    return ids
+
+
+def opened_session_id(tx):
+    return opened_session_ids(tx, 1)[0]
 
 
 def abort_run(path, exit_code):
@@ -1184,7 +1192,7 @@ def set_toml_value(text, section, key, value):
 class FourValidatorLifecycle:
     """Owned local startup/persistence evidence, not a transaction load driver."""
 
-    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2):
+    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2, *, sustained=False):
         self.root = Path(__file__).resolve().parent.parent
         self.binary, self.library = Path(binary).resolve(strict=True), Path(library).resolve(strict=True)
         if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
@@ -1197,7 +1205,7 @@ class FourValidatorLifecycle:
         # including on failure; multi-node receives only a new child directory.
         if os.path.lexists(self.home):
             raise ValueError("home must not already exist: " + str(self.home))
-        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 900) * 10**9
+        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 7200 if sustained else 900) * 10**9
         self.env = dict(os.environ, GOMAXPROCS=str(integer(gomaxprocs, "gomaxprocs", 1, 64)),
                         POLYSTORE_TRUSTED_SETUP=str(self.root / "polystorechain/trusted_setup.txt"))
         for variable in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
