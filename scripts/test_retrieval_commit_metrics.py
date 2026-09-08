@@ -3,6 +3,8 @@ from decimal import Decimal
 from fractions import Fraction
 import io
 import json
+import tempfile
+from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import patch
 
@@ -26,6 +28,22 @@ def summary(samples, blocks, **kwargs):
 
 
 class CommitMetricsTest(TestCase):
+    def test_stream_retains_raw_samples_and_refuses_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = str(Path(directory) / "metrics.jsonl")
+            values = [sample(10, "0.4", 1), sample(12, "0.6", 3)]
+            with patch.object(metrics.time, "clock_gettime_ns", side_effect=[0, 0, 200000000, 400000000, 1000000000, 1000000000]), patch.object(
+                    metrics.time, "sleep"), patch.object(metrics, "capture_commit_metrics", side_effect=values):
+                result = metrics.stream_commit_metrics("http://localhost:9000/metrics", "bench", output, 1)
+            self.assertEqual(result["samples"], 2)
+            self.assertFalse(result["qualification"])
+            self.assertEqual([json.loads(line) for line in Path(output).read_text().splitlines()], values)
+            with self.assertRaises(FileExistsError):
+                metrics.stream_commit_metrics("http://localhost:9000/metrics", "bench", output, 1)
+            for seconds in (0, 1101, True, 1.5):
+                with self.assertRaises(ValueError):
+                    metrics.stream_commit_metrics("http://localhost:9000/metrics", "bench", output, seconds)
+
     def test_fenced_capture_requires_complete_stable_owned_boundary(self):
         node = "ab" * 20
         def status(height, network="bench", identity=node):
