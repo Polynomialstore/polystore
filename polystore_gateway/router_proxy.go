@@ -133,7 +133,7 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 	}
 }
 
-func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) (bool, error) {
+func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string, retryMissingMetadata bool) (bool, error) {
 	base := strings.TrimRight(strings.TrimSpace(providerBaseURL), "/")
 	if base == "" {
 		return false, fmt.Errorf("provider base url is empty")
@@ -161,6 +161,11 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 		return false, err
 	}
 	defer resp.Body.Close()
+
+	// Only the authority-checked metadata route can try another replica on 404.
+	if retryMissingMetadata && resp.StatusCode == http.StatusNotFound {
+		return false, fmt.Errorf("metadata replica missing requested MDU")
+	}
 
 	// Slot mismatch is a router concern (Mode 2): treat it as a routing miss so we can
 	// try another provider without leaking a confusing 400 back to the client.
@@ -391,7 +396,7 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 			lastErr = err
 			continue
 		}
-		ok, err := tryProxyToProviderBaseURL(w, r, baseURL)
+		ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false)
 		if ok {
 			dealProviderCache.Store(dealID, &dealProviderCacheEntry{
 				provider: providerAddr,
@@ -422,7 +427,7 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 				lastErr = err
 				continue
 			}
-			ok, err := tryProxyToProviderBaseURL(w, r, baseURL)
+			ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false)
 			if ok {
 				dealProviderCache.Store(dealID, &dealProviderCacheEntry{
 					provider: providerAddr,
@@ -597,7 +602,7 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 			lastErr = err
 			continue
 		}
-		handled, err := tryProxyToProviderBaseURL(w, r, base)
+		handled, err := tryProxyToProviderBaseURL(w, r, base, r.Header.Get("X-PolyStore-Session-Id") == "")
 		if handled {
 			return
 		}

@@ -182,13 +182,21 @@ func TestRetrievalProofLegacyShapesRemainSingleMessages(t *testing.T) {
 
 type retrievalTestRPC struct {
 	client.CometRPC
-	block        *cmttypes.BlockParams
-	err          error
-	broadcasts   []cmttypes.Tx
-	simulatedGas uint64
+	block         *cmttypes.BlockParams
+	err           error
+	broadcasts    []cmttypes.Tx
+	simulatedGas  uint64
+	missingParams int
 }
 
-func (r *retrievalTestRPC) ConsensusParams(context.Context, *int64) (*coretypes.ResultConsensusParams, error) {
+func (r *retrievalTestRPC) ConsensusParams(_ context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
+	if height != nil {
+		return nil, fmt.Errorf("must query current limits, not stale fallback")
+	}
+	if r.missingParams > 0 {
+		r.missingParams--
+		return nil, fmt.Errorf("could not find consensus params for height #8: value retrieved from db is empty")
+	}
 	return &coretypes.ResultConsensusParams{BlockHeight: 7, ConsensusParams: cmttypes.ConsensusParams{Block: *r.block}}, r.err
 }
 func (r *retrievalTestRPC) BroadcastTxSync(_ context.Context, bz cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
@@ -215,14 +223,16 @@ func TestRetrievalProofSDKSignsOnceAndChecksFinalAutoGas(t *testing.T) {
 		name          string
 		gas           uint64
 		inflateSigned bool
+		missingParams int
 		wantError     string
 	}{
 		{name: "valid signed transaction", gas: 1_000_000},
+		{name: "concurrent commit delays current params", gas: 1_000_000, missingParams: 1},
 		{name: "final estimated gas exceeds cap", gas: uint64(types.MaxRetrievalV2BlockGas) + 1, wantError: "gas exceeds"},
 		{name: "final signed bytes exceed cap", gas: 1_000_000, inflateSigned: true, wantError: "protobuf bytes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rpc := &retrievalTestRPC{block: &cmttypes.BlockParams{MaxBytes: types.MaxRetrievalV2BlockBytes, MaxGas: types.MaxRetrievalV2BlockGas}, simulatedGas: tc.gas}
+			rpc := &retrievalTestRPC{block: &cmttypes.BlockParams{MaxBytes: types.MaxRetrievalV2BlockBytes, MaxGas: types.MaxRetrievalV2BlockGas}, simulatedGas: tc.gas, missingParams: tc.missingParams}
 			ctx := client.Context{}.WithCodec(cdc).WithTxConfig(config).WithFromAddress(signer).WithFromName("submitter").
 				WithKeyring(keys).WithChainID("cli-test").WithClient(rpc).WithAccountRetriever(client.MockAccountRetriever{ReturnAccNum: 2, ReturnAccSeq: 7}).
 				WithSkipConfirmation(true).WithBroadcastMode(flags.BroadcastSync).WithOutput(&bytes.Buffer{}).WithCmdContext(context.Background())
@@ -347,4 +357,11 @@ func TestRetrievalProofUnsignedAndSignedLimits(t *testing.T) {
 	bounded, err := boundRetrievalProofTx(cmd, ctx, []sdk.Msg{msg})
 	require.NoError(t, err)
 	require.Equal(t, 99990, bounded.TxConfig.(retrievalProofTxConfig).maxBytes)
+	rpc.err = fmt.Errorf("parameters remain unavailable")
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(canceled)
+	_, err = boundRetrievalProofTx(cmd, ctx, []sdk.Msg{msg})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, rpc.broadcasts, "unavailable limits cannot reach signing/broadcast")
 }

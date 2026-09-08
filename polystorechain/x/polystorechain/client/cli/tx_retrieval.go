@@ -477,9 +477,20 @@ func boundRetrievalProofTx(cmd *cobra.Command, clientCtx client.Context, msgs []
 		}
 		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 		defer cancel()
-		result, err := querier.ConsensusParams(ctx, nil)
-		if err != nil || result == nil {
-			return clientCtx, fmt.Errorf("cannot obtain retrieval transaction block limits: %v", err)
+		var result *coretypes.ResultConsensusParams
+		for {
+			result, err = querier.ConsensusParams(ctx, nil)
+			if err == nil && result != nil {
+				break
+			}
+			// Comet's latest query uses BlockStore.Height()+1, which can advance
+			// before StateStore saves that height's parameters. Retry the current
+			// query within the existing deadline; never substitute stale limits.
+			select {
+			case <-ctx.Done():
+				return clientCtx, fmt.Errorf("cannot obtain retrieval transaction block limits: %v: %w", err, ctx.Err())
+			case <-time.After(50 * time.Millisecond):
+			}
 		}
 		block := result.ConsensusParams.Block
 		if block.MaxBytes <= retrievalSigningReserve+10 || block.MaxGas == 0 || block.MaxGas < -1 {
