@@ -444,6 +444,15 @@ To support the invariants, the protocol uses three challenge families, all bindi
 
 Historical full-replica deals may still be served by a single assigned provider as a compatibility path, but new deals assume slot-aware striped retrieval.
 
+MDU #0 uses the canonical FAT v2 representation defined in
+[the PolyFS root contract, §5.1](https://github.com/Polynomialstore/polystore/blob/main/rfcs/rfc-polyfs-root-contract.md#51-canonical-fat-v2):
+an exact 8 MiB buffer, 65,536 canonical big-endian Fr root cells, and a fixed
+31-to-32 packed File Table with at most 23,807 records. Ordinary readers reject
+malformed or legacy raw FAT bytes; legacy inspection and staging are explicit,
+separate operations. Format validation alone does not authenticate metadata.
+Paid retrieval requires a pinned committed root and layout plus authenticated
+metadata; that client integration remains gated by #257 before activation.
+
 #### 7.1.1 Stripe-aware retrieval & challenges
 
 For striped deals, `Deal.providers[]` is treated as a legacy mirror of the canonical ordered slot list `slot → provider` of length `N = K+M`.

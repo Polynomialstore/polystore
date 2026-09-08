@@ -11,6 +11,54 @@ import (
 	"testing"
 )
 
+// Identical logical workload also runs against the pre-v2 native library.
+// Go allocations exclude native heap; fat_v2_allocations_test.rs covers that heap.
+func BenchmarkMdu0Metadata(b *testing.B) {
+	builder := NewMdu0Builder(65536)
+	if builder == nil {
+		b.Fatal("builder unavailable")
+	}
+	defer builder.Free()
+	for i := uint64(0); i < 1000; i++ {
+		if err := builder.AppendFile("entry", 31, i*31); err != nil {
+			b.Fatal(err)
+		}
+	}
+	data, err := builder.Bytes()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Run("load_8MiB_1000_records", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			loaded, err := LoadMdu0Builder(data, 65536)
+			if err != nil {
+				b.Fatal(err)
+			}
+			loaded.Free()
+		}
+	})
+	b.Run("read_1000_records", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			for j := uint32(0); j < 1000; j++ {
+				record, err := builder.GetRecord(j)
+				if err != nil || record.StartOffset != uint64(j)*31 {
+					b.Fatalf("record %d: %v", j, err)
+				}
+			}
+		}
+	})
+	b.Run("export_8MiB", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			if _, err := builder.Bytes(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
 func TestMetadataV2NativeGoldenAndAtomicAdmission(t *testing.T) {
 	var golden struct {
 		RootDigest string `json:"root_digest_hex"`

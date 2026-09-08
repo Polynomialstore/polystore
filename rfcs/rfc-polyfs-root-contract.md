@@ -250,7 +250,10 @@ output path and rejects an existing path, including aliases of the input.
 Malformed or over-capacity source fails without truncation. A disk-write
 failure can leave an incomplete inactive output; the command reports failure.
 The final command recomputes the new commitments and MDU0 root with the
-canonical setup. Publish a complete staged generation and activate its new
+canonical setup. Read the 32-byte PolyFS root from `mdus[0].root_hex` and its
+64 commitments from `mdus[0].blobs` in the output JSON. The CLI also emits a
+legacy 48-byte `manifest_root_hex`; that field is not the PolyFS root.
+Publish a complete staged generation and activate its new
 root only through the existing owner-authorized content-generation transaction.
 Preserve old referenced roots under the retention contract; these commands
 never delete a generation or change the active root.
