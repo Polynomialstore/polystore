@@ -377,6 +377,24 @@ class ScheduledTransactionTest(unittest.TestCase):
         self.assertNotIn("do-not-retain", json.dumps(result))
         self.assertLess(len(json.dumps(result)), 1024)
 
+    def test_runtime_environment_reaches_submit_and_query(self):
+        job = self.job()
+        job["env"] = {"GOMAXPROCS": "2", "POLYSTORE_TRUSTED_SETUP": "/fixture/setup"}
+        assertion = "import os; assert os.environ['GOMAXPROCS']=='2'; assert os.environ['POLYSTORE_TRUSTED_SETUP']=='/fixture/setup'; "
+        for field in ("submit", "query"):
+            job[field][2] = assertion + job[field][2]
+        self.assertEqual(artifact.scheduled_transaction(job)["outcome"], "committed_success")
+        for overrides in ({"PATH": "/bad"}, {"GOMAXPROCS": 2}, {"GOMAXPROCS": "\0"}, None):
+            with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                artifact.scheduled_transaction(dict(job, env=overrides))
+
+    def test_mempool_cache_response_waits_for_committed_result(self):
+        job = self.job()
+        (self.root / "submit.json").write_text(json.dumps({"code": 19, "txhash": self.txhash}))
+        self.assertEqual(artifact.scheduled_transaction(job)["outcome"], "committed_success")
+        (self.root / "submit.json").write_text(json.dumps({"code": 19}))
+        self.assertEqual(artifact.scheduled_transaction(job)["outcome"], "unknown")
+
     def test_bad_response_data_preserves_commit_evidence_but_cannot_supply_id(self):
         for data in (None, 1, "x0", "0", OPEN_RESPONSE_DATA + "00", "00" * (artifact.MAX_RESPONSE_DATA_BYTES + 1)):
             with self.subTest(data=str(data)[:20]):

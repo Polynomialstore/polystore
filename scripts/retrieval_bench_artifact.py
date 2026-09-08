@@ -240,6 +240,15 @@ def run_bounded_command(argv, deadline, *, env=None):
             process.wait()
 
 
+def scheduled_environment(job):
+    overrides = job.get("env", {})
+    allowed = {"GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"}
+    if (not isinstance(overrides, dict) or set(overrides) - allowed or
+        any(not isinstance(value, str) or not value or "\0" in value for value in overrides.values())):
+        raise ValueError("invalid transaction runtime environment overrides")
+    return {"env": dict(os.environ, **overrides)} if overrides else {}
+
+
 def scheduled_transaction(job):
     """CLI submit/query adapter; callers must supply a resolved signer address.
 
@@ -261,10 +270,11 @@ def scheduled_transaction(job):
         # Queries can also use pretty-printed JSON.
         return json.loads(output)
 
+    command_options = scheduled_environment(job)
     started = monotonic_ns()
     deadline = min(started + job["timeout_seconds"] * 1000000000, job.get("_deadline_ns", (1 << 63) - 1))
     try:
-        submitted = run_bounded_command(job["submit"], deadline)
+        submitted = run_bounded_command(job["submit"], deadline, **command_options)
     except OSError as error:
         return {"outcome": "not_submitted", "error": str(error)[-8192:]}
     except subprocess.TimeoutExpired:
@@ -277,7 +287,9 @@ def scheduled_transaction(job):
     try:
         check = last_object(submitted.stdout)
         code = integer(check["code"], "CheckTx code")
-        if code:
+        # SDK code 19 reports an identical transaction already in the mempool;
+        # it can still commit, so retain signer ownership and query its hash.
+        if code and code != 19:
             return dict(result, outcome="checktx_rejected", code=code)
         txhash = check["txhash"]
         if not isinstance(txhash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash):
@@ -287,7 +299,7 @@ def scheduled_transaction(job):
         return result
     while monotonic_ns() < deadline:
         try:
-            queried = run_bounded_command([*job["query"], txhash], deadline)
+            queried = run_bounded_command([*job["query"], txhash], deadline, **command_options)
             committed = committed_tx(last_object(queried.stdout), txhash)
             observed = monotonic_ns()
             if observed >= deadline:
@@ -315,6 +327,7 @@ def scheduled_transaction(job):
 
 
 def validate_scheduled_command(job):
+    scheduled_environment(job)
     signer = job.get("signer", "")
     if not isinstance(signer, str) or not signer or signer != signer.lower():
         raise ValueError("signer must be the resolved canonical address")
