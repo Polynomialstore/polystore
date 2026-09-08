@@ -625,7 +625,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := "pending"
-	if errors.Is(err, errTxRejected) {
+	if errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
 		status = "failed"
 		if clearErr := changeFrozenSubmissions(entries, func(r *storedFrozenProof) { r.Submitting = false }, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
 			err = fmt.Errorf("%w; local recovery: %v", err, clearErr)

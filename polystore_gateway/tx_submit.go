@@ -9,16 +9,49 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 var errTxPending = errors.New("transaction outcome unknown")
 var errTxRejected = errors.New("transaction rejected before inclusion")
 var errTxFailed = errors.New("committed transaction failed")
+var errTxNotSubmitted = errors.New("transaction failed before broadcast")
 
 const maxCommittedTxResponseBytes = 4 << 20
+
+// Only these CLI commands implement the explicit phase contract. Each attempt
+// gets its own empty private file, so retry can never reuse an earlier marker.
+func execTrackedSubmission(ctx context.Context, args ...string) ([]byte, error) {
+	if len(args) < 3 || args[0] != "tx" || (args[2] != "submit-retrieval-proof" && args[2] != "prove-liveness-system") {
+		return execPolystorechaind(ctx, args...)
+	}
+	file, err := os.CreateTemp("", "polystore-submission-phase-*")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errTxNotSubmitted, err)
+	}
+	defer os.Remove(file.Name())
+	if err := file.Close(); err != nil {
+		return nil, fmt.Errorf("%w: %w", errTxNotSubmitted, err)
+	}
+	command := append(append([]string(nil), args...), "--submission-phase-file", file.Name())
+	out, err := execPolystorechaind(ctx, command...)
+	if err != nil {
+		phase, openErr := os.Open(file.Name())
+		if openErr == nil {
+			marker, readErr := io.ReadAll(io.LimitReader(phase, 128))
+			_ = phase.Close()
+			if readErr == nil && string(marker) == "polystore-submission-v1:not-broadcast\n" {
+				return out, fmt.Errorf("%w: %w", errTxNotSubmitted, err)
+			}
+		}
+	}
+	return out, err
+}
 
 func normalizeTxHash(raw string) (string, error) {
 	s := strings.TrimPrefix(strings.TrimSpace(raw), "0x")
@@ -142,9 +175,10 @@ func submitTxAndRecord(ctx context.Context, record func(string) error, args ...s
 	out, submitErr := runTxWithRetry(ctx, args...)
 	body := extractJSONBody(out)
 	var response struct {
-		Hash   string          `json:"txhash"`
-		Code   json.RawMessage `json:"code"`
-		RawLog string          `json:"raw_log"`
+		Hash      string          `json:"txhash"`
+		Code      json.RawMessage `json:"code"`
+		RawLog    string          `json:"raw_log"`
+		Codespace string          `json:"codespace"`
 	}
 	decodeErr := validateJSONObject(body)
 	if decodeErr == nil {
@@ -155,13 +189,27 @@ func submitTxAndRecord(ctx context.Context, record func(string) error, args ...s
 		hash, _ = normalizeTxHash(extractTxHash(string(out)))
 	}
 	code, codeErr := explicitTxCode(response.Code)
-	if decodeErr == nil && codeErr == nil && code != 0 {
+	// Cosmos can synthesize this response after the RPC reports an existing
+	// mempool transaction. It is still pending, not a rejection authorizing retry.
+	mempoolPending := response.Codespace == sdkerrors.RootCodespace && code == sdkerrors.ErrTxInMempoolCache.ABCICode()
+	if decodeErr == nil && codeErr == nil && code != 0 && !mempoolPending {
 		return hash, fmt.Errorf("%w: code %d: %.4096s", errTxRejected, code, response.RawLog)
 	}
 	if hash != "" && record != nil {
 		if err := record(hash); err != nil {
 			return hash, fmt.Errorf("%w: could not persist broadcast hash: %w", errTxPending, err)
 		}
+	}
+	if mempoolPending {
+		return hash, fmt.Errorf("%w: transaction already in mempool", errTxPending)
+	}
+	if hash == "" && errors.Is(submitErr, errTxNotSubmitted) {
+		return "", submitErr
+	}
+	if hash != "" && errors.Is(submitErr, errTxNotSubmitted) {
+		// Observed broadcast evidence wins over a contradictory phase report.
+		// Do not unwrap the local classification: callers must retain this intent.
+		return hash, fmt.Errorf("%w: conflicting CLI phase: %v", errTxPending, submitErr)
 	}
 	if submitErr != nil {
 		return hash, fmt.Errorf("%w: CLI submission: %w", errTxPending, submitErr)

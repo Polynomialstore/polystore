@@ -207,7 +207,9 @@ JSON input is limited to 2 MiB. Unsigned protobuf reserves 4 KiB for signing;
 final protobuf is limited to 1 MiB and online block byte/gas limits. Generate-only
 output (including offline) uses the 1 MiB / 64,000,000 gas profile ceilings.`,
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			phase := beginSubmissionPhase(cmd)
+			defer phase.finish(&err)
 			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
@@ -232,10 +234,15 @@ output (including offline) uses the 1 MiB / 64,000,000 gas profile ceilings.`,
 			if err != nil {
 				return err
 			}
+			bounded, err = phase.track(bounded)
+			if err != nil {
+				return err
+			}
 			return generateOrBroadcastTxCLIFn(bounded, cmd.Flags(), msgs...)
 		},
 	}
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(submissionPhaseFlag, "", "Write a final pre-broadcast failure marker for the invoking gateway")
 	return cmd
 }
 

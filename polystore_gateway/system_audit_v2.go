@@ -306,7 +306,7 @@ func storeSystemAuditIntent(in *systemAuditIntent) error {
 		return b.Put(auditIntentKey(in.Signer), raw)
 	})
 }
-func deleteSystemAuditIntent(in *systemAuditIntent, covered bool) error {
+func deleteSystemAuditIntent(in *systemAuditIntent, resolved bool) error {
 	return sessionDB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
@@ -320,7 +320,7 @@ func deleteSystemAuditIntent(in *systemAuditIntent, covered bool) error {
 			return fmt.Errorf("audit intent changed during reconciliation")
 		}
 		if old.State == "pending" {
-			if !covered {
+			if !resolved {
 				return fmt.Errorf("audit intent is unresolved")
 			}
 			var marker pendingSignerOperation
@@ -428,7 +428,13 @@ func submitFrozenSystemAudit(ctx context.Context, key string, in *systemAuditInt
 		"--from", key, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes",
 		// Includes 500k native verification and <=409,600 bounded sample derivation.
 		"--gas", "2000000", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
-	if err == nil || errors.Is(err, errTxFailed) || errors.Is(err, errTxRejected) {
+	if errors.Is(err, errTxNotSubmitted) {
+		// No transaction exists to reconcile. Release the exact intent and allow
+		// the still-live obligation to try again after the local problem is fixed.
+		if clearErr := deleteSystemAuditIntent(in, true); clearErr != nil {
+			return fmt.Errorf("%w; intent recovery: %v", err, clearErr)
+		}
+	} else if err == nil || errors.Is(err, errTxFailed) || errors.Is(err, errTxRejected) {
 		if saveErr := finishSystemAuditIntent(in, err); saveErr != nil {
 			return saveErr
 		}

@@ -351,7 +351,13 @@ func runCommand(ctx context.Context, name string, args []string, dir string) ([]
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	return cmd.CombinedOutput()
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Start(); err != nil {
+		return output.Bytes(), fmt.Errorf("%w: %w", errTxNotSubmitted, err)
+	}
+	err := cmd.Wait()
+	return output.Bytes(), err
 }
 
 func requireTxRelay(w http.ResponseWriter) bool {
@@ -758,15 +764,19 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 
 	for i := 0; i < maxRetries; i++ {
 		if ctx.Err() != nil {
-			return out, ctx.Err()
+			// Earlier attempts, if any, were explicitly rejected CheckTx results.
+			return nil, fmt.Errorf("%w: %w", errTxNotSubmitted, ctx.Err())
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 		var cmdOut []byte
 		var cmdErr error
-		cmdOut, cmdErr = execPolystorechaind(attemptCtx, args...) // Use the new execPolystorechaind
+		cmdOut, cmdErr = execTrackedSubmission(attemptCtx, args...)
 		cancel()
 		out = cmdOut
 		err = cmdErr
+		if errors.Is(err, errTxNotSubmitted) {
+			return out, err
+		}
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
 			return out, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
@@ -6347,7 +6357,7 @@ func submitLegacyRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		status := "pending"
-		if errors.Is(err, errTxRejected) || errors.Is(err, errTxFailed) {
+		if errors.Is(err, errTxRejected) || errors.Is(err, errTxFailed) || errors.Is(err, errTxNotSubmitted) {
 			status = "failed"
 			if clearErr := sessionDB.Update(func(tx *bolt.Tx) error {
 				return clearPendingSigner(tx, localProviderAddr, "retrieval", []string{sessionKey})
