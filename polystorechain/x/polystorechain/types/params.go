@@ -395,11 +395,17 @@ func (p Params) Validate() error {
 	if err := validateQuotaBpsPerEpoch(p.QuotaBpsPerEpochCold); err != nil {
 		return err
 	}
-	if err := validateQuotaMinBlobs(p.QuotaMinBlobs); err != nil {
-		return err
-	}
-	if err := validateQuotaMaxBlobs(p.QuotaMaxBlobs); err != nil {
-		return err
+	// V2 has one explicit disabled policy. Legacy zero maxima remain invalid
+	// parameters and keep their historical helper behavior for pre-v2 state.
+	disabledV2Audits := p.RetrievalV2ActivationHeight != 0 && p.QuotaMinBlobs == 0 && p.QuotaMaxBlobs == 0
+	if !disabledV2Audits {
+		if err := validateQuotaMinBlobs(p.QuotaMinBlobs); err != nil {
+			return err
+		}
+		if err := validateQuotaMaxBlobs(p.QuotaMaxBlobs); err != nil {
+			return err
+		}
+
 	}
 	if p.QuotaMaxBlobs != 0 && p.QuotaMinBlobs > p.QuotaMaxBlobs {
 		return fmt.Errorf("quota_min_blobs must be <= quota_max_blobs (got %d > %d)", p.QuotaMinBlobs, p.QuotaMaxBlobs)

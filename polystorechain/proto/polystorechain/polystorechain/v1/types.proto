@@ -4,6 +4,7 @@ package polystorechain.polystorechain.v1;
 import "gogoproto/gogo.proto";
 import "cosmos/base/v1beta1/coin.proto";
 import "cosmos_proto/cosmos.proto";
+import "polystorechain/polystorechain/v1/params.proto";
 
 option go_package = "polystorechain/x/polystorechain/types";
 
@@ -581,4 +582,33 @@ message SessionChunkProof {
 message RetrievalSessionProof {
   DownloadSessionReceipt session_receipt = 1 [(gogoproto.nullable) = false];
   repeated SessionChunkProof chunks = 2 [(gogoproto.nullable) = false];
+}
+
+// FrozenStorageAssignment is the bounded ACTIVE view and an immutable epoch input.
+message FrozenStorageAssignment {
+  uint64 deal_id = 1;
+  string provider = 2;
+  bytes manifest_root = 3;
+  RetrievalChallengeSnapshot snapshot = 4;
+  uint32 kind = 5;
+  uint64 deal_start = 6;
+}
+
+// Only exact, distinct system challenges set bits in coverage. Organic receipts
+// and pending repair work never modify this object.
+message FrozenStorageAudit {
+  uint64 epoch_id = 1;
+  FrozenStorageAssignment assignment = 2;
+  uint64 sample_count = 3;
+  bytes coverage = 4;
+  uint64 accepted_count = 5;
+  uint64 missed_epochs = 6;
+}
+
+message FrozenStorageAuditEpoch {
+  uint64 epoch_id = 1;
+  uint64 epoch_length = 2;
+  uint32 obligation_count = 3;
+  Params params = 4;
+  bool finalized = 5;
 }

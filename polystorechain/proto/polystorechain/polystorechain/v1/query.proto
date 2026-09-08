@@ -13,6 +13,21 @@ option go_package = "polystorechain/x/polystorechain/types";
 
 // Query defines the gRPC querier service.
 service Query {
+  // Complete bounded union of live session and retained audit generations.
+  // No provider filter: both assigned providers and authorized deputies retain it.
+  rpc RetainedGenerations(QueryRetainedGenerationsRequest) returns (QueryRetainedGenerationsResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/retained-generations";
+  }
+
+  // Current/previous bounded provider obligations, including distinct repair
+  // readiness. Roots and generations describe retention, not current Deal state.
+  rpc ListStorageAuditsByProvider(QueryListStorageAuditsByProviderRequest) returns (QueryListStorageAuditsByProviderResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/storage-audits/by-provider/{provider}";
+  }
+  rpc GetStorageAuditChallenge(QueryGetStorageAuditChallengeRequest) returns (QueryGetStorageAuditChallengeResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/storage-audits/{epoch_id}/{deal_id}/{slot}/{provider}";
+  }
+
   // Parameters queries the parameters of the module.
   rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/params";
@@ -513,4 +528,42 @@ message QueryListEvidenceCasesRequest {
 message QueryListEvidenceCasesResponse {
   repeated EvidenceCase evidence = 1 [(gogoproto.nullable) = false];
   cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryListStorageAuditsByProviderRequest { string provider = 1; }
+message StorageAuditView {
+  FrozenStorageAudit audit = 1;
+  uint64 epoch_length = 2;
+  bytes canonical_context = 3;
+  bytes seed = 4;
+  bool finalized = 5;
+}
+message QueryListStorageAuditsByProviderResponse { repeated StorageAuditView audits = 1 [(gogoproto.nullable) = false]; }
+message QueryGetStorageAuditChallengeRequest {
+  uint64 epoch_id = 1;
+  uint64 deal_id = 2;
+  uint32 slot = 3;
+  string provider = 4;
+}
+message StorageAuditChallenge {
+  uint64 ordinal = 1;
+  uint64 population_index = 2;
+  uint64 mdu_index = 3;
+  uint32 leaf_index = 4;
+  bytes z = 5;
+}
+message QueryGetStorageAuditChallengeResponse {
+  StorageAuditView audit = 1;
+  repeated StorageAuditChallenge challenges = 2 [(gogoproto.nullable) = false];
+}
+
+message QueryRetainedGenerationsRequest {}
+message RetainedGeneration {
+  uint64 deal_id = 1;
+  uint64 generation = 2;
+  bytes manifest_root = 3;
+}
+message QueryRetainedGenerationsResponse {
+  uint64 committed_height = 1;
+  repeated RetainedGeneration generations = 2 [(gogoproto.nullable) = false];
 }

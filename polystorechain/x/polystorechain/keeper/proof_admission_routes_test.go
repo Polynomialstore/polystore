@@ -66,6 +66,31 @@ func TestNativeLegacyBatchPrepaysAllCrypto(t *testing.T) {
 			found, err := env.f.keeper.ReceiptNoncesByDealFile.Has(base, collections.Join(deal.Id, "file0"))
 			require.NoError(t, err)
 			require.False(t, found)
+			if invalid < 0 {
+				// This exact signed, valid legacy batch succeeded before activation.
+				// After activation every ordinary variant must fail before crypto,
+				// consuming neither its fresh receipt nonce nor any payout state.
+				blocked, _ := base.CacheContext()
+				require.NoError(t, env.f.keeper.RetrievalV2ActivatedHeight.Set(blocked, 1))
+				blocked = blocked.WithGasMeter(storetypes.NewGasMeter(keeper.ProofCryptoGas - 1))
+				messages := []*types.MsgProveLiveness{
+					msg,
+					{Creator: env.provider, DealId: deal.Id, EpochId: 1, ProofType: &types.MsgProveLiveness_UserReceipt{UserReceipt: &receipts[0]}},
+					{Creator: env.provider, DealId: deal.Id, EpochId: 1, ProofType: &types.MsgProveLiveness_SessionProof{SessionProof: &types.RetrievalSessionProof{}}},
+					{Creator: env.provider, DealId: deal.Id, EpochId: 1},
+				}
+				for _, legacy := range messages {
+					_, err := env.msgServer.ProveLiveness(blocked, legacy)
+					require.ErrorContains(t, err, "open a new funded v2 retrieval session")
+				}
+				unchanged, err := env.f.keeper.Deals.Get(blocked, deal.Id)
+				require.NoError(t, err)
+				require.Equal(t, deal, unchanged)
+				hasNonce, err := env.f.keeper.ReceiptNoncesByDealFile.Has(blocked, collections.Join(deal.Id, "file0"))
+				require.NoError(t, err)
+				require.False(t, hasNonce)
+				require.Empty(t, blocked.EventManager().Events())
+			}
 		})
 	}
 	// A cryptographically invalid first proof would return an error if entered.

@@ -33,6 +33,12 @@ func (k Keeper) SetParams(ctx context.Context, params types.Params) error {
 	if err != nil {
 		return err
 	}
+	if active != 0 && current.EpochLenBlocks != params.EpochLenBlocks {
+		return fmt.Errorf("storage audit epoch length cannot change while v2 active")
+	}
+	if active != 0 && (params.QuotaMaxBlobs > 4096 || params.QuotaMinBlobs > 4096) {
+		return fmt.Errorf("storage audit quota exceeds protocol cap")
+	}
 	height := sdk.UnwrapSDKContext(ctx).BlockHeight()
 	if current.RetrievalV2ActivationHeight != params.RetrievalV2ActivationHeight && params.RetrievalV2ActivationHeight != 0 && height >= 0 && params.RetrievalV2ActivationHeight <= uint64(height) {
 		return fmt.Errorf("retrieval v2 activation must be scheduled in the future")

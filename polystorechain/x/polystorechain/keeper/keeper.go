@@ -69,6 +69,12 @@ type Keeper struct {
 	RetrievalSessionGenerationCounts collections.Map[uint64, uint64]
 	RetrievalSessionGenerationCount  collections.Item[uint64]
 
+	StorageAuditAssignments    collections.Map[string, types.FrozenStorageAssignment]
+	StorageAuditEpochs         collections.Map[uint64, types.FrozenStorageAuditEpoch]
+	StorageAudits              collections.Map[collections.Pair[uint64, uint32], types.FrozenStorageAudit]
+	StorageAuditEpochLength    collections.Item[uint64]
+	StorageAuditGenerationRefs collections.Map[collections.Pair[uint64, uint64], uint64]
+
 	VoucherUsedNonces                collections.Map[collections.Pair[uint64, uint64], bool]
 	AuditTasks                       collections.Map[collections.Pair[uint64, uint64], types.AuditTask]
 	VirtualStripes                   collections.Map[collections.Pair[uint64, uint32], types.VirtualStripe]
@@ -184,6 +190,12 @@ func NewKeeper(
 		RetrievalSessionGenerationRefs:   collections.NewMap(sb, types.RetrievalSessionGenerationRefsKey, "retrieval_session_generation_refs", collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key), collections.Uint64Value),
 		RetrievalSessionGenerationCounts: collections.NewMap(sb, types.RetrievalSessionGenerationCountsKey, "retrieval_session_generation_counts", collections.Uint64Key, collections.Uint64Value),
 		RetrievalSessionGenerationCount:  collections.NewItem(sb, types.RetrievalSessionGenerationCountKey, "retrieval_session_generation_count", collections.Uint64Value),
+
+		StorageAuditAssignments:    collections.NewMap(sb, types.StorageAuditAssignmentsKey, "storage_audit_assignments", collections.StringKey, codec.CollValue[types.FrozenStorageAssignment](cdc)),
+		StorageAuditEpochs:         collections.NewMap(sb, types.StorageAuditEpochsKey, "storage_audit_epochs", collections.Uint64Key, codec.CollValue[types.FrozenStorageAuditEpoch](cdc)),
+		StorageAudits:              collections.NewMap(sb, types.StorageAuditsKey, "storage_audits", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), codec.CollValue[types.FrozenStorageAudit](cdc)),
+		StorageAuditEpochLength:    collections.NewItem(sb, types.StorageAuditEpochLengthKey, "storage_audit_epoch_length", collections.Uint64Value),
+		StorageAuditGenerationRefs: collections.NewMap(sb, types.StorageAuditGenerationRefsKey, "storage_audit_generation_refs", collections.PairKeyCodec(collections.Uint64Key, collections.Uint64Key), collections.Uint64Value),
 
 		VoucherUsedNonces: collections.NewMap(
 			sb,

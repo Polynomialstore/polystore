@@ -1754,6 +1754,9 @@ func (p *Precompile) runUpdateDealRetrievalPolicy(ctx sdk.Context, evm *vm.EVM, 
 }
 
 func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contract *vm.Contract, method *abi.Method, data []byte) ([]byte, error) {
+	if err := p.keeper.RequireLegacyRetrieval(ctx); err != nil {
+		return nil, err
+	}
 	args := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(args, data); err != nil {
 		return nil, fmt.Errorf("proveRetrievalBatch: failed to unpack args: %w", err)

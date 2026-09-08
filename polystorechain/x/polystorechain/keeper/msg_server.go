@@ -1253,6 +1253,17 @@ func livenessTierForLatency(latency int64) (uint32, string, math.LegacyDec) {
 // ProveLiveness handles MsgProveLiveness to verify KZG proofs and process rewards.
 func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiveness) (*types.MsgProveLivenessResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
+	if _, system := msg.ProofType.(*types.MsgProveLiveness_SystemProof); system {
+		v2, err := k.RetrievalV2Active(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if v2 {
+			return k.proveFrozenStorageAudit(ctx, msg)
+		}
+	} else if err := k.RequireLegacyRetrieval(ctx); err != nil {
+		return nil, err
+	}
 
 	params := k.GetParams(ctx)
 	if params.EpochLenBlocks == 0 {
@@ -1946,6 +1957,10 @@ func (k msgServer) recordProofSummary(ctx sdk.Context, creator string, msg *type
 // failure counter and logs when a pair would be considered "degraded" under a
 // full HealthState-based eviction policy.
 func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider string, proofOK bool) {
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil || active {
+		return
+	}
 	key := collections.Join(dealID, provider)
 
 	if proofOK {
