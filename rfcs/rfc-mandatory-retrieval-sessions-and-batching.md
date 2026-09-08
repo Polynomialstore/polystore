@@ -149,3 +149,44 @@ Future optimizations that remain compatible:
 - **Session proof batching:** batch submit proof for multiple sessions in one tx.
 
 Any such optimization MUST preserve the frozen owner-paid settlement semantics.
+
+## 6. Chain proof admission and finite qualification profile (#255)
+
+These consensus validation changes require a coordinated binary upgrade. Merging
+them does not activate challenge v2 or qualify the data-plane requirements above.
+
+| Boundary | Limit / behavior |
+| --- | --- |
+| Raw native/EVM-wrapped transaction | 1 MiB, checked by BaseApp's decoder before protobuf materialization |
+| Proposal transaction body | Check every raw transaction and the aggregate protobuf-framed size against consensus `block.max_bytes` before the first transaction decode; CometBFT separately bounds the complete block |
+| Declared proof list | 1–64 proofs, at most 128 KiB of admitted proof/receipt envelope |
+| Precompile ABI | 256 KiB calldata body; arrays at most 64 elements; bytes/string values at most 4096 bytes; at most 8192 visited values before geth decoding |
+| ABI dynamic tails | Contiguous in declaration order, with no aliasing, repeated tails or unused trailing bytes; the existing ABI encoders generate this shape |
+| Merkle witnesses | Exactly the siblings consumed for the actual leaf count and index, including odd-node promotion; unused trailing siblings are rejected |
+| User MDU | `WitnessMdus < mdu_index < TotalMdus`; missing/zero legacy `TotalMdus` requires an explicit valid content commit before proving |
+
+After cheap admission of the whole declared list, reserve **500,000 SDK gas per
+proof before the first FFI call**. This covers the crypto component for two KZG
+verification hops and Merkle verification. Invalid-first/middle/last positions
+pay the same crypto component. Authenticated no-op retries do no crypto; there
+are no duplicate, cache or batching discounts. Native KV/bank work is additional.
+The EVM static charge remains `200000 + 64 * len(input)`; the native-action wrapper
+then meters actual native work against the child's remaining gas and charges it
+once, including failures. A budget covering only static work cannot enter FFI.
+
+Enabled legacy receipts retain `ceil(bytes/1024)` pricing using division and
+remainder. One proof can claim only 1–126,976 payload bytes, with checked range
+end within committed content. Their envelope lacks an authenticated file-table
+offset, so these bounds cannot prove exact file-to-blob mapping. Versioned
+activation must quarantine these unbound routes; they are not a substitute for
+the all-opened-blob challenge session contract in #254.
+
+`scripts/retrieval_consensus_profile.json` supplies positive finite **2 MiB block
+bytes / 64,000,000 block gas** to the benchmark's newly created isolated genesis.
+The result records these values; ordinary node genesis defaults are unchanged.
+The candidate gas rate and block limits are preliminary bounds, not a throughput
+or permissionless-security claim. #260 must measure honest generation/admission
+and admitted-state maxima, including the separate fixed audit demand, before
+coordinated activation. Run focused checks with `scripts/chain_go.sh test -p 2
+./app ./precompiles/polystore ./x/polystorechain/keeper` and the real entrypoint
+regressions with `python3 scripts/test_bench_retrieval_sessions.py`.

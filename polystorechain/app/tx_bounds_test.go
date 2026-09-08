@@ -16,8 +16,12 @@ import (
 func TestRetrievalConsensusProfile(t *testing.T) {
 	raw, err := os.ReadFile("../../scripts/retrieval_consensus_profile.json")
 	require.NoError(t, err)
+	var profile struct {
+		Block cmttypes.BlockParams `json:"block"`
+	}
+	require.NoError(t, cmtjson.Unmarshal(raw, &profile))
 	params := cmttypes.DefaultConsensusParams()
-	require.NoError(t, cmtjson.Unmarshal(raw, params))
+	params.Block = profile.Block
 	require.NoError(t, params.ValidateBasic())
 	require.Positive(t, params.Block.MaxGas)
 	require.Greater(t, params.Block.MaxBytes, int64(MaxTransactionBytes))
