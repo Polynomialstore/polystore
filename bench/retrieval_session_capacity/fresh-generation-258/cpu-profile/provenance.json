@@ -1,0 +1,56 @@
+{
+  "purpose": "bounded native CPU diagnostic; no capacity or performance comparison qualification",
+  "qualification": false,
+  "args": [
+    "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/keeper-mixed.test",
+    "-test.run=^$",
+    "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+    "-test.benchtime=1x",
+    "-test.count=1",
+    "-test.timeout=45s"
+  ],
+  "cwd": "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/x/polystorechain/keeper",
+  "env": {
+    "GOMAXPROCS": "2",
+    "DYLD_LIBRARY_PATH": "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release"
+  },
+  "sha256": {
+    "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/keeper-mixed.test": "a0fc699d79460f55493ca9fcd512893bd3bb793fe3004ed2174657bbbc6a4be0",
+    "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+    "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "source_head": "32ad85bd93d8d479d78325704c907d6cecba4782",
+  "benchmark_build_provenance": {
+    "qualification": false,
+    "purpose": "actual benchmark entrypoint smoke after warmup nonce correction; no retained performance comparison",
+    "fixture_commit": "d2fa788f",
+    "source_version": "8b6e2b69",
+    "benchtime": "1x",
+    "sha256": {
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-mixed/polystorechain/x/polystorechain/keeper/retrieval_v2_bench_test.go": "63c54fc917602b493ed722cc2c916bc58f1866f8a2e8bb136090eaed71109489",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/keeper-mixed.test": "a0fc699d79460f55493ca9fcd512893bd3bb793fe3004ed2174657bbbc6a4be0",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/overlay.json": "aa3221b219fe97f51e67b81bbc293483168b887952950d0e16c920b20be887c7",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/warmup-green.log": "0332ea712e1f8455b31e9101b79003c014aae04d702416d536446fa699f459ad",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0"
+    }
+  },
+  "pid": 7865,
+  "sample_args": [
+    "/usr/bin/sample",
+    "7865",
+    "10",
+    "1",
+    "-file",
+    "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/native-cpu-profile-1x/sample.txt"
+  ],
+  "sample_returncode": 0,
+  "benchmark_returncode": 0,
+  "elapsed_seconds": 13.674515542,
+  "retained_artifact_sha256": {
+    "sample.txt": "77b31868eb57ac12b7c5ad60ba54f76f818c5cc137b754b91248e0957aaa6e08",
+    "sample-command.log": "2191f787dd542938dd892c31fd5b6a2de3756732b11decf5a13301249390eae0",
+    "benchmark.log": "56c15bddadca6244a6d6a7884401b2968b8d61363fd55cf68c65a9248c1694fd",
+    "summary.json": "0bebe1aa03fafc48b7adac3a16b7e1e1d8e076102f23439580119241aa24f2ed",
+    "summary.md": "c97628924b5b02c7b0a3348bafdc994ec6a9f73407765b28fc78c7487ed735d8"
+  }
+}
