@@ -117,7 +117,7 @@ echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
   (cd "$ROOT_DIR/polystore-website" && npx playwright install --with-deps chromium)
 fi
-if [ "${E2E_MODE2_STREAMED_BYTES:-0}" = "1073741824" ]; then
+if [ "${E2E_MODE2_STREAMED:-0}" = "1" ] && [ "${E2E_MODE2_STREAMED_BYTES:-0}" = "1073741824" ]; then
   # Prove the browser can persist the full output before funding a long retrieval.
   (cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/retrieval-v2-browser.spec.ts --grep '1GiB OPFS' --retries=0 --workers=1)
 fi
