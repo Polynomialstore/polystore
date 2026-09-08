@@ -11,23 +11,30 @@ const __dirname = path.dirname(__filename)
 type PolyStoreWasmLike = {
   expand_mdu_rs: (encodedUserMdu: Uint8Array, k: number, m: number) => unknown
   expand_payload_rs_flat: (payloadBytes: Uint8Array, k: number, m: number) => unknown
+  commit_mdu: (mdu: Uint8Array) => { mdu_root: number[] }
+  free: () => void
   compute_mdu_root: (witnessFlat: Uint8Array) => unknown
 }
 
-async function loadPolyStoreCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; PolyStoreWasm: new (trustedSetupBytes: Uint8Array) => PolyStoreWasmLike; wasmPath: string }> {
+type MetadataBuilder = {
+  set_root: (index: bigint, root: Uint8Array) => void
+  append_file: (path: string, size: bigint, start: bigint) => void
+  bytes: () => Uint8Array
+  free: () => void
+}
+
+async function loadPolyStoreCoreWasm() {
   const jsPath = path.resolve(__dirname, '../../public/wasm/polystore_core.js')
   const wasmPath = path.resolve(__dirname, '../../public/wasm/polystore_core_bg.wasm')
-  try {
-    await fs.access(jsPath)
-    await fs.access(wasmPath)
-  } catch {
-    return null
-  }
+  // These are maintained artifacts. A missing bundle must fail this parity gate.
+  await fs.access(jsPath)
+  await fs.access(wasmPath)
   const mod = (await import(pathToFileURL(jsPath).href)) as {
     default: (args: unknown) => Promise<unknown>
     PolyStoreWasm: new (trustedSetupBytes: Uint8Array) => PolyStoreWasmLike
+    WasmMdu0Builder: { new_with_commitments: (max: bigint, leaves: bigint) => MetadataBuilder }
   }
-  return { init: mod.default, PolyStoreWasm: mod.PolyStoreWasm, wasmPath }
+  return { init: mod.default, PolyStoreWasm: mod.PolyStoreWasm, WasmMdu0Builder: mod.WasmMdu0Builder, wasmPath }
 }
 
 function sha256Hex0x(bytes: Uint8Array): string {
@@ -66,17 +73,34 @@ function encodePayloadToMdu(rawData: Uint8Array): Uint8Array {
   return mdu
 }
 
-test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
+// Independent fixed FAT wire encoding and integer reduction, without producer helpers.
+function rootCell(root: Uint8Array): Uint8Array {
+  const fr = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n
+  return hexToBytes((BigInt(bytesToHex0x(root)) % fr).toString(16).padStart(64, '0'))
+}
+
+function independentMdu0(payloadLength: number, witnessRoot: Uint8Array, userRoot: Uint8Array): Uint8Array {
+  const mdu = new Uint8Array(8 * 1024 * 1024)
+  mdu.set(rootCell(witnessRoot), 0)
+  mdu.set(rootCell(userRoot), 32)
+  const fat = new Uint8Array(384)
+  fat.set([78, 73, 76, 70, 2, 0, 0, 1])
+  const view = new DataView(fat.buffer)
+  view.setUint32(8, 1, true)
+  view.setBigUint64(136, BigInt(payloadLength), true)
+  fat.set(new TextEncoder().encode('fixture.bin'), 152)
+  fat.forEach((byte, index) => { mdu[16 * 128 * 1024 + Math.floor(index / 31) * 32 + 1 + index % 31] = byte })
+  return mdu
+}
+
+test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async () => {
   const wasm = await loadPolyStoreCoreWasm()
-  if (!wasm) {
-    t.skip('WASM artifacts not present (polystore-website/public/wasm).')
-    return
-  }
   const repoRoot = path.resolve(__dirname, '../../..')
   const fixturePath = path.join(repoRoot, 'testdata/mode2-artifacts-v1/fixture_k8m4_single.json')
   const fixtureRaw = await fs.readFile(fixturePath, 'utf8')
   const fx = JSON.parse(fixtureRaw) as {
     spec: string
+    mdu0_format_version: number
     k: number
     m: number
     leaf_count: number
@@ -89,6 +113,7 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
   }
 
   assert.strictEqual(fx.spec, 'mode2-artifacts-v1')
+  assert.strictEqual(fx.mdu0_format_version, 2)
   assert.strictEqual(fx.k, 8)
   assert.strictEqual(fx.m, 4)
   assert.strictEqual(fx.leaf_count, 96)
@@ -128,6 +153,27 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
   const userRoot = userRootRaw instanceof Uint8Array ? userRootRaw : new Uint8Array(userRootRaw as ArrayBufferLike)
   assert.strictEqual(bytesToHex0x(userRoot), fx.roots['user_mdu_root'])
 
+  assert.strictEqual(sha256Hex0x(encodedUser), fx.extra['encoded_user_mdu_sha256'])
+  const witnessMdu = encodePayloadToMdu(witnessFlat)
+  assert.strictEqual(sha256Hex0x(witnessMdu), fx.artifact_sha256['mdu_1.bin'])
+  const witnessRoot = new Uint8Array(polyStoreWasm.commit_mdu(witnessMdu).mdu_root)
+  assert.strictEqual(bytesToHex0x(witnessRoot), fx.roots['witness_mdu_root'])
+  const mdu0 = independentMdu0(payload.length, witnessRoot, userRoot)
+  const builder = wasm.WasmMdu0Builder.new_with_commitments(1n, 96n)
+  try {
+    builder.set_root(0n, witnessRoot)
+    builder.set_root(1n, userRoot)
+    builder.append_file('fixture.bin', BigInt(payload.length), 0n)
+    assert.deepStrictEqual(builder.bytes(), mdu0)
+  } finally { builder.free() }
+  assert.strictEqual(sha256Hex0x(mdu0), fx.artifact_sha256['mdu_0.bin'])
+  const mdu0Root = new Uint8Array(polyStoreWasm.commit_mdu(mdu0).mdu_root)
+  assert.strictEqual(bytesToHex0x(mdu0Root), fx.roots['mdu0_root'])
+  assert.strictEqual(fx.roots['manifest_root'], fx.roots['mdu0_root'])
+  const manifest = new Uint8Array(128 * 1024)
+  ;[mdu0Root, witnessRoot, userRoot].forEach((root, index) => manifest.set(rootCell(root), index * 32))
+  assert.strictEqual(sha256Hex0x(manifest), fx.artifact_sha256['manifest.bin'])
+
   // Fixture shard artifacts: single user MDU => slab_index = 1 + W, W=1 => 2.
   const slabIndex = 2
   for (let slot = 0; slot < shardsList.length; slot++) {
@@ -157,4 +203,5 @@ test('mode2-artifacts-v1 fixture: WASM matches golden hashes', async (t) => {
     const end = start + payloadShardLen
     assert.deepStrictEqual(payloadShardsFlat.slice(start, end), shardsList[slot])
   }
+  polyStoreWasm.free()
 })
