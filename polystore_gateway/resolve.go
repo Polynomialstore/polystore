@@ -232,7 +232,7 @@ func ResolveFileByPath(dealDir string, filePath string) (io.ReadCloser, uint64, 
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return nil, 0, err
 		}
 		// Decode path
 		if rec.Path[0] == 0 {
@@ -286,7 +286,7 @@ func GetFileLocation(dealDir, filePath string) (mduIndex uint64, mduPath string,
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return 0, "", 0, err
 		}
 		if rec.Path[0] == 0 {
 			continue
@@ -336,7 +336,7 @@ func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uin
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return 0, 0, 0, err
 		}
 		if rec.Path[0] == 0 {
 			continue
@@ -369,7 +369,7 @@ func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return 0, err
 		}
 		if rec.Path[0] == 0 {
 			continue
@@ -382,7 +382,7 @@ func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error
 	}
 	userCount := uint64(0)
 	if maxEnd > 0 {
-		userCount = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+		userCount = 1 + (maxEnd-1)/RawMduCapacity
 	}
 
 	entries, err := os.ReadDir(dealDir)

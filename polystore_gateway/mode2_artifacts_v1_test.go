@@ -14,16 +14,17 @@ import (
 )
 
 type mode2Fixture struct {
-	Spec          string            `json:"spec"`
-	K             uint64            `json:"k"`
-	M             uint64            `json:"m"`
-	LeafCount     uint64            `json:"leaf_count"`
-	PayloadHex    string            `json:"payload_hex"`
-	PayloadSha256 string            `json:"payload_sha256"`
-	WitnessCount  uint64            `json:"witness_count"`
-	Roots         map[string]string `json:"roots"`
-	ArtifactSha   map[string]string `json:"artifact_sha256"`
-	Extra         map[string]any    `json:"extra"`
+	Mdu0FormatVersion uint8             `json:"mdu0_format_version"`
+	Spec              string            `json:"spec"`
+	K                 uint64            `json:"k"`
+	M                 uint64            `json:"m"`
+	LeafCount         uint64            `json:"leaf_count"`
+	PayloadHex        string            `json:"payload_hex"`
+	PayloadSha256     string            `json:"payload_sha256"`
+	WitnessCount      uint64            `json:"witness_count"`
+	Roots             map[string]string `json:"roots"`
+	ArtifactSha       map[string]string `json:"artifact_sha256"`
+	Extra             map[string]any    `json:"extra"`
 }
 
 func readMode2Fixture(t *testing.T) mode2Fixture {
@@ -65,6 +66,10 @@ func TestMode2ArtifactsV1_FixtureHashes(t *testing.T) {
 	fx := readMode2Fixture(t)
 	if fx.Spec != "mode2-artifacts-v1" {
 		t.Fatalf("unexpected spec: %s", fx.Spec)
+	}
+
+	if fx.Mdu0FormatVersion != 2 {
+		t.Fatalf("unexpected MDU0 format version: %d", fx.Mdu0FormatVersion)
 	}
 
 	payload := decodeHex0x(t, fx.PayloadHex)

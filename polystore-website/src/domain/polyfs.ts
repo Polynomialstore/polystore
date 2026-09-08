@@ -31,7 +31,8 @@ export interface SlabLayoutData {
 export interface MduRootRecord {
   mdu_index: number
   kind: 'mdu0' | 'witness' | 'user'
-  root_hex: string
+  root_hex?: string
+  root_table_cell_hex?: string
   root_table_index?: number
 }
 

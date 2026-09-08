@@ -37,10 +37,20 @@ export class WasmMdu0Builder {
   constructor(max_user_mdus: bigint);
   static new_with_commitments(max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder;
   static load(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder;
+  static load_legacy_recovery(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder;
+  static stage_v2_from_trusted_legacy(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder;
   append_file(path: string, size: bigint, start_offset: bigint): void;
   append_file_with_flags(path: string, size: bigint, start_offset: bigint, flags: number): void;
   bytes(): Uint8Array;
   set_root(index: bigint, root: Uint8Array): void;
+  get_record_count(): number;
+  is_legacy_recovery(): boolean;
+  get_record(index: number): Uint8Array;
+  read_fat_range(offset: number, len: number): Uint8Array;
+  /**
+   * Returns the stored cell, not the original digest supplied to set_root.
+   */
+  get_root(index: bigint): Uint8Array;
   get_witness_count(): bigint;
 }
 
@@ -75,13 +85,20 @@ export interface InitOutput {
   readonly polystorewasm_set_pippenger_window_bits: (a: number, b: number) => [number, number];
   readonly polystorewasm_set_wasm_msm_basis_mode: (a: number, b: number, c: number) => [number, number];
   readonly __wbg_wasmmdu0builder_free: (a: number, b: number) => void;
-  readonly wasmmdu0builder_new: (a: bigint) => number;
-  readonly wasmmdu0builder_new_with_commitments: (a: bigint, b: bigint) => number;
-  readonly wasmmdu0builder_load: (a: number, b: number, c: bigint, d: bigint) => [number, number, number];
-  readonly wasmmdu0builder_append_file: (a: number, b: number, c: number, d: bigint, e: bigint) => [number, number];
-  readonly wasmmdu0builder_append_file_with_flags: (a: number, b: number, c: number, d: bigint, e: bigint, f: number) => [number, number];
+  readonly wasmmdu0builder_new: (a: any) => [number, number, number];
+  readonly wasmmdu0builder_new_with_commitments: (a: any, b: any) => [number, number, number];
+  readonly wasmmdu0builder_load: (a: number, b: number, c: any, d: any) => [number, number, number];
+  readonly wasmmdu0builder_load_legacy_recovery: (a: number, b: number, c: any, d: any) => [number, number, number];
+  readonly wasmmdu0builder_stage_v2_from_trusted_legacy: (a: number, b: number, c: any, d: any) => [number, number, number];
+  readonly wasmmdu0builder_append_file: (a: number, b: any, c: any, d: any) => [number, number];
+  readonly wasmmdu0builder_append_file_with_flags: (a: number, b: any, c: any, d: any, e: number) => [number, number];
   readonly wasmmdu0builder_bytes: (a: number) => [number, number];
-  readonly wasmmdu0builder_set_root: (a: number, b: bigint, c: number, d: number) => [number, number];
+  readonly wasmmdu0builder_set_root: (a: number, b: any, c: number, d: number) => [number, number];
+  readonly wasmmdu0builder_get_record_count: (a: number) => number;
+  readonly wasmmdu0builder_is_legacy_recovery: (a: number) => number;
+  readonly wasmmdu0builder_get_record: (a: number, b: number) => [number, number, number, number];
+  readonly wasmmdu0builder_read_fat_range: (a: number, b: number, c: number) => [number, number, number, number];
+  readonly wasmmdu0builder_get_root: (a: number, b: any) => [number, number, number, number];
   readonly wasmmdu0builder_get_witness_count: (a: number) => bigint;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

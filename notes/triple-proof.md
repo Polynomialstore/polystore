@@ -55,7 +55,7 @@ MDU #0 is an 8 MiB unit strictly partitioned into two regions:
 | Blob Range | Content | Format | Capacity |
 | :--- | :--- | :--- | :--- |
 | **0 - 15** | **Root Table** | `[Scalar; 65536]` | Roots for MDUs #1..#65536 |
-| **16 - 63** | **File Table** | Header + `[FileRecord; N]` | ~98k Files |
+| **16 - 63** | **File Table** | FAT v2: fixed 31/32 packing | 23,807 records |
 
 **1. The Root Table (Blobs 0-15)**
 A contiguous array of 32-byte BLS12-381 Scalars.
@@ -66,19 +66,23 @@ A contiguous array of 32-byte BLS12-381 Scalars.
 
 **2. The File Table (Blobs 16-63)**
 A metadata region describing the files stored within the User Data Slab.
+The canonical FAT v2 wire mapping, validation and explicit legacy migration are
+defined in [the root contract](../rfcs/rfc-polyfs-root-contract.md#51-canonical-fat-v2).
+Offsets below refer to the decoded fixed 6,094,848-byte logical FAT.
 
-**Header (Blob 16, Offset 0):**
+**Header (logical FAT offset 0):**
 ```rust
 struct FileTableHeader {
     magic: [u8; 4],      // "NILF" (0x4E494C46)
-    version: u8,         // Version of this Header format (e.g., 1)
-    record_size: u16,    // Size of each FileRecord in bytes (e.g., 64)
-    record_count: u32,   // Number of active records
-    _reserved: [u8; 117] // Padding
+    version: u8,         // 2
+    _pad: u8,           // zero
+    record_size: u16,    // 256
+    record_count: u32,   // Includes tombstone records
+    _reserved: [u8; 116] // Padding
 }
 ```
 
-**Records (Blob 16+, Offset 128):**
+**Records (logical FAT offset 128):**
 ```rust
 struct FileRecordV1 {
     // Global byte offset from start of the FIRST USER DATA MDU.
@@ -94,9 +98,9 @@ struct FileRecordV1 {
 
     // Null-terminated filename/path. Padded with 0x00.
     // If path[0] == 0x00, the record is a TOMBSTONE (Deleted/Free).
-    path: [u8; 40],    // 40 bytes
+    path: [u8; 232],   // Full 232-byte path or zero-padded shorter path
 }
-// Total Size: 64 Bytes.
+// Total Size: 256 Bytes.
 
 // Flags (Top 8 bits of length_and_flags):
 // Bit 7 (0x80): ENCRYPTED (1 if client-side encrypted, 0 otherwise)
@@ -112,7 +116,7 @@ This contiguous block of MDUs (immediately following MDU #0) stores the KZG Blob
     *   For a *planned* maximum of `N_user_mdus`, total blob commitments = `N_user_mdus * commitments_per_user_mdu`.
     *   `commitments_per_user_mdu` is the target MDU root profile leaf count selected by the committed deal mode/profile. Replicated user MDUs use 64. Mode 2 striped user SP-MDUs use `L = (K+M)*(64/K)`; the default `K=8`, `M=4` profile uses 96.
     *   Total size of commitments = `N_user_mdus * commitments_per_user_mdu * 48 bytes`.
-    *   `W = ceil( (N_user_mdus * commitments_per_user_mdu * 48) / (8 * 1024 * 1024) )`.
+    *   `W = ceil( (N_user_mdus * commitments_per_user_mdu * 48) / 8_126_464 )`.
     *   A Mode 2 gateway/client MUST NOT reserve Witness MDUs with the old `N_user_mdus * 64` formula, because that omits parity-slot commitments and prevents proofs for leaves `64..95`.
     *   **Devnet note:** `N_user_mdus` is currently an off-chain input (e.g., a gateway/client parameter). The on-chain Deal does not store this reservation.
 *   **Structure:** Witness MDUs are a packed, contiguous array of 48-byte G1 Points (Compressed).

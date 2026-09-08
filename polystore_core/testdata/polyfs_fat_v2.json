@@ -1,0 +1,22 @@
+{
+  "description": "Independent Python integer and struct oracle; fixed 31-byte FAT packing; all unspecified bytes zero",
+  "root_digest_hex": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+  "root_cell_hex": "1824b159acc5056f998c4fefecbc4ff55884b7fa0003480200000001fffffffc",
+  "records": [
+    {
+      "path": "dir/é.txt",
+      "start": "0",
+      "length": "31",
+      "flags": 129,
+      "timestamp": "17"
+    },
+    {
+      "path": "a//./b",
+      "start": "8126464",
+      "length": "1",
+      "flags": 0,
+      "timestamp": "18"
+    }
+  ],
+  "mdu0_sha256": "bbcd686e1b99f645e9e05c21b9ec45497b478906461e1dd64f71534dcfe27757"
+}
