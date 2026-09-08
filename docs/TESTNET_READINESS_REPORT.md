@@ -4,6 +4,26 @@ Date: 2026-02-05
 
 This report is the Phase 8 deliverable from `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
+## Retrieval v2 qualification update (2026-09-08)
+
+Retrieval v2 remains disabled by default. Its challenge, signer/payee, verified
+byte and independent storage-audit boundaries are documented in the
+[qualification report](../performance/retrieval-v2-qualification.md).
+The profile assumes trusted non-grinding block proposers; it does not qualify
+permissionless randomness, exclusive custody or guaranteed fresh delivery.
+
+The retained local capacity measurement uses four validator processes on one
+Apple workstation, finite 64M gas / 2 MiB blocks and a prepared-proof workload.
+The highest stable tested offered rate is 2 sessions/s over one 180-second step;
+4/s saturates the queue. All audit epochs intersecting the 900-second stepped
+measurement finalized 96/96 samples before interruption, and fixed Commit/RSS
+budgets passed. A later disk-guard interruption and supplementary audit recovery
+remain separately recorded. This establishes neither four-host/WAN capacity nor
+a validator hardware minimum, and is not paid delivery throughput.
+
+Final hosted byte-delivery artifacts and report review are pending. #254/#260
+remain open until those gates complete.
+
 ## One-command local testnet
 
 Start the full local stack (chain + faucet + gateways + optional web UI):

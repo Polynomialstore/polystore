@@ -1,0 +1,19 @@
+{
+  "createdAt": "2026-09-08T19:53:31Z",
+  "databaseId": 34271587678,
+  "event": "push",
+  "headSha": "1a10ea5cb5287717bcb1681e21bae2360aee34bf",
+  "url": "https://github.com/Polynomialstore/polystore/actions/runs/34271587678",
+  "workflowName": "PolyStore CI",
+  "artifact_id": 10074685795,
+  "artifact_name": "e2e-mode2-fast-artifacts",
+  "artifact_archive_sha256": "1886517eba1981892219ab5960aab0334b7c4910f90ec6ef2b1b51443b3d6543",
+  "scope": "Source/harness provenance only; running binary/native/WASM hashes were not recorded.",
+  "job": "E2E Mode2 Stripe (Fast 3 SPs)",
+  "job_conclusion": "SUCCESS",
+  "pr": 284,
+  "merge": "5cffe3450761f9c19cd9d8e42217ebcd047b5add",
+  "final_ci_checks_passed": 28,
+  "codex_review": "https://github.com/Polynomialstore/polystore/pull/284#issuecomment-5591086963",
+  "ci_retry_note": "The separate Multi-SP gateway job was diagnostically cancelled after a 30 minute stall; no logs/artifact were returned, cause unknown. Only that job was rerun on the unchanged head and passed. The Fast 3 SPs delivery artifact comes from its original successful job."
+}
