@@ -127,7 +127,9 @@ class FreshProofTest(unittest.TestCase):
             if req.full_url.endswith("/status"):
                 current_height = next(heights, 102)
                 return Response({"result": {"node_info": {"id": "owned", "network": "polystore-test-1"},
-                                  "sync_info": {"latest_block_height": str(current_height), "catching_up": False}}})
+                                  "sync_info": {"latest_block_height": str(current_height + 1), "catching_up": False}}})
+            if req.full_url.endswith("/abci_info"):
+                return Response({"result": {"response": {"last_block_height": str(current_height)}}})
             if "/retrieval-sessions/" in req.full_url:
                 self.assertEqual(req.get_header("X-cosmos-block-height"), str(current_height))
                 return Response(view, 100 if wrong_header else current_height)
@@ -136,29 +138,41 @@ class FreshProofTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp, patch.object(producer.urllib.request, "urlopen", side_effect=request), patch.object(producer, "native_proofs", return_value={"proofs": ["bounded"]}) as native:
             out = Path(tmp) / "proof.json"
-            result = producer.prepare(config, expected, sid, time.monotonic_ns() + 10**9, out)
+            result = producer.prepare(config, expected, sid, artifact.monotonic_ns() + 10**9, out)
             self.assertEqual(result["session_id"], sid)
             self.assertEqual(out.stat().st_mode & 0o777, 0o600)
-            self.assertEqual(len(calls), 5)
+            self.assertEqual(len(calls), 7)
             self.assertEqual(native.call_count, 1)
+            # The same bounded reader retains terminal state without rewriting
+            # it to OPEN or invoking native generation, and pins an exact height.
+            original_status = view["session"]["status"]
+            view["session"]["status"] = "RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED"
+            observed = producer.session_evidence(config, expected, sid, artifact.monotonic_ns() + 10**9, height=102)
+            self.assertEqual(observed["height"], 102)
+            self.assertEqual(observed["view"]["session"]["status"], "RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED")
+            self.assertEqual(set(observed["anchor"]), {"block", "block_id"})
+            self.assertEqual(native.call_count, 1)
+            view["session"]["status"] = original_status
+            with self.assertRaisesRegex(ValueError, "not committed"):
+                producer.session_evidence(config, expected, sid, artifact.monotonic_ns() + 10**9, height=103)
             wrong_header = True
             with self.assertRaisesRegex(ValueError, "committed response"):
-                producer.prepare(config, expected, sid, time.monotonic_ns() + 10**9, Path(tmp) / "bad-height.json")
+                producer.prepare(config, expected, sid, artifact.monotonic_ns() + 10**9, Path(tmp) / "bad-height.json")
             wrong_header = False
             with self.assertRaisesRegex(ValueError, "owned node"):
-                producer.prepare(dict(config, node_id="different"), expected, sid, time.monotonic_ns() + 10**9, Path(tmp) / "bad-node.json")
+                producer.prepare(dict(config, node_id="different"), expected, sid, artifact.monotonic_ns() + 10**9, Path(tmp) / "bad-node.json")
             with self.assertRaises(TimeoutError):
-                producer.prepare(config, expected, sid, time.monotonic_ns() - 1, Path(tmp) / "late.json")
+                producer.prepare(config, expected, sid, artifact.monotonic_ns() - 1, Path(tmp) / "late.json")
             view["challenge_seed"] = base64.b64encode(bytes(32)).decode()
             with self.assertRaisesRegex(ValueError, "anchor"):
-                producer.prepare(config, expected, sid, time.monotonic_ns() + 10**9, Path(tmp) / "bad.json")
+                producer.prepare(config, expected, sid, artifact.monotonic_ns() + 10**9, Path(tmp) / "bad.json")
             self.assertEqual(native.call_count, 1)
 
     def test_callback_owned_process_path_and_absolute_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = dict(library=__file__, setup=__file__, fixture=tmp)
             builder = artifact.fresh_session_proof_builder(config, Path(tmp) / "proofs")
-            deadline = time.monotonic_ns() + 10**9
+            deadline = artifact.monotonic_ns() + 10**9
             sid = "ab" * 32
             def run(argv, actual_deadline):
                 self.assertEqual(actual_deadline, deadline)

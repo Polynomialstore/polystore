@@ -114,35 +114,78 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _read_owned_endpoint(url, path, timeout):
+    if not isinstance(url, str) or any(char in url for char in "\r\n\t"):
+        raise ValueError("invalid metrics URL")
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "::1", "localhost")
+            or parsed.username is not None or parsed.password is not None
+            or parsed.fragment or parsed.query or parsed.path != path
+            or parsed.port is None or not 1 <= parsed.port <= 65535):
+        raise ValueError(f"an owned explicit localhost HTTP {path} endpoint is required")
+    if isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 10:
+        raise ValueError("socket timeout must be in (0, 10] seconds")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    with opener.open(url, timeout=timeout) as response:
+        if response.status != 200:
+            raise ValueError("metrics endpoint did not return 200")
+        body = response.read(MAX_BYTES + 1)
+    if len(body) > MAX_BYTES:
+        raise ValueError("metrics response exceeds limit")
+    return body.decode("utf-8")
+
+
 def capture_commit_metrics(url, chain_id, timeout=2.0):
     """One size/socket-time-bounded scrape; use the command adapter for hard time.
 
     The monotonic timestamps bracket the HTTP operation, not block execution.
     A metric is observed near the end of Commit and has no per-height label.
     """
-    if not isinstance(url, str) or any(char in url for char in "\r\n\t"):
-        raise ValueError("invalid metrics URL")
-    parsed = urllib.parse.urlsplit(url)
-    if (parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "::1", "localhost")
-            or parsed.username is not None or parsed.password is not None
-            or parsed.fragment or parsed.query or parsed.path != "/metrics"
-            or parsed.port is None or not 1 <= parsed.port <= 65535):
-        raise ValueError("an owned explicit localhost HTTP /metrics endpoint is required")
-    if isinstance(timeout, bool) or not math.isfinite(timeout) or not 0 < timeout <= 10:
-        raise ValueError("socket timeout must be in (0, 10] seconds")
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     wall_time_ns = time.time_ns()
     started = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
-    with opener.open(url, timeout=timeout) as response:
-        if response.status != 200:
-            raise ValueError("metrics endpoint did not return 200")
-        body = response.read(MAX_BYTES + 1)
+    body = _read_owned_endpoint(url, "/metrics", timeout)
     ended = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
-    if len(body) > MAX_BYTES:
-        raise ValueError("metrics response exceeds limit")
-    return {**parse_commit_metrics(body.decode("utf-8"), chain_id),
+    return {**parse_commit_metrics(body, chain_id),
             "wall_time_ns": wall_time_ns, "monotonic_start_ns": started,
             "monotonic_end_ns": ended}
+
+
+def capture_fenced_commit_metrics(url, chain_id, rpc_url, node_id, initial_height, timeout=2.0):
+    """Attest a fully observed Commit boundary for one owned process lifetime.
+
+    initial_height is the persisted app height BEFORE this process starts, not
+    the first height later observed over RPC. Fresh genesis starts at zero.
+    Restart needs a separately established persisted height and separate series.
+    A moving or lagging boundary fails rather than assigning timers to guessed
+    heights. The driver may retry within its existing absolute command deadline.
+    """
+    initial_height = _integer(initial_height, "process initial height")
+    if not isinstance(node_id, str) or not re.fullmatch(r"[0-9a-f]{40}", node_id):
+        raise ValueError("expected node identity is required")
+    heights = []
+    captures = []
+    for index in range(3):
+        status = json.loads(_read_owned_endpoint(rpc_url, "/status", timeout))
+        if not isinstance(status, dict) or status.get("error"):
+            raise ValueError("invalid RPC status")
+        status = status["result"]
+        if status["node_info"]["id"] != node_id or status["node_info"]["network"] != chain_id:
+            raise ValueError("status endpoint belongs to a different node or chain")
+        height = status["sync_info"]["latest_block_height"]
+        if not isinstance(height, str) or not re.fullmatch(r"0|[1-9][0-9]{0,18}", height):
+            raise ValueError("invalid committed status height")
+        heights.append(int(height))
+        if index < 2:
+            captures.append(capture_commit_metrics(url, chain_id, timeout))
+    first, last = captures
+    if (len(set(heights)) != 1 or heights[0] < initial_height
+            or first["count"] != last["count"] or first["sum_seconds"] != last["sum_seconds"]
+            or last["count"] != heights[0] - initial_height):
+        raise ValueError("Commit observation boundary is moving or not fully observed")
+    return {**last, "committed_height": heights[0], "boundary_fence": {
+        "node_id": node_id, "process_initial_height": initial_height,
+        "status_heights": heights, "captures": captures,
+        "fully_observed": True}}
 
 
 def _sum_bounds(count, total):
@@ -252,5 +295,15 @@ if __name__ == "__main__":
     parser.add_argument("url")
     parser.add_argument("chain_id")
     parser.add_argument("--timeout", type=float, default=2.0)
+    parser.add_argument("--rpc-url")
+    parser.add_argument("--node-id")
+    parser.add_argument("--process-initial-height", type=int)
     args = parser.parse_args()
-    print(json.dumps(capture_commit_metrics(args.url, args.chain_id, args.timeout), sort_keys=True))
+    fenced = (args.rpc_url, args.node_id, args.process_initial_height)
+    if any(value is not None for value in fenced):
+        if any(value is None for value in fenced):
+            parser.error("fenced capture requires RPC URL, node ID and process initial height")
+        result = capture_fenced_commit_metrics(args.url, args.chain_id, *fenced, args.timeout)
+    else:
+        result = capture_commit_metrics(args.url, args.chain_id, args.timeout)
+    print(json.dumps(result, sort_keys=True))

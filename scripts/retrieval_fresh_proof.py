@@ -226,9 +226,9 @@ def native_proofs(config, c, digest, seed):
     return {"session_id": base64.b64encode(bytes.fromhex(c["context_id"])).decode(), "proofs": proofs}
 
 
-def prepare(config, expected, session_id, deadline, output):
+def session_evidence(config, expected, session_id, deadline, height=None):
     def remaining():
-        seconds = (deadline - time.monotonic_ns()) / 1e9
+        seconds = (deadline - time.clock_gettime_ns(time.CLOCK_MONOTONIC)) / 1e9
         if seconds <= 0:
             raise TimeoutError("proof preparation deadline")
         return seconds
@@ -252,16 +252,40 @@ def prepare(config, expected, session_id, deadline, output):
         return result if height is not None else result["result"]
 
     encoded = urllib.parse.quote(base64.urlsafe_b64encode(bytes.fromhex(session_id)).decode(), safe="")
+    status = query(config["rpc"], "/status")
+    if status["node_info"]["id"] != config["node_id"] or status["node_info"]["network"] != expected["snapshot"]["chain_id"] or status["sync_info"]["catching_up"] is not False:
+        raise ValueError("wrong owned node or uncommitted state")
+    # BlockStore /status can advance before application persistence and the
+    # height-pinned API. ABCI Info reads the committed application height.
+    latest = uint(query(config["rpc"], "/abci_info")["response"]["last_block_height"])
+    height = latest if height is None else uint(height)
+    if not 1 <= height <= latest:
+        raise ValueError("requested evidence height is not committed")
+    view = query(config["api"], "/polystorechain/polystorechain/v1/retrieval-sessions/" + encoded, height)
+    anchor_height = uint(view["session"]["opened_height"]) + 1
+    anchor = None
+    if height >= anchor_height + 1:
+        block = query(config["rpc"], "/block?height=" + str(anchor_height))
+        # Retain only authenticated anchor fields, never block transaction bodies.
+        anchor = {"block_id": {"hash": block["block_id"]["hash"]}, "block": {"header": {
+            key: block["block"]["header"][key] for key in ("height", "chain_id")}}}
+    return dict(height=height, view=view, anchor=anchor)
+
+
+def prepare(config, expected, session_id, deadline, output):
+    def remaining():
+        seconds = (deadline - time.clock_gettime_ns(time.CLOCK_MONOTONIC)) / 1e9
+        if seconds <= 0:
+            raise TimeoutError("proof preparation deadline")
+        return seconds
+
     while True:
-        status = query(config["rpc"], "/status")
-        if status["node_info"]["id"] != config["node_id"] or status["node_info"]["network"] != expected["snapshot"]["chain_id"] or status["sync_info"]["catching_up"] is not False:
-            raise ValueError("wrong owned node or uncommitted state")
-        height = uint(status["sync_info"]["latest_block_height"])
-        view = query(config["api"], "/polystorechain/polystorechain/v1/retrieval-sessions/" + encoded, height)
+        evidence = session_evidence(config, expected, session_id, deadline)
+        height, view = evidence["height"], evidence["view"]
         c, digest = frozen_context(view, expected, session_id, height)
         if height >= c["first_response_height"] and view.get("challenge_seed"):
             seed = b64(view["challenge_seed"], 32)
-            anchor = query(config["rpc"], "/block?height=" + str(c["anchor_height"]))
+            anchor = evidence["anchor"]
             header = anchor["block"]["header"]
             if uint(header["height"]) != c["anchor_height"] or header["chain_id"] != c["chain_id"] or not re.fullmatch(r"[0-9A-Fa-f]{64}", anchor["block_id"]["hash"]) or bytes.fromhex(anchor["block_id"]["hash"]) != seed:
                 raise ValueError("seed does not match committed anchor")
@@ -277,4 +301,7 @@ def prepare(config, expected, session_id, deadline, output):
 
 if __name__ == "__main__":
     request = json.loads(sys.argv[1])
-    print(json.dumps(prepare(**request)))
+    action = request.pop("action", "prepare")
+    if action not in ("prepare", "evidence"):
+        raise ValueError("unknown proof producer action")
+    print(json.dumps((prepare if action == "prepare" else session_evidence)(**request)))

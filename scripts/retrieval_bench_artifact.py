@@ -349,6 +349,8 @@ def validate_scheduled_command(job):
 
 
 def execute_scheduled_transaction(job):
+    if "_lifecycle" in job and job["_lifecycle"].mode == "prepared-proof-only":
+        return execute_prepared_retrieval_proof(job)
     if "_lifecycle" not in job or job["kind"] != "submit-proof":
         return scheduled_transaction(job)
     lifecycle, state = job["_lifecycle"], job["_state"]
@@ -379,6 +381,115 @@ def execute_scheduled_transaction(job):
     result = scheduled_transaction(command_job)
     return dict(result, session_id=state["session_id"], context_hash=prepared["context_hash"], seed=prepared["seed"],
                 preparation_latency_ns=preparation_ns)
+
+
+def prepared_session_pin(operation, evidence):
+    """Validate an owned-node, height-attested OPEN response and its anchor.
+
+    The integrating read callback owns HTTP/node identity and height attestation.
+    This helper authenticates response contents against independent caller intent;
+    it neither fetches data nor changes the producer's accepted state contract.
+    """
+    import retrieval_fresh_proof as producer
+    if not isinstance(evidence, dict) or len(json.dumps(evidence).encode()) > 65536:
+        raise ValueError("prepared session evidence exceeds 64 KiB or is not an object")
+    height = integer(evidence["height"], "attested session height", 1)
+    sid = operation["prepared"]["session_id"]
+    if not isinstance(sid, str) or not re.fullmatch(r"[0-9a-f]{64}", sid):
+        raise ValueError("prepared session ID must be canonical hex")
+    view = evidence["view"]
+    c, digest = producer.frozen_context(view, operation["proof_expectation"], sid, height)
+    if view["session"]["status"] not in (1, "RETRIEVAL_SESSION_STATUS_OPEN") or height < c["first_response_height"]:
+        raise ValueError("prepared proof-only session must be anchored and OPEN")
+    if operation["submit-proof"]["signer"] != view["session"]["authorized_proof_provider"]:
+        raise ValueError("prepared proof signer differs from frozen payee")
+    seed = producer.b64(view["challenge_seed"], 32)
+    anchor = evidence["anchor"]
+    header = anchor["block"]["header"]
+    block_hash = anchor["block_id"]["hash"]
+    if (producer.uint(header["height"]) != c["anchor_height"] or header["chain_id"] != c["chain_id"] or
+        not isinstance(block_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", block_hash) or bytes.fromhex(block_hash) != seed):
+        raise ValueError("prepared seed differs from committed anchor")
+    return dict(height=height, context=c, context_hash=digest.hex(), seed=seed.hex(), view=view)
+
+
+def validate_prepared_proof_file(operation, pin):
+    """Bind the exact CLI payload, session and ordered fresh challenges to a hash."""
+    import retrieval_fresh_proof as producer
+    prepared, job = operation["prepared"], operation["submit-proof"]
+    path, digest = prepared["proof_path"], prepared["proof_sha256"]
+    if (not isinstance(path, str) or not Path(path).is_absolute() or not Path(path).is_file() or
+        not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+        raise ValueError("prepared proof requires an absolute path and canonical SHA256")
+    argv = job["submit"]
+    if argv[1:5] != ["tx", "nilchain", "submit-retrieval-proof", path] or argv.count(path) != 1:
+        raise ValueError("prepared command must submit the pinned proof file")
+    payload, raw = producer.read_json(path)
+    if hashlib.sha256(raw).hexdigest() != digest or producer.b64(payload["session_id"], 32).hex() != prepared["session_id"]:
+        raise ValueError("prepared proof digest or session mismatch")
+    c = pin["context"]
+    proofs = payload["proofs"]
+    if not isinstance(proofs, list) or len(proofs) != c["blob_count"]:
+        raise ValueError("prepared proof count differs from pinned range")
+    for ordinal, proof in enumerate(proofs):
+        leaf = c["start_leaf"] + ordinal
+        z = producer.fresh_z(bytes.fromhex(pin["context_hash"]), bytes.fromhex(pin["seed"]), ordinal, c["start_mdu"], leaf)
+        if (producer.uint(proof["mdu_index"]) != c["start_mdu"] or producer.uint(proof.get("blob_index", 0)) != leaf or
+            producer.b64(proof["z_value"], 32) != z):
+            raise ValueError("prepared proof tuple or challenge differs from anchored context")
+
+
+def execute_prepared_retrieval_proof(job):
+    lifecycle, state = job["_lifecycle"], job["_state"]
+    operation, sid = state["operation"], state["session_id"]
+    began = monotonic_ns()
+    deadline = min(began + job["timeout_seconds"] * 10**9, job.get("_deadline_ns", (1 << 63) - 1))
+    try:
+        if began >= deadline:
+            raise TimeoutError("prepared proof started after the run deadline")
+        evidence = lifecycle.read_session_evidence(operation, sid, None, deadline)
+        pin = prepared_session_pin(operation, evidence)
+        original = state["proof_pin"]
+        if pin["height"] < original["height"] or any(pin[name] != original[name] for name in ("context", "context_hash", "seed", "view")):
+            raise ValueError("prepared session changed or response height regressed")
+        validate_prepared_proof_file(operation, pin)
+        if monotonic_ns() >= deadline:
+            raise TimeoutError("prepared validation exhausted the stage deadline")
+    except Exception as error:
+        return {"outcome": "not_submitted", "error": "prepared_proof_validation_failed: " + str(error)[-8192:]}
+    validation_ns = monotonic_ns() - began
+    result = scheduled_transaction(dict(job, _deadline_ns=deadline))
+    result.update(session_id=sid, context_hash=pin["context_hash"], seed=pin["seed"],
+                  proof_sha256=operation["prepared"]["proof_sha256"], proof_state_verified=False,
+                  pre_submission_evidence=evidence, prepared_validation_latency_ns=validation_ns)
+    if result["outcome"] == "committed_success":
+        try:
+            if monotonic_ns() >= deadline:
+                raise TimeoutError("committed state verification deadline")
+            height = integer(result["height"], "committed proof height", pin["height"])
+            after = lifecycle.read_session_evidence(operation, sid, height, deadline)
+            if monotonic_ns() >= deadline or after["height"] != height or height > pin["context"]["deadline_height"]:
+                raise ValueError("proof state response has wrong height or expired deadline")
+            if len(json.dumps(after).encode()) > 65536:
+                raise ValueError("proof state response exceeds 64 KiB")
+            view = after["view"]
+            session = view["session"]
+            if session["status"] not in (2, "RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED") or integer(session["updated_height"], "proof updated height") != height:
+                raise ValueError("committed proof did not attest PROOF_SUBMITTED at its transaction height")
+            # Compare immutable fields directly to the authenticated OPEN pin.
+            # No status rewriting or broadened producer trust semantics.
+            for name in ("challenge_context", "challenge_context_hash", "challenge_seed"):
+                if view[name] != pin["view"][name]:
+                    raise ValueError("committed proof changed frozen context or seed")
+            if ({k: v for k, v in session.items() if k not in ("status", "updated_height")} !=
+                {k: v for k, v in pin["view"]["session"].items() if k not in ("status", "updated_height")} or after["anchor"] != evidence["anchor"]):
+                raise ValueError("committed proof changed session funding, identity or anchor")
+            result.update(proof_state_verified=True, post_submission_evidence=after)
+        except Exception as error:
+            # The known committed transaction remains known; it is not a verified
+            # proof-state result and never authorizes confirmation or resubmission.
+            result["state_evidence_error"] = str(error)[-8192:]
+    return result
 
 
 def fresh_session_proof_builder(config, output_directory):
@@ -433,10 +544,15 @@ class RetrievalLifecycleJournal:
     """
     stages = ("open-session", "submit-proof", "confirm")
 
-    def __init__(self, path, signers, prepare_session_proof):
+    def __init__(self, path, signers, prepare_session_proof, *, mode="lifecycle", read_session_evidence=None):
         self.path = Path(path)
-        if not callable(prepare_session_proof):
+        if mode not in ("lifecycle", "prepared-proof-only"):
+            raise ValueError("invalid retrieval scheduling mode")
+        if mode == "lifecycle" and not callable(prepare_session_proof):
             raise ValueError("prepare_session_proof is required")
+        if mode == "prepared-proof-only" and not callable(read_session_evidence):
+            raise ValueError("read_session_evidence is required for prepared proof-only scheduling")
+        self.mode, self.read_session_evidence = mode, read_session_evidence
         if not isinstance(signers, (list, tuple)) or not 1 <= len(signers) <= 128:
             raise ValueError("declare 1..128 resolved signers before admission")
         if any(not isinstance(s, str) or not s or s != s.lower() for s in signers) or len(set(signers)) != len(signers):
@@ -452,6 +568,7 @@ class RetrievalLifecycleJournal:
             PRAGMA cache_size=-2048;
             CREATE TABLE operations (id TEXT PRIMARY KEY, phase TEXT NOT NULL, result TEXT);
             CREATE TABLE hashes (hash TEXT PRIMARY KEY);
+            CREATE TABLE proof_sessions (session_id TEXT PRIMARY KEY);
             CREATE TABLE transactions (id TEXT PRIMARY KEY, phase TEXT NOT NULL, outcome TEXT NOT NULL, result TEXT NOT NULL);
             CREATE TABLE run (status TEXT NOT NULL, result TEXT);
             INSERT INTO run(status) VALUES ('running');
@@ -471,6 +588,24 @@ class RetrievalLifecycleJournal:
         offset = integer(operation["offered_offset_ns"], "offered_offset_ns", self.previous_offset)
         self.previous_offset = offset
         operation["offered_offset_ns"] = offset
+        if self.mode == "prepared-proof-only":
+            if "open-session" in operation or "confirm" in operation:
+                raise ValueError("prepared proof-only operations cannot contain open or confirm stages")
+            job = operation["submit-proof"]
+            if job.get("signer") not in self.signers:
+                raise ValueError("proof signer is not a declared resolved account")
+            prepared = operation["prepared"]
+            check = dict(job)
+            if prepared is None:
+                check["submit"] = ["inventory-depleted", "--from", job["signer"]]
+                pin, sid = None, None
+            else:
+                pin = prepared_session_pin(operation, prepared["evidence"])
+                validate_prepared_proof_file(operation, pin)
+                sid = prepared["session_id"]
+            validate_scheduled_command(check)
+            job["timeout_seconds"] = check["timeout_seconds"]
+            return self.stage_job(dict(operation=operation, session_id=sid, proof_pin=pin, committed_stages=0), "submit-proof")
         for stage in self.stages:
             template = operation[stage]
             if template.get("signer") not in self.signers:
@@ -502,6 +637,8 @@ class RetrievalLifecycleJournal:
     def admit(self, job):
         with self.db:
             self.db.execute("INSERT INTO operations(id, phase) VALUES (?, ?)", (job["operation_id"], job["phase"]))
+            if self.mode == "prepared-proof-only" and job["_state"]["session_id"] is not None:
+                self.db.execute("INSERT INTO proof_sessions VALUES (?)", (job["_state"]["session_id"],))
 
     def record(self, job, item):
         state = job["_state"]
@@ -518,21 +655,30 @@ class RetrievalLifecycleJournal:
             if item["outcome"] == "committed_success":
                 state["committed_stages"] += 1
                 try:
-                    if job["kind"] == "open-session":
+                    if self.mode == "prepared-proof-only":
+                        pass  # No followup stage, including for a committed proof.
+                    elif job["kind"] == "open-session":
                         state["session_id"] = opened_session_id(item)
                         next_job = self.stage_job(state, "submit-proof")
                     elif job["kind"] == "submit-proof":
                         next_job = self.stage_job(state, "confirm")
                 except (ValueError, KeyError, TypeError) as invalid:
                     error = "stage_response_invalid: " + str(invalid)
-            self.db.execute("INSERT INTO transactions VALUES (?, ?, ?, ?)",
-                            (item["id"], item["phase"], item["outcome"], json.dumps(item)))
+            depleted = self.mode == "prepared-proof-only" and state["operation"]["prepared"] is None
+            if not depleted:
+                self.db.execute("INSERT INTO transactions VALUES (?, ?, ?, ?)",
+                                (item["id"], item["phase"], item["outcome"], json.dumps(item)))
             if next_job is None:
                 result = {"operation_id": job["operation_id"], "phase": job["phase"],
                           "all_transactions_committed": state["committed_stages"] == 3 and error is None,
                           "session_id": state["session_id"], "last_stage": job["kind"],
                           "terminal_latency_ns": item["terminal_latency_ns"],
                           "error": error or item.get("error", "")}
+                if self.mode == "prepared-proof-only":
+                    result.update(outcome=item["outcome"], all_transactions_committed=state["committed_stages"] == 1,
+                        proof_submitted=item["outcome"] == "committed_success" and item.get("proof_state_verified") is True,
+                        completed_session=False, inventory_depleted=depleted,
+                        state_evidence_error=item.get("state_evidence_error", ""))
                 self.db.execute("UPDATE operations SET result=? WHERE id=?", (json.dumps(result), job["operation_id"]))
         return next_job
 
@@ -543,11 +689,19 @@ class RetrievalLifecycleJournal:
             phases[phase]["outcomes"][outcome] = count
         for phase, count in self.db.execute("SELECT phase, COUNT(*) FROM operations GROUP BY phase"):
             phases[phase]["offered_operations"] = count
+        if self.mode == "prepared-proof-only":
+            for counts in phases.values():
+                counts.update(proof_submitted=0, inventory_depleted=0, completed_sessions=0)
+            for phase, result in self.db.execute("SELECT phase, result FROM operations WHERE result IS NOT NULL"):
+                row = json.loads(result)
+                for field in ("proof_submitted", "inventory_depleted"):
+                    phases[phase][field] += int(row[field])
         return phases
 
 
-def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_session_proof,
-                                 max_in_flight, max_queued, max_queued_per_signer):
+def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_session_proof=None,
+                                 max_in_flight, max_queued, max_queued_per_signer,
+                                 mode="lifecycle", read_session_evidence=None):
     """Incremental open -> anchored proof -> confirm preparation; no runtime qualification.
 
     Operations arrive in absolute offered-offset order with one lookahead. The
@@ -555,8 +709,20 @@ def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_
     its deadline. It returns existing submit argv plus session_id/context_hash/
     seed provenance. All stages retain the operation's original offered time.
     Final rows live in the SQLite ledger, not an ever-growing in-memory list.
+
+    mode='prepared-proof-only' accepts offered slots with submit-proof plus
+    prepared={session_id,proof_path,proof_sha256,evidence:{height,view,anchor}}
+    and independent proof_expectation. prepared=None declares an empty inventory
+    slot, not an offered transaction. read_session_evidence(operation, session_id,
+    height, deadline_ns) returns owned-node height-attested evidence: height=None
+    requests current state, otherwise exactly that committed height. The callback
+    must honor the shared absolute deadline and cannot broadcast. Pre-opening and
+    proof generation are excluded; fresh state reads and digest checks are included.
+    Prepared inputs retain the producer's maintained slot-zero K8/K2 fixture
+    restrictions. This mode does not qualify delivered bytes or storage audits.
     """
-    lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof)
+    lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof,
+                                          mode=mode, read_session_evidence=read_session_evidence)
     try:
         result = schedule_transactions(operations, max_in_flight=max_in_flight, max_queued=max_queued,
                                        max_queued_per_signer=max_queued_per_signer, _lifecycle=lifecycle)
@@ -615,15 +781,19 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
     pending, running, active, quarantined, records, finished, seen_hashes = [], {}, set(), {}, [], {}, set()
     peak_pending = peak_running = peak_signer_pending = peak_operation_states = 0
     warmup_overlap = False
+    latest_warmup_finished_ns = start
     followups = []
 
     def record(job, result, started=None):
+        nonlocal latest_warmup_finished_ns
         # Only this coordinator mutates accounting. Duplicate hashes remain
         # visible but never produce another successful transaction/operation.
         item = {"id": job["id"], "operation_id": job["operation_id"], "phase": job["phase"],
                 "signer": job["signer"], "kind": job.get("kind", "transaction"), "attempt": 1,
                 "offered_ns": start + job["offered_offset_ns"], "started_ns": started,
                 "finished_ns": monotonic_ns(), **result}
+        if job["phase"] == "warmup":
+            latest_warmup_finished_ns = max(latest_warmup_finished_ns, item["finished_ns"])
         if item["outcome"] == "unknown":
             quarantined[job["signer"]] = job["phase"]
         if _lifecycle is None and item.get("txhash"):
@@ -682,9 +852,15 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         def enqueue(job):
             nonlocal warmup_overlap, peak_pending, peak_signer_pending
             job["_enqueued_ns"] = monotonic_ns()
-            # A finished worker can leave an unresolved warmup broadcast.
-            warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
-                item["phase"] == "warmup" for item in pending + followups + [item for item, _ in running.values()]))
+            # Completion collected before admission can still overlap the
+            # absolute offer time. Unknown broadcasts remain unresolved.
+            warmup_overlap |= job["phase"] == "measurement" and (
+                latest_warmup_finished_ns > start + job["offered_offset_ns"] or
+                "warmup" in quarantined.values() or any(item["phase"] == "warmup"
+                    for item in pending + followups + [item for item, _ in running.values()]))
+            if _lifecycle is not None and _lifecycle.mode == "prepared-proof-only" and job["_state"]["operation"]["prepared"] is None:
+                record(job, {"outcome": "not_submitted", "error": "inventory_depleted"})
+                return
             signer_queued = sum(item["signer"] == job["signer"] for item in pending)
             if job["signer"] in quarantined:
                 record(job, {"outcome": "not_submitted", "error": "signer_quarantined"})
@@ -769,6 +945,13 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         report.update(kind="incremental-retrieval-lifecycle-preparation", journal_path=str(_lifecycle.path),
                       transactions=None, operations=None, phases=_lifecycle.phases(),
                       peak_retained_operation_states=peak_operation_states)
+        if _lifecycle.mode == "prepared-proof-only":
+            report.update(kind="prepared-retrieval-proof-only-preparation", completed_sessions=0,
+                proof_submitted=sum(phase["proof_submitted"] for phase in report["phases"].values()),
+                inventory_depleted=sum(phase["inventory_depleted"] for phase in report["phases"].values()),
+                source_exhausted=True,
+                preparation_excluded=["session opening", "anchor waiting", "native proof generation"],
+                completion_basis="committed transaction plus pinned PROOF_SUBMITTED state; no confirmations or completed sessions")
     return report
 
 

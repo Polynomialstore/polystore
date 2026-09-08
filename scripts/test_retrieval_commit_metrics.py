@@ -2,6 +2,7 @@
 from decimal import Decimal
 from fractions import Fraction
 import io
+import json
 from unittest import TestCase, main
 from unittest.mock import patch
 
@@ -25,6 +26,33 @@ def summary(samples, blocks, **kwargs):
 
 
 class CommitMetricsTest(TestCase):
+    def test_fenced_capture_requires_complete_stable_owned_boundary(self):
+        node = "ab" * 20
+        def status(height, network="bench", identity=node):
+            return json.dumps({"result": {"node_info": {"id": identity, "network": network},
+                                         "sync_info": {"latest_block_height": str(height)}}})
+
+        def capture(heights, counts, initial=0):
+            with patch.object(metrics, "_read_owned_endpoint", side_effect=heights), patch.object(
+                    metrics, "capture_commit_metrics", side_effect=[sample(c, "0.4", i * 2) for i, c in enumerate(counts)]):
+                return metrics.capture_fenced_commit_metrics("http://127.0.0.1:9001/metrics", "bench",
+                    "http://127.0.0.1:9000/status", node, initial)
+
+        observed = capture([status(2)] * 3, [2, 2])
+        self.assertEqual(observed["committed_height"], 2)
+        self.assertTrue(observed["boundary_fence"]["fully_observed"])
+        self.assertEqual(observed["boundary_fence"]["status_heights"], [2, 2, 2])
+        # RPC height publication can precede its Commit timer. Stable RPC alone
+        # must not accept even an otherwise valid, stable prior metric pair.
+        for heights, counts, initial in [([status(2)] * 3, [1, 1], 0),
+                ([status(2)] * 3, [1, 2], 0), ([status(2), status(2), status(3)], [2, 2], 0),
+                ([status(2)] * 3, [2, 2], 1), ([status(2, network="other")] * 3, [2, 2], 0),
+                ([status(2, identity="cd" * 20)] * 3, [2, 2], 0)]:
+            with self.subTest(heights=heights, counts=counts, initial=initial), self.assertRaises(ValueError):
+                capture(heights, counts, initial)
+        # Restart series uses its separately known persisted starting height.
+        self.assertEqual(capture([status(12)] * 3, [2, 2], 10)["count"], 2)
+
     def test_parse_exact_labels_and_ignore_unrelated_nan(self):
         text = ('# TYPE ignored summary\nother_metric{quantile="0.5"} NaN\n'
                 + exposition(step="NewHeight") + exposition())
