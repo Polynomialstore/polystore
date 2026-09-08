@@ -633,9 +633,117 @@ pub fn reconstruct_mdu_from_shards(
     Ok(mdu)
 }
 
+/// Recover one slot from exactly K supplied shards, without allocating absent
+/// parity. Authentication of input and output belongs to the frozen-generation
+/// caller. Total shard bytes stay bounded by three MDUs, even at K=1/M=255.
+pub fn reconstruct_slot_from_shards(
+    shards: &mut [Option<Vec<u8>>],
+    k: usize,
+    m: usize,
+    target: usize,
+) -> Result<Vec<u8>, CodingError> {
+    if k == 0
+        || k > BLOBS_PER_MDU
+        || BLOBS_PER_MDU % k != 0
+        || m == 0
+        || k.checked_add(m).filter(|n| *n <= 256) != Some(shards.len())
+        || target >= shards.len()
+    {
+        return Err(CodingError::InvalidRsParams);
+    }
+    let size = MDU_SIZE / k;
+    if shards.iter().flatten().count() != k || shards.iter().flatten().any(|s| s.len() != size) {
+        return Err(CodingError::InvalidSize);
+    }
+    if let Some(bytes) = shards[target].take() {
+        return Ok(bytes);
+    }
+    let rs = ReedSolomon::new(k, m).map_err(|e| CodingError::Rs(e.to_string()))?;
+    rs.reconstruct_data(shards)
+        .map_err(|e| CodingError::Rs(e.to_string()))?;
+    if target < k {
+        return shards[target].take().ok_or(CodingError::InvalidSize);
+    }
+
+    // Ask the existing encoder for this parity row's coefficients using a tiny
+    // identity basis (at most 16 KiB). Encode only the selected full-size output.
+    let mut basis = vec![vec![0u8; k]; k];
+    for (i, row) in basis.iter_mut().enumerate() {
+        row[i] = 1;
+    }
+    let mut parity = vec![vec![0u8; k]; m];
+    rs.encode_sep(&basis, &mut parity)
+        .map_err(|e| CodingError::Rs(e.to_string()))?;
+    let mut output = vec![0u8; size];
+    for (slot, coefficient) in parity[target - k].iter().enumerate() {
+        let data = shards[slot].as_ref().ok_or(CodingError::InvalidSize)?;
+        reed_solomon_erasure::galois_8::mul_slice_xor(*coefficient, data, &mut output);
+    }
+    Ok(output)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reconstruct_selected_data_and_parity_slot() {
+        for (k, m) in [(8usize, 4usize), (64, 192)] {
+            let size = MDU_SIZE / k;
+            let mut encoded: Vec<Vec<u8>> = (0..k + m)
+                .map(|slot| {
+                    (0..size)
+                        .map(|i| {
+                            if slot < k {
+                                (i * 37 + slot * 13 + i / 97) as u8
+                            } else {
+                                0
+                            }
+                        })
+                        .collect()
+                })
+                .collect();
+            ReedSolomon::new(k, m)
+                .unwrap()
+                .encode(&mut encoded)
+                .unwrap();
+            for target in [1, k, k + m - 1] {
+                let mut input = vec![None; k + m];
+                for slot in (0..k + m).filter(|slot| *slot != target).take(k) {
+                    input[slot] = Some(encoded[slot].clone());
+                }
+                let recovered = reconstruct_slot_from_shards(&mut input, k, m, target).unwrap();
+                assert_eq!(recovered, encoded[target]);
+                assert!(input.iter().skip(k).filter(|s| s.is_some()).count() <= 1);
+            }
+        }
+    }
+
+    #[test]
+    fn reconstruct_selected_slot_maximum_parity_is_bounded() {
+        let data: Vec<u8> = (0..MDU_SIZE).map(|i| (i * 37 + i / 97) as u8).collect();
+        let mut input = vec![None; 256];
+        input[0] = Some(data.clone());
+        assert_eq!(
+            reconstruct_slot_from_shards(&mut input, 1, 255, 255).unwrap(),
+            data
+        );
+        assert_eq!(input.iter().filter(|s| s.is_some()).count(), 1);
+    }
+
+    #[test]
+    fn reconstruct_selected_slot_rejects_invalid_input() {
+        for (k, m, target) in [(0, 4, 0), (3, 4, 0), (64, 193, 0), (8, 4, 12)] {
+            assert!(reconstruct_slot_from_shards(&mut vec![None; k + m], k, m, target).is_err());
+        }
+        assert!(reconstruct_slot_from_shards(&mut vec![None; 12], 8, 4, 1).is_err());
+        let mut invalid = vec![None; 12];
+        for slot in 0..8 {
+            invalid[slot] = Some(vec![0; 32]);
+        }
+        assert!(reconstruct_slot_from_shards(&mut invalid, 8, 4, 1).is_err());
+    }
     use crate::utils::frs_to_blobs;
     use num_bigint::BigUint;
 

@@ -325,16 +325,26 @@ func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, 
 	q.Set("slot", strconv.FormatUint(slot, 10))
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := mode2ShardHTTPClient.Do(req)
+	// Recovery sends credentials only to the resolved provider endpoint.
+	client := *mode2ShardHTTPClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, fmt.Errorf("shard fetch failed: %s", string(body))
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(types.MDU_SIZE)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > types.MDU_SIZE {
+		return nil, fmt.Errorf("shard exceeds maximum size")
+	}
+	return body, nil
 }
 
 func reconstructMduFromDataShards(shards [][]byte, dataShards uint64, rows uint64) ([]byte, error) {

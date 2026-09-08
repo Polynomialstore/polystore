@@ -338,11 +338,7 @@ func generateFrozenSessionProof(ctx context.Context, dir string, f *frozenRetrie
 		return nil, nil, err
 	}
 	rows := uint64(64 / c.K)
-	path := filepath.Join(dir, fmt.Sprintf("mdu_%d.bin", c.StartMDU))
-	if c.Layout == retrievalchallenge.Stripe {
-		path = filepath.Join(dir, fmt.Sprintf("mdu_%d_slot_%d.bin", c.StartMDU, c.Slot))
-	}
-	window, err := readExactArtifactRange(path, rows*types.BLOB_SIZE, (uint64(c.StartLeaf)%rows)*types.BLOB_SIZE, c.BlobCount*types.BLOB_SIZE)
+	window, err := readFrozenSessionWindow(ctx, dir, f, user)
 	if err != nil {
 		return nil, nil, err
 	}

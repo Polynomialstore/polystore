@@ -237,6 +237,7 @@ ensure_polystore_core() {
       polystore_compute_mdu_root_from_witness_flat \
       polystore_expand_mdu_rs \
       polystore_reconstruct_mdu_rs \
+      polystore_reconstruct_slot_rs \
       polystore_mdu0_builder_new_with_commitments \
       polystore_mdu0_builder_load_with_commitments \
       polystore_compute_mdu0_root_table_proof \
