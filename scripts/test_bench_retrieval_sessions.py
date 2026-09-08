@@ -954,7 +954,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                         "bank": {"denom_metadata": []}, "nilchain": {"params": {
                             "retrieval_v2_activation_height": "0", "unchanged_fee": "17"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
-                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus_listen_addr = ":26660"\\n')
+                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
                     (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
@@ -1064,7 +1064,12 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         self.assertEqual(doc["before_restart"]["height"], 2)
         self.assertEqual(doc["before_restart"]["app_hash_block_height"], 3)
         self.assertEqual(doc["after_restart_later_height"]["height"], 5)
-        self.assertEqual(len(set(doc["signers"].values())), 4)
+        self.assertEqual(set(doc["signers"]),
+                         {f"owner{i}" for i in range(16)} | {f"provider{i}" for i in range(12)} | {"control"})
+        self.assertEqual(len(set(doc["signers"].values())), 29)
+        funding = [c for c in doc["commands"] if c[1:3] == ["genesis", "add-genesis-account"]]
+        self.assertEqual({c[3] for c in funding}, set(doc["signers"].values()))
+        self.assertTrue(all(c[4] == "100000000000stake,1000000000000000000aatom" for c in funding))
         self.assertEqual(self.runner.home.stat().st_mode & 0o777, 0o700)
         self.assertEqual(len([c for c in doc["commands"] if c[1] == "multi-node"]), 1)
         self.assertFalse(any("gentx" in c or "in-place-testnet" in c for c in doc["commands"]))
@@ -1073,6 +1078,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             home = Path(node["home"])
             self.assertEqual(artifact.sha256(home / "config/genesis.json"), doc["genesis_sha256"])
             self.assertIn('timeout_commit = "1s"', (home / "config/config.toml").read_text())
+            self.assertIn("prometheus = true", (home / "config/config.toml").read_text())
             self.assertTrue((home / "initial.log").exists())
             self.assertTrue((home / "restart.log").exists())
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")

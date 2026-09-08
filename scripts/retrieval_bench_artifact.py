@@ -1003,7 +1003,11 @@ class FourValidatorLifecycle:
                  "--validators-stake-amount", "100000000,100000000,100000000,100000000",
                  "--keyring-backend", "test")
         first = Path(self.nodes[0]["home"])
-        for name in ("owner0", "owner1", "provider0", "provider1"):
+        # Sixteen independent owners can offer full lifecycle traffic while twelve
+        # providers cover the default RS(8,12) placement. Control transactions
+        # use their own signer and cannot race workload account sequences.
+        names = [f"owner{i}" for i in range(16)] + [f"provider{i}" for i in range(12)] + ["control"]
+        for name in names:
             self.cli(first, "keys", "add", name, "--keyring-backend", "test", "--output", "json")
             address = self.cli(first, "keys", "show", name, "-a", "--keyring-backend", "test")
             if not re.fullmatch(r"nil1[0-9a-z]{20,80}", address) or address in self.signers.values():
@@ -1036,6 +1040,7 @@ class FourValidatorLifecycle:
             config = path.read_text()
             for section, key, value in (("consensus", "timeout_commit", '"1s"'),
                                         ("p2p", "addr_book_strict", "false"),
+                                        ("instrumentation", "prometheus", "true"),
                                         ("instrumentation", "prometheus_listen_addr", f'"127.0.0.1:{node["metrics"]}"')):
                 config = set_toml_value(config, section, key, value)
             path.write_text(config)
