@@ -128,10 +128,10 @@ async function isCommitCompleteOrReset(page: Page, commitBtn: Locator, filePath:
     }
   }
 
-  const panelState = await page.getByTestId('mdu-upload-card').getAttribute('data-panel-state').catch(() => null)
+  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes[0]?.getAttribute('data-panel-state') ?? null).catch(() => null)
   if (panelState === 'success') return true
 
-  const text = ((await commitBtn.textContent().catch(() => '')) || '').trim()
+  const text = ((await commitBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || '').trim()
   if (/Committed!/i.test(text)) return true
   return false
 }
@@ -142,14 +142,14 @@ async function completeUploadAndCommit(uploadBtn: Locator, commitBtn: Locator, f
   while (Date.now() < deadline) {
     if (await isCommitCompleteOrReset(page, commitBtn, filePath, dealId)) return
 
-    const commitEnabled = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.isEnabled().catch(() => false))
+    const commitEnabled = (await commitBtn.count().catch(() => 0)) > 0 && (await commitBtn.evaluateAll((buttons) => buttons.length === 1 && buttons[0].matches(':enabled')).catch(() => false))
     if (commitEnabled) {
       await commitBtn.click({ force: true })
       await expect.poll(() => isCommitCompleteOrReset(page, commitBtn, filePath, dealId), { timeout: 180_000 }).toBe(true)
       return
     }
 
-    const uploadEnabled = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isEnabled().catch(() => false))
+    const uploadEnabled = (await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.evaluateAll((buttons) => buttons.length === 1 && buttons[0].matches(':enabled')).catch(() => false))
     if (uploadEnabled) {
       await uploadBtn.click({ force: true })
     }
@@ -271,4 +271,22 @@ test.describe('mode2 setup bump live', () => {
       fileVisibleInUi: await fileRow.isVisible().catch(() => false),
     })
   })
+})
+
+test('upload completion polling observes removed controls', async ({ page }) => {
+  test.setTimeout(5_000)
+  await page.setContent(`
+    <div data-testid="mdu-upload-card" data-panel-state="uploading"></div>
+    <button data-testid="mdu-commit" disabled>Confirming...</button>
+  `)
+  const commitBtn = page.getByTestId('mdu-commit')
+  await commitBtn.evaluate((button) => button.remove())
+  // Missing controls alone are not completion and must not block the next poll.
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin')).toBe(false)
+
+  await page.getByTestId('mdu-upload-card').evaluate((card) => card.setAttribute('data-panel-state', 'success'))
+
+  await expect.poll(() => isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin'), { timeout: 1_000 }).toBe(true)
+  await page.setContent('')
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin')).toBe(false)
 })
