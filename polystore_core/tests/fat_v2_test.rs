@@ -357,3 +357,37 @@ fn ffi_load_modes_and_failed_operations_preserve_outputs() {
     );
     polystore_mdu0_builder_free(staged);
 }
+
+#[test]
+fn independent_python_full_slab_golden() {
+    use sha2::{Digest, Sha256};
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../testdata/polyfs_fat_v2.json")).unwrap();
+    let mut builder = Mdu0Builder::new(65536);
+    let digest: [u8; 32] = hex::decode(fixture["root_digest_hex"].as_str().unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    builder.set_root(0, digest).unwrap();
+    for value in fixture["records"].as_array().unwrap() {
+        let mut rec = FileRecordV1::from_path(
+            value["path"].as_str().unwrap(),
+            value["length"].as_str().unwrap().parse().unwrap(),
+            value["start"].as_str().unwrap().parse().unwrap(),
+            value["flags"].as_u64().unwrap() as u8,
+        )
+        .unwrap();
+        rec.timestamp = value["timestamp"].as_str().unwrap().parse().unwrap();
+        builder.append_file_record(rec).unwrap();
+    }
+    assert_eq!(
+        hex::encode(builder.get_root(0).unwrap()),
+        fixture["root_cell_hex"]
+    );
+    assert_eq!(
+        hex::encode(Sha256::digest(builder.bytes())),
+        fixture["mdu0_sha256"]
+    );
+    let loaded = Mdu0Builder::load(builder.bytes(), 65536).unwrap();
+    assert!(loaded.bytes() == builder.bytes());
+}
