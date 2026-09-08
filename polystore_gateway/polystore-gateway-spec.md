@@ -319,7 +319,7 @@ for that exact frozen challenge. For two existing single-session files:
 
 ```sh
 jq -s '{sessions: map({session_id, proofs})}' session-a.json session-b.json > sessions.json
-polystorechaind tx polystorechain submit-retrieval-proof sessions.json \
+polystorechaind tx nilchain submit-retrieval-proof sessions.json \
   --from provider --chain-id "$CHAIN_ID" --node "$RPC_URL" \
   --gas auto --gas-adjustment 1.6 --gas-prices "$GAS_PRICES" \
   --broadcast-mode sync --output json --yes
@@ -333,6 +333,15 @@ actual opened range. Duplicate JSON keys, unknown entry fields, empty lists and
 mixed `sessions`/`session_id`/receipt discriminators are rejected. The existing
 singular `{ "session_id": ..., "proofs": [...] }` form remains supported;
 legacy receipt forms remain subject to the chain's activation restrictions.
+
+Secured native opens require `--challenge-version 2` on the existing
+`open-retrieval-session` command. Add `--authorized-proof-provider <nil address>`
+to authorize a deputy explicitly; omission selects the assigned provider. The
+payee is frozen at open, so failover to another payee needs a new funded session.
+The default version remains 0 for legacy CLI compatibility and cannot bypass
+the chain's activation rules. A runnable two-owner batch plus singular example
+is maintained in [the native CLI smoke](../scripts/smoke_retrieval_v2.py), with
+[commands and retained results](../bench/retrieval_session_capacity/native-multimessage-e259d573/README.md).
 
 Input JSON is bounded to 2 MiB before decoding. Unsigned protobuf must leave
 4 KiB for signing; final signed protobuf is capped at 1 MiB and the applicable

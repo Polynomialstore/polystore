@@ -1,5 +1,10 @@
 # PolyStore Network Performance Simulation Plan
 
+Secured v2 native transaction measurements and the maintained CLI-to-node smoke
+are documented in [the #257 artifact](../bench/retrieval_session_capacity/native-multimessage-e259d573/README.md).
+They demonstrate local transaction amortization; sustained capacity and the
+deployment operating envelope remain qualification work in #260.
+
 ## Objective
 To benchmark the `polystorechain` implementation under varying loads to assess stability, transaction throughput (TPS), and resource consumption. This ensures the Phase 3 implementation is robust enough for Phase 4 (Testnet).
 
