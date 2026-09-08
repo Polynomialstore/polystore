@@ -33,6 +33,30 @@ class BenchmarkHomeTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(root), "add", "."], check=True)
         self.script = root / "scripts" / SCRIPT.name
 
+    def test_external_fixture_overrides_are_rejected_before_home_or_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / "build-called"
+            fakebin = root / "bin"
+            fakebin.mkdir()
+            cargo = fakebin / "cargo"
+            cargo.write_text('#!/bin/sh\nprintf called > "$BUILD_MARKER"\nexit 89\n')
+            cargo.chmod(0o755)
+            home = root / "new-home"
+            output = root / "previous-result.json"
+            output.write_text("preserve")
+            env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", BUILD_MARKER=str(marker),
+                       POLYSTORE_BENCH_HOME=str(home), POLYSTORE_BENCH_OUTPUT=str(output))
+            for name in ("POLYSTORE_BENCH_PROOFS_DIR", "POLYSTORE_BENCH_MANIFEST_ROOT"):
+                with self.subTest(override=name):
+                    result = subprocess.run(["bash", str(self.script)], env=dict(env, **{name: "untrusted"}),
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(name + " is unsupported", result.stderr)
+                    self.assertFalse(marker.exists())
+                    self.assertFalse(home.exists())
+                    self.assertEqual(output.read_text(), "preserve")
+
     def test_existing_paths_are_preserved_before_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -251,6 +275,9 @@ class BenchmarkArtifactTest(unittest.TestCase):
         got = artifact.profile("2", "32", "700", "2147483648", consensus)
         self.assertEqual(got["target_block_interval_ms"], 1000)
         self.assertEqual(got["execution_budget_ms"], 700)
+        self.assertEqual(got["gas_limit"], "17000000")
+        control = artifact.profile("1", "0", "700", "2147483648", consensus)
+        self.assertEqual(control["gas_limit"], "1000000")
         for args in (("8193", "1", "700", "1"), ("1", "33", "700", "1"), ("1", "1", "0", "1"), ("1", "1", "700", "0")):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 artifact.profile(*args, consensus)

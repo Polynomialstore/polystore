@@ -52,6 +52,8 @@ def committed_tx(value, expected_hash):
 
 
 def fixture(directory, sessions, proofs, pattern):
+    # Consistency checks for this run's trusted exporter, not authentication of
+    # external data/proof bindings. The driver always generates its own fixture.
     if pattern not in {"zero-filled-v1", "be-fr-last-byte-cycle-1-through-251-v1"}:
         raise ValueError("unknown deterministic fixture pattern")
     directory = Path(directory)
@@ -102,6 +104,7 @@ def profile(sessions, proofs, execution_ms, memory_bytes, consensus):
     integer(block["max_gas"], "max_gas", 1, 64000000)
     integer(block["max_bytes"], "max_bytes", 1, 2097152)
     return {"sessions": sessions, "proofs_per_session": proofs,
+            "gas_limit": str(1000000 + proofs * 500000),
             "mode": "legacy-serial", "challenge_kind": "legacy-fixed-z",
             "target_block_interval_ms": 1000, "execution_budget_ms": execution_ms,
             "memory_ceiling_bytes": memory_bytes, "max_in_flight": 1,
