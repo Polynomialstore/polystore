@@ -173,7 +173,13 @@ export function useFetch() {
       let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
       let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
       const job = checkpoint, sink = job.output
-      if (job.state.cleanup) { await payment.forget(job.state.cleanup, job.key); job.cleaned() }
+      const availableProofBase = () => isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
+      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+        // Durable settlement rows are written only after the original ACK commits.
+        confirm: async () => {}, gatewayBase: availableProofBase() ?? previousBase, signal,
+      }), (sessions) => payment.forget(sessions, job.key), signal)
+      unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
+      setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
       let currentOrdinal = -1n
       const fetchSession = async (session: FrozenSession) => {
         setProgress((p) => ({ ...p, phase: 'fetching' }))
@@ -183,8 +189,7 @@ export function useFetch() {
       }
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
-        const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() })
-        const gatewayBase = job.state.pending?.proofBase ?? (gatewayEnabled ? appConfig.gatewayBase : undefined)
+        const gatewayBase = job.state.pending?.proofBase ?? availableProofBase()
         job.prepare(currentOrdinal, sessions, gatewayBase)
         const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
           confirm: (wave) => payment.confirm(wave, signal, job.key), signal,
@@ -194,8 +199,7 @@ export function useFetch() {
         if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
         for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
         job.complete(currentOrdinal, outcomes)
-        await payment.forget(sessions, job.key)
-        job.cleaned()
+        if (job.state.cleanup) { await payment.forget(job.state.cleanup, job.key); job.cleaned() }
       }
       const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
         for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
@@ -270,10 +274,13 @@ export function useFetch() {
       }
       const blob = await sink.file()
       const url = URL.createObjectURL(blob)
-      try { job.finish() } catch (error) { URL.revokeObjectURL(url); throw error }
+      let cleanup: (() => Promise<void>) | undefined
+      try { cleanup = await job.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
       if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
-      saved.current = { url, cleanup: sink.cleanup }; checkpoint = null
-      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}` : undefined
+      // The same output is needed to retry settlement without another download.
+      // A retained checkpoint owns its bytes across URL replacement and unmount.
+      saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpoint = null
+      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file when the trusted local gateway is available to settle the saved sessions without another payment or download.` : undefined
       setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
       setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
       return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }

@@ -70,6 +70,156 @@ test('real OPFS checkpoint survives reload and excludes a second tab after a sim
   await other.close()
 })
 
+test('real OPFS successful download retains unavailable settlement across reload until a gateway returns', async ({ page }) => {
+  test.setTimeout(90_000)
+  const fixture = JSON.parse(await readFile(new URL('../../testdata/retrieval-window-v2/session.json', import.meta.url), 'utf8'))
+  const owner = fixture.session.owner, payee = fixture.session.authorized_proof_provider
+  const ids = [1, 2, 3, 4].map((n) => `0x${n.toString(16).padStart(64, '0')}`)
+  const expectedHash = createHash('sha256')
+  for (let ordinal = 0; ordinal < 2; ordinal++) {
+    const bytes = Buffer.alloc(8388608)
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 17 + ordinal + 1) & 255
+    expectedHash.update(bytes)
+  }
+  const digest = expectedHash.digest('hex'), posted: string[] = []
+  await page.route('**/settlement-recovery-harness', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Settlement recovery</title>' }))
+  await page.goto('/settlement-recovery-harness')
+  const [download, first] = await Promise.all([
+    page.waitForEvent('download'),
+    page.evaluate(async ({ owner, payee, ids }) => {
+      const checkpointPath = '/src/lib/retrievalCheckpoint.ts', transactionPath = '/src/lib/retrievalTransactions.ts', settlementPath = '/src/lib/retrievalSettlement.ts'
+      const { openRetrievalCheckpoint } = await import(/* @vite-ignore */ checkpointPath) as typeof import('../src/lib/retrievalCheckpoint')
+      const { browserRetrievalStore, settleBrowserTransaction } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
+      const { confirmAndRequestRetrievalProofs } = await import(/* @vite-ignore */ settlementPath) as typeof import('../src/lib/retrievalSettlement')
+      const job = await openRetrievalCheckpoint(['unavailable-download'], 16n << 20n), store = browserRetrievalStore()
+      // Real OPFS and browser download; wallet receipts and provider outcomes
+      // are simulated. Two original open/ACK transactions per MDU stay durable.
+      for (let ordinal = 0; ordinal < 2; ordinal++) {
+        const wave = ids.slice(ordinal * 2, ordinal * 2 + 2).map((sessionId) => ({ sessionId, owner, payee,
+          pin: { dealId: 17n }, window: { mduIndex: BigInt(ordinal + 2), blobCount: 1 }, browserTransactionKey: `open:${ids[ordinal * 2].slice(2)}`,
+        })) as FrozenSession[]
+        const transaction = (key: string) => settleBrowserTransaction({ store, key,
+          prepare: async () => ({ data: '0x1234', intent: wave.map((s) => s.sessionId) }),
+          send: async () => { localStorage.setItem('unavailable-sends', String(Number(localStorage.getItem('unavailable-sends') ?? 0) + 1)); return wave[0].sessionId },
+          receipt: async (hash) => ({ status: 'success', transactionHash: hash, blockNumber: 9n }), reconcile: async () => false,
+        })
+        await transaction(wave[0].browserTransactionKey!)
+        const bytes = Uint8Array.from({ length: 8388608 }, (_, i) => (i * 17 + ordinal + 1) & 255)
+        await job.output.write(BigInt(ordinal) * 8388608n, bytes); await job.output.flush()
+        job.prepare(BigInt(ordinal), wave)
+        const outcomes = await confirmAndRequestRetrievalProofs(wave, { confirm: async () => { await transaction(`ack:${wave[0].sessionId.slice(2)}`) } })
+        job.complete(BigInt(ordinal), outcomes)
+        if (job.state.cleanup) throw new Error('unavailable settlement scheduled payment deletion')
+      }
+      const file = await job.output.file(), url = URL.createObjectURL(file)
+      const cleanup = await job.handoff()
+      if (cleanup) throw new Error('unsettled handoff transferred ownership of recoverable bytes')
+      const a = document.createElement('a'); a.href = url; a.download = 'verified-unsettled.bin'; a.click()
+      return { id: job.state.id, unsettled: job.state.unsettled, sends: Number(localStorage.getItem('unavailable-sends')) }
+    }, { owner, payee, ids }),
+  ])
+  expect(first.unsettled).toBe(4); expect(first.sends).toBe(4)
+  const stream = await download.createReadStream(), actualHash = createHash('sha256')
+  let length = 0
+  if (!stream) throw new Error('download stream missing')
+  for await (const bytes of stream) { length += bytes.length; actualHash.update(bytes) }
+  expect(length).toBe(16 * 2 ** 20); expect(actualHash.digest('hex')).toBe(digest)
+  await download.delete()
+  await page.reload()
+  await page.route('http://localhost:8080/gateway/session-proof?*', async (route) => {
+    if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST', 'access-control-allow-headers': 'content-type' } }); return }
+    const body = route.request().postDataJSON()
+    expect(body.provider).toBe(payee); posted.push(body.session_id)
+    await route.fulfill({ headers: { 'access-control-allow-origin': '*' }, json: { status: 'reconciled', session_id: body.session_id, proof_count: 1, tx_hash: '' } })
+  })
+  const result = await page.evaluate(async () => {
+    const checkpointPath = '/src/lib/retrievalCheckpoint.ts', transactionPath = '/src/lib/retrievalTransactions.ts', settlementPath = '/src/lib/retrievalSettlement.ts'
+    const { openRetrievalCheckpoint } = await import(/* @vite-ignore */ checkpointPath) as typeof import('../src/lib/retrievalCheckpoint')
+    const { browserRetrievalStore } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
+    const { confirmAndRequestRetrievalProofs } = await import(/* @vite-ignore */ settlementPath) as typeof import('../src/lib/retrievalSettlement')
+    const job = await openRetrievalCheckpoint(['unavailable-download'], 16n << 20n), store = browserRetrievalStore()
+    await job.reconcile((wave) => confirmAndRequestRetrievalProofs(wave, { confirm: async () => {}, gatewayBase: 'http://localhost:8080' }), async (wave) => {
+      for (const kind of ['open', 'ack']) {
+        const key = `${kind}:${wave[0].sessionId.slice(2)}`
+        const transaction = store.get<{ state: string; intent: string[] }>(key)
+        if (transaction?.state !== 'committed' || transaction.intent.join() !== wave.map((s) => s.sessionId).join()) throw new Error('original ACK wave changed')
+        store.remove(key)
+      }
+    })
+    const file = await job.output.file()
+    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+    const hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+    const cleanup = await job.handoff()
+    if (!cleanup) throw new Error('settled output did not transfer normal cleanup ownership')
+    await cleanup()
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('retrieval-output')
+    const exists = await dir.getFileHandle(job.state.id).then(() => true, () => false)
+    return { id: job.state.id, unsettled: job.state.unsettled, sends: Number(localStorage.getItem('unavailable-sends')), hash, exists, checkpoint: store.get(job.key) ?? null }
+  })
+  expect(posted).toEqual(ids)
+  expect(result).toEqual({ id: first.id, unsettled: 0, sends: 4, hash: digest, exists: false, checkpoint: null })
+})
+
+test('real localStorage retains 133 compact settlement waves and full transaction journals within quota', async ({ page }) => {
+  test.setTimeout(60_000)
+  const fixture = JSON.parse(await readFile(new URL('../../testdata/retrieval-window-v2/session.json', import.meta.url), 'utf8'))
+  const { bech32 } = await import('bech32')
+  const providers = Array.from({ length: 12 }, (_, i) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(i + 1))))
+  await page.route('**/settlement-quota-harness', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Settlement quota</title>' }))
+  await page.goto('/settlement-quota-harness')
+  const result = await page.evaluate(async ({ fixture, providers }) => {
+    const checkpointPath = '/src/lib/retrievalCheckpoint.ts', transactionPath = '/src/lib/retrievalTransactions.ts', retrievalPath = '/src/lib/retrieval.ts', precompilePath = '/src/lib/polystorePrecompile.ts', settlementPath = '/src/lib/retrievalSettlement.ts'
+    const { retrievalCheckpointCursor } = await import(/* @vite-ignore */ checkpointPath) as typeof import('../src/lib/retrievalCheckpoint')
+    const { browserRetrievalStore } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
+    const { parsePinnedGeneration, planRetrievalWindows } = await import(/* @vite-ignore */ retrievalPath) as typeof import('../src/lib/retrieval')
+    const { encodeRetrievalV2Data, encodeConfirmRetrievalSessionsData } = await import(/* @vite-ignore */ precompilePath) as typeof import('../src/lib/polystorePrecompile')
+    const { confirmAndRequestRetrievalProofs } = await import(/* @vite-ignore */ settlementPath) as typeof import('../src/lib/retrievalSettlement')
+    const pin = parsePinnedGeneration({ deal: { id: '17', owner: fixture.session.owner, manifest_root: fixture.session.manifest_root,
+      current_gen: '7', total_mdus: '135', witness_mdus: '1', end_block: '10000', redundancy_mode: 2, mode2_profile: { k: 8, m: 4 },
+      mode2_slots: providers.map((provider, slot) => ({ provider, slot, status: 'SLOT_STATUS_ACTIVE' })),
+    } }, '31337', 9n, 17n)
+    const store = browserRetrievalStore(), key = `output:${'11'.repeat(32)}`
+    const cursor = retrievalCheckpointCursor(store, key, { id: 'quota-control-only', length: 1n << 30n, through: -1n })
+    const decode = (value: string) => Uint8Array.from(atob(value), (c) => c.charCodeAt(0))
+    let ordinal = 0, count = 0, wave: RetrievalWindow[] = []
+    const flush = async () => {
+      const suffix = ordinal.toString(16).padStart(64, '0'), openKey = `open:${suffix}`, ackKey = `ack:${suffix}`
+      const sessions: FrozenSession[] = wave.map((window) => ({ sessionId: `0x${(++count).toString(16).padStart(64, '0')}`, pin, window,
+        owner: pin.owner, payee: window.provider, height: 12n, openedHeight: 10n, expiry: 522n, status: 3, funding: 1,
+        context: decode(fixture.challenge_context), contextHash: decode(fixture.challenge_context_hash), seed: decode(fixture.challenge_seed), browserTransactionKey: openKey,
+      }))
+      const ids = sessions.map((s) => s.sessionId)
+      const requests = sessions.map((s, i) => ({ dealId: pin.dealId, provider: s.payee, manifestRoot: pin.root, startMduIndex: s.window.mduIndex,
+        startBlobIndex: s.window.startBlobIndex, blobCount: BigInt(s.window.blobCount), nonce: BigInt(i), expiresAt: 522n, authorizedProofProvider: s.payee }))
+      // Real calldata, pinned assignments, contexts, and storage quota. These
+      // committed receipts are simulated; this is not a chain throughput test.
+      store.put(openKey, { state: 'committed', data: encodeRetrievalV2Data('openRetrievalSessions', requests), hash: ids[0], intent: { ids, pin } })
+      store.put(ackKey, { state: 'committed', data: encodeConfirmRetrievalSessionsData(ids), hash: ids[0], intent: ids })
+      cursor.prepare(BigInt(ordinal), sessions)
+      cursor.complete(BigInt(ordinal), await confirmAndRequestRetrievalProofs(sessions, { confirm: async () => {} }))
+      ordinal++; wave = []
+    }
+    for (const window of planRetrievalWindows(pin, { path: 'one-gib', flags: 0, start_offset: 0n, size_bytes: 1n << 30n }, 0n, 1n << 30n, true)) {
+      if (wave.length && wave[0].mduIndex !== window.mduIndex) await flush()
+      wave.push(window)
+    }
+    await flush()
+    const records = localStorage.length
+    let characters = 0
+    for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i)!; characters += key.length + localStorage.getItem(key)!.length }
+    let replayed = 0, maximumWave = 0
+    await cursor.reconcile(async (sessions) => { replayed += sessions.length; maximumWave = Math.max(maximumWave, sessions.length); return sessions.map((s) => ({ sessionId: s.sessionId, state: 'committed' })) }, async (sessions) => {
+      const openKey = sessions[0].browserTransactionKey!
+      store.remove(openKey); store.remove(`ack:${openKey.slice(5)}`)
+    })
+    store.remove(key)
+    return { count, ordinal, records, characters, utf16Bytes: characters * 2, replayed, maximumWave, remaining: localStorage.length }
+  }, { fixture, providers })
+  expect(result).toMatchObject({ count: 1064, ordinal: 133, records: 400, replayed: 1064, maximumWave: 8, remaining: 0 })
+  expect(result.utf16Bytes).toBeLessThan(5 * 2 ** 20)
+  console.log(`[settlement storage] ${JSON.stringify(result)}`)
+})
+
 test('secured selected window uses real Chromium Worker/WASM and OPFS before simulated ACK', async ({ page }) => {
   test.setTimeout(120_000)
   const root = new URL('../../testdata/retrieval-window-v2/', import.meta.url)

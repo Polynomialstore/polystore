@@ -13,20 +13,26 @@ export interface RetrievalSettlementOutcome {
   message?: string
 }
 
-interface SettlementOptions {
-  confirm: (sessions: readonly FrozenSession[]) => Promise<void>
+// Already-ACKed recovery needs only the frozen request identity. Metadata,
+// challenge contexts and decoding slices remain in the active retrieval flow.
+export type RetrievalSettlementSession = Pick<FrozenSession, 'sessionId' | 'payee' | 'browserTransactionKey'> & {
+  pin: Pick<FrozenSession['pin'], 'dealId'>
+  window: Pick<FrozenSession['window'], 'blobCount'>
+}
+interface SettlementOptions<S extends RetrievalSettlementSession> {
+  confirm: (sessions: readonly S[]) => Promise<void>
   onConfirmed?: () => void
   gatewayBase?: string
   signal?: AbortSignal
   fetchFn?: typeof fetch
 }
 
-function pending(session: FrozenSession, detail: string, txHash?: string): RetrievalSettlementOutcome {
+function pending(session: RetrievalSettlementSession, detail: string, txHash?: string): RetrievalSettlementOutcome {
   return { state: 'pending', sessionId: session.sessionId, txHash,
     message: `Provider settlement pending for session ${session.sessionId}${txHash ? ` (transaction ${txHash})` : ' (transaction outcome unknown)'}. ${detail} Reconcile this same session with the provider; do not blindly rebroadcast.` }
 }
 
-async function requestProof(session: FrozenSession, base: string, options: SettlementOptions): Promise<RetrievalSettlementOutcome> {
+async function requestProof(session: RetrievalSettlementSession, base: string, options: Pick<SettlementOptions<RetrievalSettlementSession>, 'fetchFn' | 'signal'>): Promise<RetrievalSettlementOutcome> {
   const signal = AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(options.signal ? [options.signal] : [])])
   try {
     signal.throwIfAborted()
@@ -71,7 +77,7 @@ async function requestProof(session: FrozenSession, base: string, options: Settl
 }
 
 /** Called only after verified output is flushed. ACK failure prevents every POST. */
-export async function confirmAndRequestRetrievalProofs(sessions: readonly FrozenSession[], options: SettlementOptions): Promise<RetrievalSettlementOutcome[]> {
+export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettlementSession>(sessions: readonly S[], options: SettlementOptions<S>): Promise<RetrievalSettlementOutcome[]> {
   if (!sessions.length || sessions.length > 64 || new Set(sessions.map((s) => s.sessionId)).size !== sessions.length) throw new Error('invalid settlement session list')
   for (const session of sessions) { unhex(session.sessionId, 32); account(session.payee); if (!uint(session.window.blobCount, 64)) throw new Error('empty settlement proof range') }
   await options.confirm(sessions)

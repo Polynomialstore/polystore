@@ -2062,10 +2062,10 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
     const output = job.output
     let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
+    const gatewayBase = localGateway.url || appConfig.gatewayBase
+    const availableProofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' }) ? gatewayBase : undefined
     const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
-      const gatewayBase = localGateway.url || appConfig.gatewayBase
-      const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' })
-      const proofBase = job.state.pending?.proofBase ?? (gatewayEnabled ? gatewayBase : undefined)
+      const proofBase = job.state.pending?.proofBase ?? availableProofBase
       job.prepare(ordinal, sessions, proofBase)
       const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
         confirm: (wave) => retrievalPayment.confirm(wave, signal, job.key), signal,
@@ -2074,11 +2074,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
       for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
       job.complete(ordinal, outcomes)
-      await retrievalPayment.forget(sessions, job.key)
-      job.cleaned()
+      if (job.state.cleanup) { await retrievalPayment.forget(job.state.cleanup, job.key); job.cleaned() }
     }
     try {
-      if (job.state.cleanup) { await retrievalPayment.forget(job.state.cleanup, job.key); job.cleaned() }
+      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+        confirm: async () => {}, gatewayBase: availableProofBase ?? previousBase, signal,
+      }), (sessions) => retrievalPayment.forget(sessions, job.key), signal)
+      unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
         fetch: async (index) => {
           let last: unknown
@@ -2110,9 +2112,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
+      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Connect the trusted local gateway and retry before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
       const file = await output.file()
       job.finish()
-      if (firstSettlementIssue) addLog(`> Recovered data verified and acknowledged; ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}`)
       await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
       const existingMaxEnd = records.reduce((end, r) => r.start_offset + r.size_bytes > end ? r.start_offset + r.size_bytes : end, 0n)
       return { baseMdu0Bytes: mdu0Bytes, existingUserCount: Number(pin.userMdus), existingMaxEnd: Number(existingMaxEnd), appendStartOffset: Number(pin.userMdus) * RAW_MDU_CAPACITY,

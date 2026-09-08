@@ -103,7 +103,7 @@ export function useRetrievalSessions() {
         },
       }))
     },
-    async forget(sessions: readonly FrozenSession[], recoveryKey: string) {
+    async forget(sessions: readonly Pick<FrozenSession, 'sessionId' | 'browserTransactionKey'>[], recoveryKey: string) {
       const store = browserRetrievalStore()
       store.remove('ack:' + await retrievalIntentKey([scope(), recoveryKey, sessions.map((s) => s.sessionId)]))
       for (const session of sessions) if (session.browserTransactionKey) store.remove(session.browserTransactionKey)
