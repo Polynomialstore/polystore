@@ -8,6 +8,7 @@ import {
   POLYFS_ROOT_TABLE_CAPACITY,
   RAW_MDU_CAPACITY_BYTES,
   computePolyfsResolvedRange,
+  committedPolyfsLayout,
   computeStripeProfile,
   computeUserMduCount,
   computeWitnessLayout,
@@ -24,7 +25,7 @@ test('PolyFS constants describe the current MDU #0 layout', () => {
   assert.equal(MDU_SIZE_BYTES, 8 * 1024 * 1024)
   assert.equal(RAW_MDU_CAPACITY_BYTES, 8_126_464)
   assert.equal(POLYFS_ROOT_TABLE_CAPACITY, 65_536)
-  assert.equal(POLYFS_FILE_RECORD_CAPACITY, 24_575)
+  assert.equal(POLYFS_FILE_RECORD_CAPACITY, 23_807)
 })
 
 test('computePolyfsResolvedRange maps raw file offsets to slab MDUs and encoded blobs', () => {
@@ -91,4 +92,15 @@ test('packLengthAndFlags matches the Rust layout convention', () => {
   const packed = packLengthAndFlags(100, 0x81)
   assert.equal(packed, 0x8100_0000_0000_0064n)
   assert.deepEqual(unpackLengthAndFlags(packed), { length: 100, flags: 0x81 })
+})
+
+// Counts come from the committed deal, never the number of nonzero root cells.
+test('committed layout requires exact complete bounded counts', () => {
+  assert.deepEqual(committedPolyfsLayout({ total_mdus: '65537', witness_mdus: '1' }), { totalMdus: 65537, witnessMdus: 1, userMdus: 65535 })
+  for (const total of [undefined, '', '0', '65538', '9007199254740993', '1.5', '01', '+3', ' 3', '3 ']) {
+    assert.throws(() => committedPolyfsLayout({ total_mdus: total, witness_mdus: '1' }))
+  }
+  for (const witness of [undefined, '', '3', '65537', '-1', '1.5', '01']) {
+    assert.throws(() => committedPolyfsLayout({ total_mdus: '3', witness_mdus: witness }))
+  }
 })

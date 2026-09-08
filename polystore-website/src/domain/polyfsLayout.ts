@@ -19,8 +19,10 @@ export const POLYFS_FILE_TABLE_END_BLOB = BLOBS_PER_MDU - 1
 
 export const POLYFS_ROOT_TABLE_CAPACITY =
   (POLYFS_ROOT_TABLE_BLOBS * BLOB_SIZE_BYTES) / POLYFS_ROOT_SIZE_BYTES
+export const POLYFS_FAT_VERSION = 2
+export const POLYFS_FAT_LOGICAL_BYTES = POLYFS_FILE_TABLE_BLOBS * BLOB_SIZE_BYTES / 32 * 31
 export const POLYFS_FILE_RECORD_CAPACITY = Math.floor(
-  (POLYFS_FILE_TABLE_BLOBS * BLOB_SIZE_BYTES - POLYFS_FILE_TABLE_HEADER_BYTES) /
+  (POLYFS_FAT_LOGICAL_BYTES - POLYFS_FILE_TABLE_HEADER_BYTES) /
     POLYFS_FILE_RECORD_BYTES,
 )
 
@@ -62,11 +64,10 @@ export interface WitnessLayout {
 }
 
 export function asNonNegativeInteger(value: number, label: string): number {
-  const n = Number(value)
-  if (!Number.isFinite(n) || n < 0) {
-    throw new Error(`${label} must be a non-negative finite number`)
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a non-negative safe integer`)
   }
-  return Math.floor(n)
+  return value
 }
 
 export function formatBytes(bytes: number): string {
@@ -121,12 +122,12 @@ export function computePolyfsResolvedRange(input: PolyfsRangeInput): PolyfsResol
   if (rawMduCapacityBytes <= 0) throw new Error('rawMduCapacityBytes must be positive')
   if (sizeBytes === 0) return null
 
-  const metaMdus = 1 + witnessMdus
-  const endOffset = startOffset + sizeBytes - 1
+  const metaMdus = asNonNegativeInteger(1 + witnessMdus, 'metaMdus')
+  const endOffset = asNonNegativeInteger(startOffset + (sizeBytes - 1), 'endOffset')
   const userMduStart = Math.floor(startOffset / rawMduCapacityBytes)
   const userMduEnd = Math.floor(endOffset / rawMduCapacityBytes)
-  const slabMduStart = metaMdus + userMduStart
-  const slabMduEnd = metaMdus + userMduEnd
+  const slabMduStart = asNonNegativeInteger(metaMdus + userMduStart, 'slabMduStart')
+  const slabMduEnd = asNonNegativeInteger(metaMdus + userMduEnd, 'slabMduEnd')
   const rawOffsetInFirstMdu = startOffset % rawMduCapacityBytes
   const rawOffsetInLastMdu = endOffset % rawMduCapacityBytes
   const encodedBlobStart = rawOffsetToEncodedPosition(rawOffsetInFirstMdu).encodedBlobIndex
@@ -156,7 +157,8 @@ export function computeStripeProfile(k: number, m: number): StripeProfile {
   if (BLOBS_PER_MDU % safeK !== 0) {
     throw new Error(`k must divide ${BLOBS_PER_MDU}`)
   }
-  const n = safeK + safeM
+  const n = asNonNegativeInteger(safeK + safeM, 'n')
+  if (n > 256) throw new Error('Mode 2 n must be <= 256')
   const rows = BLOBS_PER_MDU / safeK
   return {
     k: safeK,
@@ -201,7 +203,7 @@ export function computeWitnessLayout(input: {
   if (rawMduCapacityBytes <= 0) throw new Error('rawMduCapacityBytes must be positive')
   const profile = computeStripeProfile(input.k, input.m)
   const witnessBytesPerUserMdu = profile.leafCount * KZG_COMMITMENT_BYTES
-  const totalWitnessBytes = totalUserMdus * witnessBytesPerUserMdu
+  const totalWitnessBytes = asNonNegativeInteger(totalUserMdus * witnessBytesPerUserMdu, 'totalWitnessBytes')
   const witnessMduCount = Math.max(1, Math.ceil(totalWitnessBytes / rawMduCapacityBytes))
   return {
     profile,
@@ -213,14 +215,31 @@ export function computeWitnessLayout(input: {
 }
 
 export function packLengthAndFlags(length: number, flags: number): bigint {
-  const safeLength = BigInt(asNonNegativeInteger(length, 'length')) & 0x00ff_ffff_ffff_ffffn
-  const safeFlags = BigInt(asNonNegativeInteger(flags, 'flags') & 0xff)
+  const safeLength = BigInt(asNonNegativeInteger(length, 'length'))
+  const safeFlags = BigInt(asNonNegativeInteger(flags, 'flags'))
+  if (safeLength > 0x00ff_ffff_ffff_ffffn || safeFlags > 255n) throw new Error('length or flags overflow')
   return (safeFlags << 56n) | safeLength
 }
 
 export function unpackLengthAndFlags(value: bigint): { length: number; flags: number } {
+  if (value < 0n || value > 0xffff_ffff_ffff_ffffn) throw new Error('invalid packed length')
   return {
-    length: Number(value & 0x00ff_ffff_ffff_ffffn),
+    length: asNonNegativeInteger(Number(value & 0x00ff_ffff_ffff_ffffn), 'length'),
     flags: Number((value >> 56n) & 0xffn),
   }
+}
+
+// Counts come from the committed chain generation. Zero-valued root cells and
+// file extents cannot establish the witness/user boundary.
+export function committedPolyfsLayout(deal: { total_mdus?: string; witness_mdus?: string }): {
+  totalMdus: number; witnessMdus: number; userMdus: number
+} {
+  const count = (value: string | undefined, label: string): number => {
+    if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value) || value.length > 5) throw new Error(`invalid committed ${label}`)
+    return Number(value)
+  }
+  const totalMdus = count(deal.total_mdus, 'total_mdus')
+  const witnessMdus = count(deal.witness_mdus, 'witness_mdus')
+  if (totalMdus < 1 || totalMdus > POLYFS_ROOT_TABLE_CAPACITY + 1 || witnessMdus >= totalMdus) throw new Error('invalid committed PolyFS layout')
+  return { totalMdus, witnessMdus, userMdus: totalMdus - witnessMdus - 1 }
 }

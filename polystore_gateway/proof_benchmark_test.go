@@ -65,9 +65,6 @@ func buildProofBenchmarkFixture(t testing.TB, userMdus uint64, targetUserOrdinal
 		t.Fatal(err)
 	}
 	mdu0Data, _ := builder.Bytes()
-	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + witnessCount + targetUserOrdinal: targetRoot}); err != nil {
-		t.Fatal(err)
-	}
 	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +109,10 @@ func buildProofBenchmarkFixture(t testing.TB, userMdus uint64, targetUserOrdinal
 	}
 
 	totalMdus := uint64(1) + witnessCount + userMdus
+	records, err := slabMetadataFileRecordsFromBuilder(builder)
+	if err != nil {
+		t.Fatal(err)
+	}
 	meta, err := newSlabMetadataDocument(slabMetadataBuildOptions{
 		GenerationID: hex.EncodeToString(mdu0Root),
 		ManifestRoot: "0x" + hex.EncodeToString(mdu0Root),
@@ -119,7 +120,7 @@ func buildProofBenchmarkFixture(t testing.TB, userMdus uint64, targetUserOrdinal
 		WitnessMdus:  &witnessCount,
 		UserMdus:     &userMdus,
 		TotalMdus:    &totalMdus,
-		FileRecords:  slabMetadataFileRecordsFromBuilder(builder),
+		FileRecords:  records,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +176,9 @@ func TestProofHeaderJSONRejectsStaleMdu0RootTable(t *testing.T) {
 	if corruptOffset >= uint64(len(mdu0Bytes)) {
 		t.Fatalf("corrupt offset %d out of MDU #0 bounds", corruptOffset)
 	}
-	mdu0Bytes[corruptOffset] ^= 0xff
+	// Keep the field element canonical so this exercises an incorrect root,
+	// separately from rejecting a malformed root-table encoding at load time.
+	mdu0Bytes[corruptOffset+31] ^= 1
 	if err := os.WriteFile(mdu0Path, mdu0Bytes, 0o644); err != nil {
 		t.Fatalf("write corrupted MDU #0: %v", err)
 	}

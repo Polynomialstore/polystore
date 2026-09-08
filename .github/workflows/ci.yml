@@ -57,6 +57,14 @@ jobs:
             go test ./... -v
           fi
 
+      - name: Check validator trusted setup admission
+        if: matrix.service == 'polystorechain'
+        working-directory: polystorechain
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
+          ../scripts/chain_go.sh build -p 2 -o "$RUNNER_TEMP/polystorechaind-setup-test" ./cmd/polystorechaind
+          python3 ../scripts/test_validator_setup_startup.py "$RUNNER_TEMP/polystorechaind-setup-test" trusted_setup.txt
+
   # ------------------------------------------------------------------
   # RUST CRATES (Core, CLI, P2P, Mock L1)
   # ------------------------------------------------------------------
@@ -84,6 +92,12 @@ jobs:
       - name: Test ${{ matrix.crate }}
         working-directory: ${{ matrix.crate }}
         run: cargo test --verbose
+
+      - name: Check independent crypto vectors and setup checkout bytes
+        if: matrix.crate == 'polystore_core'
+        run: |
+          python3 polystore_core/tests/testdata/check_session_batch_vectors.py
+          python3 scripts/test_trusted_setup_checkout.py
 
   # ------------------------------------------------------------------
   # FRONTEND (PolyStore Website)

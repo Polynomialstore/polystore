@@ -1,3 +1,4 @@
+import { committedPolyfsLayout } from '../domain/polyfsLayout'
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
 import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
@@ -2115,6 +2116,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     if (!manifestRoot || !owner || !stripeParams) {
       return null
     }
+    const head = await lcdFetchDeal(appConfig.lcdBase, dealId)
+    if (!head || head.id !== dealId || normalizeManifestRoot(head.cid) !== manifestRoot || head.owner !== owner) throw new Error('committed append generation changed or unavailable')
+    const { totalMdus, witnessMdus: witnessCount, userMdus: userCount } = committedPolyfsLayout(head)
     const dataSlotProviders = slotProviders
       .map((value, slot) => ({
         slot,
@@ -2181,19 +2185,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       return null
     }
 
-    const roots = parsePolyfsRootTableFromMdu0(mdu0Bytes)
-    let maxEnd = 0
-    for (const file of files) {
-      const start = Number(file.start_offset || 0)
-      const sizeBytes = Number(file.size_bytes || 0)
-      if (!Number.isFinite(start) || start < 0 || !Number.isFinite(sizeBytes) || sizeBytes <= 0) continue
-      maxEnd = Math.max(maxEnd, start + sizeBytes)
-    }
-    const userCount = maxEnd > 0 ? Math.ceil(maxEnd / RAW_MDU_CAPACITY) : 0
-    if (roots.length < userCount) {
-      throw new Error(`bootstrap root table mismatch: roots=${roots.length} user_mdus=${userCount}`)
-    }
-    const witnessCount = roots.length - userCount
+    parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
+    if (files.some((file) => file.start_offset + file.size_bytes > userCount * RAW_MDU_CAPACITY)) throw new Error('file map exceeds committed user capacity')
     const userMduIndexes = Array.from({ length: userCount }, (_, idx) => 1 + witnessCount + idx)
 
     const userMdus = await Promise.all(

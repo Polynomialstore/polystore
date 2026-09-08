@@ -91,6 +91,10 @@ function getUint8ArrayMemory0() {
     return cachedUint8ArrayMemory0;
 }
 
+function isLikeNone(x) {
+    return x === undefined || x === null;
+}
+
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
@@ -190,17 +194,96 @@ export class PolyStoreWasm {
         wasm.__wbg_polystorewasm_free(ptr, 0);
     }
     /**
-     * @param {Uint8Array} mdu_bytes
-     * @returns {any}
+     * @param {Uint8Array} input
+     * @returns {boolean}
      */
-    commit_mdu(mdu_bytes) {
-        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+    verify_polyfs_session_batch(input) {
+        const ptr0 = passArray8ToWasm0(input, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_commit_mdu(this.__wbg_ptr, ptr0, len0);
+        const ret = wasm.polystorewasm_verify_polyfs_session_batch(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] !== 0;
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @returns {Uint8Array}
+     */
+    static challenge_context_hash(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_challenge_context_hash(ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
         return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @param {Uint8Array} seed
+     * @returns {Uint8Array}
+     */
+    static derive_challenges(bytes, seed) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(seed, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_derive_challenges(ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     */
+    static validate_trusted_setup(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_validate_trusted_setup(ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {Uint8Array} blob
+     * @returns {Uint8Array}
+     */
+    commit_received_blob(blob) {
+        const ptr0 = passArray8ToWasm0(blob, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_commit_received_blob(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} encoded
+     * @param {number} raw_len
+     */
+    static validate_packed_payload(encoded, raw_len) {
+        const ptr0 = passArray8ToWasm0(encoded, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_validate_packed_payload(ptr0, len0, raw_len);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {Uint8Array} trusted_setup_bytes
+     */
+    constructor(trusted_setup_bytes) {
+        const ptr0 = passArray8ToWasm0(trusted_setup_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_new(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0] >>> 0;
+        PolyStoreWasmFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
     /**
      * @param {Uint8Array} data
@@ -210,6 +293,109 @@ export class PolyStoreWasm {
         const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.polystorewasm_expand_file(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} mdu_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_mdu_rs(mdu_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_mdu_rs(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} payload_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_payload_rs_flat(payload_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_payload_rs_flat(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} mdu_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_mdu_rs_flat_uncommitted(mdu_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} payload_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_payload_rs_flat_uncommitted(payload_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} payload_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_payload_rs_flat_committed_profiled(payload_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} payload_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_payload_rs_flat_committed(payload_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} mdu_bytes
+     * @returns {any}
+     */
+    commit_mdu(mdu_bytes) {
+        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_commit_mdu(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -229,15 +415,67 @@ export class PolyStoreWasm {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
+     * @param {Uint8Array} blobs_flat
+     * @returns {any}
+     */
+    commit_blobs_profiled(blobs_flat) {
+        const ptr0 = passArray8ToWasm0(blobs_flat, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_commit_blobs_profiled(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    webgpu_g1_srs_lagrange() {
+        const ret = wasm.polystorewasm_webgpu_g1_srs_lagrange(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} window_sums
+     * @param {number} bucket_width
+     * @returns {Uint8Array}
+     */
+    webgpu_fold_g1_window_sums(window_sums, bucket_width) {
+        const ptr0 = passArray8ToWasm0(window_sums, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_webgpu_fold_g1_window_sums(this.__wbg_ptr, ptr0, len0, bucket_width);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * @param {Uint8Array} mdu_bytes
      * @param {number} k
      * @param {number} m
      * @returns {any}
      */
-    expand_mdu_rs(mdu_bytes, k, m) {
+    expand_mdu_rs_flat_committed_profiled(mdu_bytes, k, m) {
         const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_mdu_rs(this.__wbg_ptr, ptr0, len0, k, m);
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} mdu_bytes
+     * @param {number} k
+     * @param {number} m
+     * @returns {any}
+     */
+    expand_mdu_rs_flat_committed(mdu_bytes, k, m) {
+        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -270,42 +508,13 @@ export class PolyStoreWasm {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * @param {Uint8Array} blobs_flat
-     * @returns {any}
+     * @param {number} bits
      */
-    commit_blobs_profiled(blobs_flat) {
-        const ptr0 = passArray8ToWasm0(blobs_flat, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_commit_blobs_profiled(this.__wbg_ptr, ptr0, len0);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
+    set_pippenger_window_bits(bits) {
+        const ret = wasm.polystorewasm_set_pippenger_window_bits(this.__wbg_ptr, bits);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
         }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} payload_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_payload_rs_flat(payload_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_payload_rs_flat(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @returns {Uint8Array}
-     */
-    webgpu_g1_srs_lagrange() {
-        const ret = wasm.polystorewasm_webgpu_g1_srs_lagrange(this.__wbg_ptr);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
     }
     /**
      * @param {string} mode
@@ -317,133 +526,6 @@ export class PolyStoreWasm {
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
-    }
-    /**
-     * @param {number} bits
-     */
-    set_pippenger_window_bits(bits) {
-        const ret = wasm.polystorewasm_set_pippenger_window_bits(this.__wbg_ptr, bits);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
-    /**
-     * @param {Uint8Array} window_sums
-     * @param {number} bucket_width
-     * @returns {Uint8Array}
-     */
-    webgpu_fold_g1_window_sums(window_sums, bucket_width) {
-        const ptr0 = passArray8ToWasm0(window_sums, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_webgpu_fold_g1_window_sums(this.__wbg_ptr, ptr0, len0, bucket_width);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} mdu_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_mdu_rs_flat_committed(mdu_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} mdu_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_mdu_rs_flat_uncommitted(mdu_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_mdu_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} payload_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_payload_rs_flat_committed(payload_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} payload_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_payload_rs_flat_uncommitted(payload_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_payload_rs_flat_uncommitted(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} mdu_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_mdu_rs_flat_committed_profiled(mdu_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(mdu_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_mdu_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
-    }
-    /**
-     * @param {Uint8Array} trusted_setup_bytes
-     */
-    constructor(trusted_setup_bytes) {
-        const ptr0 = passArray8ToWasm0(trusted_setup_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_new(ptr0, len0);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        this.__wbg_ptr = ret[0] >>> 0;
-        PolyStoreWasmFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-    /**
-     * @param {Uint8Array} payload_bytes
-     * @param {number} k
-     * @param {number} m
-     * @returns {any}
-     */
-    expand_payload_rs_flat_committed_profiled(payload_bytes, k, m) {
-        const ptr0 = passArray8ToWasm0(payload_bytes, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.polystorewasm_expand_payload_rs_flat_committed_profiled(this.__wbg_ptr, ptr0, len0, k, m);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        return takeFromExternrefTable0(ret[0]);
     }
 }
 if (Symbol.dispose) PolyStoreWasm.prototype[Symbol.dispose] = PolyStoreWasm.prototype.free;
@@ -467,24 +549,16 @@ export class WasmMdu0Builder {
         wasm.__wbg_wasmmdu0builder_free(ptr, 0);
     }
     /**
-     * @param {string} path
-     * @param {bigint} size
-     * @param {bigint} start_offset
+     * @param {bigint} max_user_mdus
      */
-    append_file(path, size, start_offset) {
-        const ptr0 = passStringToWasm0(path, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.wasmmdu0builder_append_file(this.__wbg_ptr, ptr0, len0, size, start_offset);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
+    constructor(max_user_mdus) {
+        const ret = wasm.wasmmdu0builder_new(max_user_mdus);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
         }
-    }
-    /**
-     * @returns {bigint}
-     */
-    get_witness_count() {
-        const ret = wasm.wasmmdu0builder_get_witness_count(this.__wbg_ptr);
-        return BigInt.asUintN(64, ret);
+        this.__wbg_ptr = ret[0] >>> 0;
+        WasmMdu0BuilderFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
     /**
      * @param {bigint} max_user_mdus
@@ -493,30 +567,10 @@ export class WasmMdu0Builder {
      */
     static new_with_commitments(max_user_mdus, commitments_per_mdu) {
         const ret = wasm.wasmmdu0builder_new_with_commitments(max_user_mdus, commitments_per_mdu);
-        return WasmMdu0Builder.__wrap(ret);
-    }
-    /**
-     * @param {string} path
-     * @param {bigint} size
-     * @param {bigint} start_offset
-     * @param {number} flags
-     */
-    append_file_with_flags(path, size, start_offset, flags) {
-        const ptr0 = passStringToWasm0(path, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.wasmmdu0builder_append_file_with_flags(this.__wbg_ptr, ptr0, len0, size, start_offset, flags);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
         }
-    }
-    /**
-     * @param {bigint} max_user_mdus
-     */
-    constructor(max_user_mdus) {
-        const ret = wasm.wasmmdu0builder_new(max_user_mdus);
-        this.__wbg_ptr = ret >>> 0;
-        WasmMdu0BuilderFinalization.register(this, this.__wbg_ptr, this);
-        return this;
+        return WasmMdu0Builder.__wrap(ret[0]);
     }
     /**
      * @param {Uint8Array} data
@@ -532,6 +586,59 @@ export class WasmMdu0Builder {
             throw takeFromExternrefTable0(ret[1]);
         }
         return WasmMdu0Builder.__wrap(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} data
+     * @param {bigint} max_user_mdus
+     * @param {bigint} commitments_per_mdu
+     * @returns {WasmMdu0Builder}
+     */
+    static load_legacy_recovery(data, max_user_mdus, commitments_per_mdu) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmmdu0builder_load_legacy_recovery(ptr0, len0, max_user_mdus, commitments_per_mdu);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WasmMdu0Builder.__wrap(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} data
+     * @param {bigint} max_user_mdus
+     * @param {bigint} commitments_per_mdu
+     * @returns {WasmMdu0Builder}
+     */
+    static stage_v2_from_trusted_legacy(data, max_user_mdus, commitments_per_mdu) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmmdu0builder_stage_v2_from_trusted_legacy(ptr0, len0, max_user_mdus, commitments_per_mdu);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WasmMdu0Builder.__wrap(ret[0]);
+    }
+    /**
+     * @param {string} path
+     * @param {bigint} size
+     * @param {bigint} start_offset
+     */
+    append_file(path, size, start_offset) {
+        const ret = wasm.wasmmdu0builder_append_file(this.__wbg_ptr, path, size, start_offset);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @param {string} path
+     * @param {bigint} size
+     * @param {bigint} start_offset
+     * @param {number} flags
+     */
+    append_file_with_flags(path, size, start_offset, flags) {
+        const ret = wasm.wasmmdu0builder_append_file_with_flags(this.__wbg_ptr, path, size, start_offset, flags);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
     /**
      * @returns {Uint8Array}
@@ -553,6 +660,68 @@ export class WasmMdu0Builder {
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
+    }
+    /**
+     * @returns {number}
+     */
+    get_record_count() {
+        const ret = wasm.wasmmdu0builder_get_record_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    is_legacy_recovery() {
+        const ret = wasm.wasmmdu0builder_is_legacy_recovery(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @param {number} index
+     * @returns {Uint8Array}
+     */
+    get_record(index) {
+        const ret = wasm.wasmmdu0builder_get_record(this.__wbg_ptr, index);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @param {number} offset
+     * @param {number} len
+     * @returns {Uint8Array}
+     */
+    read_fat_range(offset, len) {
+        const ret = wasm.wasmmdu0builder_read_fat_range(this.__wbg_ptr, offset, len);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * Returns the stored cell, not the original digest supplied to set_root.
+     * @param {bigint} index
+     * @returns {Uint8Array}
+     */
+    get_root(index) {
+        const ret = wasm.wasmmdu0builder_get_root(this.__wbg_ptr, index);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {bigint}
+     */
+    get_witness_count() {
+        const ret = wasm.wasmmdu0builder_get_witness_count(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
     }
 }
 if (Symbol.dispose) WasmMdu0Builder.prototype[Symbol.dispose] = WasmMdu0Builder.prototype.free;
@@ -596,6 +765,12 @@ function __wbg_get_imports() {
         const ret = Error(getStringFromWasm0(arg0, arg1));
         return ret;
     };
+    imports.wbg.__wbg___wbindgen_bigint_get_as_i64_6e32f5e6aff02e1d = function(arg0, arg1) {
+        const v = arg1;
+        const ret = typeof(v) === 'bigint' ? v : undefined;
+        getDataViewMemory0().setBigInt64(arg0 + 8 * 1, isLikeNone(ret) ? BigInt(0) : ret, true);
+        getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+    };
     imports.wbg.__wbg___wbindgen_debug_string_adfb662ae34724b6 = function(arg0, arg1) {
         const ret = debugString(arg1);
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -603,8 +778,32 @@ function __wbg_get_imports() {
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
     };
+    imports.wbg.__wbg___wbindgen_is_bigint_0e1a2e3f55cfae27 = function(arg0) {
+        const ret = typeof(arg0) === 'bigint';
+        return ret;
+    };
+    imports.wbg.__wbg___wbindgen_is_string_704ef9c8fc131030 = function(arg0) {
+        const ret = typeof(arg0) === 'string';
+        return ret;
+    };
+    imports.wbg.__wbg___wbindgen_jsval_eq_b6101cc9cef1fe36 = function(arg0, arg1) {
+        const ret = arg0 === arg1;
+        return ret;
+    };
+    imports.wbg.__wbg___wbindgen_string_get_a2a31e16edf96e42 = function(arg0, arg1) {
+        const obj = arg1;
+        const ret = typeof(obj) === 'string' ? obj : undefined;
+        var ptr1 = isLikeNone(ret) ? 0 : passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+        getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+    };
     imports.wbg.__wbg___wbindgen_throw_dd24417ed36fc46e = function(arg0, arg1) {
         throw new Error(getStringFromWasm0(arg0, arg1));
+    };
+    imports.wbg.__wbg_charCodeAt_6c748220ece97752 = function(arg0, arg1) {
+        const ret = arg0.charCodeAt(arg1 >>> 0);
+        return ret;
     };
     imports.wbg.__wbg_error_7534b8e9a36f1ab4 = function(arg0, arg1) {
         let deferred0_0;
@@ -616,6 +815,10 @@ function __wbg_get_imports() {
         } finally {
             wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
         }
+    };
+    imports.wbg.__wbg_length_1f83b8e5895c84aa = function(arg0) {
+        const ret = arg0.length;
+        return ret;
     };
     imports.wbg.__wbg_new_1ba21ce319a06297 = function() {
         const ret = new Object();

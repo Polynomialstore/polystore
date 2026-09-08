@@ -1,0 +1,2 @@
+# Setup identity is the exact approved artifact, including its line endings.
+trusted_setup.txt -text

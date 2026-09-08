@@ -20,6 +20,15 @@ change `.active_generation`; current deal updates cannot redirect old sessions.
 Batches split at slot/MDU boundaries and preserve each session's ID and fresh z.
 The profile documents native/EVM fields, exact query bytes, funding and recovery.
 
+The [internal v2 verifier contract](../docs/retrieval-v2-crypto.md) specifies the
+bounded PSB1 transport, exact transcript and weighted KZG equation. One synchronous
+native call verifies each complete admitted list, including singleton input, after
+all cheap checks and full crypto prepayment. The 64-proof/60522-byte internal
+ceiling does not relax public slot/MDU limits or aggregate separate sessions.
+There is no gas discount or recursive isolation on failure. Both membership hops,
+fresh expected z and the authenticated setup remain mandatory. Consumers must use
+the strict full received-blob commitment boundary before decoding and confirmation.
+
 ## 1. Motivation
 
 PolyStore’s “Retrieval IS Storage” model only works if **served bytes are accountable**:

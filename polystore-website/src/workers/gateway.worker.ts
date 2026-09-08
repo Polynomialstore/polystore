@@ -5,6 +5,7 @@
 // Import the WASM module
 // The `init` function loads the WASM binary.
 // The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
+import { asNonNegativeInteger, POLYFS_ROOT_TABLE_CAPACITY } from '../domain/polyfsLayout';
 import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
 import {
     createBrowserKzgCommitBackend,
@@ -27,6 +28,19 @@ let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
 let wasmInitError: unknown = null;
 let mdu0BuilderInstance: WasmMdu0Builder | null = null;
+let mdu0SizingHint = { maxUserMdus: 0n, commitments: 64n };
+let mdu0Busy = false;
+
+function setMdu0Builder(builder: WasmMdu0Builder): void {
+    mdu0BuilderInstance?.free();
+    mdu0BuilderInstance = builder;
+}
+
+function validateRootBatch(start: number, roots: Uint8Array): void {
+    asNonNegativeInteger(start, 'root start');
+    if (!(roots instanceof Uint8Array) || roots.byteLength % 32 !== 0) throw new Error('roots must contain whole 32-byte digests');
+    if (start > POLYFS_ROOT_TABLE_CAPACITY || roots.byteLength / 32 > POLYFS_ROOT_TABLE_CAPACITY - start) throw new Error('root batch exceeds table capacity');
+}
 let polyStoreWasmInstance: PolyStoreWasm | null = null;
 let kzgCommitBackend: KzgCommitBackend | null = null;
 
@@ -223,10 +237,16 @@ void initializeWasm();
 // Listen for messages from the main thread
 self.onmessage = async (event) => {
     const { type, payload, id } = event.data;
+    let ownsMdu0 = false;
 
     try {
         // Ensure WASM is loaded before processing messages
         await initializeWasm();
+        if (type.includes('Mdu0') || type === 'initPolyStoreWasm') {
+            if (mdu0Busy) throw new Error('another metadata operation is in progress');
+            mdu0Busy = true;
+            ownsMdu0 = true;
+        }
 
         let result;
         const collectTransferables = (val: unknown): Transferable[] => {
@@ -256,11 +276,12 @@ self.onmessage = async (event) => {
         switch (type) {
             case 'initPolyStoreWasm': {
                 const { trustedSetupBytes } = payload;
+                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
+                PolyStoreWasm.validate_trusted_setup(trustedSetupBytes);
                 if (polyStoreWasmInstance) {
                     result = 'PolyStoreWasm already initialized';
                     break;
                 }
-                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
                 polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
                 kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, USER_UPLOAD_KZG_OPTIONS);
                 // Initialize the blob-commit compute pool (best-effort).
@@ -282,14 +303,10 @@ self.onmessage = async (event) => {
             case 'initMdu0Builder': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
                 const { maxUserMdus, commitmentsPerMdu } = payload as { maxUserMdus: number; commitmentsPerMdu?: number };
-                if (commitmentsPerMdu && Number(commitmentsPerMdu) > 0) {
-                    mdu0BuilderInstance = WasmMdu0Builder.new_with_commitments(
-                        BigInt(maxUserMdus),
-                        BigInt(commitmentsPerMdu),
-                    );
-                } else {
-                    mdu0BuilderInstance = new WasmMdu0Builder(BigInt(maxUserMdus));
-                }
+                const hint = { maxUserMdus: BigInt(asNonNegativeInteger(maxUserMdus, 'maxUserMdus')), commitments: BigInt(asNonNegativeInteger(commitmentsPerMdu ?? 64, 'commitmentsPerMdu')) };
+                const builder = WasmMdu0Builder.new_with_commitments(hint.maxUserMdus, hint.commitments);
+                setMdu0Builder(builder);
+                mdu0SizingHint = hint;
                 result = 'Mdu0Builder initialized';
                 break;
             }
@@ -301,8 +318,10 @@ self.onmessage = async (event) => {
                     commitmentsPerMdu?: number;
                 };
                 if (!(data instanceof Uint8Array)) throw new Error('MDU0 data must be a Uint8Array');
-                const commitments = commitmentsPerMdu && Number(commitmentsPerMdu) > 0 ? commitmentsPerMdu : 0;
-                mdu0BuilderInstance = WasmMdu0Builder.load(data, BigInt(maxUserMdus), BigInt(commitments));
+                const hint = { maxUserMdus: BigInt(asNonNegativeInteger(maxUserMdus, 'maxUserMdus')), commitments: BigInt(asNonNegativeInteger(commitmentsPerMdu ?? 64, 'commitmentsPerMdu')) };
+                const builder = WasmMdu0Builder.load(data, hint.maxUserMdus, hint.commitments);
+                setMdu0Builder(builder);
+                mdu0SizingHint = hint;
                 result = 'Mdu0Builder loaded';
                 break;
             }
@@ -314,12 +333,7 @@ self.onmessage = async (event) => {
                     startOffset: number;
                     flags?: number;
                 };
-                const flagValue = typeof flags === 'number' ? flags : 0;
-                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
-                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
-                } else {
-                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
-                }
+                mdu0BuilderInstance.append_file_with_flags(path, BigInt(asNonNegativeInteger(size, 'size')), BigInt(asNonNegativeInteger(startOffset, 'startOffset')), flags ?? 0);
                 result = 'File appended to Mdu0';
                 break;
             }
@@ -332,92 +346,22 @@ self.onmessage = async (event) => {
             case 'setMdu0Root': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 const { index, root } = payload; // root is Uint8Array (32 bytes)
-                mdu0BuilderInstance.set_root(BigInt(index), root);
+                mdu0BuilderInstance.set_root(BigInt(asNonNegativeInteger(index, 'root index')), root);
                 result = 'Root set in Mdu0';
                 break;
             }
             case 'setMdu0RootsBatch': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 const { startIndex, rootsFlat } = payload as { startIndex: number; rootsFlat: Uint8Array };
-                if (!(rootsFlat instanceof Uint8Array)) throw new Error('rootsFlat must be a Uint8Array');
-                if (rootsFlat.byteLength % 32 !== 0) throw new Error('rootsFlat must be a multiple of 32 bytes');
-                let rootIndex = Number(startIndex);
+                validateRootBatch(startIndex, rootsFlat);
+                let rootIndex = startIndex;
                 for (let offset = 0; offset < rootsFlat.byteLength; offset += 32, rootIndex += 1) {
                     mdu0BuilderInstance.set_root(BigInt(rootIndex), rootsFlat.subarray(offset, offset + 32));
                 }
                 result = 'Roots set in Mdu0';
                 break;
             }
-            case 'prepareMdu0Bytes': {
-                if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
-                const {
-                    witnessRootsFlat,
-                    userRootStartIndex,
-                    userRootsFlat,
-                    path,
-                    size,
-                    startOffset,
-                    flags,
-                } = payload as {
-                    witnessRootsFlat?: Uint8Array;
-                    userRootStartIndex: number;
-                    userRootsFlat?: Uint8Array;
-                    path: string;
-                    size: number;
-                    startOffset: number;
-                    flags?: number;
-                };
-                const perf = {
-                    witnessRootSetMs: 0,
-                    userRootSetMs: 0,
-                    appendMs: 0,
-                    bytesMs: 0,
-                    totalMs: 0,
-                };
-                const totalStart = performance.now();
-
-                if (witnessRootsFlat) {
-                    if (!(witnessRootsFlat instanceof Uint8Array)) throw new Error('witnessRootsFlat must be a Uint8Array');
-                    if (witnessRootsFlat.byteLength % 32 !== 0) throw new Error('witnessRootsFlat must be a multiple of 32 bytes');
-                    const start = performance.now();
-                    let rootIndex = 0;
-                    for (let offset = 0; offset < witnessRootsFlat.byteLength; offset += 32, rootIndex += 1) {
-                        mdu0BuilderInstance.set_root(BigInt(rootIndex), witnessRootsFlat.subarray(offset, offset + 32));
-                    }
-                    perf.witnessRootSetMs = performance.now() - start;
-                }
-
-                if (userRootsFlat) {
-                    if (!(userRootsFlat instanceof Uint8Array)) throw new Error('userRootsFlat must be a Uint8Array');
-                    if (userRootsFlat.byteLength % 32 !== 0) throw new Error('userRootsFlat must be a multiple of 32 bytes');
-                    const start = performance.now();
-                    let rootIndex = Number(userRootStartIndex);
-                    for (let offset = 0; offset < userRootsFlat.byteLength; offset += 32, rootIndex += 1) {
-                        mdu0BuilderInstance.set_root(BigInt(rootIndex), userRootsFlat.subarray(offset, offset + 32));
-                    }
-                    perf.userRootSetMs = performance.now() - start;
-                }
-
-                const appendStart = performance.now();
-                const flagValue = typeof flags === 'number' ? flags : 0;
-                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
-                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
-                } else {
-                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
-                }
-                perf.appendMs = performance.now() - appendStart;
-
-                const bytesStart = performance.now();
-                const mdu0Bytes = mdu0BuilderInstance.bytes();
-                perf.bytesMs = performance.now() - bytesStart;
-                perf.totalMs = performance.now() - totalStart;
-
-                result = {
-                    mdu0_bytes: mdu0Bytes,
-                    perf,
-                };
-                break;
-            }
+            case 'prepareMdu0Bytes':
             case 'prepareAndCommitMdu0': {
                 if (!mdu0BuilderInstance) throw new Error('Mdu0Builder not initialized');
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
@@ -438,94 +382,101 @@ self.onmessage = async (event) => {
                     startOffset: number;
                     flags?: number;
                 };
-                const perf = {
-                    witnessRootSetMs: 0,
-                    userRootSetMs: 0,
-                    appendMs: 0,
-                    bytesMs: 0,
-                    prepareBuilderMs: 0,
-                    commitMs: 0,
-                    rootMs: 0,
-                    totalMs: 0,
-                    rustCommitDecodeMs: 0,
-                    rustCommitTransformMs: 0,
-                    rustCommitMsmScalarPrepMs: 0,
-                    rustCommitMsmBucketFillMs: 0,
-                    rustCommitMsmReduceMs: 0,
-                    rustCommitMsmDoubleMs: 0,
-                    rustCommitMsmMs: 0,
-                    rustCommitCompressMs: 0,
-                    rustCommitMs: 0,
-                    rustCommitBackend: 'blst',
-                    rustCommitMsmSubphasesAvailable: false,
-                };
+                if (witnessRootsFlat) validateRootBatch(0, witnessRootsFlat);
+                if (userRootsFlat) validateRootBatch(userRootStartIndex, userRootsFlat);
+                const fileSize = BigInt(asNonNegativeInteger(size, 'size'));
+                const fileStart = BigInt(asNonNegativeInteger(startOffset, 'startOffset'));
                 const totalStart = performance.now();
+                // One temporary slab makes roots + record + optional commitment atomic.
+                const staged = WasmMdu0Builder.load(mdu0BuilderInstance.bytes(), mdu0SizingHint.maxUserMdus, mdu0SizingHint.commitments);
+                try {
+                    const perf = {
+                        witnessRootSetMs: 0,
+                        userRootSetMs: 0,
+                        appendMs: 0,
+                        bytesMs: 0,
+                        prepareBuilderMs: 0,
+                        commitMs: 0,
+                        rootMs: 0,
+                        totalMs: 0,
+                        rustCommitDecodeMs: 0,
+                        rustCommitTransformMs: 0,
+                        rustCommitMsmScalarPrepMs: 0,
+                        rustCommitMsmBucketFillMs: 0,
+                        rustCommitMsmReduceMs: 0,
+                        rustCommitMsmDoubleMs: 0,
+                        rustCommitMsmMs: 0,
+                        rustCommitCompressMs: 0,
+                        rustCommitMs: 0,
+                        rustCommitBackend: 'blst',
+                        rustCommitMsmSubphasesAvailable: false,
+                    };
 
-                if (witnessRootsFlat) {
-                    if (!(witnessRootsFlat instanceof Uint8Array)) throw new Error('witnessRootsFlat must be a Uint8Array');
-                    if (witnessRootsFlat.byteLength % 32 !== 0) throw new Error('witnessRootsFlat must be a multiple of 32 bytes');
-                    const start = performance.now();
-                    let rootIndex = 0;
-                    for (let offset = 0; offset < witnessRootsFlat.byteLength; offset += 32, rootIndex += 1) {
-                        mdu0BuilderInstance.set_root(BigInt(rootIndex), witnessRootsFlat.subarray(offset, offset + 32));
+                    if (witnessRootsFlat) {
+                        const start = performance.now();
+                        let rootIndex = 0;
+                        for (let offset = 0; offset < witnessRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                            staged.set_root(BigInt(rootIndex), witnessRootsFlat.subarray(offset, offset + 32));
+                        }
+                        perf.witnessRootSetMs = performance.now() - start;
                     }
-                    perf.witnessRootSetMs = performance.now() - start;
-                }
 
-                if (userRootsFlat) {
-                    if (!(userRootsFlat instanceof Uint8Array)) throw new Error('userRootsFlat must be a Uint8Array');
-                    if (userRootsFlat.byteLength % 32 !== 0) throw new Error('userRootsFlat must be a multiple of 32 bytes');
-                    const start = performance.now();
-                    let rootIndex = Number(userRootStartIndex);
-                    for (let offset = 0; offset < userRootsFlat.byteLength; offset += 32, rootIndex += 1) {
-                        mdu0BuilderInstance.set_root(BigInt(rootIndex), userRootsFlat.subarray(offset, offset + 32));
+                    if (userRootsFlat) {
+                        const start = performance.now();
+                        let rootIndex = Number(userRootStartIndex);
+                        for (let offset = 0; offset < userRootsFlat.byteLength; offset += 32, rootIndex += 1) {
+                            staged.set_root(BigInt(rootIndex), userRootsFlat.subarray(offset, offset + 32));
+                        }
+                        perf.userRootSetMs = performance.now() - start;
                     }
-                    perf.userRootSetMs = performance.now() - start;
+
+                    const appendStart = performance.now();
+                    staged.append_file_with_flags(path, fileSize, fileStart, flags ?? 0);
+                    perf.appendMs = performance.now() - appendStart;
+
+                    const bytesStart = performance.now();
+                    const mdu0Bytes = staged.bytes();
+                    perf.bytesMs = performance.now() - bytesStart;
+                    perf.prepareBuilderMs = performance.now() - totalStart;
+
+                    if (type === 'prepareMdu0Bytes') {
+                        perf.totalMs = performance.now() - totalStart;
+                        setMdu0Builder(staged);
+                        result = { mdu0_bytes: mdu0Bytes, perf };
+                        break;
+                    }
+                    const commitStart = performance.now();
+                    if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
+                    const committedRaw = await kzgCommitBackend.commitBlobsProfiled(mdu0Bytes);
+                    perf.commitMs = performance.now() - commitStart;
+                    const witnessFlat = committedRaw.witnessFlat;
+                    const commitPerf = committedRaw.perf;
+                    perf.rustCommitDecodeMs = commitPerf.decodeMs;
+                    perf.rustCommitTransformMs = commitPerf.transformMs;
+                    perf.rustCommitMsmScalarPrepMs = commitPerf.msmScalarPrepMs;
+                    perf.rustCommitMsmBucketFillMs = commitPerf.msmBucketFillMs;
+                    perf.rustCommitMsmReduceMs = commitPerf.msmReduceMs;
+                    perf.rustCommitMsmDoubleMs = commitPerf.msmDoubleMs;
+                    perf.rustCommitMsmMs = commitPerf.msmMs;
+                    perf.rustCommitCompressMs = commitPerf.compressMs;
+                    perf.rustCommitMs = commitPerf.totalMs || perf.commitMs;
+                    Object.assign(perf, kzgCommitDiagnostics());
+
+                    const rootStart = performance.now();
+                    const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
+                    perf.rootMs = performance.now() - rootStart;
+                    const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
+                    perf.totalMs = performance.now() - totalStart;
+
+                    setMdu0Builder(staged);
+                    result = {
+                        mdu0_bytes: mdu0Bytes,
+                        mdu_root: rootBytes,
+                        perf,
+                    };
+                } finally {
+                    if (staged !== mdu0BuilderInstance) staged.free();
                 }
-
-                const appendStart = performance.now();
-                const flagValue = typeof flags === 'number' ? flags : 0;
-                if (typeof (mdu0BuilderInstance as WasmMdu0Builder).append_file_with_flags === 'function') {
-                    mdu0BuilderInstance.append_file_with_flags(path, BigInt(size), BigInt(startOffset), flagValue);
-                } else {
-                    mdu0BuilderInstance.append_file(path, BigInt(size), BigInt(startOffset));
-                }
-                perf.appendMs = performance.now() - appendStart;
-
-                const bytesStart = performance.now();
-                const mdu0Bytes = mdu0BuilderInstance.bytes();
-                perf.bytesMs = performance.now() - bytesStart;
-                perf.prepareBuilderMs =
-                    perf.witnessRootSetMs + perf.userRootSetMs + perf.appendMs + perf.bytesMs;
-
-                const commitStart = performance.now();
-                if (!kzgCommitBackend) throw new Error('PolyStoreWasm not initialized. Call initPolyStoreWasm first.');
-                const committedRaw = await kzgCommitBackend.commitBlobsProfiled(mdu0Bytes);
-                perf.commitMs = performance.now() - commitStart;
-                const witnessFlat = committedRaw.witnessFlat;
-                const commitPerf = committedRaw.perf;
-                perf.rustCommitDecodeMs = commitPerf.decodeMs;
-                perf.rustCommitTransformMs = commitPerf.transformMs;
-                perf.rustCommitMsmScalarPrepMs = commitPerf.msmScalarPrepMs;
-                perf.rustCommitMsmBucketFillMs = commitPerf.msmBucketFillMs;
-                perf.rustCommitMsmReduceMs = commitPerf.msmReduceMs;
-                perf.rustCommitMsmDoubleMs = commitPerf.msmDoubleMs;
-                perf.rustCommitMsmMs = commitPerf.msmMs;
-                perf.rustCommitCompressMs = commitPerf.compressMs;
-                perf.rustCommitMs = commitPerf.totalMs || perf.commitMs;
-                Object.assign(perf, kzgCommitDiagnostics());
-
-                const rootStart = performance.now();
-                const root = polyStoreWasmInstance.compute_mdu_root(witnessFlat) as unknown;
-                perf.rootMs = performance.now() - rootStart;
-                const rootBytes = root instanceof Uint8Array ? root : new Uint8Array(root as ArrayBufferLike);
-                perf.totalMs = performance.now() - totalStart;
-
-                result = {
-                    mdu0_bytes: mdu0Bytes,
-                    mdu_root: rootBytes,
-                    perf,
-                };
                 break;
             }
             case 'getMdu0WitnessCount': {
@@ -809,5 +760,7 @@ self.onmessage = async (event) => {
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         self.postMessage({ id, type: 'error', payload: message || 'Unknown worker error' });
+    } finally {
+        if (ownsMdu0) mdu0Busy = false;
     }
 };

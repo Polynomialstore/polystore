@@ -39,6 +39,13 @@ declare module '/wasm/polystore_core.js' {
     append_file_with_flags(path: string, size: bigint, start_offset: bigint, flags: number): void
     bytes(): Uint8Array
     set_root(index: bigint, root: Uint8Array): void
+    get_record_count(): number
+    get_record(index: number): Uint8Array
+    read_fat_range(offset: number, length: number): Uint8Array
+    get_root(index: bigint): Uint8Array
+    is_legacy_recovery(): boolean
+    static load_legacy_recovery(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder
+    static stage_v2_from_trusted_legacy(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder
     get_witness_count(): bigint
     free(): void
   }
@@ -87,6 +94,13 @@ declare module '../../public/wasm/polystore_core.js' {
     append_file_with_flags(path: string, size: bigint, start_offset: bigint, flags: number): void
     bytes(): Uint8Array
     set_root(index: bigint, root: Uint8Array): void
+    get_record_count(): number
+    get_record(index: number): Uint8Array
+    read_fat_range(offset: number, length: number): Uint8Array
+    get_root(index: bigint): Uint8Array
+    is_legacy_recovery(): boolean
+    static load_legacy_recovery(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder
+    static stage_v2_from_trusted_legacy(data: Uint8Array, max_user_mdus: bigint, commitments_per_mdu: bigint): WasmMdu0Builder
     get_witness_count(): bigint
     free(): void
   }

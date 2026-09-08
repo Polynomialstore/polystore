@@ -394,7 +394,7 @@ PolyStore MAY use a content‑addressed *file* manifest at the application layer
 *   `cid` is a legacy alias for the *deal-level* `Deal.manifest_root` (not the Root/DU CIDs below).
 *   For REST/path params, `manifest_root` parsing is strict: 48‑byte compressed BLS12‑381 G1 (96 hex chars, optional `0x` prefix), rejecting invalid encodings and invalid subgroup points (return `400`).
 *   Retrieval/proof flows are keyed by PolyFS `file_path` and validated against `Deal.manifest_root` (no `uploads/index.json` or “single-file deal” fallbacks).
-*   `file_path` is **mandatory** and MUST be unique within a deal; uploads to an existing path overwrite deterministically and `GET /gateway/list-files/{manifest_root}` returns a deduplicated view (latest non-tombstone record per path).
+*   `file_path` is **mandatory** and MUST be unique among active records within a deal. Canonical FAT v2 rejects duplicate active paths on mutation and load. An append to an existing path fails; replacement must explicitly update or tombstone the prior record in a newly staged generation. Paths compare by exact UTF-8 bytes, without normalization. Tombstones have empty paths and do not participate in uniqueness.
 *   `file_path` decoding is strict: decode at most once, reject traversal/absolute paths, and beware `+` vs `%20` (clients should use JS `encodeURIComponent`).
 *   For devnet convenience endpoints (e.g., `/gateway/fetch/{manifest_root}`, `/gateway/list-files/{manifest_root}`, `/gateway/prove-retrieval`), the gateway MUST enforce retrieval authorization via on-chain sessions and `Deal.retrieval_policy` (owner-only / allowlist / voucher / public), and MUST reject stale `manifest_root` values that do not match on-chain deal state (prefer `409`). In testnet/mainnet posture, these endpoints MUST require `X‑PolyStore‑Session-Id` and MUST reject out‑of‑session reads (prefer `403`).
 *   Retrieval session enforcement (Gamma‑4+): data-plane fetches MUST include `X‑PolyStore‑Session‑Id` for **all served bytes**, and the server MUST reject out‑of‑session reads. Batching is preserved: a response MAY include multiple contiguous blobs as long as requests remain blob-aligned and a subset of the session’s range. Proof submission MUST be session‑bound and submitted via `/gateway/session-proof` (forwarded to a provider) or `/sp/session-proof` directly. The gateway is a relay/compute helper only; user authorization lives on‑chain (EVM precompile).
@@ -444,6 +444,15 @@ To support the invariants, the protocol uses three challenge families, all bindi
 
 Historical full-replica deals may still be served by a single assigned provider as a compatibility path, but new deals assume slot-aware striped retrieval.
 
+MDU #0 uses the canonical FAT v2 representation defined in
+[the PolyFS root contract, §5.1](https://github.com/Polynomialstore/polystore/blob/main/rfcs/rfc-polyfs-root-contract.md#51-canonical-fat-v2):
+an exact 8 MiB buffer, 65,536 canonical big-endian Fr root cells, and a fixed
+31-to-32 packed File Table with at most 23,807 records. Ordinary readers reject
+malformed or legacy raw FAT bytes; legacy inspection and staging are explicit,
+separate operations. Format validation alone does not authenticate metadata.
+Paid retrieval requires a pinned committed root and layout plus authenticated
+metadata; that client integration remains gated by #257 before activation.
+
 #### 7.1.1 Stripe-aware retrieval & challenges
 
 For striped deals, `Deal.providers[]` is treated as a legacy mirror of the canonical ordered slot list `slot → provider` of length `N = K+M`.
@@ -473,6 +482,14 @@ Existing version-0 liabilities become expiry-refund-only upon coordinated activa
 COMPLETED remains terminal. Default deployment stays inactive pending C4 and
 #256/#257/#260 qualification. The historical flow below applies to legacy operation
 where it differs from this versioned contract.
+
+The [v2 cryptographic verifier](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-crypto.md)
+uses one bounded PSB1 native call for every complete admitted v2 session, including
+singletons. It authenticates both Merkle hops and batches the root/blob KZG equations
+with transcript-derived nonzero weights. The internal maximum is 64 proofs/60522
+bytes; public slot/range limits still apply. Whole-list gas remains 500000 per proof.
+Native/WASM setup identity and strict received-byte validation are shared; provider
+and browser adoption remains an activation gate.
 
 
 PolyStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:

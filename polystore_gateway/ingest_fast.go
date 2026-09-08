@@ -38,7 +38,7 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 	// We skip Witness generation completely. Witness roots (indices 0..W-1) remain zero.
 	witnessMduCount := b.GetWitnessCount()
 	baseIdx := witnessMduCount
-	rootsByMduIndex := make(map[uint64][]byte, len(shardOut.Mdus))
+
 	orderedSlabRoots := make([][]byte, 0, int(witnessMduCount)+len(shardOut.Mdus))
 	zeroRoot := make([]byte, types.POLYFS_ROOT_SIZE)
 	for i := uint64(0); i < witnessMduCount; i++ {
@@ -59,13 +59,16 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 			b.Free()
 			return nil, "", 0, err
 		}
-		slabMduIndex := uint64(1) + witnessMduCount + userOrdinal
-		rootsByMduIndex[slabMduIndex] = rootBytes
+
 		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
 	// 4. Append File Record
-	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
+	baseName, err := normalizePolyfsRecordBasename(recordPath, filePath)
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -78,7 +81,7 @@ func IngestNewDealFast(ctx context.Context, filePath string, maxUserMdus uint64,
 		return nil, "", 0, err
 	}
 
-	parsedRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, rootsByMduIndex, orderedSlabRoots)
+	parsedRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, orderedSlabRoots)
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err

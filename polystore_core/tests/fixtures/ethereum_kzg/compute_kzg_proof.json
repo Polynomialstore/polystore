@@ -1,0 +1,50 @@
+{
+  "blob_sha256": "30beea5592dd172b3d57ef64b7597509888de4f31d9f2304404bb331ca59f89d",
+  "cases": [
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_0",
+      "source_sha256": "cb32113f9a1bf8b253016d08a366d11fa441aa0448b3f1807509164a0b684c69",
+      "z": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "proof": "0x809adfa8b078b0921cdb8696ca017a0cc2d5337109016f36a766886eade28d32f205311ff5def247c3ddba91896fae97",
+      "y": "0x61157104410181bdc6eac224aa9436ac268bdcfeecb6badf71d228adda820af3"
+    },
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_1",
+      "source_sha256": "4bcc817507b839e6556f6f230e602df5a8d95350821af7e561b44b0fc600f8bb",
+      "z": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "proof": "0xb30b3d1e4faccc380557792c9a0374d58fa286f5f75fea48870585393f890909cd3c53cfe4897e799fb211b4be531e43",
+      "y": "0x60f840641ec0d0c0d2b77b2d5a393b329442721fad05ab78c7b98f2aa3c20ec9"
+    },
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_2",
+      "source_sha256": "63d171f243203de27e607cec2f6cc0b2d0f060e75d29308f30d4c7418fdef1af",
+      "z": "0x0000000000000000000000000000000000000000000000000000000000000002",
+      "proof": "0xa35c4f136a09a33c6437c26dc0c617ce6548a14bc4af7127690a411f5e1cde2f73157365212dbcea6432e0e7869cb006",
+      "y": "0x549345dd3612e36fab0ab7baffe3faa5b820d56b71348c89ecaf63f7c4f85370"
+    },
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_3",
+      "source_sha256": "30c57f3a97edbee605ea1e467a17d4848fe01675ecc043340ca88895778f52f0",
+      "z": "0x5eb7004fe57383e6c88b99d839937fddf3f99279353aaf8d5c9a75f91ce33c62",
+      "proof": "0x987ea6df69bbe97c23e0dd948cf2d4490824ba7fea5af812721b2393354b0810a9dba2c231ea7ae30f26c412c7ea6e3a",
+      "y": "0x4882cf0609af8c7cd4c256e63a35838c95a9ebbf6122540ab344b42fd66d32e1"
+    },
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_4",
+      "source_sha256": "d08ccc6ae798d947c5f966e0144ed256ed0b59eb08196ecbf5c0653e0b0d90df",
+      "z": "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000000",
+      "proof": "0xa62ad71d14c5719385c0686f1871430475bf3a00f0aa3f7b8dd99a9abc2160744faf0070725e00b60ad9a026a15b1a8c",
+      "y": "0x1522a4a7f34e1ea350ae07c29c96c7e79655aa926122e95fe69fcbd932ca49e9"
+    },
+    {
+      "name": "compute_kzg_proof_case_valid_blob_4_5",
+      "source_sha256": "70028438c52222f12722afacf5364c0fabbbbdcfc49d346a3927bcf9629705d8",
+      "z": "0x564c0a11a0f704f4fc3e8acfe0f8245f0ad1347b378fbf96e206da11a5d36306",
+      "proof": "0x873033e038326e87ed3e1276fd140253fa08e9fc25fb2d9a98527fc22a2c9612fbeafdad446cbc7bcdbdcd780af2c16a",
+      "y": "0x24d25032e67a7e6a4910df5834b8fe70e6bcfeeac0352434196bdf4b2485d5a1"
+    }
+  ],
+  "commitment": "0x8f59a8d2a1a625a17f3fea0fe5eb8c896db3764f3185481bc22f91b4aaffcca25f26936857bc3a7c2539ea8ec3a952b7",
+  "commitment_source": "blob_to_kzg_commitment_case_valid_blob_4",
+  "commitment_source_sha256": "cbb2b99859288e9b4d177c70c0011ffe69acf8fa7751ffe74f79b96797555f79"
+}

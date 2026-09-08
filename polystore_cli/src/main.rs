@@ -1,3 +1,5 @@
+mod metadata;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use polystore_core::{
@@ -34,6 +36,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Validate original legacy FAT bytes for read-only recovery; does not authenticate them.
+    InspectLegacyMetadata { file: PathBuf },
+    /// Stage a separate FAT v2 file from trusted original legacy bytes; never activates it.
+    StageLegacyMetadata {
+        file: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        /// Acknowledge that these original bytes are independently trusted. A legacy KZG root is insufficient.
+        #[arg(long, required = true)]
+        trusted_source: bool,
+    },
     Shard {
         file: PathBuf,
         #[arg(long, default_value = "5,17,42")]
@@ -116,9 +129,11 @@ struct StoreRequest {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Only load trusted setup for shard/verify commands
+    // Offline metadata recovery/staging does not use the trusted setup.
     let needs_ts = match cli.command {
-        Commands::Store { .. } => false,
+        Commands::Store { .. }
+        | Commands::InspectLegacyMetadata { .. }
+        | Commands::StageLegacyMetadata { .. } => false,
         _ => true,
     };
 
@@ -139,6 +154,12 @@ fn main() -> Result<()> {
     };
 
     match cli.command {
+        Commands::InspectLegacyMetadata { file } => metadata::inspect(&file),
+        Commands::StageLegacyMetadata {
+            file,
+            out,
+            trusted_source,
+        } => metadata::stage(&file, &out, trusted_source),
         Commands::Shard {
             file,
             seeds,

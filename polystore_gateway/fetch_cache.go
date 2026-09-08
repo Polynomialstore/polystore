@@ -109,7 +109,10 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 	}
 	defer b.Free()
 
-	records := slabMetadataFileRecordsFromBuilder(b)
+	records, err := slabMetadataFileRecordsFromBuilder(b)
+	if err != nil {
+		return nil, err
+	}
 	files := slabIndexFilesFromMetadata(records)
 
 	witnessCount, err := inferWitnessCount(dealDir, b)

@@ -128,48 +128,33 @@ func inferDealIDFromDealDir(dealDir string) *uint64 {
 	return &dealID
 }
 
-func normalizeSlabMetadataFileRecords(records []slabMetadataFileRecord) []slabMetadataFileRecord {
-	latest := make(map[string]slabMetadataFileRecord, len(records))
-	order := make([]string, 0, len(records))
-	for _, rec := range records {
-		path := strings.TrimSpace(rec.Path)
-		if path == "" {
-			continue
-		}
-		rec.Path = path
-		if _, ok := latest[path]; !ok {
-			order = append(order, path)
-		}
-		latest[path] = rec
-	}
-	out := make([]slabMetadataFileRecord, 0, len(order))
-	for _, path := range order {
-		out = append(out, latest[path])
-	}
-	return out
-}
-
-func slabMetadataMaxEnd(records []slabMetadataFileRecord) uint64 {
+func slabMetadataMaxEnd(records []slabMetadataFileRecord) (uint64, error) {
 	var maxEnd uint64
-	for _, rec := range records {
+	for i, rec := range records {
+		if _, err := validatePolyfsFilePath(rec.Path); err != nil {
+			return 0, fmt.Errorf("file_records[%d]: %w", i, err)
+		}
+		if rec.SizeBytes >= 1<<56 || rec.StartOffset > ^uint64(0)-rec.SizeBytes {
+			return 0, fmt.Errorf("file_records[%d]: invalid extent", i)
+		}
 		end := rec.StartOffset + rec.SizeBytes
 		if end > maxEnd {
 			maxEnd = end
 		}
 	}
-	return maxEnd
+	return maxEnd, nil
 }
 
-func slabMetadataFileRecordsFromBuilder(b *crypto_ffi.Mdu0Builder) []slabMetadataFileRecord {
+func slabMetadataFileRecordsFromBuilder(b *crypto_ffi.Mdu0Builder) ([]slabMetadataFileRecord, error) {
 	if b == nil {
-		return nil
+		return nil, errors.New("nil mdu0 builder")
 	}
 	records := make([]slabMetadataFileRecord, 0, b.GetRecordCount())
 	count := b.GetRecordCount()
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return nil, err
 		}
 		if rec.Path[0] == 0 {
 			continue
@@ -186,7 +171,7 @@ func slabMetadataFileRecordsFromBuilder(b *crypto_ffi.Mdu0Builder) []slabMetadat
 			Flags:       flags,
 		})
 	}
-	return normalizeSlabMetadataFileRecords(records)
+	return records, nil
 }
 
 func validateSlabMetadataDocument(meta *slabMetadataDocument) error {
@@ -220,7 +205,7 @@ func validateSlabMetadataDocument(meta *slabMetadataDocument) error {
 	if strings.TrimSpace(meta.CreatedAt) == "" {
 		return errors.New("slab metadata created_at is required")
 	}
-	if meta.TotalMdus != 1+meta.WitnessMdus+meta.UserMdus {
+	if meta.TotalMdus > 65537 || meta.WitnessMdus > 65536 || meta.UserMdus > 65536 || meta.TotalMdus != 1+meta.WitnessMdus+meta.UserMdus {
 		return fmt.Errorf(
 			"invalid slab metadata counts: total_mdus=%d witness_mdus=%d user_mdus=%d",
 			meta.TotalMdus,
@@ -228,10 +213,12 @@ func validateSlabMetadataDocument(meta *slabMetadataDocument) error {
 			meta.UserMdus,
 		)
 	}
-	for i, rec := range meta.FileRecords {
-		if strings.TrimSpace(rec.Path) == "" {
-			return fmt.Errorf("slab metadata file_records[%d].path is required", i)
-		}
+	maxEnd, err := slabMetadataMaxEnd(meta.FileRecords)
+	if err != nil {
+		return err
+	}
+	if maxEnd > meta.UserMdus*RawMduCapacity {
+		return errors.New("file map exceeds user MDU capacity")
 	}
 	if meta.LastValidatedAt != nil && strings.TrimSpace(*meta.LastValidatedAt) == "" {
 		return errors.New("slab metadata last_validated_at must be null or non-empty")
@@ -240,7 +227,11 @@ func validateSlabMetadataDocument(meta *slabMetadataDocument) error {
 }
 
 func newSlabMetadataDocument(opts slabMetadataBuildOptions) (*slabMetadataDocument, error) {
-	records := normalizeSlabMetadataFileRecords(opts.FileRecords)
+	records := opts.FileRecords
+	maxEnd, err := slabMetadataMaxEnd(records)
+	if err != nil {
+		return nil, err
+	}
 
 	witnessMdus := uint64(0)
 	if opts.WitnessMdus != nil {
@@ -250,8 +241,8 @@ func newSlabMetadataDocument(opts slabMetadataBuildOptions) (*slabMetadataDocume
 	userMdus := uint64(0)
 	if opts.UserMdus != nil {
 		userMdus = *opts.UserMdus
-	} else if maxEnd := slabMetadataMaxEnd(records); maxEnd > 0 {
-		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+	} else if maxEnd > 0 {
+		userMdus = 1 + (maxEnd-1)/RawMduCapacity
 	}
 
 	totalMdus := uint64(1) + witnessMdus + userMdus
@@ -303,7 +294,11 @@ func buildSlabMetadataFromBuilder(b *crypto_ffi.Mdu0Builder, opts slabMetadataBu
 		return nil, errors.New("nil mdu0 builder")
 	}
 	if len(opts.FileRecords) == 0 {
-		opts.FileRecords = slabMetadataFileRecordsFromBuilder(b)
+		records, err := slabMetadataFileRecordsFromBuilder(b)
+		if err != nil {
+			return nil, err
+		}
+		opts.FileRecords = records
 	}
 	return newSlabMetadataDocument(opts)
 }
@@ -328,7 +323,6 @@ func readSlabMetadataFile(dealDir string) (*slabMetadataDocument, error) {
 		trimmed := strings.TrimSpace(*meta.LastValidatedAt)
 		meta.LastValidatedAt = &trimmed
 	}
-	meta.FileRecords = normalizeSlabMetadataFileRecords(meta.FileRecords)
 	if err := validateSlabMetadataDocument(&meta); err != nil {
 		return nil, err
 	}
@@ -365,7 +359,6 @@ func writeSlabMetadataFile(dealDir string, meta *slabMetadataDocument) error {
 	copyMeta.Owner = strings.TrimSpace(copyMeta.Owner)
 	copyMeta.Source = strings.TrimSpace(copyMeta.Source)
 	copyMeta.CreatedAt = strings.TrimSpace(copyMeta.CreatedAt)
-	copyMeta.FileRecords = normalizeSlabMetadataFileRecords(copyMeta.FileRecords)
 	if copyMeta.TotalMdus == 0 {
 		copyMeta.TotalMdus = 1 + copyMeta.WitnessMdus + copyMeta.UserMdus
 	}
@@ -396,10 +389,17 @@ func synthesizeSlabMetadataFromMdu0(dealDir string) (*slabMetadataDocument, erro
 	if err != nil {
 		return nil, err
 	}
-	records := slabMetadataFileRecordsFromBuilder(b)
+	records, err := slabMetadataFileRecordsFromBuilder(b)
+	if err != nil {
+		return nil, err
+	}
 	userMdus := uint64(0)
-	if maxEnd := slabMetadataMaxEnd(records); maxEnd > 0 {
-		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+	maxEnd, err := slabMetadataMaxEnd(records)
+	if err != nil {
+		return nil, err
+	}
+	if maxEnd > 0 {
+		userMdus = 1 + (maxEnd-1)/RawMduCapacity
 	}
 	totalMdus := uint64(1) + witnessMdus + userMdus
 

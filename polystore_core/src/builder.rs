@@ -1,33 +1,223 @@
+//! Canonical FAT v2 builder and explicit, immutable legacy recovery.
+//!
+//! Validation establishes representation correctness only. The caller must
+//! authenticate metadata against its committed generation before using its map,
+//! and must independently trust the original bytes passed to staged migration.
+use crate::kzg::encode_mdu_root_for_root_table;
 use crate::layout::{self, FileRecordV1, FileTableHeader, MAGIC_NILF};
+use bls12_381::Scalar;
+use std::cmp::Ordering;
 
-pub const MDU_SIZE: usize = 8 * 1024 * 1024; // 8 MiB
-pub const BLOB_SIZE: usize = 128 * 1024; // 128 KiB
+pub const MDU_SIZE: usize = 8 * 1024 * 1024;
+pub const BLOB_SIZE: usize = 128 * 1024;
 pub const ROOT_TABLE_START: usize = 0;
 pub const ROOT_TABLE_END: usize = 16 * BLOB_SIZE;
-pub const FILE_TABLE_START: usize = 16 * BLOB_SIZE;
-pub const FILE_TABLE_END: usize = 64 * BLOB_SIZE;
-pub const FILE_TABLE_HEADER_SIZE: usize = 128;
+pub const FILE_TABLE_START: usize = ROOT_TABLE_END;
+pub const FILE_TABLE_END: usize = MDU_SIZE;
+pub const FILE_TABLE_HEADER_SIZE: usize = FileTableHeader::SIZE;
 pub const FILE_RECORD_SIZE: usize = layout::FILE_RECORD_SIZE;
 pub const ROOT_SIZE: usize = 32;
 pub const SCALAR_BYTES: usize = 32;
 pub const SCALAR_PAYLOAD_BYTES: usize = 31;
 pub const MDU_PAYLOAD_BYTES: usize = (MDU_SIZE / SCALAR_BYTES) * SCALAR_PAYLOAD_BYTES;
 pub const COMMITMENT_SIZE: u64 = 48;
+pub const FAT_V2_LOGICAL_BYTES: usize = ((FILE_TABLE_END - FILE_TABLE_START) / 32) * 31;
+pub const FAT_V2_MAX_RECORDS: usize =
+    (FAT_V2_LOGICAL_BYTES - FILE_TABLE_HEADER_SIZE) / FILE_RECORD_SIZE;
+pub const FAT_LEGACY_MAX_RECORDS: usize =
+    (FILE_TABLE_END - FILE_TABLE_START - FILE_TABLE_HEADER_SIZE) / FILE_RECORD_SIZE;
 
-fn ceil_div_u64(n: u64, d: u64) -> u64 {
-    if n == 0 { 0 } else { 1 + (n - 1) / d }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FatFormat {
+    V2,
+    LegacyRecovery,
+}
+
+impl FatFormat {
+    fn capacity(self) -> usize {
+        match self {
+            Self::V2 => FAT_V2_LOGICAL_BYTES,
+            Self::LegacyRecovery => FILE_TABLE_END - FILE_TABLE_START,
+        }
+    }
+    fn max_records(self) -> usize {
+        (self.capacity() - FILE_TABLE_HEADER_SIZE) / FILE_RECORD_SIZE
+    }
+    fn version(self) -> u8 {
+        match self {
+            Self::V2 => 2,
+            Self::LegacyRecovery => 1,
+        }
+    }
+    fn physical_range(self, logical: usize, remaining: usize) -> (usize, usize) {
+        match self {
+            Self::V2 => (
+                FILE_TABLE_START + (logical / 31) * 32 + 1 + logical % 31,
+                remaining.min(31 - logical % 31),
+            ),
+            Self::LegacyRecovery => (FILE_TABLE_START + logical, remaining),
+        }
+    }
+}
+
+fn checked_range(format: FatFormat, offset: usize, len: usize) -> Result<(), String> {
+    if offset
+        .checked_add(len)
+        .is_none_or(|end| end > format.capacity())
+    {
+        return Err("FAT range out of bounds".into());
+    }
+    Ok(())
+}
+
+fn read_fat(data: &[u8], format: FatFormat, offset: usize, out: &mut [u8]) -> Result<(), String> {
+    checked_range(format, offset, out.len())?;
+    let mut copied = 0;
+    while copied < out.len() {
+        let (physical, count) = format.physical_range(offset + copied, out.len() - copied);
+        out[copied..copied + count].copy_from_slice(&data[physical..physical + count]);
+        copied += count;
+    }
+    Ok(())
+}
+
+fn read_record(data: &[u8], format: FatFormat, index: u32) -> Result<FileRecordV1, String> {
+    let mut raw = [0u8; FILE_RECORD_SIZE];
+    read_fat(
+        data,
+        format,
+        FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE,
+        &mut raw,
+    )?;
+    FileRecordV1::from_bytes(&raw)
+}
+
+fn path_offset(index: u32) -> usize {
+    FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE + 24
+}
+
+// Called only after the full record inventory and its canonical padding have
+// been validated. Compare the logical path without copying/decoding the slab.
+fn compare_paths(data: &[u8], format: FatFormat, a: u32, b: u32) -> Ordering {
+    let mut offset = 0;
+    while offset < layout::FILE_RECORD_PATH_BYTES {
+        let remaining = layout::FILE_RECORD_PATH_BYTES - offset;
+        let (a_start, a_len) = format.physical_range(path_offset(a) + offset, remaining);
+        let (b_start, b_len) = format.physical_range(path_offset(b) + offset, remaining);
+        let len = a_len.min(b_len);
+        let order = data[a_start..a_start + len].cmp(&data[b_start..b_start + len]);
+        if order != Ordering::Equal {
+            return order;
+        }
+        offset += len;
+    }
+    Ordering::Equal
+}
+
+// A 47,614-byte stack index array, no heap allocation and O(n log n) worst-case
+// comparisons via the standard in-place sort. Keep this frame out of ordinary
+// record reads/mutations. V2 capacity fits u16; callers validate count first.
+#[inline(never)]
+fn validate_unique_paths(data: &[u8], format: FatFormat, count: u32) -> Result<(), String> {
+    const { assert!(FAT_V2_MAX_RECORDS <= u16::MAX as usize) };
+    debug_assert!(count as usize <= FAT_V2_MAX_RECORDS);
+    let mut indices = [0u16; FAT_V2_MAX_RECORDS];
+    let mut active = 0;
+    for index in 0..count {
+        let (start, _) = format.physical_range(path_offset(index), 1);
+        if data[start] != 0 {
+            indices[active] = index as u16;
+            active += 1;
+        }
+    }
+    let indices = &mut indices[..active];
+    indices.sort_unstable_by(|a, b| compare_paths(data, format, u32::from(*a), u32::from(*b)));
+    if indices.windows(2).any(|pair| {
+        compare_paths(data, format, u32::from(pair[0]), u32::from(pair[1])) == Ordering::Equal
+    }) {
+        return Err("duplicate active FAT path".into());
+    }
+    Ok(())
+}
+
+fn validate(data: &[u8], format: FatFormat) -> Result<FileTableHeader, String> {
+    if data.len() != MDU_SIZE {
+        return Err("invalid MDU size".into());
+    }
+    let mut raw = [0u8; FILE_TABLE_HEADER_SIZE];
+    read_fat(data, format, 0, &mut raw)?;
+    let header = FileTableHeader::from_bytes(&raw)?;
+    if header.magic != MAGIC_NILF
+        || header.version != format.version()
+        || header.record_size as usize != FILE_RECORD_SIZE
+    {
+        return Err("invalid FAT magic, version or record size".into());
+    }
+    if header.pad1 != 0 || header.reserved.iter().any(|b| *b != 0) {
+        return Err("nonzero FAT header reserved bytes".into());
+    }
+    if header.record_count as usize > format.max_records() {
+        return Err("FAT record count exceeds capacity".into());
+    }
+    if format == FatFormat::V2 {
+        // Fr - 1 comes from the pinned field implementation, avoiding another
+        // modulus constant. These public BE metadata cells need only a range
+        // check, not 65,536 field decodes or constant-time secret arithmetic.
+        let mut max_scalar = (-Scalar::one()).to_bytes();
+        max_scalar.reverse();
+        if data[..ROOT_TABLE_END]
+            .chunks_exact(32)
+            .any(|cell| cell > max_scalar.as_slice())
+        {
+            return Err("noncanonical root-table scalar".into());
+        }
+        if data[FILE_TABLE_START..]
+            .chunks_exact(32)
+            .any(|cell| cell[0] != 0)
+        {
+            return Err("nonzero FAT scalar prefix".into());
+        }
+    }
+    for index in 0..header.record_count {
+        read_record(data, format, index)?.validate(format == FatFormat::LegacyRecovery)?;
+    }
+    let logical = FILE_TABLE_HEADER_SIZE + header.record_count as usize * FILE_RECORD_SIZE;
+    // All inserted FAT prefixes were checked above. After the last record,
+    // logical tail zeros and physical tail zeros are therefore equivalent.
+    let (physical, _) = format.physical_range(logical, 0);
+    if data[physical..].iter().any(|b| *b != 0) {
+        return Err("nonzero unused FAT bytes".into());
+    }
+    if format == FatFormat::V2 && header.record_count > 1 {
+        validate_unique_paths(data, format, header.record_count)?;
+    }
+    Ok(header)
+}
+
+/// Validate without copying the slab or requiring a trusted setup. This does not
+/// authenticate the bytes against a chain root or authorize paid retrieval.
+pub fn validate_mdu0_v2(data: &[u8]) -> Result<FileTableHeader, String> {
+    validate(data, FatFormat::V2)
 }
 
 fn witness_mdu_count_for(max_user_mdus: u64, commitments_per_mdu: u64) -> u64 {
-    let total_commitment_bytes = max_user_mdus
+    // These legacy constructor arguments are sizing hints, not authenticated
+    // capacity. Preserve their saturating behavior; never derive file bounds
+    // or chain allocation from this value.
+    let bytes = max_user_mdus
         .saturating_mul(commitments_per_mdu)
         .saturating_mul(COMMITMENT_SIZE);
-    ceil_div_u64(total_commitment_bytes, MDU_PAYLOAD_BYTES as u64)
+    if bytes == 0 {
+        0
+    } else {
+        1 + (bytes - 1) / MDU_PAYLOAD_BYTES as u64
+    }
 }
 
 pub struct Mdu0Builder {
-    pub buffer: Vec<u8>,
-    pub header: FileTableHeader,
+    buffer: Vec<u8>,
+    header: FileTableHeader,
+    format: FatFormat,
     pub witness_mdu_count: u64,
     pub max_user_mdus: u64,
     pub commitments_per_mdu: u64,
@@ -37,176 +227,257 @@ impl Mdu0Builder {
     pub fn new(max_user_mdus: u64) -> Self {
         Self::new_with_commitments(max_user_mdus, 64)
     }
-
     pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> Self {
         let commitments = if commitments_per_mdu == 0 {
             64
         } else {
             commitments_per_mdu
         };
-        let w = witness_mdu_count_for(max_user_mdus, commitments);
-
-        let mut header = FileTableHeader::default();
-        header.record_size = FILE_RECORD_SIZE as u16;
-        header.record_count = 0;
-
-        let mut builder = Mdu0Builder {
-            buffer: vec![0u8; MDU_SIZE],
-            header,
-            witness_mdu_count: w,
+        let mut b = Self {
+            buffer: vec![0; MDU_SIZE],
+            header: FileTableHeader::default(),
+            format: FatFormat::V2,
+            witness_mdu_count: witness_mdu_count_for(max_user_mdus, commitments),
             max_user_mdus,
             commitments_per_mdu: commitments,
         };
-        builder.flush_header();
-        builder
+        b.flush_header();
+        b
     }
-
     pub fn load(data: &[u8], max_user_mdus: u64) -> Result<Self, String> {
         Self::load_with_commitments(data, max_user_mdus, 64)
     }
-
     pub fn load_with_commitments(
         data: &[u8],
         max_user_mdus: u64,
         commitments_per_mdu: u64,
     ) -> Result<Self, String> {
-        if data.len() != MDU_SIZE {
-            return Err("invalid MDU size".to_string());
-        }
-
+        Self::load_format(data, max_user_mdus, commitments_per_mdu, FatFormat::V2)
+    }
+    pub fn load_legacy_recovery(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<Self, String> {
+        Self::load_format(
+            data,
+            max_user_mdus,
+            commitments_per_mdu,
+            FatFormat::LegacyRecovery,
+        )
+    }
+    fn load_format(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+        format: FatFormat,
+    ) -> Result<Self, String> {
+        let header = validate(data, format)?; // Validate fully before the owned 8 MiB allocation.
         let commitments = if commitments_per_mdu == 0 {
             64
         } else {
             commitments_per_mdu
         };
-        let witness_mdu_count = witness_mdu_count_for(max_user_mdus, commitments);
-
-        let header_slice = &data[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE];
-        let header = FileTableHeader::from_bytes(header_slice);
-
-        if header.magic != MAGIC_NILF {
-            return Err("invalid magic".to_string());
-        }
-        if header.record_size as usize != FILE_RECORD_SIZE {
-            return Err(format!(
-                "unsupported record size: got {}, expected {}",
-                header.record_size, FILE_RECORD_SIZE
-            ));
-        }
-
-        Ok(Mdu0Builder {
+        Ok(Self {
             buffer: data.to_vec(),
             header,
-            witness_mdu_count,
+            format,
+            witness_mdu_count: witness_mdu_count_for(max_user_mdus, commitments),
             max_user_mdus,
             commitments_per_mdu: commitments,
         })
     }
-
-    pub fn flush_header(&mut self) {
-        let bytes = self.header.to_bytes();
-        self.buffer[FILE_TABLE_START..FILE_TABLE_START + FILE_TABLE_HEADER_SIZE]
-            .copy_from_slice(&bytes);
+    /// Stage a separate canonical generation from explicitly trusted original
+    /// legacy bytes. A legacy KZG root alone cannot authenticate their raw FAT.
+    /// The caller must commit/activate this result through the normal content
+    /// generation transaction and retain referenced old generations.
+    pub fn stage_v2_from_trusted_legacy(
+        data: &[u8],
+        max_user_mdus: u64,
+        commitments_per_mdu: u64,
+    ) -> Result<Self, String> {
+        let header = validate(data, FatFormat::LegacyRecovery)?;
+        if header.record_count as usize > FAT_V2_MAX_RECORDS {
+            return Err("legacy FAT exceeds v2 record capacity".into());
+        }
+        validate_unique_paths(data, FatFormat::LegacyRecovery, header.record_count)?;
+        let mut staged = Self::new_with_commitments(max_user_mdus, commitments_per_mdu);
+        for (index, cell) in data[..ROOT_TABLE_END].chunks_exact(32).enumerate() {
+            staged.set_root(index as u64, cell.try_into().unwrap())?;
+        }
+        for index in 0..header.record_count {
+            let mut rec = read_record(data, FatFormat::LegacyRecovery, index)?;
+            if rec.path[0] == 0 {
+                rec.path.fill(0);
+            }
+            // Source records and uniqueness were preflighted before allocating
+            // the staged slab. Avoid repeating a linear append check per record.
+            staged.write_fat(
+                FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE,
+                &rec.to_bytes(),
+            );
+        }
+        staged.header.record_count = header.record_count;
+        staged.flush_header();
+        Ok(staged)
     }
-
-    pub fn bytes(&mut self) -> &[u8] {
-        self.flush_header();
+    pub fn is_legacy_recovery(&self) -> bool {
+        self.format == FatFormat::LegacyRecovery
+    }
+    pub fn record_count(&self) -> u32 {
+        self.header.record_count
+    }
+    pub fn fat_logical_capacity(&self) -> usize {
+        self.format.capacity()
+    }
+    pub fn bytes(&self) -> &[u8] {
         &self.buffer
     }
-
-    pub fn get_root(&self, index: u64) -> [u8; 32] {
-        let offset = ROOT_TABLE_START + (index as usize * ROOT_SIZE);
-        let mut root = [0u8; 32];
-        root.copy_from_slice(&self.buffer[offset..offset + ROOT_SIZE]);
-        root
+    pub fn read_fat_range(&self, offset: usize, out: &mut [u8]) -> Result<(), String> {
+        read_fat(&self.buffer, self.format, offset, out)
     }
-
-    pub fn set_root(&mut self, index: u64, root: [u8; 32]) -> Result<(), String> {
-        let offset = ROOT_TABLE_START + (index as usize * ROOT_SIZE);
-        if offset + ROOT_SIZE > ROOT_TABLE_END {
-            return Err("root index out of bounds".to_string());
+    fn editable(&self) -> Result<(), String> {
+        if self.is_legacy_recovery() {
+            return Err("legacy recovery is read-only; stage an explicit trusted migration".into());
         }
-        self.buffer[offset..offset + ROOT_SIZE].copy_from_slice(&root);
         Ok(())
     }
-
-    pub fn get_file_record(&self, index: u32) -> FileRecordV1 {
-        let offset =
-            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
-        FileRecordV1::from_bytes(&self.buffer[offset..offset + FILE_RECORD_SIZE])
-    }
-
-    pub fn append_file_record(&mut self, rec: FileRecordV1) -> Result<(), String> {
-        let index = self.header.record_count;
-        let offset =
-            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
-
-        if offset + FILE_RECORD_SIZE > FILE_TABLE_END {
-            return Err("file table full".to_string());
+    // All callers preflight the entire mutation; once writing starts these
+    // bounded operations have no fallible branch or allocation.
+    fn write_fat(&mut self, offset: usize, bytes: &[u8]) {
+        debug_assert!(checked_range(self.format, offset, bytes.len()).is_ok());
+        let mut copied = 0;
+        while copied < bytes.len() {
+            let (physical, count) = self
+                .format
+                .physical_range(offset + copied, bytes.len() - copied);
+            self.buffer[physical..physical + count].copy_from_slice(&bytes[copied..copied + count]);
+            copied += count;
         }
-
-        let bytes = rec.to_bytes();
-        self.buffer[offset..offset + FILE_RECORD_SIZE].copy_from_slice(&bytes);
-
+    }
+    fn flush_header(&mut self) {
+        self.write_fat(0, &self.header.to_bytes());
+    }
+    fn root_offset(index: u64) -> Result<usize, String> {
+        if index >= (ROOT_TABLE_END / ROOT_SIZE) as u64 {
+            return Err("root index out of bounds".into());
+        }
+        Ok(index as usize * ROOT_SIZE)
+    }
+    /// Returns the stored field cell, not the original MDU digest. Legacy
+    /// recovery returns its original raw cell unchanged.
+    pub fn get_root(&self, index: u64) -> Result<[u8; 32], String> {
+        let offset = Self::root_offset(index)?;
+        Ok(self.buffer[offset..offset + ROOT_SIZE].try_into().unwrap())
+    }
+    /// Accept a raw MDU digest and store its canonical Fr representative.
+    pub fn set_root(&mut self, index: u64, root: [u8; 32]) -> Result<(), String> {
+        self.editable()?;
+        let offset = Self::root_offset(index)?;
+        let encoded = encode_mdu_root_for_root_table(&root).map_err(|e| e.to_string())?;
+        self.buffer[offset..offset + ROOT_SIZE].copy_from_slice(&encoded);
+        Ok(())
+    }
+    pub fn get_file_record(&self, index: u32) -> Result<FileRecordV1, String> {
+        if index >= self.header.record_count {
+            return Err("record index out of bounds".into());
+        }
+        read_record(&self.buffer, self.format, index)
+    }
+    fn check_unique_path(&self, rec: &FileRecordV1, except: Option<u32>) -> Result<(), String> {
+        if rec.path[0] == 0 {
+            return Ok(()); // Tombstones have no active path identity.
+        }
+        for index in 0..self.header.record_count {
+            if except == Some(index) {
+                continue;
+            }
+            let mut offset = 0;
+            while offset < rec.path.len() {
+                let (start, len) = self
+                    .format
+                    .physical_range(path_offset(index) + offset, rec.path.len() - offset);
+                if self.buffer[start..start + len] != rec.path[offset..offset + len] {
+                    break;
+                }
+                offset += len;
+            }
+            if offset == rec.path.len() {
+                return Err("duplicate active FAT path".into());
+            }
+        }
+        Ok(())
+    }
+    pub fn append_file_record(&mut self, rec: FileRecordV1) -> Result<(), String> {
+        self.editable()?;
+        rec.validate(false)?;
+        if self.header.record_count as usize >= FAT_V2_MAX_RECORDS {
+            return Err("file table full".into());
+        }
+        self.check_unique_path(&rec, None)?;
+        self.write_fat(
+            FILE_TABLE_HEADER_SIZE + self.header.record_count as usize * FILE_RECORD_SIZE,
+            &rec.to_bytes(),
+        );
         self.header.record_count += 1;
         self.flush_header();
         Ok(())
     }
-
     pub fn update_file_record(&mut self, index: u32, rec: FileRecordV1) -> Result<(), String> {
+        self.editable()?;
         if index >= self.header.record_count {
-            return Err("index out of bounds".to_string());
+            return Err("record index out of bounds".into());
         }
-        let offset =
-            FILE_TABLE_START + FILE_TABLE_HEADER_SIZE + (index as usize * FILE_RECORD_SIZE);
-
-        let bytes = rec.to_bytes();
-        self.buffer[offset..offset + FILE_RECORD_SIZE].copy_from_slice(&bytes);
+        rec.validate(false)?;
+        self.check_unique_path(&rec, Some(index))?;
+        self.write_fat(
+            FILE_TABLE_HEADER_SIZE + index as usize * FILE_RECORD_SIZE,
+            &rec.to_bytes(),
+        );
         Ok(())
     }
-
     pub fn find_free_slot_and_insert(&mut self, mut rec: FileRecordV1) -> Result<u32, String> {
+        self.editable()?;
+        rec.validate(false)?;
+        self.check_unique_path(&rec, None)?;
         let (required_len, _) = layout::unpack_length_and_flags(rec.length_and_flags);
-
         for i in 0..self.header.record_count {
-            let existing = self.get_file_record(i);
-            // Check if Tombstone
-            if existing.path[0] == 0 {
-                let (tomb_len, _) = layout::unpack_length_and_flags(existing.length_and_flags);
-                if tomb_len >= required_len {
-                    // FOUND MATCH.
-
-                    // 1. Overwrite this slot with new record
-                    // Preserve the original StartOffset of the slot!
-                    rec.start_offset = existing.start_offset;
-                    if let Err(e) = self.update_file_record(i, rec) {
-                        return Err(e);
-                    }
-
-                    // 2. Handle Split (if leftover space > 0)
-                    let leftover = tomb_len - required_len;
-                    if leftover > 0 {
-                        // Append a new tombstone at the end
-                        let new_tomb = FileRecordV1 {
-                            start_offset: existing.start_offset + required_len,
-                            length_and_flags: layout::pack_length_and_flags(leftover, 0),
-                            timestamp: 0,
-                            path: [0; layout::FILE_RECORD_PATH_BYTES],
-                        };
-                        // Path is already all zeros
-                        if let Err(e) = self.append_file_record(new_tomb) {
-                            return Err(e);
-                        }
-                    }
-                    return Ok(i);
+            let existing = self.get_file_record(i)?;
+            let (tomb_len, _) = layout::unpack_length_and_flags(existing.length_and_flags);
+            if existing.path[0] == 0 && tomb_len >= required_len {
+                rec.start_offset = existing.start_offset;
+                rec.validate(false)?;
+                let leftover = tomb_len - required_len;
+                if leftover > 0 && self.header.record_count as usize >= FAT_V2_MAX_RECORDS {
+                    // A later exact-fit tombstone may still be reusable.
+                    continue;
                 }
+                let tomb = FileRecordV1 {
+                    start_offset: existing
+                        .start_offset
+                        .checked_add(required_len)
+                        .ok_or("file extent overflow")?,
+                    length_and_flags: layout::pack_length_and_flags(leftover, 0)?,
+                    ..Default::default()
+                };
+                tomb.validate(false)?;
+                self.write_fat(
+                    FILE_TABLE_HEADER_SIZE + i as usize * FILE_RECORD_SIZE,
+                    &rec.to_bytes(),
+                );
+                if leftover > 0 {
+                    self.write_fat(
+                        FILE_TABLE_HEADER_SIZE
+                            + self.header.record_count as usize * FILE_RECORD_SIZE,
+                        &tomb.to_bytes(),
+                    );
+                    self.header.record_count += 1;
+                    self.flush_header();
+                }
+                return Ok(i);
             }
         }
-
-        // No suitable tombstone found. Append.
-        if let Err(e) = self.append_file_record(rec) {
-            return Err(e);
-        }
+        self.append_file_record(rec)?;
         Ok(self.header.record_count - 1)
     }
 }
@@ -254,6 +525,43 @@ mod tests {
     }
 
     #[test]
+    fn public_root_range_and_tail_boundaries_remain_strict() {
+        let mut builder = Mdu0Builder::new(1);
+        let modulus: [u8; 32] = hex::decode(crate::utils::FR_MODULUS_HEX)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let mut max_scalar = modulus;
+        max_scalar[31] -= 1;
+        for index in [0, 32768, 65535] {
+            let start = index * ROOT_SIZE;
+            builder.buffer[start..start + ROOT_SIZE].copy_from_slice(&max_scalar);
+            validate_mdu0_v2(builder.bytes()).unwrap();
+            for invalid in [modulus, [0xff; 32]] {
+                builder.buffer[start..start + ROOT_SIZE].copy_from_slice(&invalid);
+                assert!(validate_mdu0_v2(builder.bytes()).is_err());
+            }
+            builder.buffer[start..start + ROOT_SIZE].fill(0);
+        }
+        // 256 and 31 are coprime: these record counts exercise every tail
+        // alignment, including the transition to the next physical scalar.
+        for index in 0..31 {
+            let logical =
+                FILE_TABLE_HEADER_SIZE + builder.record_count() as usize * FILE_RECORD_SIZE;
+            let (physical, _) = FatFormat::V2.physical_range(logical, 0);
+            for offset in [physical, physical / 32 * 32, MDU_SIZE - 1] {
+                builder.buffer[offset] = 1;
+                assert!(validate_mdu0_v2(builder.bytes()).is_err());
+                builder.buffer[offset] = 0;
+            }
+            validate_mdu0_v2(builder.bytes()).unwrap();
+            builder
+                .append_file_record(FileRecordV1::from_path(&format!("a{index}"), 1, 0, 0).unwrap())
+                .unwrap();
+        }
+    }
+
+    #[test]
     fn test_append_file_record() {
         let mut b = Mdu0Builder::new(100);
 
@@ -262,7 +570,7 @@ mod tests {
         path[..9].copy_from_slice(b"file1.txt");
         let rec1 = FileRecordV1 {
             start_offset: 0,
-            length_and_flags: layout::pack_length_and_flags(1024, 0),
+            length_and_flags: layout::pack_length_and_flags(1024, 0).unwrap(),
             timestamp: 100,
             path,
         };
@@ -272,7 +580,7 @@ mod tests {
         assert_eq!(b.header.record_count, 1, "RecordCount mismatch. Want 1");
 
         // Verify it's in the File Table
-        let fetched_rec = b.get_file_record(0);
+        let fetched_rec = b.get_file_record(0).unwrap();
         assert_eq!(fetched_rec.start_offset, 0, "Fetched record mismatch");
     }
 
@@ -287,8 +595,12 @@ mod tests {
         b.set_root(0, dummy_root).expect("SetRoot failed");
 
         // Verify
-        let fetched = b.get_root(0);
-        assert_eq!(fetched, dummy_root, "GetRoot mismatch");
+        let fetched = b.get_root(0).unwrap();
+        assert_eq!(
+            fetched,
+            encode_mdu_root_for_root_table(&dummy_root).unwrap(),
+            "GetRoot mismatch"
+        );
     }
 
     #[test]
@@ -306,7 +618,7 @@ mod tests {
 
         assert_eq!(b2.header.record_count, 1, "Loaded RecordCount mismatch");
 
-        let fetched = b2.get_file_record(0);
+        let fetched = b2.get_file_record(0).unwrap();
         assert_eq!(fetched.timestamp, 555, "Loaded record content mismatch");
     }
 
@@ -319,21 +631,21 @@ mod tests {
         path[..7].copy_from_slice(b"big.txt");
         let mut rec1 = FileRecordV1 {
             start_offset: 0,
-            length_and_flags: layout::pack_length_and_flags(100000, 0),
+            length_and_flags: layout::pack_length_and_flags(100000, 0).unwrap(),
             path,
             ..Default::default()
         };
         b.append_file_record(rec1).unwrap();
 
         // 2. Delete it (Tombstone)
-        rec1.path[0] = 0;
+        rec1.path.fill(0);
         b.update_file_record(0, rec1).unwrap();
 
         // 3. Add 30KB file. Should reuse slot 0.
         let mut path2 = [0u8; layout::FILE_RECORD_PATH_BYTES];
         path2[..9].copy_from_slice(b"small.txt");
         let rec2 = FileRecordV1 {
-            length_and_flags: layout::pack_length_and_flags(30000, 0),
+            length_and_flags: layout::pack_length_and_flags(30000, 0).unwrap(),
             path: path2,
             ..Default::default()
         };
@@ -346,7 +658,7 @@ mod tests {
 
         // 4. Verify splitting
         // Slot 0 should be "small.txt" (30KB)
-        let slot0 = b.get_file_record(0);
+        let slot0 = b.get_file_record(0).unwrap();
         let (l, _) = layout::unpack_length_and_flags(slot0.length_and_flags);
         assert_eq!(l, 30000, "Slot 0 length wrong");
 
@@ -357,7 +669,7 @@ mod tests {
             "Expected 2 records (1 active + 1 split tombstone)"
         );
 
-        let slot1 = b.get_file_record(1);
+        let slot1 = b.get_file_record(1).unwrap();
         assert_eq!(slot1.path[0], 0, "Slot 1 should be tombstone");
 
         let (l1, _) = layout::unpack_length_and_flags(slot1.length_and_flags);

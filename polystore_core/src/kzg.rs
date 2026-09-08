@@ -1,5 +1,7 @@
 use blake2::{Blake2s256, Digest};
-use bls12_381::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
+use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scalar};
+#[path = "session_batch.rs"]
+mod session_batch;
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
 #[cfg(target_arch = "wasm32")]
@@ -10,10 +12,11 @@ use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb
 use ff::{Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
+pub use session_batch::{SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_PROOFS};
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -26,6 +29,49 @@ pub const BLOBS_PER_MDU: usize = MDU_SIZE / BLOB_SIZE;
 pub const SCALARS_PER_BLOB: usize = BLOB_SIZE / 32;
 pub const MDU0_ROOT_TABLE_DUS: usize = 16;
 pub const MDU0_ROOT_TABLE_CAPACITY: u64 = (MDU0_ROOT_TABLE_DUS * SCALARS_PER_BLOB) as u64;
+/// Identity of the complete approved ceremony artifact, including its monomial trailer.
+pub const TRUSTED_SETUP_BYTES: usize = 807_177;
+pub const TRUSTED_SETUP_SHA256: [u8; 32] = [
+    0xd3, 0x9b, 0x9f, 0x2d, 0x04, 0x7c, 0xc9, 0xdc, 0xa2, 0xde, 0x58, 0xf2, 0x64, 0xb6, 0xa0, 0x94,
+    0x48, 0xcc, 0xd3, 0x4d, 0xb9, 0x67, 0x88, 0x1a, 0x67, 0x13, 0xea, 0xca, 0xcf, 0x0f, 0x26, 0xb7,
+];
+
+/// Cheap identity validation shared by native reinitialization and browser workers.
+pub fn validate_trusted_setup(bytes: &[u8]) -> Result<(), KzgError> {
+    if bytes.len() != TRUSTED_SETUP_BYTES
+        || sha2::Sha256::digest(bytes).as_slice() != TRUSTED_SETUP_SHA256
+    {
+        return Err(KzgError::Internal(
+            "Unapproved trusted setup identity".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn read_trusted_setup<R: Read>(reader: R) -> Result<Vec<u8>, KzgError> {
+    let mut bytes = Vec::with_capacity(TRUSTED_SETUP_BYTES + 1);
+    reader
+        .take((TRUSTED_SETUP_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    validate_trusted_setup(&bytes)?;
+    Ok(bytes)
+}
+
+/// Exact rs_merkle sibling consumption, including unpaired nodes in non-power-of-two trees.
+pub fn merkle_sibling_count(mut index: usize, mut leaves: usize) -> Result<usize, KzgError> {
+    if leaves == 0 || index >= leaves {
+        return Err(KzgError::InvalidDataLength);
+    }
+    let mut count = 0;
+    while leaves > 1 {
+        if index ^ 1 < leaves {
+            count += 1;
+        }
+        index /= 2;
+        leaves = leaves / 2 + leaves % 2;
+    }
+    Ok(count)
+}
 
 pub type KzgCommitment = [u8; 48];
 pub type Bytes32 = [u8; 32];
@@ -132,6 +178,8 @@ pub struct KzgContext {
     g2_points: Vec<G2Affine>,
     g1_generator: G1Affine,
     g1_points_are_monomial: bool,
+    prepared_h: G2Prepared,
+    prepared_tau: G2Prepared,
 }
 
 impl KzgContext {
@@ -142,7 +190,8 @@ impl KzgContext {
     }
 
     pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, KzgError> {
-        let mut lines = reader.lines();
+        let bytes = read_trusted_setup(reader)?;
+        let mut lines = bytes.as_slice().lines();
 
         let n_g1_str = lines
             .next()
@@ -157,6 +206,11 @@ impl KzgContext {
         let n_g2: usize = n_g2_str
             .parse()
             .map_err(|_| KzgError::Internal("Bad n_g2".into()))?;
+        if n_g1 != SCALARS_PER_BLOB || n_g2 != 65 {
+            return Err(KzgError::Internal(
+                "Unapproved trusted setup dimensions".into(),
+            ));
+        }
 
         let mut g1_points = Vec::with_capacity(n_g1);
         let mut g1_points_blst = Vec::with_capacity(n_g1);
@@ -219,12 +273,24 @@ impl KzgContext {
             }
             acc.to_affine()
         };
+        if g1_points_are_monomial
+            || g1_generator != G1Affine::generator()
+            || g2_points[0] != G2Affine::generator()
+            || g1_points.iter().any(|p| bool::from(p.is_identity()))
+            || g2_points.iter().any(|p| bool::from(p.is_identity()))
+        {
+            return Err(KzgError::Internal(
+                "Invalid approved Lagrange setup basis".into(),
+            ));
+        }
 
         #[cfg(target_arch = "wasm32")]
         let g1_points_projective: Vec<G1Projective> =
             g1_points.iter().map(|p| G1Projective::from(*p)).collect();
 
         Ok(Self {
+            prepared_h: G2Prepared::from(g2_points[0]),
+            prepared_tau: G2Prepared::from(g2_points[1]),
             g1_points,
             #[cfg(target_arch = "wasm32")]
             g1_points_projective,
@@ -238,6 +304,18 @@ impl KzgContext {
     pub fn blob_to_commitment(&self, blob_bytes: &[u8]) -> Result<KzgCommitment, KzgError> {
         self.blob_to_commitment_profiled(blob_bytes)
             .map(|(commitment, _)| commitment)
+    }
+
+    /// Commit received bytes only after exact-width, canonical Fr validation.
+    /// Producer APIs retain their existing conversion semantics.
+    pub fn commit_received_blob(&self, blob: &[u8]) -> Result<KzgCommitment, KzgError> {
+        if blob.len() != BLOB_SIZE {
+            return Err(KzgError::InvalidDataLength);
+        }
+        for cell in blob.chunks_exact(32) {
+            parse_scalar(cell)?;
+        }
+        self.blob_to_commitment(blob)
     }
 
     pub fn blob_to_commitment_profiled(
@@ -827,7 +905,9 @@ impl KzgContext {
         if mdu_merkle_root.len() != 32 || challenged_kzg_commitment.len() != 48 {
             return Err(KzgError::InvalidDataLength);
         }
-        if merkle_proof_bytes.len() % 32 != 0 {
+        if merkle_proof_bytes.len()
+            != 32 * merkle_sibling_count(challenged_kzg_commitment_index, num_leaves)?
+        {
             return Err(KzgError::InvalidDataLength);
         }
 
@@ -983,6 +1063,10 @@ fn pippenger_window_size(n: usize) -> usize {
     if override_bits > 0 {
         return override_bits;
     }
+    default_pippenger_window_size(n)
+}
+
+fn default_pippenger_window_size(n: usize) -> usize {
     match n {
         0..=32 => 3,
         33..=64 => 4,
@@ -1182,6 +1266,14 @@ fn msm_pippenger_g1_projective_profiled_wasm(
 }
 
 fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
+    msm_pippenger_g1_with_window(points, scalars, pippenger_window_size(points.len()))
+}
+
+fn msm_pippenger_g1_with_window(
+    points: &[G1Affine],
+    scalars: &[Scalar],
+    window_bits: usize,
+) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 
     let n = points.len().min(scalars.len());
@@ -1191,7 +1283,6 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     let points = &points[..n];
     let scalars = &scalars[..n];
 
-    let window_bits = pippenger_window_size(points.len());
     let buckets_len = 1usize << window_bits;
     let windows = (256 + window_bits - 1) / window_bits;
 

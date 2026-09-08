@@ -29,10 +29,11 @@ type manifestInfoResponse struct {
 }
 
 type mduRootRecord struct {
-	MduIndex       uint64  `json:"mdu_index"`
-	Kind           string  `json:"kind"`
-	RootHex        string  `json:"root_hex"`
-	RootTableIndex *uint64 `json:"root_table_index,omitempty"`
+	MduIndex         uint64  `json:"mdu_index"`
+	Kind             string  `json:"kind"`
+	RootHex          string  `json:"root_hex,omitempty"`
+	RootTableCellHex string  `json:"root_table_cell_hex,omitempty"`
+	RootTableIndex   *uint64 `json:"root_table_index,omitempty"`
 }
 
 type mduKzgResponse struct {
@@ -534,8 +535,8 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 		rootIdx := i - 1
 		rootBytes, err := meta.builder.GetRoot(rootIdx)
 		if err != nil {
-			log.Printf("GatewayManifestInfo: GetRoot error: %v", err)
-			continue
+			writeJSONError(w, http.StatusInternalServerError, "invalid root table", "")
+			return
 		}
 		rootHex := "0x" + hex.EncodeToString(rootBytes[:])
 
@@ -544,10 +545,10 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 			kind = "witness"
 		}
 		roots = append(roots, mduRootRecord{
-			MduIndex:       i,
-			Kind:           kind,
-			RootHex:        rootHex,
-			RootTableIndex: &rootIdx,
+			MduIndex:         i,
+			Kind:             kind,
+			RootTableCellHex: rootHex,
+			RootTableIndex:   &rootIdx,
 		})
 	}
 

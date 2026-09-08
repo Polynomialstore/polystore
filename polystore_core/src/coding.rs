@@ -13,6 +13,27 @@ pub const SCALARS_PER_BLOB: usize = BLOB_SIZE / SCALAR_BYTES; // 4096
 pub const SCALARS_PER_MDU: usize = BLOBS_PER_MDU * SCALARS_PER_BLOB; // 262_144
 pub const MDU_PAYLOAD_BYTES: usize = SCALARS_PER_MDU * SCALAR_PAYLOAD_BYTES; // 8_126_464
 
+/// Validate the producer's 31-byte packing, including right-aligned final partial
+/// scalar and zero unused cells. This is separate from canonical Fr validation:
+/// root-table cells use full canonical field elements and must not use this rule.
+pub fn validate_packed_payload(encoded: &[u8], raw_len: usize) -> Result<(), CodingError> {
+    if encoded.len() > MDU_SIZE
+        || encoded.len() % SCALAR_BYTES != 0
+        || raw_len > (encoded.len() / SCALAR_BYTES) * SCALAR_PAYLOAD_BYTES
+    {
+        return Err(CodingError::InvalidSize);
+    }
+    let mut remaining = raw_len;
+    for scalar in encoded.chunks_exact(SCALAR_BYTES) {
+        let used = remaining.min(SCALAR_PAYLOAD_BYTES);
+        if scalar[..SCALAR_BYTES - used].iter().any(|b| *b != 0) {
+            return Err(CodingError::InvalidSize);
+        }
+        remaining -= used;
+    }
+    Ok(())
+}
+
 #[derive(Error, Debug)]
 pub enum CodingError {
     #[error("RS Error: {0}")]

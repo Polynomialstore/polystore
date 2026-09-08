@@ -1181,7 +1181,6 @@ func TestIngestAppendToDeal_UsesMdu0PolyfsRootAndSkipsLegacyAggregate(t *testing
 	orderedRoots = append(orderedRoots, oldRoot)
 	oldManifestRoot, oldManifestBlob, err := computePolyfsManifestArtifacts(
 		mdu0Bytes,
-		map[uint64][]byte{uint64(1) + witnessCount: oldRoot},
 		orderedRoots,
 	)
 	if err != nil {
@@ -1371,9 +1370,6 @@ func TestGatewayFetch_DealIDZero(t *testing.T) {
 	}
 
 	mdu0Bytes, _ := b.Bytes()
-	if err := materializeMdu0RootTable(mdu0Bytes, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
-		t.Fatalf("materialize MDU #0 root table failed: %v", err)
-	}
 	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
 	if err != nil {
 		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)

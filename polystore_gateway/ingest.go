@@ -34,7 +34,6 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	b := crypto_ffi.NewMdu0Builder(maxUserMdus)
 	// No error check for NewMdu0Builder as it returns pointer
 
-	rootsByMduIndex := make(map[uint64][]byte)
 	orderedSlabRoots := make([][]byte, 0)
 
 	// 3. Build Witness Data Buffer
@@ -112,8 +111,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 			b.Free()
 			return nil, "", 0, err
 		}
-		slabMduIndex := uint64(1) + i
-		rootsByMduIndex[slabMduIndex] = rootBytes
+
 		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
@@ -134,13 +132,16 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 			b.Free()
 			return nil, "", 0, err
 		}
-		slabMduIndex := uint64(1) + witnessMduCount + userOrdinal
-		rootsByMduIndex[slabMduIndex] = rootBytes
+
 		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
 	// 6. Append File Record
-	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
+	baseName, err := normalizePolyfsRecordBasename(recordPath, filePath)
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, 0, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -153,7 +154,7 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 		return nil, "", 0, err
 	}
 
-	parsedRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, rootsByMduIndex, orderedSlabRoots)
+	parsedRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, orderedSlabRoots)
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err
