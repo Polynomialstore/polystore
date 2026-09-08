@@ -1,8 +1,11 @@
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../cacheFreshness'
 
+export type AppendMdu = { index: number; data: Uint8Array } | { index: number; read: () => Promise<Uint8Array> }
+export async function readAppendMdu(mdu: AppendMdu): Promise<Uint8Array> { return 'data' in mdu ? mdu.data : mdu.read() }
+
 export interface ResolvedAppendBase {
   baseMdu0Bytes: Uint8Array | null
-  existingUserMdus: Array<{ index: number; data: Uint8Array }>
+  existingUserMdus: AppendMdu[]
   existingUserCount: number
   existingMaxEnd: number
   appendStartOffset: number
@@ -11,7 +14,7 @@ export interface ResolvedAppendBase {
 
 export interface ExistingLocalAppendBase {
   baseMdu0Bytes: Uint8Array
-  existingUserMdus: Array<{ index: number; data: Uint8Array }>
+  existingUserMdus: AppendMdu[]
   existingUserCount: number
   existingMaxEnd: number
   appendStartOffset: number
@@ -21,7 +24,6 @@ export interface ResolveAppendBaseInput {
   localManifestRoot: string | null | undefined
   chainManifestRoot: string | null | undefined
   loadLocal: () => Promise<ExistingLocalAppendBase | null>
-  clearLocal: () => Promise<void>
   bootstrapFromNetwork: () => Promise<ExistingLocalAppendBase | null>
   addLog?: (message: string) => void
   formatBytes?: (bytes: number) => string
@@ -49,11 +51,11 @@ export async function resolveMode2AppendBase(input: ResolveAppendBaseInput): Pro
     log(
       `> Mode 2 append: local slab manifest ${freshness.localManifestRoot} is stale; bootstrapping from current committed root ${freshness.chainManifestRoot}.`,
     )
-    await input.clearLocal()
+    // Preserve the previous generation until a complete replacement is ready.
   }
 
   try {
-    const local = await input.loadLocal()
+    const local = freshness.status === 'stale' ? null : await input.loadLocal()
     if (local && local.existingUserCount > 0) {
       log(`> Mode 2 append: found ${local.existingUserCount} existing user MDUs; starting new file at ${formatBytes(local.appendStartOffset)}.`)
       return { ...local, source: 'local' }

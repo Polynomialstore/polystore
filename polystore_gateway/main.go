@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	bolt "go.etcd.io/bbolt"
 	"io"
 	"log"
 	"math/big"
@@ -350,7 +351,13 @@ func runCommand(ctx context.Context, name string, args []string, dir string) ([]
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	return cmd.CombinedOutput()
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Start(); err != nil {
+		return output.Bytes(), fmt.Errorf("%w: %w", errTxNotSubmitted, err)
+	}
+	err := cmd.Wait()
+	return output.Bytes(), err
 }
 
 func requireTxRelay(w http.ResponseWriter) bool {
@@ -757,34 +764,42 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 
 	for i := 0; i < maxRetries; i++ {
 		if ctx.Err() != nil {
-			return out, ctx.Err()
+			// Earlier attempts, if any, were explicitly rejected CheckTx results.
+			return nil, fmt.Errorf("%w: %w", errTxNotSubmitted, ctx.Err())
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 		var cmdOut []byte
 		var cmdErr error
-		cmdOut, cmdErr = execPolystorechaind(attemptCtx, args...) // Use the new execPolystorechaind
+		cmdOut, cmdErr = execTrackedSubmission(attemptCtx, args...)
 		cancel()
 		out = cmdOut
 		err = cmdErr
-		outStr := string(out)
+		if errors.Is(err, errTxNotSubmitted) {
+			return out, err
+		}
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
 			return out, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
 		}
-
-		if err != nil {
-			if strings.Contains(outStr, "account sequence mismatch") {
-				log.Printf("runTxWithRetry: account sequence mismatch (CLI error, attempt %d/%d), retrying...", i+1, maxRetries)
-				time.Sleep(1 * time.Second)
+		// Retry only an explicit SDK CheckTx sequence rejection. A successful or
+		// ambiguous broadcast must not be replayed based on arbitrary log text.
+		var check struct {
+			Code      json.RawMessage `json:"code"`
+			Codespace string          `json:"codespace"`
+		}
+		body := extractJSONBody(out)
+		if validateJSONObject(body) == nil && json.Unmarshal(body, &check) == nil {
+			code, codeErr := explicitTxCode(check.Code)
+			if codeErr == nil && code == 32 && check.Codespace == "sdk" && i+1 < maxRetries {
+				log.Printf("runTxWithRetry: CheckTx sequence rejection (attempt %d/%d)", i+1, maxRetries)
+				if err := waitTxRetry(ctx, time.Second); err != nil {
+					return out, err
+				}
 				continue
 			}
-			return out, err
 		}
-
-		if strings.Contains(outStr, "account sequence mismatch") {
-			log.Printf("runTxWithRetry: account sequence mismatch (CheckTx error, attempt %d/%d), retrying...", i+1, maxRetries)
-			time.Sleep(1 * time.Second)
-			continue
+		if err != nil {
+			return out, err
 		}
 
 		return out, nil
@@ -835,8 +850,6 @@ func main() {
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
 	}
-	recoverDealGenerationStateOnStartup()
-
 	if !routerMode {
 		if err := initSessionDB(sessionDBPath); err != nil {
 			log.Fatalf("failed to open session db %s: %v", sessionDBPath, err)
@@ -855,6 +868,8 @@ func main() {
 
 		startSystemLivenessProver()
 	}
+	// Retention reads the session DB; publish it before starting maintenance.
+	startGenerationRetention()
 
 	r := mux.NewRouter()
 	// Legacy S3-style interface
@@ -2628,7 +2643,9 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, rawManifestRoot)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -2893,7 +2910,9 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
 
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, rawManifestRoot)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -3193,7 +3212,6 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 	setCacheFreshnessHeaders(w, freshnessReasonFresh, freshnessReasonFresh)
 	rawManifestRoot = dealRoot.Canonical
 	manifestRoot = dealRoot
-	cleanupStaleDealGenerations(dealID, manifestRoot)
 
 	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
 	if serr != nil {
@@ -3206,7 +3224,9 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
 	}
 
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, rawManifestRoot)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -3855,7 +3875,6 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setCacheFreshnessHeaders(w, freshnessReasonFresh, freshnessReasonFresh)
-	cleanupStaleDealGenerations(dealID, dealRoot)
 
 	serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
 	if serr != nil {
@@ -3868,7 +3887,9 @@ func GatewayDownload(w http.ResponseWriter, r *http.Request) {
 		stripe = stripeParams{mode: 1, leafCount: types.BLOBS_PER_MDU}
 	}
 
-	dealDir, err := resolveDealDirForDeal(dealID, dealRoot, dealRoot.Canonical)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, dealRoot, dealRoot.Canonical)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -4074,7 +4095,9 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dealDir, err := resolveDealDirForDeal(dealID, dealRoot, dealRoot.Canonical)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, dealRoot, dealRoot.Canonical)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -4392,9 +4415,10 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	cleanupStaleDealGenerations(dealID, manifestRoot)
 
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, rawManifestRoot)
+
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -4559,14 +4583,20 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
-		cleanupStaleDealGenerations(dealID, manifestRoot)
+
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -6178,7 +6208,7 @@ func parseSessionIDHex(raw string) (string, []byte, error) {
 
 // SpSubmitRetrievalSessionProof submits proof-of-retrieval for an on-chain RetrievalSession.
 // It expects the gateway to have recorded per-blob ChainedProofs under the given session_id.
-func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+func submitLegacyRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -6200,24 +6230,20 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
-	localProviderAddr := cachedProviderAddress(r.Context())
-	if strings.TrimSpace(localProviderAddr) == "" {
-		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
-			return
-		}
-	}
-	if strings.TrimSpace(localProviderAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set POLYSTORE_PROVIDER_ADDRESS or POLYSTORE_PROVIDER_KEY")
+	providerKeyName, localProviderAddr, err := retrievalSigner(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "provider signing key unavailable", err.Error())
 		return
 	}
 
 	// Try loading from on-chain proof bucket first
 	var proofs []types.ChainedProof
 	onChainProofs, err := loadOnChainSessionProofs(sessionKey)
-	if err == nil && len(onChainProofs) > 0 {
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "stored session proof is unreadable", err.Error())
+		return
+	}
+	if len(onChainProofs) > 0 {
 		proofs = onChainProofs
 	} else {
 		// Fallback to off-chain download session
@@ -6230,8 +6256,8 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusForbidden, "session provider mismatch", "")
 			return
 		}
-		if len(s.Chunks) == 0 {
-			writeJSONError(w, http.StatusBadRequest, "session has no recorded chunks", "fetch at least one blob chunk before submitting proofs")
+		if len(s.Chunks) == 0 || len(s.Chunks) > 64 {
+			writeJSONError(w, http.StatusBadRequest, "session must have 1..64 recorded chunks", "fetch at least one blob chunk before submitting proofs")
 			return
 		}
 
@@ -6244,9 +6270,9 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 			return chunks[i].ProofDetails.BlobIndex < chunks[j].ProofDetails.BlobIndex
 		})
 
-		seen := make(map[uint64]struct{}, len(chunks))
+		seen := make(map[[2]uint64]struct{}, len(chunks))
 		for _, c := range chunks {
-			key := c.ProofDetails.MduIndex*uint64(types.BLOBS_PER_MDU) + uint64(c.ProofDetails.BlobIndex)
+			key := [2]uint64{c.ProofDetails.MduIndex, uint64(c.ProofDetails.BlobIndex)}
 			if _, ok := seen[key]; ok {
 				continue
 			}
@@ -6257,6 +6283,16 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 
 	if len(proofs) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "session has no usable proofs", "")
+		return
+	}
+
+	request := sessionProofRequest{SessionID: sessionKey}
+	pending, pendingErr := loadPendingSigner(localProviderAddr)
+	if pendingErr != nil || (pending != nil && (pending.Kind != "retrieval" || len(pending.IDs) != 1 || pending.IDs[0] != sessionKey || pending.TxHash == "")) {
+		if pendingErr == nil {
+			pendingErr = fmt.Errorf("actual signer has an unresolved operation; retain proofs and reconcile its original IDs")
+		}
+		writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), "", "pending", "retained", pendingErr)
 		return
 	}
 
@@ -6272,6 +6308,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
 
 	bz, err := json.Marshal(msg)
 	if err != nil {
@@ -6282,39 +6319,62 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
 		return
 	}
-	_ = tmpFile.Close()
-
-	txHash, err := submitTxAndWait(
-		r.Context(),
-		"tx", "polystorechain", "submit-retrieval-proof",
-		tmpFile.Name(),
-		"--from", providerKeyName,
-		"--chain-id", chainID,
-		"--home", homeDir,
-		"--keyring-backend", "test",
-		"--yes",
-		"--gas", "auto",
-		"--gas-adjustment", "1.6",
-		"--gas-prices", gasPrices,
-		"--broadcast-mode", "sync",
-		"--output", "json",
-	)
-	if err != nil {
-		log.Printf("SpSubmitRetrievalSessionProof: submit failed: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "submit session proof failed", err.Error())
+	if err := tmpFile.Close(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to close proof input", err.Error())
 		return
 	}
 
-	_, _ = takeDownloadSession(sessionKey)
-	_ = deleteOnChainSessionProofs(sessionKey)
+	var txHash string
+	if pending != nil {
+		txHash, err = waitForCommittedTx(r.Context(), pending.TxHash)
+	} else {
+		if err := sessionDB.Update(func(tx *bolt.Tx) error {
+			return claimPendingSigner(tx, localProviderAddr, pendingSignerOperation{Kind: "retrieval", IDs: []string{sessionKey}})
+		}); err != nil {
+			writeJSONError(w, http.StatusConflict, "cannot persist submission intent", err.Error())
+			return
+		}
+		txHash, err = submitTxAndRecord(
+			r.Context(), func(hash string) error {
+				return sessionDB.Update(func(tx *bolt.Tx) error {
+					return claimPendingSigner(tx, localProviderAddr, pendingSignerOperation{Kind: "retrieval", IDs: []string{sessionKey}, TxHash: hash})
+				})
+			},
+			"tx", "polystorechain", "submit-retrieval-proof",
+			tmpFile.Name(),
+			"--from", providerKeyName,
+			"--chain-id", chainID,
+			"--home", homeDir,
+			"--keyring-backend", "test",
+			"--yes",
+			"--gas", "auto",
+			"--gas-adjustment", "1.6",
+			"--gas-prices", gasPrices,
+			"--broadcast-mode", "sync",
+			"--output", "json",
+		)
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":      "success",
-		"tx_hash":     txHash,
-		"proof_count": len(proofs),
-		"session_id":  sessionKey,
-	})
+	if err != nil {
+		status := "pending"
+		if errors.Is(err, errTxRejected) || errors.Is(err, errTxFailed) || errors.Is(err, errTxNotSubmitted) {
+			status = "failed"
+			if clearErr := sessionDB.Update(func(tx *bolt.Tx) error {
+				return clearPendingSigner(tx, localProviderAddr, "retrieval", []string{sessionKey})
+			}); clearErr != nil {
+				err = fmt.Errorf("%w; signer recovery: %v", err, clearErr)
+			}
+		}
+		writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), txHash, status, "retained", err)
+		return
+	}
+
+	cleanupErr := deleteSubmittedLegacyProofs(sessionKey, localProviderAddr)
+	cleanup := "complete"
+	if cleanupErr != nil {
+		cleanup = "pending"
+	}
+	writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), txHash, "success", cleanup, cleanupErr)
 }
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -6387,6 +6447,14 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mduIndex, indexErr := strconv.ParseUint(mduIndexStr, 10, 64)
+	if indexErr != nil || mduIndex > 65536 || strconv.FormatUint(mduIndex, 10) != mduIndexStr {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_mdu_index"
+		http.Error(w, "invalid mdu index", statusCode)
+		return
+	}
+
 	uploadGenerationID, err := normalizeUploadGenerationID(uploadGenerationRaw)
 	if err != nil {
 		statusCode = http.StatusBadRequest
@@ -6454,19 +6522,18 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 		rootDir = stagedUploadDir(dealID, uploadGenerationID)
 	}
 
+	releaseGeneration, err := leaseGenerationPaths(rootDir)
+	if err != nil {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "generation_capacity"
+		http.Error(w, err.Error(), statusCode)
+		return
+	}
+	defer releaseGeneration()
+
 	// Write MDU
 	filename := fmt.Sprintf("mdu_%s.bin", mduIndexStr)
 	path := filepath.Join(rootDir, filename)
-
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
-		// Idempotent: already stored.
-		storedPath = path
-		profile.setCount("stored_size_bytes", uint64(info.Size()))
-		outcome = "already_present"
-		logVerboseMode2Uploadf("SpUploadMdu: already present %s for deal %d", path, dealID)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 
 	mkdirStarted := time.Now()
 	if err := ensureUploadRootDir(rootDir); err != nil {
@@ -6557,20 +6624,14 @@ func SpUploadMdu(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renameStarted := time.Now()
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := publishImmutableArtifact(tmpPath, path); err != nil {
 		profile.addDuration("rename_ms", time.Since(renameStarted))
-		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.MDU_SIZE) {
-			// Race/idempotent: another upload wrote the same MDU.
-			storedPath = path
-			profile.setCount("stored_size_bytes", uint64(info.Size()))
-			outcome = "race_kept_existing"
-			logVerboseMode2Uploadf("SpUploadMdu: race detected; keeping existing %s for deal %d", path, dealID)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
 		statusCode = http.StatusInternalServerError
-		outcome = "rename_failed"
-		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		if errors.Is(err, errGenerationConflict) {
+			statusCode = http.StatusConflict
+		}
+		outcome = "publish_failed"
+		http.Error(w, err.Error(), statusCode)
 		return
 	}
 	profile.addDuration("rename_ms", time.Since(renameStarted))
@@ -6643,10 +6704,18 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slot, err := strconv.ParseUint(slotStr, 10, 64)
-	if err != nil {
+	if err != nil || slot > 255 {
 		statusCode = http.StatusBadRequest
 		outcome = "invalid_slot"
 		http.Error(w, "invalid slot", http.StatusBadRequest)
+		return
+	}
+
+	mduIndex, indexErr := strconv.ParseUint(mduIndexStr, 10, 64)
+	if indexErr != nil || mduIndex > 65536 || strconv.FormatUint(mduIndex, 10) != mduIndexStr {
+		statusCode = http.StatusBadRequest
+		outcome = "invalid_mdu_index"
+		http.Error(w, "invalid mdu index", statusCode)
 		return
 	}
 
@@ -6723,23 +6792,17 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 		rootDir = stagedUploadDir(dealID, uploadGenerationID)
 	}
 
+	releaseGeneration, err := leaseGenerationPaths(rootDir)
+	if err != nil {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "generation_capacity"
+		http.Error(w, err.Error(), statusCode)
+		return
+	}
+	defer releaseGeneration()
+
 	filename := fmt.Sprintf("mdu_%s_slot_%d.bin", mduIndexStr, slot)
 	path := filepath.Join(rootDir, filename)
-
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
-		expectedSize := r.ContentLength
-		if hasDeclaredFullSize {
-			expectedSize = declaredFullSize
-		}
-		if expectedSize <= 0 || info.Size() == expectedSize {
-			storedPath = path
-			profile.setCount("stored_size_bytes", uint64(info.Size()))
-			outcome = "already_present"
-			logVerboseMode2Uploadf("SpUploadShard: already present %s for deal %d", path, dealID)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-	}
 
 	mkdirStarted := time.Now()
 	if err := ensureUploadRootDir(rootDir); err != nil {
@@ -6819,25 +6882,14 @@ func SpUploadShard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renameStarted := time.Now()
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := publishImmutableArtifact(tmpPath, path); err != nil {
 		profile.addDuration("rename_ms", time.Since(renameStarted))
-		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= int64(types.MDU_SIZE) {
-			expectedSize := r.ContentLength
-			if hasDeclaredFullSize {
-				expectedSize = declaredFullSize
-			}
-			if expectedSize <= 0 || info.Size() == expectedSize {
-				storedPath = path
-				profile.setCount("stored_size_bytes", uint64(info.Size()))
-				outcome = "race_kept_existing"
-				logVerboseMode2Uploadf("SpUploadShard: race detected; keeping existing %s for deal %d", path, dealID)
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		}
 		statusCode = http.StatusInternalServerError
-		outcome = "rename_failed"
-		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		if errors.Is(err, errGenerationConflict) {
+			statusCode = http.StatusConflict
+		}
+		outcome = "publish_failed"
+		http.Error(w, err.Error(), statusCode)
 		return
 	}
 	profile.addDuration("rename_ms", time.Since(renameStarted))
@@ -6897,6 +6949,13 @@ func SpFetchShard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rootDir := dealScopedDir(dealID, parsed)
+	releaseGeneration, err := leaseGenerationPaths(rootDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer releaseGeneration()
+
 	filename := fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot)
 	path := filepath.Join(rootDir, filename)
 
@@ -7029,21 +7088,23 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 		writeDir = stagedUploadDir(dealID, uploadGenerationID)
 	}
 
+	releaseGeneration, err := leaseGenerationPaths(rootDir, writeDir)
+	if err != nil {
+		statusCode = http.StatusServiceUnavailable
+		outcome = "generation_capacity"
+		http.Error(w, err.Error(), statusCode)
+		return
+	}
+	defer releaseGeneration()
+
 	path := filepath.Join(writeDir, "manifest.bin")
-	if uploadGenerationID == "" {
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
-			storedPath = path
-			profile.setCount("stored_size_bytes", uint64(info.Size()))
-			outcome = "already_present"
-			logVerboseMode2Uploadf("SpUploadManifest: already present %s for deal %d", path, dealID)
-			w.WriteHeader(http.StatusOK)
+	if uploadGenerationID != "" {
+		if _, err := os.Stat(writeDir); err != nil {
+			statusCode = http.StatusNotFound
+			outcome = "staged_generation_not_found"
+			http.Error(w, "staged upload generation not found", statusCode)
 			return
 		}
-	} else if _, err := os.Stat(writeDir); err != nil {
-		statusCode = http.StatusNotFound
-		outcome = "staged_generation_not_found"
-		http.Error(w, "staged upload generation not found", http.StatusNotFound)
-		return
 	}
 
 	mkdirStarted := time.Now()
@@ -7129,19 +7190,14 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renameStarted := time.Now()
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := publishImmutableArtifact(tmpPath, path); err != nil {
 		profile.addDuration("rename_ms", time.Since(renameStarted))
-		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == int64(types.BLOB_SIZE) {
-			storedPath = path
-			profile.setCount("stored_size_bytes", uint64(info.Size()))
-			outcome = "race_kept_existing"
-			logVerboseMode2Uploadf("SpUploadManifest: race detected; keeping existing %s for deal %d", path, dealID)
-			w.WriteHeader(http.StatusOK)
-			return
-		}
 		statusCode = http.StatusInternalServerError
-		outcome = "rename_failed"
-		http.Error(w, "failed to store file", http.StatusInternalServerError)
+		if errors.Is(err, errGenerationConflict) {
+			statusCode = http.StatusConflict
+		}
+		outcome = "publish_failed"
+		http.Error(w, err.Error(), statusCode)
 		return
 	}
 	profile.addDuration("rename_ms", time.Since(renameStarted))
@@ -7150,6 +7206,7 @@ func SpUploadManifest(w http.ResponseWriter, r *http.Request) {
 
 	if uploadGenerationID != "" {
 		promoteStarted := time.Now()
+		releaseGeneration() // Publisher rejects concurrent staged writers atomically.
 		if err := promoteStagedUploadGeneration(dealID, uploadGenerationID, rootDir); err != nil {
 			profile.addDuration("promote_generation_ms", time.Since(promoteStarted))
 			statusCode = http.StatusInternalServerError

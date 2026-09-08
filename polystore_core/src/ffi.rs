@@ -472,6 +472,64 @@ pub extern "C" fn polystore_reconstruct_mdu_rs(
     0
 }
 
+/// Compact exact-K input, with unique slot indices. No absent shard buffers.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_reconstruct_slot_rs(
+    packed: *const u8,
+    packed_len: usize,
+    indices: *const u8,
+    indices_len: usize,
+    k: u64,
+    m: u64,
+    target: u64,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    if packed.is_null()
+        || indices.is_null()
+        || output.is_null()
+        || k == 0
+        || k > 64
+        || 64 % k != 0
+        || m == 0
+        || m > 255
+        || k + m > 256
+        || target >= k + m
+        || indices_len != k as usize
+        || packed_len != crate::kzg::MDU_SIZE
+        || output_len != crate::kzg::MDU_SIZE / k as usize
+    {
+        return -2;
+    }
+    let input = unsafe { std::slice::from_raw_parts(packed, packed_len) };
+    let indices = unsafe { std::slice::from_raw_parts(indices, indices_len) };
+    let mut shards = vec![None; (k + m) as usize];
+    // Validate all identities before copying the bounded input.
+    let mut seen = [false; 256];
+    for &slot in indices {
+        if slot as u64 >= k + m || seen[slot as usize] {
+            return -2;
+        }
+        seen[slot as usize] = true;
+    }
+    for (&slot, bytes) in indices.iter().zip(input.chunks_exact(output_len)) {
+        shards[slot as usize] = Some(bytes.to_vec());
+    }
+    let result = match crate::coding::reconstruct_slot_from_shards(
+        &mut shards,
+        k as usize,
+        m as usize,
+        target as usize,
+    ) {
+        Ok(result) => result,
+        Err(_) => return -3,
+    };
+    unsafe {
+        std::ptr::copy_nonoverlapping(result.as_ptr(), output, output_len);
+    }
+    0
+}
+
 /// Verifies a KZG proof for a single 128 KiB blob within an MDU, including Merkle proof verification.
 #[unsafe(no_mangle)]
 pub extern "C" fn polystore_verify_mdu_proof(

@@ -45,6 +45,12 @@ type mduKzgResponse struct {
 }
 
 func GatewayMdu(w http.ResponseWriter, r *http.Request) {
+	// Both user-gateway modes relay frozen authority; local files and the
+	// gateway key cannot substitute for the session's authorized payee.
+	if strings.HasPrefix(r.URL.Path, "/gateway/mdu/") {
+		RouterGatewayMdu(w, r)
+		return
+	}
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -73,6 +79,54 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A v2 session is authority for its historical root and requester. Resolve it
+	// before current-deal owner/root checks, which cannot authorize a deputy or a
+	// sponsored request and must not revoke an already funded generation.
+	var onchainSession *types.RetrievalSession
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") != "" {
+		ctx, releaseCapacity, err := admitRetrievalResponse(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "provider proof capacity is busy", "")
+			return
+		}
+		defer releaseCapacity()
+		r = r.WithContext(ctx)
+		key, _, err := parseSessionIDHex(r.Header.Get("X-PolyStore-Session-Id"))
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
+			return
+		}
+		release, err := claimRetrievalOperations([]string{key}, "")
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "session is busy", err.Error())
+			return
+		}
+		defer release()
+		response, height, queryErr := queryRetrievalSession(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+		if queryErr != nil {
+			status := http.StatusBadGateway
+			if errors.Is(queryErr, ErrSessionNotFound) {
+				status = http.StatusNotFound
+			}
+			writeJSONError(w, status, "failed to load retrieval session", queryErr.Error())
+			return
+		}
+		if response.Session.ChallengeVersion == 2 {
+			serveFrozenRetrievalWindow(w, r, manifestRoot, mduIndex, response, height)
+			return
+		}
+		if response.Session.ChallengeVersion != 0 {
+			writeJSONError(w, http.StatusBadRequest, "unsupported retrieval challenge version", "")
+			return
+		}
+		onchainSession = &response.Session
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") == "" {
+		serveCommittedRetrievalMetadata(w, r, manifestRoot, mduIndex)
+		return
+	}
+
 	dealID, _, status, err := validateDealOwnerCidQuery(r, manifestRoot)
 	hasDealQuery := strings.TrimSpace(r.URL.Query().Get("deal_id")) != ""
 	if err != nil {
@@ -80,60 +134,11 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") {
-		sessionID := strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id"))
-		if sessionID == "" {
-			if !hasDealQuery {
-				writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "provider retrieval requires session-scoped deal context")
-				return
-			}
-			dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-					return
-				}
-				if errors.Is(err, ErrDealDirConflict) {
-					writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
-					return
-				}
-				writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
-				return
-			}
-			meta, err := loadSlabMeta(dealDir)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					writeJSONError(w, http.StatusNotFound, "slab not found", "")
-					return
-				}
-				log.Printf("GatewayMdu: load slab meta error: %v", err)
-				writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
-				return
-			}
-			defer meta.Close()
-			if mduIndex >= meta.totalMdus {
-				writeJSONError(w, http.StatusNotFound, "mdu index out of range", "")
-				return
-			}
-			if mduIndex > meta.witnessMdus {
-				writeJSONError(w, http.StatusBadRequest, "missing X-PolyStore-Session-Id", "open an on-chain retrieval session first")
-				return
-			}
-			serveMduFromMeta(w, manifestRoot, meta, mduIndex)
-			return
-		}
 		if !hasDealQuery {
 			writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "provider retrieval requires session-scoped deal context")
 			return
 		}
-		onchainSession, err := fetchRetrievalSession(sessionID)
-		if err != nil {
-			if errors.Is(err, ErrSessionNotFound) {
-				writeJSONError(w, http.StatusNotFound, "retrieval session not found", "")
-				return
-			}
-			writeJSONError(w, http.StatusBadGateway, "failed to load retrieval session", err.Error())
-			return
-		}
+
 		providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
 		if providerAddr == "" {
 			writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "")
@@ -199,64 +204,7 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var dealDir string
-	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
-	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
-	}
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-			return
-		}
-		if errors.Is(err, ErrDealDirConflict) {
-			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
-			return
-		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
-		return
-	}
-
-	meta, err := loadSlabMeta(dealDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found", "")
-			return
-		}
-		log.Printf("GatewayMdu: load slab meta error: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
-		return
-	}
-	defer meta.Close()
-
-	if mduIndex >= meta.totalMdus {
-		writeJSONError(w, http.StatusNotFound, "mdu index out of range", "")
-		return
-	}
-
-	serveMduFromMeta(w, manifestRoot, meta, mduIndex)
-}
-
-func serveMduFromMeta(w http.ResponseWriter, manifestRoot ManifestRoot, meta *slabMeta, mduIndex uint64) {
-	mduPath := filepath.Join(meta.dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-	data, err := os.ReadFile(mduPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "mdu not found", "")
-			return
-		}
-		log.Printf("GatewayMdu: read mdu error: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to read mdu", "")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
-	w.Header().Set("X-PolyStore-Mdu-Index", strconv.FormatUint(mduIndex, 10))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	writeJSONError(w, http.StatusBadRequest, "unsupported retrieval MDU route", "")
 }
 
 type dealDirLocator struct {
@@ -270,7 +218,8 @@ func metaOrNil(dealID uint64, manifestRoot ManifestRoot, rawManifestRoot string)
 }
 
 func readMduSessionWindow(locator dealDirLocator, mduIndex uint64, stripe stripeParams, startBlobIndex uint32, blobCount uint64) ([]byte, error) {
-	dealDir, err := resolveDealDirForDeal(locator.dealID, locator.manifestRoot, locator.rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(locator.dealID, locator.manifestRoot, locator.rawManifestRoot)
+	defer releaseGeneration()
 	if err != nil {
 		return nil, err
 	}
@@ -466,10 +415,16 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -604,10 +559,16 @@ func GatewayMduKzg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

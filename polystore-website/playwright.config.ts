@@ -9,6 +9,7 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {},
   },
   // Keep it lean: assume the dev server is started separately (e.g., run_local_stack).
   // If you want Playwright to start it, set WEB_SERVER_COMMAND env and enable webServer here.

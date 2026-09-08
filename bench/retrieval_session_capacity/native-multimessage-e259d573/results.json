@@ -1,0 +1,1793 @@
+{
+  "schema_version": 1,
+  "qualification": false,
+  "scope": "Signed native application proof-settlement comparison; MemDB IAVL; no network, fsync or browser delivery",
+  "repeats": 5,
+  "iterations_per_repeat": 3,
+  "rows": [
+    {
+      "file": "n1-r1.log",
+      "sessions": 1,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5631695.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 5628806.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 177.7,
+        "sign-encode-ns/session": 342737.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1392090.0,
+        "allocs/op": 21024.0
+      },
+      "process_rss_bytes": 222232576,
+      "process_peak_footprint_bytes": 158843624,
+      "process_real_seconds": 2.52,
+      "process_user_seconds": 0.96,
+      "process_system_seconds": 0.07
+    },
+    {
+      "file": "n1-r1.log",
+      "sessions": 1,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4788945.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 4786305.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 208.9,
+        "sign-encode-ns/session": 320139.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1388000.0,
+        "allocs/op": 20997.0
+      },
+      "process_rss_bytes": 222232576,
+      "process_peak_footprint_bytes": 158843624,
+      "process_real_seconds": 2.52,
+      "process_user_seconds": 0.96,
+      "process_system_seconds": 0.07
+    },
+    {
+      "file": "n1-r2.log",
+      "sessions": 1,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5771000.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 5767861.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 173.4,
+        "sign-encode-ns/session": 354306.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1392752.0,
+        "allocs/op": 21045.0
+      },
+      "process_rss_bytes": 222265344,
+      "process_peak_footprint_bytes": 159236864,
+      "process_real_seconds": 0.84,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.02
+    },
+    {
+      "file": "n1-r2.log",
+      "sessions": 1,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4825750.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 4823014.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 207.3,
+        "sign-encode-ns/session": 328722.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1389354.0,
+        "allocs/op": 21010.0
+      },
+      "process_rss_bytes": 222265344,
+      "process_peak_footprint_bytes": 159236864,
+      "process_real_seconds": 0.84,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.02
+    },
+    {
+      "file": "n1-r3.log",
+      "sessions": 1,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5213944.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 5210528.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 191.9,
+        "sign-encode-ns/session": 363333.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1392480.0,
+        "allocs/op": 21032.0
+      },
+      "process_rss_bytes": 222576640,
+      "process_peak_footprint_bytes": 159236888,
+      "process_real_seconds": 0.85,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n1-r3.log",
+      "sessions": 1,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4811124.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 4808361.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 208.0,
+        "sign-encode-ns/session": 324986.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1390322.0,
+        "allocs/op": 21009.0
+      },
+      "process_rss_bytes": 222576640,
+      "process_peak_footprint_bytes": 159236888,
+      "process_real_seconds": 0.85,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n1-r4.log",
+      "sessions": 1,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5013500.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 5009014.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 199.6,
+        "sign-encode-ns/session": 343250.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1391709.0,
+        "allocs/op": 21027.0
+      },
+      "process_rss_bytes": 223199232,
+      "process_peak_footprint_bytes": 159843096,
+      "process_real_seconds": 0.85,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n1-r4.log",
+      "sessions": 1,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4842847.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 4839916.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 206.6,
+        "sign-encode-ns/session": 327597.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1389928.0,
+        "allocs/op": 21006.0
+      },
+      "process_rss_bytes": 223199232,
+      "process_peak_footprint_bytes": 159843096,
+      "process_real_seconds": 0.85,
+      "process_user_seconds": 0.97,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n1-r5.log",
+      "sessions": 1,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5760722.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 5757625.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 173.7,
+        "sign-encode-ns/session": 346139.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1392957.0,
+        "allocs/op": 21045.0
+      },
+      "process_rss_bytes": 222658560,
+      "process_peak_footprint_bytes": 159482648,
+      "process_real_seconds": 0.84,
+      "process_user_seconds": 0.96,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n1-r5.log",
+      "sessions": 1,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4905736.0,
+        "envelope-B/op": 245.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 1.0,
+        "gas/session": 619349.0,
+        "ns/session": 4902875.0,
+        "other-gas/session": 119349.0,
+        "pending-json-B": 1342.0,
+        "sessions/s": 204.0,
+        "sign-encode-ns/session": 316708.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 1072.0,
+        "txs/op": 1.0,
+        "B/op": 1388501.0,
+        "allocs/op": 20999.0
+      },
+      "process_rss_bytes": 222658560,
+      "process_peak_footprint_bytes": 159482648,
+      "process_real_seconds": 0.84,
+      "process_user_seconds": 0.96,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n32-r1.log",
+      "sessions": 32,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 121836264.0,
+        "envelope-B/op": 7902.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 619606.0,
+        "ns/session": 3807268.0,
+        "other-gas/session": 119606.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 262.7,
+        "sign-encode-ns/session": 289948.0,
+        "signature-B/op": 2048.0,
+        "tx-bytes/op": 34366.0,
+        "txs/op": 32.0,
+        "B/op": 10468266.0,
+        "allocs/op": 156434.0
+      },
+      "process_rss_bytes": 236568576,
+      "process_peak_footprint_bytes": 172393216,
+      "process_real_seconds": 5.5,
+      "process_user_seconds": 5.65,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r1.log",
+      "sessions": 32,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 105037541.0,
+        "envelope-B/op": 2479.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 575393.0,
+        "ns/session": 3282336.0,
+        "other-gas/session": 75393.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 304.7,
+        "sign-encode-ns/session": 11577.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 28943.0,
+        "txs/op": 1.0,
+        "B/op": 4083845.0,
+        "allocs/op": 50095.0
+      },
+      "process_rss_bytes": 236568576,
+      "process_peak_footprint_bytes": 172393216,
+      "process_real_seconds": 5.5,
+      "process_user_seconds": 5.65,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r2.log",
+      "sessions": 32,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 121627139.0,
+        "envelope-B/op": 7902.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 619606.0,
+        "ns/session": 3800728.0,
+        "other-gas/session": 119606.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 263.1,
+        "sign-encode-ns/session": 286764.0,
+        "signature-B/op": 2048.0,
+        "tx-bytes/op": 34366.0,
+        "txs/op": 32.0,
+        "B/op": 10468360.0,
+        "allocs/op": 156435.0
+      },
+      "process_rss_bytes": 236601344,
+      "process_peak_footprint_bytes": 171819776,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.69,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r2.log",
+      "sessions": 32,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 105292417.0,
+        "envelope-B/op": 2479.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 575393.0,
+        "ns/session": 3290277.0,
+        "other-gas/session": 75393.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 303.9,
+        "sign-encode-ns/session": 11293.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 28943.0,
+        "txs/op": 1.0,
+        "B/op": 4082021.0,
+        "allocs/op": 50084.0
+      },
+      "process_rss_bytes": 236601344,
+      "process_peak_footprint_bytes": 171819776,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.69,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r3.log",
+      "sessions": 32,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 121539611.0,
+        "envelope-B/op": 7902.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 619606.0,
+        "ns/session": 3798004.0,
+        "other-gas/session": 119606.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 263.3,
+        "sign-encode-ns/session": 292506.0,
+        "signature-B/op": 2048.0,
+        "tx-bytes/op": 34366.0,
+        "txs/op": 32.0,
+        "B/op": 10467834.0,
+        "allocs/op": 156418.0
+      },
+      "process_rss_bytes": 236748800,
+      "process_peak_footprint_bytes": 172229376,
+      "process_real_seconds": 5.54,
+      "process_user_seconds": 5.7,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r3.log",
+      "sessions": 32,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 105502111.0,
+        "envelope-B/op": 2479.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 575393.0,
+        "ns/session": 3296847.0,
+        "other-gas/session": 75393.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 303.3,
+        "sign-encode-ns/session": 11690.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 28943.0,
+        "txs/op": 1.0,
+        "B/op": 4082885.0,
+        "allocs/op": 50091.0
+      },
+      "process_rss_bytes": 236748800,
+      "process_peak_footprint_bytes": 172229376,
+      "process_real_seconds": 5.54,
+      "process_user_seconds": 5.7,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r4.log",
+      "sessions": 32,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 121218292.0,
+        "envelope-B/op": 7902.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 619606.0,
+        "ns/session": 3787971.0,
+        "other-gas/session": 119606.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 264.0,
+        "sign-encode-ns/session": 289235.0,
+        "signature-B/op": 2048.0,
+        "tx-bytes/op": 34366.0,
+        "txs/op": 32.0,
+        "B/op": 10469002.0,
+        "allocs/op": 156413.0
+      },
+      "process_rss_bytes": 236519424,
+      "process_peak_footprint_bytes": 172163840,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.69,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r4.log",
+      "sessions": 32,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 105211445.0,
+        "envelope-B/op": 2479.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 575393.0,
+        "ns/session": 3287764.0,
+        "other-gas/session": 75393.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 304.2,
+        "sign-encode-ns/session": 11266.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 28943.0,
+        "txs/op": 1.0,
+        "B/op": 4084725.0,
+        "allocs/op": 50093.0
+      },
+      "process_rss_bytes": 236519424,
+      "process_peak_footprint_bytes": 172163840,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.69,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r5.log",
+      "sessions": 32,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 121046736.0,
+        "envelope-B/op": 7902.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 619606.0,
+        "ns/session": 3782620.0,
+        "other-gas/session": 119606.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 264.4,
+        "sign-encode-ns/session": 289111.0,
+        "signature-B/op": 2048.0,
+        "tx-bytes/op": 34366.0,
+        "txs/op": 32.0,
+        "B/op": 10469920.0,
+        "allocs/op": 156438.0
+      },
+      "process_rss_bytes": 236077056,
+      "process_peak_footprint_bytes": 172278528,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.68,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n32-r5.log",
+      "sessions": 32,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 104885750.0,
+        "envelope-B/op": 2479.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 32.0,
+        "gas/session": 575393.0,
+        "ns/session": 3277587.0,
+        "other-gas/session": 75393.0,
+        "pending-json-B": 42510.0,
+        "sessions/s": 305.1,
+        "sign-encode-ns/session": 10901.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 28943.0,
+        "txs/op": 1.0,
+        "B/op": 4086000.0,
+        "allocs/op": 50101.0
+      },
+      "process_rss_bytes": 236077056,
+      "process_peak_footprint_bytes": 172278528,
+      "process_real_seconds": 5.53,
+      "process_user_seconds": 5.68,
+      "process_system_seconds": 0.04
+    },
+    {
+      "file": "n64-r1.log",
+      "sessions": 64,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 236660889.0,
+        "envelope-B/op": 15806.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 619616.0,
+        "ns/session": 3697774.0,
+        "other-gas/session": 119616.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 270.4,
+        "sign-encode-ns/session": 268668.0,
+        "signature-B/op": 4096.0,
+        "tx-bytes/op": 68734.0,
+        "txs/op": 64.0,
+        "B/op": 19777890.0,
+        "allocs/op": 295275.0
+      },
+      "process_rss_bytes": 250200064,
+      "process_peak_footprint_bytes": 185533208,
+      "process_real_seconds": 10.37,
+      "process_user_seconds": 10.5,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r1.log",
+      "sessions": 64,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 218438041.0,
+        "envelope-B/op": 4783.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 574686.0,
+        "ns/session": 3413043.0,
+        "other-gas/session": 74686.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 293.0,
+        "sign-encode-ns/session": 6000.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 57711.0,
+        "txs/op": 1.0,
+        "B/op": 6808264.0,
+        "allocs/op": 79189.0
+      },
+      "process_rss_bytes": 250200064,
+      "process_peak_footprint_bytes": 185533208,
+      "process_real_seconds": 10.37,
+      "process_user_seconds": 10.5,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r2.log",
+      "sessions": 64,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 237999667.0,
+        "envelope-B/op": 15806.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 619616.0,
+        "ns/session": 3718687.0,
+        "other-gas/session": 119616.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 268.9,
+        "sign-encode-ns/session": 269607.0,
+        "signature-B/op": 4096.0,
+        "tx-bytes/op": 68734.0,
+        "txs/op": 64.0,
+        "B/op": 19775890.0,
+        "allocs/op": 295261.0
+      },
+      "process_rss_bytes": 250167296,
+      "process_peak_footprint_bytes": 185385752,
+      "process_real_seconds": 10.41,
+      "process_user_seconds": 10.54,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r2.log",
+      "sessions": 64,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 208693777.0,
+        "envelope-B/op": 4783.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 574686.0,
+        "ns/session": 3260787.0,
+        "other-gas/session": 74686.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 306.7,
+        "sign-encode-ns/session": 6231.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 57711.0,
+        "txs/op": 1.0,
+        "B/op": 6811296.0,
+        "allocs/op": 79199.0
+      },
+      "process_rss_bytes": 250167296,
+      "process_peak_footprint_bytes": 185385752,
+      "process_real_seconds": 10.41,
+      "process_user_seconds": 10.54,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r3.log",
+      "sessions": 64,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 237777694.0,
+        "envelope-B/op": 15806.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 619616.0,
+        "ns/session": 3715224.0,
+        "other-gas/session": 119616.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 269.2,
+        "sign-encode-ns/session": 271639.0,
+        "signature-B/op": 4096.0,
+        "tx-bytes/op": 68734.0,
+        "txs/op": 64.0,
+        "B/op": 19777893.0,
+        "allocs/op": 295275.0
+      },
+      "process_rss_bytes": 249856000,
+      "process_peak_footprint_bytes": 185500440,
+      "process_real_seconds": 10.36,
+      "process_user_seconds": 10.52,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r3.log",
+      "sessions": 64,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 208558792.0,
+        "envelope-B/op": 4783.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 574686.0,
+        "ns/session": 3258678.0,
+        "other-gas/session": 74686.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 306.9,
+        "sign-encode-ns/session": 6003.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 57711.0,
+        "txs/op": 1.0,
+        "B/op": 6809077.0,
+        "allocs/op": 79194.0
+      },
+      "process_rss_bytes": 249856000,
+      "process_peak_footprint_bytes": 185500440,
+      "process_real_seconds": 10.36,
+      "process_user_seconds": 10.52,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r4.log",
+      "sessions": 64,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 238119417.0,
+        "envelope-B/op": 15806.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 619616.0,
+        "ns/session": 3720559.0,
+        "other-gas/session": 119616.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 268.8,
+        "sign-encode-ns/session": 273383.0,
+        "signature-B/op": 4096.0,
+        "tx-bytes/op": 68734.0,
+        "txs/op": 64.0,
+        "B/op": 19775104.0,
+        "allocs/op": 295266.0
+      },
+      "process_rss_bytes": 250036224,
+      "process_peak_footprint_bytes": 185434928,
+      "process_real_seconds": 10.38,
+      "process_user_seconds": 10.54,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r4.log",
+      "sessions": 64,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 207952597.0,
+        "envelope-B/op": 4783.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 574686.0,
+        "ns/session": 3249206.0,
+        "other-gas/session": 74686.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 307.8,
+        "sign-encode-ns/session": 5965.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 57711.0,
+        "txs/op": 1.0,
+        "B/op": 6811632.0,
+        "allocs/op": 79191.0
+      },
+      "process_rss_bytes": 250036224,
+      "process_peak_footprint_bytes": 185434928,
+      "process_real_seconds": 10.38,
+      "process_user_seconds": 10.54,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r5.log",
+      "sessions": 64,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 237336542.0,
+        "envelope-B/op": 15806.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 619616.0,
+        "ns/session": 3708331.0,
+        "other-gas/session": 119616.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 269.7,
+        "sign-encode-ns/session": 273105.0,
+        "signature-B/op": 4096.0,
+        "tx-bytes/op": 68734.0,
+        "txs/op": 64.0,
+        "B/op": 19781840.0,
+        "allocs/op": 295293.0
+      },
+      "process_rss_bytes": 250085376,
+      "process_peak_footprint_bytes": 185205528,
+      "process_real_seconds": 10.36,
+      "process_user_seconds": 10.53,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n64-r5.log",
+      "sessions": 64,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 208279028.0,
+        "envelope-B/op": 4783.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 64.0,
+        "gas/session": 574686.0,
+        "ns/session": 3254314.0,
+        "other-gas/session": 74686.0,
+        "pending-json-B": 85006.0,
+        "sessions/s": 307.3,
+        "sign-encode-ns/session": 6133.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 57711.0,
+        "txs/op": 1.0,
+        "B/op": 6807114.0,
+        "allocs/op": 79185.0
+      },
+      "process_rss_bytes": 250085376,
+      "process_peak_footprint_bytes": 185205528,
+      "process_real_seconds": 10.36,
+      "process_user_seconds": 10.53,
+      "process_system_seconds": 0.05
+    },
+    {
+      "file": "n8-r1.log",
+      "sessions": 8,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 33185778.0,
+        "envelope-B/op": 1974.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 619485.0,
+        "ns/session": 4147800.0,
+        "other-gas/session": 119485.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 241.1,
+        "sign-encode-ns/session": 293005.0,
+        "signature-B/op": 512.0,
+        "tx-bytes/op": 8590.0,
+        "txs/op": 8.0,
+        "B/op": 3452397.0,
+        "allocs/op": 51937.0
+      },
+      "process_rss_bytes": 225820672,
+      "process_peak_footprint_bytes": 161973016,
+      "process_real_seconds": 1.89,
+      "process_user_seconds": 2.03,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r1.log",
+      "sessions": 8,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 27429292.0,
+        "envelope-B/op": 750.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 579573.0,
+        "ns/session": 3428252.0,
+        "other-gas/session": 79573.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 291.7,
+        "sign-encode-ns/session": 43087.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 7366.0,
+        "txs/op": 1.0,
+        "B/op": 2006269.0,
+        "allocs/op": 27915.0
+      },
+      "process_rss_bytes": 225820672,
+      "process_peak_footprint_bytes": 161973016,
+      "process_real_seconds": 1.89,
+      "process_user_seconds": 2.03,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r2.log",
+      "sessions": 8,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 33020473.0,
+        "envelope-B/op": 1974.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 619485.0,
+        "ns/session": 4127111.0,
+        "other-gas/session": 119485.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 242.3,
+        "sign-encode-ns/session": 297075.0,
+        "signature-B/op": 512.0,
+        "tx-bytes/op": 8590.0,
+        "txs/op": 8.0,
+        "B/op": 3452434.0,
+        "allocs/op": 51936.0
+      },
+      "process_rss_bytes": 226197504,
+      "process_peak_footprint_bytes": 162235136,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.04,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r2.log",
+      "sessions": 8,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 27418139.0,
+        "envelope-B/op": 750.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 579573.0,
+        "ns/session": 3426898.0,
+        "other-gas/session": 79573.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 291.8,
+        "sign-encode-ns/session": 40552.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 7366.0,
+        "txs/op": 1.0,
+        "B/op": 2006165.0,
+        "allocs/op": 27913.0
+      },
+      "process_rss_bytes": 226197504,
+      "process_peak_footprint_bytes": 162235136,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.04,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r3.log",
+      "sessions": 8,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 31683347.0,
+        "envelope-B/op": 1974.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 619485.0,
+        "ns/session": 3960036.0,
+        "other-gas/session": 119485.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 252.5,
+        "sign-encode-ns/session": 301328.0,
+        "signature-B/op": 512.0,
+        "tx-bytes/op": 8590.0,
+        "txs/op": 8.0,
+        "B/op": 3454973.0,
+        "allocs/op": 51950.0
+      },
+      "process_rss_bytes": 226181120,
+      "process_peak_footprint_bytes": 162448152,
+      "process_real_seconds": 1.91,
+      "process_user_seconds": 2.06,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r3.log",
+      "sessions": 8,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 27632361.0,
+        "envelope-B/op": 750.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 579573.0,
+        "ns/session": 3453604.0,
+        "other-gas/session": 79573.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 289.6,
+        "sign-encode-ns/session": 44955.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 7366.0,
+        "txs/op": 1.0,
+        "B/op": 2004826.0,
+        "allocs/op": 27908.0
+      },
+      "process_rss_bytes": 226181120,
+      "process_peak_footprint_bytes": 162448152,
+      "process_real_seconds": 1.91,
+      "process_user_seconds": 2.06,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r4.log",
+      "sessions": 8,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 31698806.0,
+        "envelope-B/op": 1974.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 619485.0,
+        "ns/session": 3961951.0,
+        "other-gas/session": 119485.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 252.4,
+        "sign-encode-ns/session": 298361.0,
+        "signature-B/op": 512.0,
+        "tx-bytes/op": 8590.0,
+        "txs/op": 8.0,
+        "B/op": 3452706.0,
+        "allocs/op": 51931.0
+      },
+      "process_rss_bytes": 225918976,
+      "process_peak_footprint_bytes": 162415384,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.05,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r4.log",
+      "sessions": 8,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 27603403.0,
+        "envelope-B/op": 750.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 579573.0,
+        "ns/session": 3450043.0,
+        "other-gas/session": 79573.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 289.9,
+        "sign-encode-ns/session": 42799.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 7366.0,
+        "txs/op": 1.0,
+        "B/op": 2009826.0,
+        "allocs/op": 27914.0
+      },
+      "process_rss_bytes": 225918976,
+      "process_peak_footprint_bytes": 162415384,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.05,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r5.log",
+      "sessions": 8,
+      "mode": "separate",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 32722431.0,
+        "envelope-B/op": 1974.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 619485.0,
+        "ns/session": 4089910.0,
+        "other-gas/session": 119485.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 244.5,
+        "sign-encode-ns/session": 292849.0,
+        "signature-B/op": 512.0,
+        "tx-bytes/op": 8590.0,
+        "txs/op": 8.0,
+        "B/op": 3453602.0,
+        "allocs/op": 51952.0
+      },
+      "process_rss_bytes": 226082816,
+      "process_peak_footprint_bytes": 162300696,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.05,
+      "process_system_seconds": 0.03
+    },
+    {
+      "file": "n8-r5.log",
+      "sessions": 8,
+      "mode": "batched",
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 27526820.0,
+        "envelope-B/op": 750.0,
+        "failures/op": 0.0,
+        "ffi-calls/op": 8.0,
+        "gas/session": 579573.0,
+        "ns/session": 3440496.0,
+        "other-gas/session": 79573.0,
+        "pending-json-B": 10638.0,
+        "sessions/s": 290.7,
+        "sign-encode-ns/session": 41832.0,
+        "signature-B/op": 64.0,
+        "tx-bytes/op": 7366.0,
+        "txs/op": 1.0,
+        "B/op": 2010645.0,
+        "allocs/op": 27922.0
+      },
+      "process_rss_bytes": 226082816,
+      "process_peak_footprint_bytes": 162300696,
+      "process_real_seconds": 1.9,
+      "process_user_seconds": 2.05,
+      "process_system_seconds": 0.03
+    }
+  ],
+  "summary": [
+    {
+      "sessions": 1,
+      "mode": "separate",
+      "metrics": {
+        "ns/op": {
+          "median": 5631695.0,
+          "min": 5013500.0,
+          "max": 5771000.0
+        },
+        "envelope-B/op": {
+          "median": 245.0,
+          "min": 245.0,
+          "max": 245.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "gas/session": {
+          "median": 619349.0,
+          "min": 619349.0,
+          "max": 619349.0
+        },
+        "ns/session": {
+          "median": 5628806.0,
+          "min": 5009014.0,
+          "max": 5767861.0
+        },
+        "other-gas/session": {
+          "median": 119349.0,
+          "min": 119349.0,
+          "max": 119349.0
+        },
+        "pending-json-B": {
+          "median": 1342.0,
+          "min": 1342.0,
+          "max": 1342.0
+        },
+        "sessions/s": {
+          "median": 177.7,
+          "min": 173.4,
+          "max": 199.6
+        },
+        "sign-encode-ns/session": {
+          "median": 346139.0,
+          "min": 342737.0,
+          "max": 363333.0
+        },
+        "signature-B/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "tx-bytes/op": {
+          "median": 1072.0,
+          "min": 1072.0,
+          "max": 1072.0
+        },
+        "txs/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "B/op": {
+          "median": 1392480.0,
+          "min": 1391709.0,
+          "max": 1392957.0
+        },
+        "allocs/op": {
+          "median": 21032.0,
+          "min": 21024.0,
+          "max": 21045.0
+        }
+      },
+      "process_rss_bytes_max": 223199232
+    },
+    {
+      "sessions": 1,
+      "mode": "batched",
+      "metrics": {
+        "ns/op": {
+          "median": 4825750.0,
+          "min": 4788945.0,
+          "max": 4905736.0
+        },
+        "envelope-B/op": {
+          "median": 245.0,
+          "min": 245.0,
+          "max": 245.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "gas/session": {
+          "median": 619349.0,
+          "min": 619349.0,
+          "max": 619349.0
+        },
+        "ns/session": {
+          "median": 4823014.0,
+          "min": 4786305.0,
+          "max": 4902875.0
+        },
+        "other-gas/session": {
+          "median": 119349.0,
+          "min": 119349.0,
+          "max": 119349.0
+        },
+        "pending-json-B": {
+          "median": 1342.0,
+          "min": 1342.0,
+          "max": 1342.0
+        },
+        "sessions/s": {
+          "median": 207.3,
+          "min": 204.0,
+          "max": 208.9
+        },
+        "sign-encode-ns/session": {
+          "median": 324986.0,
+          "min": 316708.0,
+          "max": 328722.0
+        },
+        "signature-B/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "tx-bytes/op": {
+          "median": 1072.0,
+          "min": 1072.0,
+          "max": 1072.0
+        },
+        "txs/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "B/op": {
+          "median": 1389354.0,
+          "min": 1388000.0,
+          "max": 1390322.0
+        },
+        "allocs/op": {
+          "median": 21006.0,
+          "min": 20997.0,
+          "max": 21010.0
+        }
+      },
+      "process_rss_bytes_max": 223199232
+    },
+    {
+      "sessions": 8,
+      "mode": "separate",
+      "metrics": {
+        "ns/op": {
+          "median": 32722431.0,
+          "min": 31683347.0,
+          "max": 33185778.0
+        },
+        "envelope-B/op": {
+          "median": 1974.0,
+          "min": 1974.0,
+          "max": 1974.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0
+        },
+        "gas/session": {
+          "median": 619485.0,
+          "min": 619485.0,
+          "max": 619485.0
+        },
+        "ns/session": {
+          "median": 4089910.0,
+          "min": 3960036.0,
+          "max": 4147800.0
+        },
+        "other-gas/session": {
+          "median": 119485.0,
+          "min": 119485.0,
+          "max": 119485.0
+        },
+        "pending-json-B": {
+          "median": 10638.0,
+          "min": 10638.0,
+          "max": 10638.0
+        },
+        "sessions/s": {
+          "median": 244.5,
+          "min": 241.1,
+          "max": 252.5
+        },
+        "sign-encode-ns/session": {
+          "median": 297075.0,
+          "min": 292849.0,
+          "max": 301328.0
+        },
+        "signature-B/op": {
+          "median": 512.0,
+          "min": 512.0,
+          "max": 512.0
+        },
+        "tx-bytes/op": {
+          "median": 8590.0,
+          "min": 8590.0,
+          "max": 8590.0
+        },
+        "txs/op": {
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0
+        },
+        "B/op": {
+          "median": 3452706.0,
+          "min": 3452397.0,
+          "max": 3454973.0
+        },
+        "allocs/op": {
+          "median": 51937.0,
+          "min": 51931.0,
+          "max": 51952.0
+        }
+      },
+      "process_rss_bytes_max": 226197504
+    },
+    {
+      "sessions": 8,
+      "mode": "batched",
+      "metrics": {
+        "ns/op": {
+          "median": 27526820.0,
+          "min": 27418139.0,
+          "max": 27632361.0
+        },
+        "envelope-B/op": {
+          "median": 750.0,
+          "min": 750.0,
+          "max": 750.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 8.0,
+          "min": 8.0,
+          "max": 8.0
+        },
+        "gas/session": {
+          "median": 579573.0,
+          "min": 579573.0,
+          "max": 579573.0
+        },
+        "ns/session": {
+          "median": 3440496.0,
+          "min": 3426898.0,
+          "max": 3453604.0
+        },
+        "other-gas/session": {
+          "median": 79573.0,
+          "min": 79573.0,
+          "max": 79573.0
+        },
+        "pending-json-B": {
+          "median": 10638.0,
+          "min": 10638.0,
+          "max": 10638.0
+        },
+        "sessions/s": {
+          "median": 290.7,
+          "min": 289.6,
+          "max": 291.8
+        },
+        "sign-encode-ns/session": {
+          "median": 42799.0,
+          "min": 40552.0,
+          "max": 44955.0
+        },
+        "signature-B/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "tx-bytes/op": {
+          "median": 7366.0,
+          "min": 7366.0,
+          "max": 7366.0
+        },
+        "txs/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "B/op": {
+          "median": 2006269.0,
+          "min": 2004826.0,
+          "max": 2010645.0
+        },
+        "allocs/op": {
+          "median": 27914.0,
+          "min": 27908.0,
+          "max": 27922.0
+        }
+      },
+      "process_rss_bytes_max": 226197504
+    },
+    {
+      "sessions": 32,
+      "mode": "separate",
+      "metrics": {
+        "ns/op": {
+          "median": 121539611.0,
+          "min": 121046736.0,
+          "max": 121836264.0
+        },
+        "envelope-B/op": {
+          "median": 7902.0,
+          "min": 7902.0,
+          "max": 7902.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 32.0,
+          "min": 32.0,
+          "max": 32.0
+        },
+        "gas/session": {
+          "median": 619606.0,
+          "min": 619606.0,
+          "max": 619606.0
+        },
+        "ns/session": {
+          "median": 3798004.0,
+          "min": 3782620.0,
+          "max": 3807268.0
+        },
+        "other-gas/session": {
+          "median": 119606.0,
+          "min": 119606.0,
+          "max": 119606.0
+        },
+        "pending-json-B": {
+          "median": 42510.0,
+          "min": 42510.0,
+          "max": 42510.0
+        },
+        "sessions/s": {
+          "median": 263.3,
+          "min": 262.7,
+          "max": 264.4
+        },
+        "sign-encode-ns/session": {
+          "median": 289235.0,
+          "min": 286764.0,
+          "max": 292506.0
+        },
+        "signature-B/op": {
+          "median": 2048.0,
+          "min": 2048.0,
+          "max": 2048.0
+        },
+        "tx-bytes/op": {
+          "median": 34366.0,
+          "min": 34366.0,
+          "max": 34366.0
+        },
+        "txs/op": {
+          "median": 32.0,
+          "min": 32.0,
+          "max": 32.0
+        },
+        "B/op": {
+          "median": 10468360.0,
+          "min": 10467834.0,
+          "max": 10469920.0
+        },
+        "allocs/op": {
+          "median": 156434.0,
+          "min": 156413.0,
+          "max": 156438.0
+        }
+      },
+      "process_rss_bytes_max": 236748800
+    },
+    {
+      "sessions": 32,
+      "mode": "batched",
+      "metrics": {
+        "ns/op": {
+          "median": 105211445.0,
+          "min": 104885750.0,
+          "max": 105502111.0
+        },
+        "envelope-B/op": {
+          "median": 2479.0,
+          "min": 2479.0,
+          "max": 2479.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 32.0,
+          "min": 32.0,
+          "max": 32.0
+        },
+        "gas/session": {
+          "median": 575393.0,
+          "min": 575393.0,
+          "max": 575393.0
+        },
+        "ns/session": {
+          "median": 3287764.0,
+          "min": 3277587.0,
+          "max": 3296847.0
+        },
+        "other-gas/session": {
+          "median": 75393.0,
+          "min": 75393.0,
+          "max": 75393.0
+        },
+        "pending-json-B": {
+          "median": 42510.0,
+          "min": 42510.0,
+          "max": 42510.0
+        },
+        "sessions/s": {
+          "median": 304.2,
+          "min": 303.3,
+          "max": 305.1
+        },
+        "sign-encode-ns/session": {
+          "median": 11293.0,
+          "min": 10901.0,
+          "max": 11690.0
+        },
+        "signature-B/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "tx-bytes/op": {
+          "median": 28943.0,
+          "min": 28943.0,
+          "max": 28943.0
+        },
+        "txs/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "B/op": {
+          "median": 4083845.0,
+          "min": 4082021.0,
+          "max": 4086000.0
+        },
+        "allocs/op": {
+          "median": 50093.0,
+          "min": 50084.0,
+          "max": 50101.0
+        }
+      },
+      "process_rss_bytes_max": 236748800
+    },
+    {
+      "sessions": 64,
+      "mode": "separate",
+      "metrics": {
+        "ns/op": {
+          "median": 237777694.0,
+          "min": 236660889.0,
+          "max": 238119417.0
+        },
+        "envelope-B/op": {
+          "median": 15806.0,
+          "min": 15806.0,
+          "max": 15806.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "gas/session": {
+          "median": 619616.0,
+          "min": 619616.0,
+          "max": 619616.0
+        },
+        "ns/session": {
+          "median": 3715224.0,
+          "min": 3697774.0,
+          "max": 3720559.0
+        },
+        "other-gas/session": {
+          "median": 119616.0,
+          "min": 119616.0,
+          "max": 119616.0
+        },
+        "pending-json-B": {
+          "median": 85006.0,
+          "min": 85006.0,
+          "max": 85006.0
+        },
+        "sessions/s": {
+          "median": 269.2,
+          "min": 268.8,
+          "max": 270.4
+        },
+        "sign-encode-ns/session": {
+          "median": 271639.0,
+          "min": 268668.0,
+          "max": 273383.0
+        },
+        "signature-B/op": {
+          "median": 4096.0,
+          "min": 4096.0,
+          "max": 4096.0
+        },
+        "tx-bytes/op": {
+          "median": 68734.0,
+          "min": 68734.0,
+          "max": 68734.0
+        },
+        "txs/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "B/op": {
+          "median": 19777890.0,
+          "min": 19775104.0,
+          "max": 19781840.0
+        },
+        "allocs/op": {
+          "median": 295275.0,
+          "min": 295261.0,
+          "max": 295293.0
+        }
+      },
+      "process_rss_bytes_max": 250200064
+    },
+    {
+      "sessions": 64,
+      "mode": "batched",
+      "metrics": {
+        "ns/op": {
+          "median": 208558792.0,
+          "min": 207952597.0,
+          "max": 218438041.0
+        },
+        "envelope-B/op": {
+          "median": 4783.0,
+          "min": 4783.0,
+          "max": 4783.0
+        },
+        "failures/op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "ffi-calls/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "gas/session": {
+          "median": 574686.0,
+          "min": 574686.0,
+          "max": 574686.0
+        },
+        "ns/session": {
+          "median": 3258678.0,
+          "min": 3249206.0,
+          "max": 3413043.0
+        },
+        "other-gas/session": {
+          "median": 74686.0,
+          "min": 74686.0,
+          "max": 74686.0
+        },
+        "pending-json-B": {
+          "median": 85006.0,
+          "min": 85006.0,
+          "max": 85006.0
+        },
+        "sessions/s": {
+          "median": 306.9,
+          "min": 293.0,
+          "max": 307.8
+        },
+        "sign-encode-ns/session": {
+          "median": 6003.0,
+          "min": 5965.0,
+          "max": 6231.0
+        },
+        "signature-B/op": {
+          "median": 64.0,
+          "min": 64.0,
+          "max": 64.0
+        },
+        "tx-bytes/op": {
+          "median": 57711.0,
+          "min": 57711.0,
+          "max": 57711.0
+        },
+        "txs/op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "B/op": {
+          "median": 6809077.0,
+          "min": 6807114.0,
+          "max": 6811632.0
+        },
+        "allocs/op": {
+          "median": 79191.0,
+          "min": 79185.0,
+          "max": 79199.0
+        }
+      },
+      "process_rss_bytes_max": 250200064
+    }
+  ],
+  "limitations": [
+    "Shared Apple M3 host; recorded background load is high; no dedicated runner.",
+    "Each fresh process executes separate then batched after fixture setup; singleton paths are identical, so their order-sensitive timing difference is not a claimed speedup.",
+    "RSS and CPU include fixture preparation and both modes; they are not per-mode deltas. Go B/op excludes native allocation.",
+    "Excludes proof generation, anchor/open/ACK latency, RPC/mempool, fsync, provider disk reads and browser verification; not sustained capacity."
+  ]
+}

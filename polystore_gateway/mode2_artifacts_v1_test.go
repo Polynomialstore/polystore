@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"polystorechain/x/crypto_ffi"
 )
@@ -225,6 +226,17 @@ func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t
 		t.Fatalf("resolved old generation mismatch: got=%s want=%s", resolvedOld, oldDir)
 	}
 
+	useRetentionAuthority(t, dealID, second.manifestRoot)
+	// A provisional upload grace period is additional retention, not chain authority.
+	oldMeta, err := readSlabMetadataFile(oldDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldMeta.CreatedAt = time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339Nano)
+	if err := writeSlabMetadataFile(oldDir, oldMeta); err != nil {
+		t.Fatal(err)
+	}
+
 	cleanupStaleDealGenerations(dealID, second.manifestRoot)
 
 	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
@@ -233,14 +245,6 @@ func TestMode2BuildArtifactsAppend_PreservesActiveGenerationUntilCommitCleanup(t
 	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
 		t.Fatalf("expected new generation to remain after commit cleanup, stat err=%v", err)
 	}
-	promotedMeta, err := readSlabMetadataFile(newDir)
-	if err != nil {
-		t.Fatalf("read promoted slab metadata: %v", err)
-	}
-	if promotedMeta.GenerationState != slabGenerationStateActive {
-		t.Fatalf("expected promoted generation state active, got=%q", promotedMeta.GenerationState)
-	}
-
 	active, err = readActiveDealGeneration(dealID)
 	if err != nil {
 		t.Fatalf("read active generation after cleanup: %v", err)

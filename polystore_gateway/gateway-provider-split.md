@@ -1,7 +1,15 @@
 # PolyStore Gateway & Provider-Daemon Separation Specification
 
-**Status:** Draft (Phase 1)
+**Status:** Historical receipt-era design; not the retrieval v2 operator contract
 **Target:** "Store Wars" Devnet (Retrieval Separation)
+
+For implemented retrieval v2, use the [client and operator contract](polystore-gateway-spec.md#33-retrieval-v2-client-and-operator-contract)
+and [session RFC](../rfcs/rfc-mandatory-retrieval-sessions-and-batching.md).
+The legacy receipt flow, planned bundled receipts and `MsgProveLiveness` user
+payouts below do not authorize v2 delivery or settlement. V2 uses funded frozen
+sessions, received-byte verification before owner confirmation, and separate
+provider proof submission. Runtime role names and boundaries are defined by
+[Runtime Personas](../docs/runtime-personas.md).
 
 ## 1. Overview
 

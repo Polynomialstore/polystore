@@ -240,6 +240,27 @@ ensure_polystore_core_runtime() {
     die "polystore_core runtime library not found in $lib_dir after build"
   fi
 
+
+  # Do not silently compile new FFI callers against an older selected runtime.
+  # Inspect the library this platform loads, preserving explicit overrides.
+  local native_runtime="$lib_dir/libpolystore_core.so"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    native_runtime="$lib_dir/libpolystore_core.dylib"
+  fi
+  if ! command -v nm >/dev/null 2>&1; then
+    echo "ERROR: nm is required to check the selected polystore_core runtime: $native_runtime" >&2
+    return 1
+  fi
+  local native_nm_args=("$native_runtime")
+  if [[ "$native_runtime" == *.so ]] && nm -D "$native_runtime" >/dev/null 2>&1; then
+    native_nm_args=(-D "$native_runtime")
+  fi
+  if ! nm "${native_nm_args[@]}" 2>/dev/null | awk '{print $3}' | sed 's/^_//; s/@.*$//' | grep -Fx polystore_reconstruct_slot_rs >/dev/null; then
+    echo "ERROR: selected polystore_core runtime lacks polystore_reconstruct_slot_rs: $native_runtime" >&2
+    echo "Build a matching polystore_core runtime and set POLYSTORE_CORE_LIB_DIR to it; the selected library was not replaced." >&2
+    return 1
+  fi
+
   export LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   export DYLD_LIBRARY_PATH="$lib_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 

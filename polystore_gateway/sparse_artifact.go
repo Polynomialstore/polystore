@@ -72,7 +72,7 @@ func writeSparseArtifactFile(path string, payload []byte, fullSize int64, perm o
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := publishImmutableArtifact(tmpPath, path); err != nil {
 		return err
 	}
 	committed = true

@@ -1,0 +1,456 @@
+{
+  "source": "e259d5733c5bf748fa21e5369dfac778f7ad4ddb",
+  "binary_sha256": "1009e9ee0d2c42f5ee563c399e24c1c8465d5b794d4cfef2a8cf8deef49a1fb5",
+  "files": {
+    "polystorechain/app/retrieval_multisession_test.go": "ea9a093c0972c595839c169d1ffe2de0a8626bcd050492b82b831515ecb56f2d",
+    "polystorechain/app/retrieval_multisession_bench_test.go": "ab179ddfae8d3b90f4428782d56d88b1fd683ce1d70148161b287f97221d621a",
+    "polystore_core/target/release/libpolystore_core.a": "d32e057befc8acd4258069b0887ddd55cf0895734fd8b75896c2e45ea58e7cd2",
+    "polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+    "polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "review": "independent ACCEPT after empty-memo signing repair",
+  "boundary": "sign/encode + actual FinalizeBlock/Commit, MemDB IAVL; excludes proof generation, RPC, filesystem fsync; RSS includes untimed fixture prep",
+  "host": "local Apple M3 shared machine; no dedicated runner",
+  "runs": [
+    {
+      "file": "n1-r1.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N1/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.86376953125,
+        16.9619140625,
+        17.10595703125
+      ],
+      "elapsed": 2.593769333,
+      "exit_code": 0
+    },
+    {
+      "file": "n8-r1.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N8/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.86376953125,
+        16.9619140625,
+        17.10595703125
+      ],
+      "elapsed": 1.9403126249999998,
+      "exit_code": 0
+    },
+    {
+      "file": "n32-r1.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N32/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.86376953125,
+        16.9619140625,
+        17.10595703125
+      ],
+      "elapsed": 5.537639749999999,
+      "exit_code": 0
+    },
+    {
+      "file": "n64-r1.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N64/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.56640625,
+        17.07763671875,
+        17.14501953125
+      ],
+      "elapsed": 10.384650707999999,
+      "exit_code": 0
+    },
+    {
+      "file": "n1-r2.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N1/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        14.7880859375,
+        16.6796875,
+        17.0029296875
+      ],
+      "elapsed": 0.8822489999999981,
+      "exit_code": 0
+    },
+    {
+      "file": "n8-r2.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N8/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        14.7880859375,
+        16.6796875,
+        17.0029296875
+      ],
+      "elapsed": 1.9345662499999996,
+      "exit_code": 0
+    },
+    {
+      "file": "n32-r2.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N32/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        14.7880859375,
+        16.6796875,
+        17.0029296875
+      ],
+      "elapsed": 5.568139958,
+      "exit_code": 0
+    },
+    {
+      "file": "n64-r2.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N64/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.4453125,
+        16.7841796875,
+        17.03759765625
+      ],
+      "elapsed": 10.436216459,
+      "exit_code": 0
+    },
+    {
+      "file": "n1-r3.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N1/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.763671875,
+        16.8076171875,
+        17.04248046875
+      ],
+      "elapsed": 0.8717440839999995,
+      "exit_code": 0
+    },
+    {
+      "file": "n8-r3.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N8/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.1826171875,
+        16.876953125,
+        17.0654296875
+      ],
+      "elapsed": 1.9469192500000005,
+      "exit_code": 0
+    },
+    {
+      "file": "n32-r3.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N32/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.1826171875,
+        16.876953125,
+        17.0654296875
+      ],
+      "elapsed": 5.567270291999996,
+      "exit_code": 0
+    },
+    {
+      "file": "n64-r3.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N64/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.48828125,
+        16.9287109375,
+        17.08251953125
+      ],
+      "elapsed": 10.403200124999998,
+      "exit_code": 0
+    },
+    {
+      "file": "n1-r4.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N1/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.806640625,
+        16.98046875,
+        17.09912109375
+      ],
+      "elapsed": 0.884661708000003,
+      "exit_code": 0
+    },
+    {
+      "file": "n8-r4.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N8/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.806640625,
+        16.98046875,
+        17.09912109375
+      ],
+      "elapsed": 1.9312059579999996,
+      "exit_code": 0
+    },
+    {
+      "file": "n32-r4.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N32/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        16.74169921875,
+        16.9638671875,
+        17.09228515625
+      ],
+      "elapsed": 5.559653957999991,
+      "exit_code": 0
+    },
+    {
+      "file": "n64-r4.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N64/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        17.40283203125,
+        17.09716796875,
+        17.13818359375
+      ],
+      "elapsed": 10.415963082999994,
+      "exit_code": 0
+    },
+    {
+      "file": "n1-r5.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N1/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        18.04150390625,
+        17.2421875,
+        17.18896484375
+      ],
+      "elapsed": 0.8700385420000032,
+      "exit_code": 0
+    },
+    {
+      "file": "n8-r5.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N8/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        18.04150390625,
+        17.2421875,
+        17.18896484375
+      ],
+      "elapsed": 1.9434107499999982,
+      "exit_code": 0
+    },
+    {
+      "file": "n32-r5.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N32/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        18.04150390625,
+        17.2421875,
+        17.18896484375
+      ],
+      "elapsed": 5.559763707999991,
+      "exit_code": 0
+    },
+    {
+      "file": "n64-r5.log",
+      "command": [
+        "/usr/bin/time",
+        "-l",
+        "/tmp/polystore-254-execution/257-app.test",
+        "-test.run",
+        "^$",
+        "-test.bench",
+        "^BenchmarkRetrievalNativeTransactions/N64/(separate|batched)$",
+        "-test.benchtime",
+        "3x",
+        "-test.benchmem"
+      ],
+      "load_before": [
+        15.7958984375,
+        16.78857421875,
+        17.0283203125
+      ],
+      "elapsed": 10.412422124999992,
+      "exit_code": 0
+    }
+  ]
+}

@@ -54,6 +54,8 @@ export VITE_E2E_PK="${VITE_E2E_PK:-0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37
 export CHAIN_ID="${CHAIN_ID:-31337}"
 export EVM_CHAIN_ID="${EVM_CHAIN_ID:-31337}"
 export POLYSTORE_ENABLE_TX_RELAY=0
+# Isolated browser test profile; the general devnet and production default stays disabled.
+export POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1
 export E2E_MODE2_SPEC="${E2E_MODE2_SPEC:-tests/mode2-stripe.spec.ts}"
 export E2E_MODE2_GREP="${E2E_MODE2_GREP:-}"
 

@@ -1,15 +1,21 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"math"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
@@ -18,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -180,104 +187,349 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 	return cmd
 }
 
+// The JSON representation includes base64 and field names. Its independent file
+// limit bounds decoding; the protobuf transaction must still fit the chain cap.
+const retrievalProofFileBytes = 2 * types.MaxTransactionBytes
+const retrievalProofMaxSessions = 64
+const retrievalSigningReserve = 4096
+
 func CmdSubmitRetrievalProof() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "submit-retrieval-proof [receipt-json-file]",
-		Short: "Submit a signed retrieval receipt (or batch/session proof) as proof of liveness",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			clientCtx, err := client.GetClientTxContext(cmd)
+		Use:   "submit-retrieval-proof [json-file]",
+		Short: "Submit a retrieval receipt or one transaction containing session proofs",
+		Long: `Submit the existing receipt, receipt batch, or single-session JSON form.
+To submit multiple sessions with one signer and transaction, use:
+  {"sessions":[{"session_id":"<base64>","proofs":[...]}, ...]}
+Each of 1..64 entries uses the single-session JSON encoding. The --from key
+supplies every creator; session owners and deals may differ. Session IDs must be
+unique. This batches transaction envelopes, not cryptography across sessions.
+JSON input is limited to 2 MiB. Unsigned protobuf reserves 4 KiB for signing;
+final protobuf is limited to 1 MiB and online block byte/gas limits. Generate-only
+output (including offline) uses the 1 MiB / 64,000,000 gas profile ceilings.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			phase := beginSubmissionPhase(cmd)
+			defer phase.finish(&err)
+			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
 			}
-
-			receiptPath := args[0]
-			bz, err := ioutil.ReadFile(receiptPath)
+			file, err := os.Open(args[0])
 			if err != nil {
 				return err
 			}
-
-			var obj map[string]json.RawMessage
-			if err := json.Unmarshal(bz, &obj); err != nil {
+			defer file.Close()
+			bz, err := io.ReadAll(io.LimitReader(file, retrievalProofFileBytes+1))
+			if err != nil {
 				return err
 			}
-
-			creator := clientCtx.GetFromAddress().String()
-
-			// Dispatch based on top-level fields:
-			// - { "session_receipt": ..., "chunks": [...] } -> RetrievalSessionProof
-			// - { "session_id": ..., "proofs": [...] } -> MsgSubmitRetrievalSessionProof
-			// - { "receipts": [...] } -> RetrievalReceiptBatch
-			// - otherwise -> RetrievalReceipt
-			if _, ok := obj["session_receipt"]; ok {
-				var session types.RetrievalSessionProof
-				if err := json.Unmarshal(bz, &session); err != nil {
-					return err
-				}
-				msg := types.MsgProveLiveness{
-					Creator: creator,
-					DealId:  session.SessionReceipt.DealId,
-					EpochId: session.SessionReceipt.EpochId,
-					ProofType: &types.MsgProveLiveness_SessionProof{
-						SessionProof: &session,
-					},
-				}
-				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			if len(bz) > retrievalProofFileBytes {
+				return fmt.Errorf("retrieval proof JSON exceeds %d bytes", retrievalProofFileBytes)
 			}
-
-			if _, ok := obj["session_id"]; ok {
-				var sp types.MsgSubmitRetrievalSessionProof
-				if err := json.Unmarshal(bz, &sp); err != nil {
-					return err
-				}
-				sp.Creator = creator
-				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &sp)
-			}
-
-			if _, ok := obj["receipts"]; ok {
-				var batch types.RetrievalReceiptBatch
-				if err := json.Unmarshal(bz, &batch); err != nil {
-					return err
-				}
-				if len(batch.Receipts) == 0 {
-					return fmt.Errorf("empty receipts batch")
-				}
-				dealID := batch.Receipts[0].DealId
-				epochID := batch.Receipts[0].EpochId
-				for i := range batch.Receipts {
-					if batch.Receipts[i].DealId != dealID || batch.Receipts[i].EpochId != epochID {
-						return fmt.Errorf("all receipts in batch must have same deal_id and epoch_id")
-					}
-				}
-				msg := types.MsgProveLiveness{
-					Creator: creator,
-					DealId:  dealID,
-					EpochId: epochID,
-					ProofType: &types.MsgProveLiveness_UserReceiptBatch{
-						UserReceiptBatch: &batch,
-					},
-				}
-				return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
-			}
-
-			var receipt types.RetrievalReceipt
-			if err := json.Unmarshal(bz, &receipt); err != nil {
+			msgs, err := retrievalProofMessages(bz, clientCtx.GetFromAddress().String())
+			if err != nil {
 				return err
 			}
-			msg := types.MsgProveLiveness{
-				Creator: creator,
-				DealId:  receipt.DealId,
-				EpochId: receipt.EpochId,
-				ProofType: &types.MsgProveLiveness_UserReceipt{
-					UserReceipt: &receipt,
-				},
+			bounded, err := boundRetrievalProofTx(cmd, clientCtx, msgs)
+			if err != nil {
+				return err
 			}
-			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+			bounded, err = phase.track(bounded)
+			if err != nil {
+				return err
+			}
+			return generateOrBroadcastTxCLIFn(bounded, cmd.Flags(), msgs...)
 		},
 	}
-
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(submissionPhaseFlag, "", "Write a final pre-broadcast failure marker for the invoking gateway")
 	return cmd
+}
+
+// Read discriminator keys without JSON's usual last-duplicate-wins behavior.
+// RawMessage also lets us reject the list count before decoding its proofs.
+func retrievalProofObject(bz []byte) (map[string]json.RawMessage, error) {
+	dec := json.NewDecoder(bytes.NewReader(bz))
+	start, err := dec.Token()
+	if err != nil || start != json.Delim('{') {
+		return nil, fmt.Errorf("retrieval proof must be a JSON object")
+	}
+	obj := make(map[string]json.RawMessage)
+	for dec.More() {
+		token, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		key := token.(string)
+		if _, exists := obj[key]; exists {
+			return nil, fmt.Errorf("duplicate JSON field %q", key)
+		}
+		var value json.RawMessage
+		if err := dec.Decode(&value); err != nil {
+			return nil, err
+		}
+		obj[key] = value
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("unexpected trailing JSON data")
+	}
+	return obj, nil
+}
+
+func retrievalProofArray(bz []byte, maximum int) ([]json.RawMessage, error) {
+	dec := json.NewDecoder(bytes.NewReader(bz))
+	start, err := dec.Token()
+	if err != nil || start != json.Delim('[') {
+		return nil, fmt.Errorf("expected a nonempty JSON array")
+	}
+	var entries []json.RawMessage
+	for dec.More() {
+		if len(entries) == maximum {
+			return nil, fmt.Errorf("array count must be 1..%d", maximum)
+		}
+		var entry json.RawMessage
+		if err := dec.Decode(&entry); err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("array count must be 1..%d", maximum)
+	}
+	return entries, nil
+}
+
+func decodeRetrievalProofJSON(bz []byte, out any) error {
+	dec := json.NewDecoder(bytes.NewReader(bz))
+	dec.DisallowUnknownFields()
+	return dec.Decode(out) // retrievalProofObject already required exactly one value.
+}
+
+func retrievalProofMessages(bz []byte, creator string) ([]sdk.Msg, error) {
+	if creator == "" {
+		return nil, fmt.Errorf("--from address is required")
+	}
+	obj, err := retrievalProofObject(bz)
+	if err != nil {
+		return nil, err
+	}
+	discriminator := ""
+	for _, key := range []string{"sessions", "session_id", "session_receipt", "receipts"} {
+		if _, present := obj[key]; present {
+			if discriminator != "" {
+				return nil, fmt.Errorf("cannot mix retrieval proof shapes %q and %q", discriminator, key)
+			}
+			discriminator = key
+		}
+	}
+	if discriminator == "sessions" || discriminator == "session_id" {
+		entries := []json.RawMessage{bz}
+		if discriminator == "sessions" {
+			if len(obj) != 1 {
+				return nil, fmt.Errorf("sessions cannot be mixed with other top-level fields")
+			}
+			entries, err = retrievalProofArray(obj["sessions"], retrievalProofMaxSessions)
+			if err != nil {
+				return nil, fmt.Errorf("sessions: %w", err)
+			}
+		}
+		if len(entries) == 0 || len(entries) > retrievalProofMaxSessions {
+			return nil, fmt.Errorf("session count must be 1..%d", retrievalProofMaxSessions)
+		}
+		msgs := make([]sdk.Msg, 0, len(entries))
+		seen := make(map[string]bool, len(entries))
+		for i, entry := range entries {
+			fields, err := retrievalProofObject(entry)
+			if err != nil {
+				return nil, fmt.Errorf("session %d: %w", i, err)
+			}
+			if fields["session_id"] == nil || fields["proofs"] == nil {
+				return nil, fmt.Errorf("session %d requires session_id and proofs", i)
+			}
+			for field := range fields {
+				if field != "session_id" && field != "proofs" && field != "creator" {
+					return nil, fmt.Errorf("session %d: unexpected field %q", i, field)
+				}
+			}
+			proofs, err := retrievalProofArray(fields["proofs"], keeper.MaxProofsPerMessage)
+			if err != nil {
+				return nil, fmt.Errorf("session %d proofs: %w", i, err)
+			}
+			for _, proof := range proofs {
+				if len(proof) > keeper.MaxProofEnvelopeBytes {
+					return nil, fmt.Errorf("session %d: proof JSON exceeds %d bytes", i, keeper.MaxProofEnvelopeBytes)
+				}
+			}
+			var msg types.MsgSubmitRetrievalSessionProof
+			if err := decodeRetrievalProofJSON(entry, &msg); err != nil {
+				return nil, fmt.Errorf("session %d: %w", i, err)
+			}
+			if len(msg.SessionId) != 32 {
+				return nil, fmt.Errorf("session %d: session_id must encode 32 bytes", i)
+			}
+			if seen[string(msg.SessionId)] {
+				return nil, fmt.Errorf("duplicate session_id at entry %d", i)
+			}
+			seen[string(msg.SessionId)] = true
+			if err := keeper.ValidateProofCount(uint64(len(msg.Proofs))); err != nil {
+				return nil, fmt.Errorf("session %d: %w", i, err)
+			}
+			msg.Creator = creator
+			msgs = append(msgs, &msg)
+		}
+		return msgs, nil
+	}
+	msg := &types.MsgProveLiveness{Creator: creator}
+	switch discriminator {
+	case "session_receipt":
+		var session types.RetrievalSessionProof
+		if err := decodeRetrievalProofJSON(bz, &session); err != nil {
+			return nil, err
+		}
+		msg.DealId, msg.EpochId = session.SessionReceipt.DealId, session.SessionReceipt.EpochId
+		msg.ProofType = &types.MsgProveLiveness_SessionProof{SessionProof: &session}
+	case "receipts":
+		var batch types.RetrievalReceiptBatch
+		if err := decodeRetrievalProofJSON(bz, &batch); err != nil {
+			return nil, err
+		}
+		if len(batch.Receipts) == 0 {
+			return nil, fmt.Errorf("empty receipts batch")
+		}
+		msg.DealId, msg.EpochId = batch.Receipts[0].DealId, batch.Receipts[0].EpochId
+		for _, receipt := range batch.Receipts {
+			if receipt.DealId != msg.DealId || receipt.EpochId != msg.EpochId {
+				return nil, fmt.Errorf("all receipts in batch must have same deal_id and epoch_id")
+			}
+		}
+		msg.ProofType = &types.MsgProveLiveness_UserReceiptBatch{UserReceiptBatch: &batch}
+	default:
+		var receipt types.RetrievalReceipt
+		if err := decodeRetrievalProofJSON(bz, &receipt); err != nil {
+			return nil, err
+		}
+		msg.DealId, msg.EpochId = receipt.DealId, receipt.EpochId
+		msg.ProofType = &types.MsgProveLiveness_UserReceipt{UserReceipt: &receipt}
+	}
+	return []sdk.Msg{msg}, nil
+}
+
+// Wrap the SDK encoders, not its signer or broadcaster. The JSON encoder checks
+// protobuf bytes, so base64 inflation in --generate-only output is not a limit.
+type retrievalProofTxConfig struct {
+	client.TxConfig
+	maxBytes int
+	maxGas   uint64
+}
+
+func (cfg retrievalProofTxConfig) encode(transaction sdk.Tx, reserve int) ([]byte, error) {
+	feeTx, ok := transaction.(sdk.FeeTx)
+	if !ok || feeTx.GetGas() > cfg.maxGas {
+		return nil, fmt.Errorf("retrieval transaction gas exceeds %d", cfg.maxGas)
+	}
+	bz, err := cfg.TxConfig.TxEncoder()(transaction)
+	if err != nil {
+		return nil, err
+	}
+	if len(bz) > cfg.maxBytes-reserve {
+		return nil, fmt.Errorf("retrieval transaction exceeds %d protobuf bytes (%d reserved for signing)", cfg.maxBytes, reserve)
+	}
+	return bz, nil
+}
+
+func (cfg retrievalProofTxConfig) TxEncoder() sdk.TxEncoder {
+	return func(transaction sdk.Tx) ([]byte, error) { return cfg.encode(transaction, 0) }
+}
+
+func (cfg retrievalProofTxConfig) TxJSONEncoder() sdk.TxEncoder {
+	return func(transaction sdk.Tx) ([]byte, error) {
+		if _, err := cfg.encode(transaction, retrievalSigningReserve); err != nil {
+			return nil, err
+		}
+		return cfg.TxConfig.TxJSONEncoder()(transaction)
+	}
+}
+
+func boundRetrievalProofTx(cmd *cobra.Command, clientCtx client.Context, msgs []sdk.Msg) (client.Context, error) {
+	if clientCtx.IsAux {
+		return clientCtx, fmt.Errorf("retrieval proof submission requires the transaction signer, not --aux")
+	}
+	if clientCtx.TxConfig == nil {
+		return clientCtx, fmt.Errorf("transaction encoding configuration is required")
+	}
+	cfg := retrievalProofTxConfig{TxConfig: clientCtx.TxConfig, maxBytes: types.MaxTransactionBytes, maxGas: uint64(types.MaxRetrievalV2BlockGas)}
+	if !clientCtx.GenerateOnly {
+		node, err := clientCtx.GetNode()
+		if err != nil {
+			return clientCtx, fmt.Errorf("cannot obtain retrieval transaction block limits: %w", err)
+		}
+		querier, ok := node.(interface {
+			ConsensusParams(context.Context, *int64) (*coretypes.ResultConsensusParams, error)
+		})
+		if !ok {
+			return clientCtx, fmt.Errorf("node does not provide consensus block limits")
+		}
+		ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
+		defer cancel()
+		result, err := querier.ConsensusParams(ctx, nil)
+		if err != nil || result == nil {
+			return clientCtx, fmt.Errorf("cannot obtain retrieval transaction block limits: %v", err)
+		}
+		block := result.ConsensusParams.Block
+		if block.MaxBytes <= retrievalSigningReserve+10 || block.MaxGas == 0 || block.MaxGas < -1 {
+			return clientCtx, fmt.Errorf("invalid consensus block byte/gas limits")
+		}
+		// Reserve the repeated-bytes protobuf framing as well as the envelope.
+		if block.MaxBytes-10 < int64(cfg.maxBytes) {
+			cfg.maxBytes = int(block.MaxBytes - 10)
+		}
+		if block.MaxGas > 0 && uint64(block.MaxGas) < cfg.maxGas {
+			cfg.maxGas = uint64(block.MaxGas)
+		}
+	}
+	gasFlag, err := cmd.Flags().GetString(flags.FlagGas)
+	if err != nil {
+		return clientCtx, err
+	}
+	gas, err := flags.ParseGasSetting(gasFlag)
+	if err != nil {
+		return clientCtx, err
+	}
+	if gas.Gas > cfg.maxGas {
+		return clientCtx, fmt.Errorf("retrieval transaction gas exceeds %d", cfg.maxGas)
+	}
+	adjustment, err := cmd.Flags().GetFloat64(flags.FlagGasAdjustment)
+	if err != nil || math.IsNaN(adjustment) || math.IsInf(adjustment, 0) || adjustment <= 0 {
+		return clientCtx, fmt.Errorf("gas adjustment must be finite and positive")
+	}
+	var proofCount uint64
+	for _, msg := range msgs {
+		if session, ok := msg.(*types.MsgSubmitRetrievalSessionProof); ok {
+			proofCount += uint64(len(session.Proofs))
+		}
+	}
+	if proofCount > cfg.maxGas/keeper.ProofCryptoGas {
+		return clientCtx, fmt.Errorf("session proofs exceed the %d gas transaction ceiling", cfg.maxGas)
+	}
+	bounded := clientCtx.WithTxConfig(cfg)
+	factory, err := tx.NewFactoryCLI(bounded, cmd.Flags())
+	if err != nil {
+		return clientCtx, err
+	}
+	unsigned, err := factory.BuildUnsignedTx(msgs...)
+	if err != nil {
+		return clientCtx, err
+	}
+	if _, err := cfg.encode(unsigned.GetTx(), retrievalSigningReserve); err != nil {
+		return clientCtx, err
+	}
+	return bounded, nil
 }
 
 func CmdOpenRetrievalSession() *cobra.Command {
@@ -331,6 +583,24 @@ func CmdOpenRetrievalSession() *cobra.Command {
 				return err
 			}
 
+			version, err := cmd.Flags().GetUint32("challenge-version")
+			if err != nil {
+				return err
+			}
+			payee, err := cmd.Flags().GetString("authorized-proof-provider")
+			if err != nil {
+				return err
+			}
+			if version != 0 && version != 2 {
+				return fmt.Errorf("challenge-version must be 0 (legacy) or 2")
+			}
+			if payee != "" {
+				address, err := sdk.AccAddressFromBech32(payee)
+				if version != 2 || err != nil || len(address) != 20 || address.String() != payee {
+					return fmt.Errorf("authorized-proof-provider requires v2 and a canonical 20-byte provider address")
+				}
+			}
+
 			if strings.TrimSpace(provider) == "" {
 				return fmt.Errorf("provider is required")
 			}
@@ -339,21 +609,25 @@ func CmdOpenRetrievalSession() *cobra.Command {
 			}
 
 			msg := types.MsgOpenRetrievalSession{
-				Creator:        clientCtx.GetFromAddress().String(),
-				DealId:         dealId,
-				Provider:       provider,
-				ManifestRoot:   manifestRoot,
-				StartMduIndex:  startMduIndex,
-				StartBlobIndex: startBlobIndex,
-				BlobCount:      blobCount,
-				Nonce:          nonce,
-				ExpiresAt:      expiresAt,
+				Creator:                 clientCtx.GetFromAddress().String(),
+				DealId:                  dealId,
+				Provider:                provider,
+				ManifestRoot:            manifestRoot,
+				StartMduIndex:           startMduIndex,
+				StartBlobIndex:          startBlobIndex,
+				BlobCount:               blobCount,
+				Nonce:                   nonce,
+				ExpiresAt:               expiresAt,
+				ChallengeVersion:        version,
+				AuthorizedProofProvider: payee,
 			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 
+	cmd.Flags().Uint32("challenge-version", 0, "Challenge version: 2 for secured retrieval, 0 for legacy compatibility")
+	cmd.Flags().String("authorized-proof-provider", "", "Immutable v2 proof payee (default: assigned provider)")
 	cmd.Flags().Uint64("deal-id", 0, "Deal ID")
 	cmd.Flags().String("provider", "", "Assigned provider address")
 	cmd.Flags().String("manifest-root", "", "PolyFS root (32-byte hex)")

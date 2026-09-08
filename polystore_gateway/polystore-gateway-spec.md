@@ -131,41 +131,39 @@ These endpoints support the `polystore-website` "Thin Client" flow.
     *   **CAS rule:** the signed intent MUST include `previous_polyfs_root`, and relay/chain execution MUST reject the update if it does not match the current on-chain deal root. `previous_manifest_root` may be accepted only as a transitional alias for a 32-byte `polyfs_root`.
 
 #### Data Retrieval & Proofs
-*   **`GET /gateway/plan-retrieval-session/{polyfs_root}`** *(legacy route name `{manifest_root}` may remain during transition)*
-    *   **Query Params:** `deal_id`, `owner`, `file_path` (required; optional `range_start`, `range_len`).
-    *   **Logic:** Resolves PolyFS offsets and returns a blob-range plan (`start_mdu_index`, `start_blob_index`, `blob_count`) plus the selected provider.
-    *   **Role:** Planning helper for browser/CLI clients before they open a retrieval session on-chain.
 
-*   **`GET /gateway/fetch/{polyfs_root}`** *(legacy route name `{manifest_root}` may remain during transition)*
-    *   **Query Params (target):** `deal_id`, `owner`, `file_path` (**required**).
-    *   **Logic:**
-        1.  Verifies `deal_id` exists on-chain and matches `owner`.
-        2.  Enforces retrieval sessions when enabled: requests MUST include `X‑PolyStore‑Session‑Id`, and ranges must be within the opened session.
-        3.  Records per-blob proof artifacts for later submission.
-        4.  Streams the file content to the response and sets `X‑PolyStore‑Provider`.
-    *   **Role:** Acts as a retrieval proxy and proof recorder; it does **not** sign user transactions.
-    *   **Striped behavior:** If the local slab is missing a user MDU, the gateway may fetch `K` shards from providers (slot 0..K-1 by default) via `/sp/shard`, reconstruct the MDU with RS decoding, and stream the requested range. Ranges must be slot-aligned (single-slot blob ranges).
-    *   **PolyFS Path Fetch (target end state):**
-        *   `file_path` is **required**. Missing/empty `file_path` returns `400` with a remediation message (no CID/index fallback).
-        *   Invalid/unsafe `file_path` returns `400` (reject traversal `..`, absolute `/` prefix, `\\` separators, whitespace-only, NUL bytes, and control characters).
-        *   Unknown `file_path` (or tombstone record) returns `404`.
-        *   Duplicate/ambiguous `file_path` entries in the on-disk File Table should fail fast with a clear non-200 (prefer `409`) rather than serving potentially stale bytes.
-        *   `polyfs_root` is a 32-byte MDU #0 Merkle root (64 hex chars; optional `0x` prefix). Invalid encodings and legacy 96-hex roots return `400` for new deals.
-        *   Owner mismatch (or invalid owner format) should return a clear non-200 (prefer `403`) as JSON.
-        *   If `polyfs_root` does not match the on-chain deal state for `deal_id`, return a clear non-200 (prefer `409`) to surface stale roots.
-        *   The gateway MUST canonicalize `polyfs_root` consistently (decode -> re-encode) for filesystem paths and logs to avoid duplicate deal directories.
-        *   The gateway resolves the file from `uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` (PolyFS File Table) and streams the requested bytes. Proof submission is performed separately via `/gateway/session-proof` or `/sp/session-proof`.
-        *   Non-200 responses MUST be JSON with a short remediation hint (even though the success path is a byte stream) and set `Content-Type: application/json`, e.g. `{ "error": "...", "hint": "..." }`.
+For retrieval v2, the [client and operator contract](#33-retrieval-v2-client-and-operator-contract)
+below supersedes legacy file-stream and receipt behavior. Deployment activation
+remains disabled by default and requires integrated qualification.
 
-*   **`POST /gateway/session-proof`**
-    *   **Input:** `{ "session_id": "0x..." }`.
-    *   **Logic:** Aggregates recorded per-blob proofs for the session and forwards them to `/sp/session-proof` (provider submission).
-    *   **Role:** Relay helper for browsers that cannot submit provider proofs directly.
+| Operation | user-gateway | provider-daemon |
+| --- | --- | --- |
+| Plan file coverage | `GET /gateway/plan-retrieval-session/{polyfs_root}` | `GET /sp/retrieval/plan/{polyfs_root}` |
+| Committed metadata or funded encoded window | `GET /gateway/mdu/{polyfs_root}/{mdu_index}` | `GET /sp/retrieval/mdu/{polyfs_root}/{mdu_index}` |
+| Submit stored session proofs | `POST /gateway/session-proof` | `POST /sp/session-proof` |
 
-*   **`POST /sp/session-proof`** *(Provider API)*
-    *   **Input:** `{ "session_id": "0x..." }`.
-    *   **Logic:** Provider submits `MsgSubmitRetrievalSessionProof` on-chain.
-    *   **Role:** Canonical proof submission path.
+Planning accepts `deal_id`, `owner`, `file_path` and optional `range_start` /
+`range_len`. Treat the result as a proposal: authenticate committed MDU #0 and
+its allocation before funding. A displayed filename or unauthenticated file-list
+response is not authority to pay for a range.
+
+Metadata reads require `deal_id` and the committed deal owner. Pass the pinned
+`committed_height` when fetching MDU #0 or witness MDUs. User-data reads instead
+require a frozen session, `Accept: multipart/form-data; version=2`, and
+`X-PolyStore-Session-Id`. Their `owner` is the session owner/requester. The server
+returns the complete encoded window and proofs; it never upgrades that request
+into a current-root read or silently changes the proof payee.
+
+The HTTP proof API accepts either `session_id` or `session_ids`, and an optional
+`provider` routing address. Routed user-gateway submissions require `provider`.
+The actual provider signing key must match that address and every selected
+session's `authorized_proof_provider`. The provider loads its recorded proofs
+and submits one native transaction. See the input and recovery examples below.
+
+The legacy `/gateway/fetch/{polyfs_root}` file stream is not a substitute for
+v2 multipart verification. It must not be used to acknowledge unverified bytes.
+The raw shard and legacy proof helpers below likewise do not authorize a bypass
+of funded user-data sessions or the activated chain's legacy-payout rejection.
 
 *   **`GET /sp/shard`** *(Striped Provider API; internal)*
     *   **Headers:** `X‑PolyStore‑Gateway‑Auth: <shared token>` (**required**).
@@ -218,6 +216,216 @@ These endpoints support the `polystore-website` "Thin Client" flow.
 
 ---
 
+### 3.3 Retrieval v2 client and operator contract
+
+This section describes the implemented interfaces. It does not assert completed
+node smoke tests, CI, throughput measurements or activation qualification. The
+[session profile](../docs/retrieval-v2-session-profile.md) defines immutable chain
+authority and accounting; the [crypto contract](../docs/retrieval-v2-crypto.md)
+defines the strict received-byte and PSB1 verifier boundaries.
+
+#### Verify before funding and ACK
+
+1. Query one committed deal generation and retain its chain height, root, layout,
+   owner and assignment view. Fetch MDU #0 using that `committed_height` and root.
+   Authenticate all of its received blob commitments and the resulting PolyFS
+   root before parsing its version-2 file table. Check canonical packing,
+   allocation bounds and the requested file/range before opening sessions.
+2. Current file clients support untransformed files (`flags == 0`) with the
+   producers' fresh-MDU allocation. Ambiguous overlapping/partial-MDU allocation,
+   unsupported encrypted/compressed/transformed ranges and unavailable bounded
+   output storage are rejected before funding. The browser uses file-backed OPFS
+   output through one Worker-owned in-place access handle per download, with
+   at most four live outputs per tab and 8 MiB per write. Each wave is flushed
+   before ACK without copying the previous file. Missing in-place OPFS support
+   fails before funding; a quota/write/flush failure prevents that wave's ACK.
+   It does not allocate the whole download in memory. Legacy raw-v1 FAT
+   recovery is an explicit migration path, not an implicit paid-read rewrite.
+3. Open legal windows within one user MDU and one provider slot. The browser
+   uses ordered bounded waves (normally up to 16 contexts) and rechecks that the
+   pinned generation/assignments still match before each funding transaction.
+   A content update before a later wave requires an explicit refresh/replan;
+   sessions already funded retain their original authority.
+4. Wait for the fixed committed H+1 anchor and height H+2. Fetch a v2 multipart
+   response containing `metadata` then `bytes`. Metadata is bounded at 128 KiB;
+   bytes must be exactly `blob_count * 131072`, with at most one 8 MiB encoded
+   MDU. Reject extra/truncated parts, reordered proofs or mismatched identities.
+5. Verify the exact context, expected ordered positions and fresh z values,
+   both membership hops, and each complete received blob's strict commitment.
+   Only then decode canonical 31/32 payload packing and write the requested
+   logical output. A 128 KiB encoded blob carries at most 126,976 payload bytes;
+   logical file byte counts cannot reduce the opened-blob proof obligation.
+6. Flush verified output before signing owner confirmation (ACK). For recovery,
+   authenticate witness MDUs/root-table cells and recovered data commitments,
+   validate decoded packing, then flush and ACK the accepted sessions. Fetch,
+   crypto, reconstruction, output-write or cancellation failure must not ACK
+   the failed wave. Previously acknowledged waves remain acknowledged.
+7. After successful owner confirmation, the browser asks an available trusted
+   local user-gateway to submit each session's provider proof through
+   `POST /gateway/session-proof`, using a singular `session_id` and its frozen
+   authorized payee as `provider`. The gateway retains provider authentication;
+   the browser adds no provider secret or wallet action. This shared callback
+   also covers direct HTTP, P2P and reconstructed downloads. Each request has a
+   95-second deadline and a 16 KiB structured response bound. Only HTTP 200
+   `success`/`reconciled` marks provider settlement submitted; HTTP 202 remains
+   pending, including an unknown outcome without a hash. Failed requests and an
+   unavailable/disabled gateway leave verified downloads and successful ACKs
+   intact, with settlement status visible. There are no automatic retries or
+   browser proof batches; reconcile the original session IDs through the
+   provider API below. A confirmed delivery alone does not pay the provider:
+   settlement requires both an accepted provider proof and owner confirmation.
+
+Changing between HTTP, user-gateway and P2P transports preserves the same frozen
+context and authorized payee. A deputy must be explicitly named by the funding
+open; a routing hint cannot authorize one. If data-slot retrieval fails, the
+browser can open separately funded active data/parity sessions for bounded RS
+recovery. Those new sessions incur their own fees and challenges. Existing
+voucher authority cannot be reused for a different recovery range/payee; obtain
+matching fresh authorization. No replacement route may relabel an old proof.
+
+#### Committed metadata and retained generations
+
+For example, fetch metadata at the exact chain snapshot selected by the client:
+
+```text
+GET /sp/retrieval/mdu/{root}/0?deal_id=7&owner={deal_owner}&committed_height=123
+```
+
+`deal_id` and `committed_height` are canonical decimal uint64 strings; height must
+be positive. The height is optional for compatibility, in which case the endpoint
+selects committed current state. A pinned client sends it explicitly. The response
+includes `x-cosmos-block-height`, the root and MDU index. MDU #0 and witness
+responses are exactly 8 MiB. The endpoint validates the committed deal/root and
+metadata index; clients cryptographically authenticate the returned bytes against
+that pinned authority. User MDU indices still require a funded session.
+
+The requested root selects its retained generation. Historical reads must not
+promote it or rewrite `.active_generation`. A current content swap cannot redirect
+an old session to different bytes. Missing retained artifacts or pruned historical
+chain state cause a clear failure; the client must not substitute current metadata
+or invent a later challenge seed. Keep retained data and the proof database needed
+by outstanding sessions; do not delete them to resolve a pending submission.
+
+Retention maintenance advances one directory cursor by at most 64 deals per
+minute with a ten-second query deadline. It retains current roots, complete
+chain references and locally active reads/ingests, and revalidates deletion
+candidates under the publication lock. Unavailable or inconsistent authority
+preserves artifacts. Missing/corrupt generation sidecars, including direct
+uploads without enough local admission metadata, also preserve artifacts for
+operator diagnosis; age alone cannot authorize their deletion. Retention can
+therefore use extra disk space while authority or metadata remains unavailable.
+
+#### Native CLI: several sessions, one transaction
+
+The existing command accepts an explicit ordered list:
+
+```text
+{"sessions":[{"session_id":"<base64 32-byte ID>","proofs":[<ChainedProof objects>]},
+             {"session_id":"<base64 32-byte ID>","proofs":[<ChainedProof objects>]}]}
+```
+
+Each entry uses the existing single-session Go JSON encoding: byte fields
+(including `session_id`, commitments, siblings, z/y and openings) are base64;
+proof integer fields such as `mdu_index` and `blob_index` are JSON numbers. This
+is not the HTTP API's hex-ID encoding. Reuse the complete generated proof objects
+for that exact frozen challenge. For two existing single-session files:
+
+```sh
+jq -s '{sessions: map({session_id, proofs})}' session-a.json session-b.json > sessions.json
+polystorechaind tx nilchain submit-retrieval-proof sessions.json \
+  --from provider --chain-id "$CHAIN_ID" --node "$RPC_URL" \
+  --gas auto --gas-adjustment 1.6 --gas-prices "$GAS_PRICES" \
+  --broadcast-mode sync --output json --yes
+```
+
+Use the operator's configured home and keyring flags as appropriate. The single
+`--from` key supplies every message's creator, overriding an input `creator`.
+Owners and deals may differ, but that signer must be authorized by every session.
+IDs must be unique; there must be 1–64 entries, each with 1–64 proofs matching its
+actual opened range. Duplicate JSON keys, unknown entry fields, empty lists and
+mixed `sessions`/`session_id`/receipt discriminators are rejected. The existing
+singular `{ "session_id": ..., "proofs": [...] }` form remains supported;
+legacy receipt forms remain subject to the chain's activation restrictions.
+
+Secured native opens require `--challenge-version 2` on the existing
+`open-retrieval-session` command. Add `--authorized-proof-provider <nil address>`
+to authorize a deputy explicitly; omission selects the assigned provider. The
+payee is frozen at open, so failover to another payee needs a new funded session.
+The default version remains 0 for legacy CLI compatibility and cannot bypass
+the chain's activation rules. A runnable two-owner batch plus singular example
+is maintained in [the native CLI smoke](../scripts/smoke_retrieval_v2.py), with
+[commands and retained results](../bench/retrieval_session_capacity/native-multimessage-e259d573/README.md).
+
+Input JSON is bounded to 2 MiB before decoding. Unsigned protobuf must leave
+4 KiB for signing; final signed protobuf is capped at 1 MiB and the applicable
+online block byte/gas limits, with a 64,000,000 gas ceiling. Online submission
+fails if current block limits cannot be read. `--generate-only`, including
+`--offline`, uses conservative 1 MiB/64M ceilings; that output does not prove a
+live node will admit it. Caps apply to protobuf bytes, not base64-expanded output
+JSON. Final automatic gas and encoded size are checked before broadcast.
+
+Transaction batching reduces repeated signatures/envelopes. It does not combine
+session funding or crypto statements. Each session pays its own base fee and
+independently rounds its variable-fee burn upward. A later-message failure rolls
+back the entire transaction's application changes, while normal ante fee/sequence
+changes remain. Each new proof acceptance performs its own fully prepaid PSB1
+verification; authenticated no-op retries retain their existing semantics. There
+is no cross-session KZG aggregation or gas discount.
+
+#### Provider API and pending-result recovery
+
+Send IDs to the provider that holds their recorded proofs and authorized key:
+
+```sh
+curl --fail-with-body "$PROVIDER_BASE/sp/session-proof" \
+  -H 'Content-Type: application/json' \
+  -H "X-PolyStore-Gateway-Auth: $GATEWAY_AUTH" \
+  --data-binary @session-ids.json
+```
+
+`session-ids.json` contains the explicit list (32-byte IDs encoded as hex):
+
+```json
+{"session_ids":["0x<64 hex digits>","0x<64 hex digits>"],"provider":"<authorized nil address>"}
+```
+
+The singular `{ "session_id": "0x...", "provider": "nil..." }` remains compatible.
+Do not send both ID fields. The provider accepts 1–64 unique IDs in at most
+16 KiB of request JSON; it applies separate stored-proof, unsigned transaction,
+signed transaction and gas bounds. HTTP fields are `session_id` or `session_ids`,
+optional `provider`, and the accepted legacy `deal_id` hint. Neither hint replaces
+chain authority. For the user-gateway relay, send the same body to
+`/gateway/session-proof` and include `provider` so it can route to that signer.
+Authorization headers follow the deployment's existing shared-token policy.
+
+| HTTP result | Meaning | Next action |
+| --- | --- | --- |
+| 200, `status: "success"` | The proof transaction committed successfully | Inspect chain state if owner ACK is still outstanding; cleanup is reported separately |
+| 200, `status: "reconciled"` | Matching immutable sessions are already `COMPLETED` | Local records can be cleaned without a new transaction |
+| 202, `status: "pending"` | Broadcast outcome is unknown; a known `tx_hash` is preserved | Resubmit the original ordered ID list to reconcile, not to create another transaction |
+| 409, `status: "failed"` | Submission or committed transaction failed | Inspect `error`, transaction result and retained records before retry decisions |
+| `cleanup_status: "pending"` | Chain outcome is known but local cleanup failed | Preserve the database and repeat the original ordered request for cleanup/reconciliation |
+| 429 / capacity conflict | The session or actual signer is busy | Retry after the outstanding operation is reconciled |
+
+Responses preserve singular/plural ID shape and include `proof_count`, `tx_hash`
+(possibly empty), `status`, and when relevant `cleanup_status` and `error`. An HTTP
+202 is not settled success, even though it is a successful HTTP transport status.
+
+The provider atomically records submission intent before broadcasting and stores
+any known hash before polling. Pending work quarantines the **actual signer**
+across retrieval and storage-audit submissions, including after restart. Resubmit
+exactly the original ordered `session_ids` (or original singular request) to
+reconcile. Do not split, reorder, combine it with new IDs, change the signing key,
+or blindly rebroadcast the CLI transaction. A known hash is queried for its
+committed outcome. If no hash was durably recorded, matching chain completion or
+operator diagnosis is required; elapsed time alone cannot justify another spend.
+
+Keep `POLYSTORE_SESSION_DB_PATH` (default `uploads/sessions.db`) and the corresponding
+retained generation/proof artifacts intact. The database is recovery evidence,
+not a disposable cache. Deterministic pre-broadcast rejection may release intent;
+unknown broadcasts and committed failures retain records for reconciliation or
+diagnosis. There is no automatic batching queue or background rebroadcast loop.
+
 ## 4. Devnet Shortcuts & "The Gap"
 
 To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gateway` takes several shortcuts:
@@ -230,7 +438,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.
     *   **Target (PolyFS SSoT):** Proof inputs are derived from the deal-scoped on-disk slab (`uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, legacy `manifest.bin`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
-    *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
+    *   **Secured consumer:** the browser verifies received bytes, canonical metadata and fresh proofs locally with WASM before acknowledgement. Provider generation and trusted user-gateway transaction relay remain separate roles. See §3.3 for the v2 path and its deployment requirements.
 
 3.  **Local Storage:**
     *   The Gateway can act as a Storage Provider for local devnet flows, but it is **not** required to be the sole provider.

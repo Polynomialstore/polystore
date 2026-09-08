@@ -43,8 +43,9 @@ var (
 )
 
 func resetPolyfsUploadRootPreflightCacheForTest() {
-	polyfsUploadRootPreflightCache = sync.Map{}
-	polyfsUploadRootPreflightGroup = singleflight.Group{}
+	// DoChan can still be unlocking after delivering its result. Never replace
+	// a used mutex or sync.Map; finished singleflight calls remove themselves.
+	polyfsUploadRootPreflightCache.Clear()
 }
 
 func validatePolyfsUploadPreviousManifestRoot(
