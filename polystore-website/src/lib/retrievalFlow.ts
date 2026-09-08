@@ -70,8 +70,8 @@ export interface RetrievalFlow {
   confirm(sessions: readonly FrozenSession[]): Promise<void>
   progress?(windows: number, encodedBytes: bigint): void
 }
-// At most 16 contexts plus one encoded window are live. Output is consumed
-// immediately; no full-file byte buffer or session list grows with the file.
+// At most waveLimit contexts (default 16, maximum 64) plus one encoded
+// window are live. Output is consumed immediately; neither grows with the file.
 export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>, flow: RetrievalFlow, signal?: AbortSignal, waveLimit = 16): Promise<void> {
   if (!Number.isSafeInteger(waveLimit) || waveLimit < 1 || waveLimit > 64) throw new Error('invalid wave bound')
   const iterator = windows[Symbol.iterator]()
@@ -99,13 +99,15 @@ export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>
   }
 }
 
-export async function createRetrievalOutput(length: bigint) {
+export async function createRetrievalOutput(length: bigint, savedId?: string) {
   if (length < 0n || length > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('unsupported output length')
   if (!navigator.storage?.getDirectory) throw new Error('file-backed browser storage is required before payment')
   const { workerClient } = await import('./worker-client')
-  const id = await workerClient.retrievalOutput({ action: 'create', length: Number(length) }) as string
+  const id = await workerClient.retrievalOutput(savedId ? { action: 'resume', id: savedId, length: Number(length) } : { action: 'create', length: Number(length) }) as string
   let removed = false
   return {
+    id,
+    async release() { await workerClient.retrievalOutput({ action: 'release', id }) },
     async write(offset: bigint, bytes: Uint8Array) {
       if (offset < 0n || offset + BigInt(bytes.length) > length || removed) throw new Error('output write out of range')
       await workerClient.retrievalOutput({ action: 'write', id, offset: Number(offset), bytes })

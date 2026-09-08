@@ -179,6 +179,7 @@ export function* planRetrievalWindows(pin: PinnedGeneration, file: RetrievalFile
 }
 
 export interface FrozenSession {
+  browserTransactionKey?: string
   sessionId: `0x${string}`; pin: PinnedGeneration; window: RetrievalWindow; owner: string; payee: string
   height: bigint; openedHeight: bigint; expiry: bigint; status: number; funding: number
   context: Uint8Array; contextHash: Uint8Array; seed: Uint8Array | null

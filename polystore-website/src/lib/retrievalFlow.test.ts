@@ -181,6 +181,7 @@ test('worker output writes in place, flushes before ACK and rejects partial pers
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { storage: { async getDirectory() { return { async getDirectoryHandle() { return dir } } } } } })
   const ids: string[] = []
   try {
+    for (let i = 0; i < 4; i++) await assert.rejects(retrievalOutput({ action: 'resume', id: '../invalid', length: 4 }), /invalid retrieval output ID/)
     const id = await retrievalOutput({ action: 'create', length: 4 }) as string; ids.push(id)
     await retrievalOutput({ action: 'write', id, offset: 0, bytes: new Uint8Array([1, 2]) }); await retrievalOutput({ action: 'flush', id })
     await retrievalOutput({ action: 'write', id, offset: 2, bytes: new Uint8Array([3, 4]) }); await retrievalOutput({ action: 'flush', id })
@@ -199,6 +200,11 @@ test('worker output writes in place, flushes before ACK and rejects partial pers
     await assert.rejects(executeRetrievalWindows(windows(), flow.flow), /disk flush failure/)
     assert.ok(!flow.events.some((e) => e.startsWith('ack:')))
     rejectFlush = false
+    await retrievalOutput({ action: 'release', id })
+    assert.equal(events.filter((e) => e === 'remove').length, 0)
+    await assert.rejects(retrievalOutput({ action: 'resume', id, length: 5 }), /length mismatch/)
+    assert.equal(events.filter((e) => e === 'remove').length, 0, 'failed resume must retain the original output')
+    assert.equal(await retrievalOutput({ action: 'resume', id, length: 4 }), id)
     const file = await retrievalOutput({ action: 'file', id }) as File
     assert.deepEqual(new Uint8Array(await file.arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
     await assert.rejects(retrievalOutput({ action: 'write', id, offset: 0, bytes: new Uint8Array([1]) }), /closed/)

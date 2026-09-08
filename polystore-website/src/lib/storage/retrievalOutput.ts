@@ -8,34 +8,37 @@ type SyncAccess = {
 }
 export type RetrievalOutputRequest =
   | { action: 'create'; length: number }
+  | { action: 'resume'; id: string; length: number }
   | { action: 'write'; id: string; offset: number; bytes: Uint8Array }
-  | { action: 'flush' | 'file' | 'remove'; id: string }
+  | { action: 'flush' | 'file' | 'remove' | 'release'; id: string }
 
 const outputs = new Map<string, { dir: FileSystemDirectoryHandle; file: FileSystemFileHandle; access: SyncAccess | null; length: number }>()
 let opening = 0
 
 export async function retrievalOutput(request: RetrievalOutputRequest): Promise<string | File | undefined> {
-  if (request.action === 'create') {
+  if (request.action === 'create' || request.action === 'resume') {
     if (!Number.isSafeInteger(request.length) || request.length < 0) throw new Error('unsupported output length')
     // ponytail: four live outputs per tab; reject before funding instead of queuing.
     if (outputs.size + opening >= 4) throw new Error('too many active retrieval outputs')
-    opening++
     let dir: FileSystemDirectoryHandle | undefined, access: SyncAccess | undefined
-    const id = crypto.randomUUID()
+    const id = request.action === 'resume' ? request.id : crypto.randomUUID()
+    if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('invalid retrieval output ID')
+    opening++
     try {
       const root = await navigator.storage.getDirectory()
       dir = await root.getDirectoryHandle('retrieval-output', { create: true })
-      const file = await dir.getFileHandle(id, { create: true })
+      const file = await dir.getFileHandle(id, { create: request.action === 'create' })
+      if (request.action === 'resume' && (await file.getFile()).size !== request.length) throw new Error('saved retrieval output length mismatch')
       // TypeScript's DOM-only library omits this dedicated-Worker method.
       const workerFile = file as FileSystemFileHandle & { createSyncAccessHandle(): Promise<SyncAccess> }
       if (!workerFile.createSyncAccessHandle) throw new Error('in-place browser storage is required before payment')
       access = await workerFile.createSyncAccessHandle()
-      access.truncate(request.length)
+      if (request.action === 'create') access.truncate(request.length)
       outputs.set(id, { dir, file, access, length: request.length })
       return id
     } catch (error) {
       access?.close()
-      await dir?.removeEntry(id).catch(() => {})
+      if (request.action === 'create') await dir?.removeEntry(id).catch(() => {})
       throw error
     } finally { opening-- }
   }
@@ -44,7 +47,10 @@ export async function retrievalOutput(request: RetrievalOutputRequest): Promise<
     if (request.action === 'remove') return
     throw new Error('retrieval output unavailable')
   }
-  if (request.action === 'remove') {
+  if (request.action === 'release') {
+    try { output.access?.flush() }
+    finally { try { output.access?.close() } finally { outputs.delete(request.id) } }
+  } else if (request.action === 'remove') {
     output.access?.close(); output.access = null
     await output.dir.removeEntry(request.id)
     outputs.delete(request.id)

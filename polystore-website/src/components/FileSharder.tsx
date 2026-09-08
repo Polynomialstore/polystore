@@ -1,3 +1,5 @@
+import type { FrozenSession } from '../lib/retrieval'
+import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -26,7 +28,7 @@ import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/p
 import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../lib/providerDiscovery'
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
-import { createRetrievalOutput, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
@@ -2055,9 +2057,26 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     // Complete user MDUs are needed for append; each session remains one slot
     // in one MDU. Preflight all required assignment states before any funding.
     if (pin.userMdus) recoveryWindows(pin, 0n)
-    const output = await createRetrievalOutput(pin.userMdus * 8388608n)
-    let unsettled = 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined
+    const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
+    const output = job.output
+    let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
+    const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
+      const gatewayBase = localGateway.url || appConfig.gatewayBase
+      const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' })
+      const proofBase = job.state.pending?.proofBase ?? (gatewayEnabled ? gatewayBase : undefined)
+      job.prepare(ordinal, sessions, proofBase)
+      const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+        confirm: (wave) => retrievalPayment.confirm(wave, signal, job.key), signal,
+        gatewayBase: proofBase,
+      })
+      if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
+      for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
+      job.complete(ordinal, outcomes)
+      await retrievalPayment.forget(sessions, job.key)
+      job.cleaned()
+    }
     try {
+      if (job.state.cleanup) { await retrievalPayment.forget(job.state.cleanup, job.key); job.cleaned() }
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
         fetch: async (index) => {
           let last: unknown
@@ -2071,35 +2090,35 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         readCommitments: workerClient.readRetrievalCommitments,
       }, signal)
       for (let ordinal = 0n; ordinal < pin.userMdus; ordinal++) {
+        if (ordinal <= job.state.through) continue
+        if (job.state.pending) {
+          if (job.state.pending.ordinal !== ordinal) throw new Error('saved append cursor does not match generation')
+          await confirm(ordinal, job.state.pending.sessions); continue
+        }
         const commitments = await readCommitments(ordinal)
         await recoverRetrievalMdu(pin, ordinal, {
-          open: (windows) => retrievalPayment.open(pin, windows, undefined, signal),
+          open: (windows) => retrievalPayment.open(pin, windows, undefined, signal, undefined, job.key),
           fetchAndVerify: async (session) => {
             const e = endpoints.get(session.payee)
             return (await retrievalTransport.fetchWindow({ session, directBase: e?.baseUrl || appConfig.spBase, p2pTarget: e?.p2pTarget, signal })).data
           },
           reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
           consumeAndFlush: async (encoded) => { validateRetrievalMduPacking(pin, records, ordinal, encoded); await output.write(ordinal * 8388608n, encoded); await output.flush() },
-          confirm: async (sessions) => {
-            const gatewayBase = localGateway.url || appConfig.gatewayBase
-            const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' })
-            const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
-              confirm: (wave) => retrievalPayment.confirm(wave, signal), signal,
-              gatewayBase: gatewayEnabled ? gatewayBase : undefined,
-            })
-            for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
-          },
+          confirm: (sessions) => confirm(ordinal, sessions),
         }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
       const file = await output.file()
-      signal.throwIfAborted()
+      job.finish()
       if (firstSettlementIssue) addLog(`> Recovered data verified and acknowledged; ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}`)
       await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
       const existingMaxEnd = records.reduce((end, r) => r.start_offset + r.size_bytes > end ? r.start_offset + r.size_bytes : end, 0n)
       return { baseMdu0Bytes: mdu0Bytes, existingUserCount: Number(pin.userMdus), existingMaxEnd: Number(existingMaxEnd), appendStartOffset: Number(pin.userMdus) * RAW_MDU_CAPACITY,
         existingUserMdus: Array.from({ length: Number(pin.userMdus) }, (_, index) => ({ index, read: async () => new Uint8Array(await file.slice(index * 8388608, (index + 1) * 8388608).arrayBuffer()) })) }
-    } catch (error) { await output.cleanup(); throw error }
+    } catch (error) {
+      await job.retain()
+      throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
+    }
   }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {

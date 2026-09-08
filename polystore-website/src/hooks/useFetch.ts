@@ -5,7 +5,7 @@ import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
 import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
-import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
@@ -13,6 +13,7 @@ import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
+import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
 import { useRetrievalSessions } from './useRetrievalSessions'
 import { useTransportRouter } from './useTransportRouter'
 
@@ -125,7 +126,7 @@ export function useFetch() {
     const signal = input.signal ? AbortSignal.any([input.signal, controller.signal]) : controller.signal
     setLoading(true); setReceiptStatus('idle'); setReceiptError(null); setLastPlan(null)
     setProgress({ phase: 'idle', filePath: input.filePath, chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
-    let output: Awaited<ReturnType<typeof createRetrievalOutput>> | null = null
+    let checkpoint: Awaited<ReturnType<typeof openRetrievalCheckpoint>> | null = null
     try {
       const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
       const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
@@ -165,13 +166,15 @@ export function useFetch() {
       }
       if (input.sponsoredAuth?.type === 'voucher' && count !== 1) throw new Error('voucher must authorize exactly one legal window before payment')
       // Storage availability and all allocation/layout checks precede funding.
-      output = await createRetrievalOutput(length)
+      checkpoint = await openRetrievalCheckpoint([payment.scope(), 'download', pin.dealId, pin.root, pin.generation, file.path, start, length, deputy, input.sponsoredAuth ?? { type: 'none' }], length)
       setProgress((p) => ({ ...p, chunkCount: count, bytesTotal: Number(length), receiptsTotal: count }))
       setLastPlan({ capturedAtMs: Date.now(), dealId: pin.dealId.toString(), manifestRoot: pin.root, filePath: file.path, routePreference: input.routePreference,
         mduSizeBytes: RAW_MDU_CAPACITY_BYTES, blobSizeBytes: BLOB_SIZE_BYTES, leafCount: BigInt(pin.leafCount), globalStart: (pin.metadataMdus + (file.start_offset + start) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), globalEnd: (pin.metadataMdus + (file.start_offset + start + (length || 1n) - 1n) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), providers: [] })
-      let logicalBytes = 0, confirmed = 0, route: string | undefined
-      let unsettled = 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined
-      const sink = output
+      let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
+      let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
+      const job = checkpoint, sink = job.output
+      if (job.state.cleanup) { await payment.forget(job.state.cleanup, job.key); job.cleaned() }
+      let currentOrdinal = -1n
       const fetchSession = async (session: FrozenSession) => {
         setProgress((p) => ({ ...p, phase: 'fetching' }))
         const e = await endpoint(session.payee)
@@ -181,12 +184,18 @@ export function useFetch() {
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
         const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() })
+        const gatewayBase = job.state.pending?.proofBase ?? (gatewayEnabled ? appConfig.gatewayBase : undefined)
+        job.prepare(currentOrdinal, sessions, gatewayBase)
         const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
-          confirm: (wave) => payment.confirm(wave, signal), signal,
-          gatewayBase: gatewayEnabled ? appConfig.gatewayBase : undefined,
+          confirm: (wave) => payment.confirm(wave, signal, job.key), signal,
+          gatewayBase,
           onConfirmed: () => { confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
         })
+        if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
         for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
+        job.complete(currentOrdinal, outcomes)
+        await payment.forget(sessions, job.key)
+        job.cleaned()
       }
       const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
         for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
@@ -207,14 +216,20 @@ export function useFetch() {
       // output MDU; file length never increases the in-memory working set.
       const processMdu = async (windows: RetrievalWindow[]) => {
         const ordinal = windows[0].mduIndex - pin.metadataMdus
+        currentOrdinal = ordinal
+        if (ordinal <= job.state.through) return
+        if (job.state.pending) {
+          if (job.state.pending.ordinal !== ordinal) throw new Error('saved retrieval cursor does not match file')
+          await confirm(job.state.pending.sessions); return
+        }
         let fetchFailed = false
         if (windows.every((w) => pin.assignments[w.slot].active)) {
           try {
             await executeRetrievalWindows(windows, {
-              open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy) },
+              open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key) },
               fetchAndVerify: async (session) => { try { return await fetchSession(session) } catch (error) { fetchFailed = true; throw error } },
               consume, flush: () => sink.flush(), confirm,
-            }, signal)
+            }, signal, 64)
             return
           } catch (error) { signal.throwIfAborted(); if (!fetchFailed) throw error }
         }
@@ -222,7 +237,7 @@ export function useFetch() {
         recoveryWindows(pin, ordinal)
         const commitments = await readCommitments(ordinal)
         await recoverRetrievalMdu(pin, ordinal, {
-          open: (wave) => payment.open(pin, wave, input.sponsoredAuth, signal, deputy),
+          open: (wave) => payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key),
           fetchAndVerify: fetchSession,
           reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
           consumeAndFlush: async (encoded) => {
@@ -253,19 +268,20 @@ export function useFetch() {
         }
         await flush()
       }
-      const blob = await sink.file(); signal.throwIfAborted()
+      const blob = await sink.file()
       const url = URL.createObjectURL(blob)
+      try { job.finish() } catch (error) { URL.revokeObjectURL(url); throw error }
       if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
-      saved.current = { url, cleanup: sink.cleanup }; output = null
+      saved.current = { url, cleanup: sink.cleanup }; checkpoint = null
       const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}` : undefined
       setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
       setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
       return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
     } catch (error) {
-      const message = classifyWalletError(error, 'Fetch failed').message
+      const message = classifyWalletError(error, 'Fetch failed').message + (checkpoint ? ' Saved retrieval progress is retained in this browser. Retry the same file to resume and reconcile its existing sessions.' : '')
       if (active.current === controller) { setProgress((p) => ({ ...p, phase: 'error', message })); setReceiptStatus('failed'); setReceiptError(message) }
       throw new Error(message)
-    } finally { await output?.cleanup().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
+    } finally { await checkpoint?.retain().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
   return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
 }

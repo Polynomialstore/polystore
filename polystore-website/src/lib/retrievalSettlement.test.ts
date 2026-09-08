@@ -147,3 +147,34 @@ test('bounded chunked reader cancels oversized outcomes and settlement waves rej
   }
   assert.equal(acks, 0)
 })
+
+test('cancellation during an ACK receipt wait does not suppress proof requests after commitment', async () => {
+  const controller = new AbortController(), s = session()
+  let posts = 0
+  const outcomes = await confirmAndRequestRetrievalProofs([s], {
+    gatewayBase, signal: controller.signal,
+    confirm: async () => { controller.abort() },
+    fetchFn: async (_, init) => { assert.equal(init?.signal?.aborted, false); posts++; return json(payload(s)) },
+  })
+  assert.equal(posts, 1); assert.equal(outcomes[0].state, 'committed')
+})
+
+test('one post-ACK deadline bounds the whole wave and prevents dispatch after expiry', async (t) => {
+  const deadlines: AbortController[] = []
+  t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 95_000)
+    const controller = new AbortController(); deadlines.push(controller); return controller.signal
+  })
+  let posts = 0
+  const outcomes = await confirmAndRequestRetrievalProofs([session(1), session(2), session(3)], {
+    gatewayBase, confirm,
+    fetchFn: async (_, init) => {
+      posts++; deadlines[0].abort(new Error('whole wave expired'))
+      assert.equal(init?.signal?.aborted, true)
+      throw new Error('response lost at deadline')
+    },
+  })
+  assert.equal(posts, 1)
+  assert.equal(outcomes.length, 3)
+  assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
+})

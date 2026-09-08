@@ -9,6 +9,7 @@ export interface RetrievalSettlementOutcome {
   state: 'committed' | 'pending' | 'failed' | 'unavailable'
   sessionId: string
   txHash?: string
+  responseUnknown?: true
   message?: string
 }
 
@@ -65,7 +66,7 @@ async function requestProof(session: FrozenSession, base: string, options: Settl
   } catch {
     // Never discard verified bytes or ACK state because an HTTP response was
     // lost. The provider owns durable reconciliation, including no-hash cases.
-    return pending(session, 'No valid final response was received.')
+    return { ...pending(session, 'No valid final response was received.'), responseUnknown: true }
   }
 }
 
@@ -81,6 +82,10 @@ export async function confirmAndRequestRetrievalProofs(sessions: readonly Frozen
       message: `Provider settlement unavailable for session ${session.sessionId}: the trusted local gateway is unavailable. Verified output and owner confirmation are preserved; provider proof submission is still required.` }))
   }
   const outcomes: RetrievalSettlementOutcome[] = []
-  for (const session of sessions) outcomes.push(await requestProof(session, base, options))
+  // The ACK has committed. Canceling the download cannot undo it or suppress
+  // its authorized provider request. One deadline bounds the entire wave,
+  // including the maximum 64 sessions; later requests stop at that deadline.
+  const proofSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  for (const session of sessions) outcomes.push(await requestProof(session, base, { ...options, signal: proofSignal }))
   return outcomes
 }
