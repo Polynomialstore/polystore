@@ -17,6 +17,7 @@ const (
 	Version = uint32(2)
 	Session = uint8(1)
 	Audit   = uint8(2)
+	Repair  = uint8(3) // Frozen pending-provider readiness; no ACTIVE quota or reward.
 	Replica = uint8(1)
 	Stripe  = uint8(2)
 	// MaxSamples is an inactive v2 hard ceiling, not a quota or deployment profile.
@@ -127,7 +128,7 @@ func (c Context) dimensions() (rows, population uint64, err error) {
 		if c.BlobCount > population-start || c.BlobCount > rows-row {
 			return 0, 0, errors.New("session range exceeds allocation or slot")
 		}
-	case Audit:
+	case Audit, Repair:
 		if c.ID != [32]byte{} || c.Payee != c.Assigned || c.StartMDU != 0 || c.StartLeaf != 0 || c.BlobCount != 0 {
 			return 0, 0, errors.New("noncanonical audit authority or session fields")
 		}
@@ -212,7 +213,7 @@ func (c Context) Challenges(seed []byte) ([]Challenge, error) {
 		return nil, err
 	}
 	var positions []uint64
-	if c.Kind == Audit {
+	if c.Kind == Audit || c.Kind == Repair {
 		positions, err = Sample(hash, seed, population, c.SampleCount)
 		if err != nil {
 			return nil, err
@@ -225,24 +226,59 @@ func (c Context) Challenges(seed []byte) ([]Challenge, error) {
 		}
 	}
 	out := make([]Challenge, len(positions))
-	transcript := appendLP(make([]byte, 0, 128), "polystore/blob-challenge/v2")
-	transcript = append(transcript, hash[:]...)
-	transcript = append(transcript, seed...)
-	prefix := len(transcript)
 	for i, p := range positions {
-		v := Challenge{Ordinal: uint64(i), PopulationIndex: p, MDUIndex: c.MetadataMDUs + p/rows, LeafIndex: uint32(uint64(c.Slot)*rows + p%rows)}
-		transcript = transcript[:prefix]
-		transcript = binary.BigEndian.AppendUint64(transcript, v.Ordinal)
-		transcript = binary.BigEndian.AppendUint64(transcript, v.MDUIndex)
-		transcript = binary.BigEndian.AppendUint32(transcript, v.LeafIndex)
-		transcript = binary.BigEndian.AppendUint32(transcript, 0)
-		v.Z, err = hashToPoint(transcript, sha256.Sum256)
+		out[i], err = c.challengePoint(hash, seed, rows, uint64(i), p)
 		if err != nil {
 			return nil, err
 		}
-		out[i] = v
 	}
+
 	return out, nil
+}
+
+// ChallengeForPosition finds an exact sampled tuple while deriving only its z.
+// A system-proof message carries one tuple; computing all Q field challenges on
+// each of Q submissions would unnecessarily repeat Q squared field operations.
+func (c Context) ChallengeForPosition(seed []byte, mdu uint64, leaf uint32) (Challenge, error) {
+	if c.Kind != Audit && c.Kind != Repair {
+		return Challenge{}, errors.New("requires epoch obligation")
+	}
+	rows, population, err := c.dimensions()
+	if err != nil {
+		return Challenge{}, err
+	}
+	h, err := c.Hash()
+	if err != nil {
+		return Challenge{}, err
+	}
+	if mdu < c.MetadataMDUs || mdu-c.MetadataMDUs >= c.UserMDUs || uint64(leaf) < uint64(c.Slot)*rows || uint64(leaf) >= uint64(c.Slot+1)*rows {
+		return Challenge{}, errors.New("tuple outside assigned population")
+	}
+	p := (mdu-c.MetadataMDUs)*rows + uint64(leaf) - uint64(c.Slot)*rows
+	positions, err := Sample(h, seed, population, c.SampleCount)
+	if err != nil {
+		return Challenge{}, err
+	}
+	for i, selected := range positions {
+		if selected == p {
+			return c.challengePoint(h, seed, rows, uint64(i), p)
+		}
+	}
+	return Challenge{}, errors.New("tuple is not a selected challenge")
+}
+
+func (c Context) challengePoint(hash [32]byte, seed []byte, rows, ordinal, p uint64) (Challenge, error) {
+	v := Challenge{Ordinal: ordinal, PopulationIndex: p, MDUIndex: c.MetadataMDUs + p/rows, LeafIndex: uint32(uint64(c.Slot)*rows + p%rows)}
+	transcript := appendLP(make([]byte, 0, 128), "polystore/blob-challenge/v2")
+	transcript = append(transcript, hash[:]...)
+	transcript = append(transcript, seed...)
+	transcript = binary.BigEndian.AppendUint64(transcript, v.Ordinal)
+	transcript = binary.BigEndian.AppendUint64(transcript, v.MDUIndex)
+	transcript = binary.BigEndian.AppendUint32(transcript, v.LeafIndex)
+	transcript = binary.BigEndian.AppendUint32(transcript, 0)
+	var err error
+	v.Z, err = hashToPoint(transcript, sha256.Sum256)
+	return v, err
 }
 
 var (

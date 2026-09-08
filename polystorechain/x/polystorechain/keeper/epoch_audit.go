@@ -92,7 +92,7 @@ func (k Keeper) totalActiveSlotBytes(ctx sdk.Context) (uint64, error) {
 	height := uint64(ctx.BlockHeight())
 	total := uint64(0)
 
-	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
+	err := k.walkProtocolAuditDeals(ctx, func(dealID uint64, deal types.Deal) (stop bool, err error) {
 		// end_block is exclusive: once height >= end_block, the deal is expired.
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
@@ -196,7 +196,7 @@ func (k Keeper) deriveAuditTasks(ctx sdk.Context, epochID uint64) error {
 
 	// Gather active providers (assignee pool).
 	assigneePool := make([]string, 0, 32)
-	if err := k.Providers.Walk(ctx, nil, func(addr string, p types.Provider) (stop bool, err error) {
+	if err := k.walkProtocolAuditProviders(ctx, func(addr string, p types.Provider) (stop bool, err error) {
 		if strings.TrimSpace(p.Status) != "Active" {
 			return false, nil
 		}
@@ -215,7 +215,7 @@ func (k Keeper) deriveAuditTasks(ctx sdk.Context, epochID uint64) error {
 	// Gather audit targets (serving slots/providers).
 	height := uint64(ctx.BlockHeight())
 	targets := make([]auditTarget, 0, 64)
-	if err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
+	if err := k.walkProtocolAuditDeals(ctx, func(dealID uint64, deal types.Deal) (stop bool, err error) {
 		// end_block is exclusive: once height >= end_block, the deal is expired.
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil

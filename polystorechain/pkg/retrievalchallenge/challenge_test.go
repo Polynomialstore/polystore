@@ -272,12 +272,12 @@ func TestIndependentGolden(t *testing.T) {
 	if err = json.Unmarshal(data, &golden); err != nil {
 		t.Fatal(err)
 	}
-	if len(golden.Vectors) != 2 {
+	if len(golden.Vectors) != 3 {
 		t.Fatal("expected session and audit fixtures")
 	}
 	for name, f := range golden.Vectors {
 		c := fixtureContext()
-		if name == "audit" {
+		if name == "audit" || name == "repair" {
 			c.Kind = Audit
 			c.ID = [32]byte{}
 			c.Payee = c.Assigned
@@ -290,6 +290,9 @@ func TestIndependentGolden(t *testing.T) {
 			c.Window.Deadline = 199
 		} else if name != "session" {
 			t.Fatal("unknown vector")
+		}
+		if name == "repair" {
+			c.Kind = Repair
 		}
 		b, err := c.Bytes()
 		if err != nil {
@@ -311,6 +314,12 @@ func TestIndependentGolden(t *testing.T) {
 		}
 		for i, w := range f.Positions {
 			v := got[i]
+			if c.Kind != Session {
+				matched, err := c.ChallengeForPosition(fixtureSeed(), v.MDUIndex, v.LeafIndex)
+				if err != nil || matched != v {
+					t.Fatalf("single challenge drift: %v", err)
+				}
+			}
 			if v.Ordinal != w.Ordinal || v.PopulationIndex != w.PopulationIndex || v.MDUIndex != w.MDU || v.LeafIndex != w.Leaf || hex.EncodeToString(v.Z[:]) != w.Z {
 				t.Fatalf("%s challenge %d drift: %+v expected %+v", name, i, v, w)
 			}
@@ -346,6 +355,33 @@ func BenchmarkAuditSamples(b *testing.B) {
 			for b.Loop() {
 				if _, err := Sample(hash, seed, 1000000, q); err != nil {
 					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// One SystemProof derives membership in Q positions but only one field point.
+func BenchmarkAuditChallengeForPosition(b *testing.B) {
+	seed := fixtureSeed()
+	for _, q := range []uint64{132, 1375} {
+		b.Run(strconv.FormatUint(q, 10), func(b *testing.B) {
+			c := fixtureContext()
+			c.Kind, c.ID, c.Payee = Audit, [32]byte{}, c.Assigned
+			c.StartMDU, c.StartLeaf, c.BlobCount = 0, 0, 0
+			c.UserMDUs, c.EpochID, c.EpochLength, c.SampleCount = 65535, 2, 10, q
+			c.Window, _, _ = AuditWindow(c.EpochID, c.EpochLength, c.DealEnd)
+			all, err := c.Challenges(seed)
+			if err != nil {
+				b.Fatal(err)
+			}
+			target := all[len(all)-1]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				actual, err := c.ChallengeForPosition(seed, target.MDUIndex, target.LeafIndex)
+				if err != nil || actual != target {
+					b.Fatalf("point mismatch: %v", err)
 				}
 			}
 		})

@@ -7,6 +7,19 @@
 
 ---
 
+## V2 SESSION integration (inactive by default)
+
+The [versioned session profile](../docs/retrieval-v2-session-profile.md) is normative
+for version-2 chain sessions and supersedes the legacy current-root/current-slot
+checks below. It binds the immutable generation and explicitly authorized proof
+payee at open, requires the fixed H+1 seed and responses from H+2, proves every
+opened blob, and separates completion activity from independent storage audits.
+Provider/browser data-plane adoption remains #257 work and is an activation gate.
+Historical generation reads must preserve their pinned directory and must not
+change `.active_generation`; current deal updates cannot redirect old sessions.
+Batches split at slot/MDU boundaries and preserve each session's ID and fresh z.
+The profile documents native/EVM fields, exact query bytes, funding and recovery.
+
 ## 1. Motivation
 
 PolyStore’s “Retrieval IS Storage” model only works if **served bytes are accountable**:

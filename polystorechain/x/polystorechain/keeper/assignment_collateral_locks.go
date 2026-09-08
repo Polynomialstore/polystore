@@ -27,6 +27,9 @@ func assignmentCollateralLockID(provider string, dealID uint64, slot uint32) str
 }
 
 func (k Keeper) setDealWithAssignmentCollateralLocks(ctx sdk.Context, dealID uint64, deal types.Deal) error {
+	if err := k.syncStorageAuditAssignments(ctx, deal); err != nil {
+		return err
+	}
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
 		return err
 	}

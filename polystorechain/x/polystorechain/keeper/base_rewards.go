@@ -58,6 +58,13 @@ type baseRewardWeights struct {
 }
 
 func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseRewardWeights, error) {
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil {
+		return baseRewardWeights{}, err
+	}
+	if active {
+		return k.frozenStorageRewardWeights(ctx, epochID)
+	}
 	params := k.GetParams(ctx)
 	height := uint64(ctx.BlockHeight())
 
@@ -67,7 +74,7 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 		byProvider:           make(map[string]uint64),
 	}
 
-	err := k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
+	err = k.Deals.Walk(ctx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
 		// end_block is exclusive: once height >= end_block, the deal is expired.
 		if height < deal.StartBlock || height >= deal.EndBlock {
 			return false, nil
@@ -234,6 +241,20 @@ func (k Keeper) computeBaseRewardWeights(ctx sdk.Context, epochID uint64) (baseR
 
 func (k Keeper) distributeBaseRewardPool(ctx sdk.Context, epochID uint64) error {
 	params := k.GetParams(ctx)
+	active, activeErr := k.RetrievalV2Active(ctx)
+	if activeErr != nil {
+		return activeErr
+	}
+	if active {
+		record, err := k.StorageAuditEpochs.Get(ctx, epochID)
+		if err != nil {
+			return err
+		}
+		if record.Params == nil {
+			return fmt.Errorf("missing frozen reward params")
+		}
+		params = *record.Params
+	}
 	if params.EpochLenBlocks == 0 {
 		return nil
 	}

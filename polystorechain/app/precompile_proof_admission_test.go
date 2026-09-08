@@ -44,7 +44,7 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 		Proof                types.ChainedProof
 	}
 	var invalidGas, validGas uint64
-	for _, invalid := range []int{-1, -2, -3, 0, 1, 2, 3} {
+	for _, invalid := range []int{-1, -2, -3, 0, 1, 2, 3, 4} {
 		t.Run(fmt.Sprintf("invalid_%d", invalid), func(t *testing.T) {
 			ctx, _ := base.CacheContext()
 			chunks := make([]chunk, 3)
@@ -62,6 +62,12 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 			require.NoError(t, err)
 			static := precompile.RequiredGas(input)
 			gas := uint64(4_000_000)
+			if invalid == 4 {
+				// Valid bytes and owner authority still cannot bypass fresh v2
+				// challenges through the legacy ordinary-payment selector.
+				require.NoError(t, a.PolyStoreChainKeeper.RetrievalV2ActivatedHeight.Set(ctx, 1))
+				gas = static + keeper.ProofCryptoGas - 1
+			}
 			if invalid == 3 {
 				gas = static + 3*keeper.ProofCryptoGas - 1
 			}
@@ -83,12 +89,18 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 				require.Zero(t, left)
 			} else {
 				require.ErrorIs(t, err, vm.ErrExecutionReverted)
-				if invalidGas == 0 {
+				if invalid == 4 {
+					require.Less(t, gas-left, static+keeper.ProofCryptoGas)
+				} else if invalidGas == 0 {
 					invalidGas = gas - left
 				}
-				require.Equal(t, invalidGas, gas-left, "invalid-first/middle/last pay the same crypto and read costs")
+				if invalid != 4 {
+					require.Equal(t, invalidGas, gas-left, "invalid-first/middle/last pay the same crypto and read costs")
+				}
 			}
-			require.GreaterOrEqual(t, gas-left, static+3*keeper.ProofCryptoGas-1)
+			if invalid != 4 {
+				require.GreaterOrEqual(t, gas-left, static+3*keeper.ProofCryptoGas-1)
+			}
 			t.Logf("static=%d charged=%d", static, gas-left)
 			require.NoError(t, state.Commit())
 			updated, err := a.PolyStoreChainKeeper.Deals.Get(ctx, deal.Id)

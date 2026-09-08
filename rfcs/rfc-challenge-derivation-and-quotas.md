@@ -1,6 +1,6 @@
 # RFC: Challenge Derivation & Proof Quota Policy
 
-**Status:** Legacy v1 runtime; v2 primitives implemented, activation unavailable
+**Status:** Legacy v1 default; v2 primitives, SESSION runtime and frozen storage obligations implemented, coordinated activation unqualified
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
@@ -11,11 +11,14 @@
 
 The pure Go package `polystorechain/pkg/retrievalchallenge` implements this section's
 serialization, response windows, distinct sampling and off-domain evaluation points.
-It has **no runtime caller or activation switch**. It does not authenticate an
-actor, setup artifact, block hash or snapshot, perform KZG verification, enforce
-payment/coverage accounting, or establish that bytes were delivered. Legacy v1
-runtime behavior remains unchanged. Issues #254–#257 and #260 own integration and
-qualification; this first #255 S0 slice does not complete #255.
+The SESSION keeper now authenticates its actors and immutable snapshots, captures
+fixed committed anchors, enforces exact proof targets and settles once. See the
+[session wire/profile/recovery contract](../docs/retrieval-v2-session-profile.md).
+The [frozen storage obligation implementation](../docs/retrieval-v2-storage-audits.md)
+adds independent ACTIVE audits, pending repair readiness and the complete retained
+generation query. Scheduled activation defaults to disabled and remains unqualified
+until coordinated #256/#257 integration and #260 qualification pass. The pure package itself does not authenticate a setup,
+perform KZG verification or establish byte delivery. Deployment and qualification obligations of #255 remain open.
 
 This section supersedes the historical v1 assumptions below **for future v2
 activation**. In particular, ordinary retrieval cannot reduce independent storage
@@ -40,8 +43,8 @@ This fixture representation does not change the binary transcript.
 | version | U32 | 2 |
 | chain_id | LP UTF-8 | Authenticated chain ID; 1–50 bytes, valid UTF-8, no NUL |
 | setup_digest | 32 bytes | SHA-256 of the exact accepted trusted-setup artifact; expected digest authenticated by the protocol profile |
-| kind | U8 | 1 = paid session; 2 = assigned storage audit |
-| context_id | 32 bytes | Existing session ID for kind 1; all zero for kind 2, whose identity is the bound epoch/assignment tuple |
+| kind | U8 | 1 = paid session; 2 = ACTIVE storage audit; 3 = pending repair readiness |
+| context_id | 32 bytes | Versioned session ID from the session profile for kind 1; all zero for kinds 2 and 3, whose identity is the bound epoch/assignment tuple |
 | deal_id, generation | U64 each | Frozen deal and content generation |
 | root | 32 bytes | Frozen PolyFS root |
 | assigned, payee | 20 bytes each | Canonical raw account addresses; distinct fields even when equal |
@@ -70,7 +73,7 @@ separate MDUs; do not reinterpret old sessions. Each opened blob requires a fres
 opening, including a partially requested blob. `blob_count*131072` is billed
 encoded coverage, not observed transport bytes or logical payload length.
 
-For audits, payee equals assigned and context_id/session fields are zero. Audit
+For epoch kinds 2 and 3, payee equals assigned and context_id/session fields are zero. Their
 `sample_count` must be positive, no greater than U and no greater than **4096**.
 4096 is the inactive v2 hard allocation/work ceiling, not the quota policy or a
 claim that an active chain can process that many proofs. A profile may set a lower
@@ -161,9 +164,34 @@ leaf = slot*rows + p_i % rows
 The selected position is **p_i**, not ordinal i. Keep i separately in the point
 transcript and eventual coverage key. For replica, slot=0 and rows=64. The map and
 output use O(Q) storage; no U-sized array or retry-until-unique loop is allowed in
-production. Derive Q once per context/request and compare the entire expected
-ordered tuple list before FFI; do not regenerate Q for each proof. No lower-level
+production. Derive Q once per context/request. A multi-proof request compares the
+ordered tuple list before FFI. A one-tuple SystemProof request samples membership
+and derives only that tuple's field point, rather than all Q points. No lower-level
 sampling helper authenticates the supplied context hash or seed.
+
+### Frozen storage audit runtime (activation disabled by default)
+
+The [C4 implementation contract](../docs/retrieval-v2-storage-audits.md) defines the
+bounded ACTIVE/pending view, BeginBlock snapshots, shared anchor/generation
+retention, exact SystemProof admission and provider queries. The canonical kind-3
+extension preserves the explicit pending repair readiness workflow without
+allowing pending/organic/session/deputy work to masquerade as ACTIVE coverage.
+The independent golden fixture includes all three kinds.
+
+For ACTIVE kind 2, Q is independent of organic volume and frozen at S-1. Kind 3
+applies the frozen existing repair-readiness fraction to that quota. Neither kind
+can reuse an accepted ordinal, change a frozen context after the seed, or transfer
+an old obligation's failure to a replacement. A pending proof changes only its
+explicit readiness evidence and slot promotion guard, with no storage reward or
+provider-health credit. Missing seeds and empty windows produce no provider
+failure or fulfilled reward.
+
+The candidate cap is 64 combined assignments and 128 current/previous records;
+the funded retrieval-task cap of 64 is separate. The default activation parameter
+remains zero. The cap, quota min=max132 profile and local helper measurements do
+not qualify whole-chain capacity or funded release. Existing global EndBlock
+health, jail, underbonding, draining and rotation work still requires #260
+measurement. No permissionless beacon or stronger C1–C6 trust claim is added.
 
 ### Integration and migration gates (not implemented by this slice)
 

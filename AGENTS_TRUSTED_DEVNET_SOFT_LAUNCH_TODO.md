@@ -11,6 +11,15 @@ Conventions:
 - Before pushing, run the **Test gate** listed for that PR.
 - After merging a PR, come back and check it off in a follow-up PR.
 
+## Retrieval challenge activation gate (#254–#257, #260)
+
+- [ ] Keep version-2 activation disabled until the independent audit, prover/client
+  and integrated qualification prerequisites pass. Follow the
+  [session profile and recovery contract](docs/retrieval-v2-session-profile.md)
+  for the exact wire, bounds, retained generations and legacy liability disposition.
+  The live [#254 tracker](https://github.com/Polynomialstore/polystore/issues/254)
+  owns execution evidence and the unsupported module export/import recovery decision.
+
 ## Launch profile (decisions locked)
 
 - Devnet type: **Trusted devnet** (hub on VPS + remote SPs)

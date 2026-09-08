@@ -4,6 +4,7 @@ package polystorechain.polystorechain.v1;
 import "gogoproto/gogo.proto";
 import "cosmos/base/v1beta1/coin.proto";
 import "cosmos_proto/cosmos.proto";
+import "polystorechain/polystorechain/v1/params.proto";
 
 option go_package = "polystorechain/x/polystorechain/types";
 
@@ -488,6 +489,34 @@ message RetrievalSession {
   // payer is used for refund routing for non-escrow funded sessions.
   // It MAY be empty for DEAL_ESCROW sessions.
   string payer = 18 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint32 challenge_version = 19; // 0 is legacy, 2 is the coordinated fresh-challenge protocol.
+  // Canonical effective responder/payee, immutable even after terminal completion.
+  string authorized_proof_provider = 20 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  RetrievalChallengeSnapshot challenge_snapshot = 21;
+
+}
+
+// RetrievalChallengeSnapshot freezes only fields not already stored in its session.
+// Together they reconstruct pkg/retrievalchallenge.Context without current deal state.
+message RetrievalChallengeSnapshot {
+  string chain_id = 1;
+  bytes setup_digest = 2;
+  uint64 generation = 3;
+  uint32 layout = 4;
+  uint32 k = 5;
+  uint32 m = 6;
+  uint32 slot = 7;
+  uint64 metadata_mdus = 8;
+  uint64 user_mdus = 9;
+  uint64 deal_end = 10;
+}
+
+// ChallengeAnchor is shared by references to one predetermined committed block.
+// Empty seed means unavailable; it must never be replaced by a later block.
+message ChallengeAnchor {
+  bytes seed = 1;
+  uint64 session_references = 2;
+  uint64 audit_references = 3;
 }
 
 // AuditTask is a deterministic protocol-assigned retrieval task used for audit sessions.
@@ -553,4 +582,33 @@ message SessionChunkProof {
 message RetrievalSessionProof {
   DownloadSessionReceipt session_receipt = 1 [(gogoproto.nullable) = false];
   repeated SessionChunkProof chunks = 2 [(gogoproto.nullable) = false];
+}
+
+// FrozenStorageAssignment is the bounded ACTIVE view and an immutable epoch input.
+message FrozenStorageAssignment {
+  uint64 deal_id = 1;
+  string provider = 2;
+  bytes manifest_root = 3;
+  RetrievalChallengeSnapshot snapshot = 4;
+  uint32 kind = 5;
+  uint64 deal_start = 6;
+}
+
+// Only exact, distinct system challenges set bits in coverage. Organic receipts
+// and pending repair work never modify this object.
+message FrozenStorageAudit {
+  uint64 epoch_id = 1;
+  FrozenStorageAssignment assignment = 2;
+  uint64 sample_count = 3;
+  bytes coverage = 4;
+  uint64 accepted_count = 5;
+  uint64 missed_epochs = 6;
+}
+
+message FrozenStorageAuditEpoch {
+  uint64 epoch_id = 1;
+  uint64 epoch_length = 2;
+  uint32 obligation_count = 3;
+  Params params = 4;
+  bool finalized = 5;
 }

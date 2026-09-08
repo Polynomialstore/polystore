@@ -184,7 +184,7 @@ func initFixtureWithBankKeeper(t *testing.T, bank types.BankKeeper) *fixture {
 		t.Fatalf("failed to set params: %v", err)
 	}
 
-	return &fixture{ctx: ctx, keeper: k, addressCodec: addressCodec}
+	return &fixture{ctx: ctx, keeper: k, addressCodec: addressCodec, storeService: storeService}
 }
 
 func TestGamma4_CreateDeal_EnforcesMinDuration(t *testing.T) {

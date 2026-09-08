@@ -256,6 +256,18 @@ func (k Keeper) providerHealthRewardIneligibility(ctx sdk.Context, provider type
 }
 
 func (k Keeper) updateProviderHealthFromEvidence(ctx sdk.Context, ev types.EvidenceCase) error {
+	// V2 repair proofs only establish the explicit promotion guard. Keep their
+	// readiness/slot evidence without turning it into provider health credit.
+	if ev.Reason == "slot_repair_ready" {
+		active, err := k.RetrievalV2Active(ctx)
+		if err != nil {
+			return err
+		}
+		if active {
+			return nil
+		}
+	}
+
 	providerAddr := strings.TrimSpace(ev.Provider)
 	if providerAddr == "" {
 		return nil
