@@ -41,6 +41,10 @@ jobs:
         working-directory: polystore-website
         run: npx playwright install --with-deps chromium
 
+      - name: Test conditional upload polling without a devnet
+        working-directory: polystore-website
+        run: npx playwright test tests/mode2-stripe.spec.ts tests/gateway-absent-ui.spec.ts tests/mode2-setup-bump-live.spec.ts --grep 'upload completion polling'
+
       - name: Start Dev Server
         working-directory: polystore-website
         run: |
