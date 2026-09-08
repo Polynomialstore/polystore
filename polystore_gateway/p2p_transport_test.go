@@ -42,9 +42,6 @@ func buildTestSlab(t *testing.T, filePath string, fileContent []byte) ManifestRo
 		t.Fatalf("SetRoot(user) failed: %v", err)
 	}
 	mdu0Data, _ := b.Bytes()
-	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
-		t.Fatalf("materialize MDU #0 root table failed: %v", err)
-	}
 	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
 		t.Fatalf("ComputeMduMerkleRoot failed: %v", err)

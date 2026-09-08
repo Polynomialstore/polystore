@@ -1391,16 +1391,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileRecordPath := strings.TrimSpace(recordPath)
-	if fileRecordPath == "" {
-		fileRecordPath = strings.TrimSpace(filename)
+	fileRecordPath, pathErr := normalizePolyfsRecordBasename(recordPath, filename)
+	if pathErr != nil {
+		writeUploadError(uploadFailure{status: http.StatusBadRequest, message: pathErr.Error()})
+		return
 	}
-	if fileRecordPath != "" {
-		if validated, err := validatePolyfsFilePath(fileRecordPath); err == nil {
-			fileRecordPath = validated
-		}
-	}
-	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filename)
 
 	if dealIDStr == "" && dealIDQueryOK {
 		dealIDStr = strconv.FormatUint(dealIDQuery, 10)
@@ -1547,7 +1542,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 							fileSize = uint64(info.Size())
 						}
 						if b != nil {
-							size = totalSizeBytesFromMdu0(b)
+							var sizeErr error
+							size, sizeErr = totalSizeBytesFromMdu0(b)
+							if sizeErr != nil {
+								return nil, sizeErr
+							}
 						}
 					default:
 						b, manifestRoot, allocLen, err2 := IngestNewDeal(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
@@ -1567,7 +1566,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 							fileSize = uint64(info.Size())
 						}
 						if b != nil {
-							size = totalSizeBytesFromMdu0(b)
+							var sizeErr error
+							size, sizeErr = totalSizeBytesFromMdu0(b)
+							if sizeErr != nil {
+								return nil, sizeErr
+							}
 						}
 					}
 				}
@@ -1607,7 +1610,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 						fileSize = uint64(info.Size())
 					}
 					if b != nil {
-						size = totalSizeBytesFromMdu0(b)
+						var sizeErr error
+						size, sizeErr = totalSizeBytesFromMdu0(b)
+						if sizeErr != nil {
+							return nil, sizeErr
+						}
 					}
 				}
 			}
@@ -1640,7 +1647,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					fileSize = uint64(info.Size())
 				}
 				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
+					var sizeErr error
+					size, sizeErr = totalSizeBytesFromMdu0(b)
+					if sizeErr != nil {
+						return nil, sizeErr
+					}
 				}
 			default:
 				b, manifestRoot, allocLen, err2 := IngestNewDeal(ctx, ingestPath, maxMdus, fileRecordPath, fileFlags)
@@ -1660,7 +1671,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 					fileSize = uint64(info.Size())
 				}
 				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
+					var sizeErr error
+					size, sizeErr = totalSizeBytesFromMdu0(b)
+					if sizeErr != nil {
+						return nil, sizeErr
+					}
 				}
 			}
 		}
@@ -1793,25 +1808,28 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		log.Printf("GatewayUpload encode error: %v", err)
 	}
 }
-func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) uint64 {
+func totalSizeBytesFromMdu0(b *crypto_ffi.Mdu0Builder) (uint64, error) {
 	if b == nil {
-		return 0
+		return 0, errors.New("nil mdu0 builder")
 	}
 	var total uint64
 	count := b.GetRecordCount()
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			return 0, err
 		}
 		// Path[0]==0 marks a tombstone in PolyFS V1.
 		if rec.Path[0] == 0 {
 			continue
 		}
 		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
+		if total > ^uint64(0)-length {
+			return 0, errors.New("file size sum overflow")
+		}
 		total += length
 	}
-	return total
+	return total, nil
 }
 
 // GatewayCreateDeal accepts a spec-aligned payload and creates a deal on-chain.
@@ -4421,7 +4439,8 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			writeJSONError(w, http.StatusInternalServerError, "invalid file map", "")
+			return
 		}
 		// Tombstone slot.
 		if rec.Path[0] == 0 {
@@ -4585,109 +4604,33 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 
 	var fileCount uint32
 	var totalSize uint64
-	var maxEnd uint64
 	count := b.GetRecordCount()
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			writeJSONError(w, http.StatusInternalServerError, "invalid file map", "")
+			return
 		}
 		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		end := rec.StartOffset + length
-		if end > maxEnd {
-			maxEnd = end
-		}
 		// Path[0]==0 marks a tombstone in PolyFS V1.
 		if rec.Path[0] == 0 {
 			continue
 		}
 		fileCount++
+		if totalSize > ^uint64(0)-length {
+			writeJSONError(w, http.StatusInternalServerError, "file size sum overflow", "")
+			return
+		}
 		totalSize += length
 	}
 
-	userMdus := uint64(0)
-	if maxEnd > 0 {
-		userMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+	meta, err := loadSlabMetadataWithFallback(dealDir)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid slab metadata", err.Error())
+		return
 	}
-
-	rootTableBytes := 16 * uint64(types.BLOB_SIZE)
-	totalRoots := uint64(0)
-	if uint64(len(mdu0Data)) >= rootTableBytes {
-		for off := uint64(0); off+32 <= rootTableBytes; off += 32 {
-			chunk := mdu0Data[off : off+32]
-			allZero := true
-			for _, v := range chunk {
-				if v != 0 {
-					allZero = false
-					break
-				}
-			}
-			if !allZero {
-				totalRoots++
-			}
-		}
-	}
-
-	totalMdus := uint64(0)
-	witnessMdus := uint64(0)
-	if totalRoots > 0 {
-		if totalRoots < userMdus {
-			http.Error(w, "invalid slab layout: root table < user mdus", http.StatusInternalServerError)
-			return
-		}
-		witnessMdus = totalRoots - userMdus
-		totalMdus = 1 + witnessMdus + userMdus
-	} else {
-		entries, err := os.ReadDir(dealDir)
-		if err != nil {
-			log.Printf("GatewaySlab: failed to read slab dir: %v", err)
-			http.Error(w, "failed to read slab", http.StatusInternalServerError)
-			return
-		}
-
-		idxSet := map[uint64]struct{}{}
-		var maxIdx uint64
-		for _, e := range entries {
-			name := e.Name()
-			if !strings.HasPrefix(name, "mdu_") || !strings.HasSuffix(name, ".bin") {
-				continue
-			}
-			idxStr := strings.TrimSuffix(strings.TrimPrefix(name, "mdu_"), ".bin")
-			idx, err := strconv.ParseUint(idxStr, 10, 64)
-			if err != nil {
-				continue
-			}
-			idxSet[idx] = struct{}{}
-			if idx > maxIdx {
-				maxIdx = idx
-			}
-		}
-
-		if len(idxSet) == 0 {
-			http.Error(w, "slab not found", http.StatusNotFound)
-			return
-		}
-		if _, ok := idxSet[0]; !ok {
-			http.Error(w, "invalid slab layout: mdu_0.bin missing", http.StatusInternalServerError)
-			return
-		}
-
-		totalMdus = maxIdx + 1
-		if uint64(len(idxSet)) != totalMdus {
-			http.Error(w, "invalid slab layout: non-contiguous mdu files", http.StatusInternalServerError)
-			return
-		}
-		if totalMdus < 1 {
-			http.Error(w, "invalid slab layout", http.StatusInternalServerError)
-			return
-		}
-		if totalMdus-1 < userMdus {
-			http.Error(w, "invalid slab layout: file table exceeds user mdus", http.StatusInternalServerError)
-			return
-		}
-		witnessMdus = (totalMdus - 1) - userMdus
-	}
-
+	totalMdus, witnessMdus := meta.TotalMdus, meta.WitnessMdus
+	userMdus := meta.UserMdus
 	segments := []slabSegment{
 		{Kind: "mdu0", StartIndex: 0, Count: 1, SizeBytes: types.MDU_SIZE},
 	}

@@ -145,7 +145,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		}
 	}
 
-	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath, err = normalizePolyfsRecordBasename(fileRecordPath, filePath)
+	if err != nil {
+		return nil, "", err
+	}
 
 	commitmentsPerMdu := stripe.leafCount
 	builder := crypto_ffi.NewMdu0BuilderWithCommitments(userMdus, commitmentsPerMdu)
@@ -289,7 +292,6 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		profile.addDuration("mode2_encode_user_mdus_ms", time.Since(encodeStarted))
 	}
 
-	rootsByMduIndex := make(map[uint64][]byte, witnessCount+userMdus)
 	witnessBytesPerUser := uint64(0)
 	for i := uint64(0); i < userMdus; i++ {
 		root := userRoots[i]
@@ -299,7 +301,6 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		if err := builder.SetRoot(witnessCount+i, root); err != nil {
 			return nil, "", fmt.Errorf("set user root %d: %w", i, err)
 		}
-		rootsByMduIndex[uint64(1)+witnessCount+i] = root
 
 		wf := witnessFlats[i]
 		if len(wf) == 0 {
@@ -344,7 +345,7 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		if err := builder.SetRoot(i, root); err != nil {
 			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
 		}
-		rootsByMduIndex[uint64(1)+i] = root
+
 		if err := writeSparseArtifactFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, int64(len(encoded)), 0o644); err != nil {
 			return nil, "", err
 		}
@@ -360,16 +361,16 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err := builder.AppendFileWithFlags(fileRecordPath, fileSize, 0, fileFlags); err != nil {
 		return nil, "", err
 	}
-	sizeBytes := totalSizeBytesFromMdu0(builder)
+	sizeBytes, err := totalSizeBytesFromMdu0(builder)
+	if err != nil {
+		return nil, "", err
+	}
 
 	manifestStarted := time.Now()
 	// Write MDU #0 and compute its root.
 	mdu0Bytes, err := builder.Bytes()
 	if err != nil {
 		return nil, "", err
-	}
-	if err := materializeMdu0RootTable(mdu0Bytes, rootsByMduIndex); err != nil {
-		return nil, "", fmt.Errorf("materialize MDU #0 root table: %w", err)
 	}
 	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, int64(len(mdu0Bytes)), 0o644); err != nil {
 		return nil, "", err
@@ -831,7 +832,8 @@ func mode2BuildArtifactsAppend(
 	for i := uint32(0); i < recordCount; i++ {
 		rec, err := tmpBuilder.GetRecord(i)
 		if err != nil {
-			continue
+			tmpBuilder.Free()
+			return nil, "", err
 		}
 		if rec.Path[0] == 0 {
 			continue
@@ -846,7 +848,7 @@ func mode2BuildArtifactsAppend(
 
 	oldUserMdus := uint64(0)
 	if maxEnd > 0 {
-		oldUserMdus = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+		oldUserMdus = 1 + (maxEnd-1)/RawMduCapacity
 	}
 	if oldUserMdus == 0 {
 		return nil, "", fmt.Errorf("existing Mode 2 slab has no user MDUs")
@@ -866,7 +868,10 @@ func mode2BuildArtifactsAppend(
 	}
 	totalUserMdus := oldUserMdus + newUserMdus
 
-	fileRecordPath = normalizePolyfsRecordBasename(fileRecordPath, filePath)
+	fileRecordPath, err = normalizePolyfsRecordBasename(fileRecordPath, filePath)
+	if err != nil {
+		return nil, "", err
+	}
 
 	// Stage artifacts under uploads/deals/<dealID>/.staging-<ts>/, then atomically rename to the manifest-root key.
 	baseDealDir := filepath.Join(uploadDir, "deals", strconv.FormatUint(dealID, 10))
@@ -966,7 +971,10 @@ func mode2BuildArtifactsAppend(
 	if err := builder.AppendFileWithFlags(fileRecordPath, newFileSize, newFileOffset, fileFlags); err != nil {
 		return nil, "", fmt.Errorf("append file record failed: %w", err)
 	}
-	sizeBytes := totalSizeBytesFromMdu0(builder)
+	sizeBytes, err := totalSizeBytesFromMdu0(builder)
+	if err != nil {
+		return nil, "", err
+	}
 
 	// Read and shard the new file into fresh stripes + witness commitments.
 	f, err := os.Open(filePath)
@@ -1111,7 +1119,7 @@ func mode2BuildArtifactsAppend(
 
 	// Build witness MDUs from the concatenated witness commitments.
 	witnessStarted := time.Now()
-	rootsByMduIndex := make(map[uint64][]byte, witnessCount+totalUserMdus)
+
 	witnessRoots := make([][]byte, 0, witnessCount)
 	for i := uint64(0); i < witnessCount; i++ {
 		start := i * RawMduCapacity
@@ -1137,7 +1145,7 @@ func mode2BuildArtifactsAppend(
 		if err := builder.SetRoot(i, root); err != nil {
 			return nil, "", fmt.Errorf("set witness root %d: %w", i, err)
 		}
-		rootsByMduIndex[uint64(1)+i] = root
+
 		if err := writeSparseArtifactFile(filepath.Join(stagingDir, fmt.Sprintf("mdu_%d.bin", 1+i)), encoded, int64(len(encoded)), 0o644); err != nil {
 			return nil, "", err
 		}
@@ -1154,7 +1162,7 @@ func mode2BuildArtifactsAppend(
 		if err := builder.SetRoot(witnessCount+uint64(i), root); err != nil {
 			return nil, "", fmt.Errorf("set user root %d: %w", i, err)
 		}
-		rootsByMduIndex[uint64(1)+witnessCount+uint64(i)] = root
+
 	}
 
 	manifestStarted := time.Now()
@@ -1162,9 +1170,6 @@ func mode2BuildArtifactsAppend(
 	mdu0Bytes, err := builder.Bytes()
 	if err != nil {
 		return nil, "", err
-	}
-	if err := materializeMdu0RootTable(mdu0Bytes, rootsByMduIndex); err != nil {
-		return nil, "", fmt.Errorf("materialize MDU #0 root table: %w", err)
 	}
 	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, int64(len(mdu0Bytes)), 0o644); err != nil {
 		return nil, "", err

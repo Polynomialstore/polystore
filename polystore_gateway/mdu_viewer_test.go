@@ -117,11 +117,11 @@ func TestGatewayManifestInfo_Basic(t *testing.T) {
 
 	want1 := "0x" + hex.EncodeToString(root1[:])
 	want2 := "0x" + hex.EncodeToString(root2[:])
-	if resp.Roots[1].RootHex != want1 {
-		t.Fatalf("expected roots[1] root_hex %q, got %q", want1, resp.Roots[1].RootHex)
+	if resp.Roots[1].RootTableCellHex != want1 {
+		t.Fatalf("expected roots[1] root_hex %q, got %q", want1, resp.Roots[1].RootTableCellHex)
 	}
-	if resp.Roots[2].RootHex != want2 {
-		t.Fatalf("expected roots[2] root_hex %q, got %q", want2, resp.Roots[2].RootHex)
+	if resp.Roots[2].RootTableCellHex != want2 {
+		t.Fatalf("expected roots[2] root_hex %q, got %q", want2, resp.Roots[2].RootTableCellHex)
 	}
 }
 

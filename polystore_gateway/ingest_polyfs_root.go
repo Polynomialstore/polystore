@@ -19,15 +19,11 @@ func decodeMduRootHex(label, rootHex string) ([]byte, error) {
 	return rootBytes, nil
 }
 
-// computePolyfsManifestArtifacts materializes the MDU #0 root-table bytes,
-// computes the canonical PolyFS root from the resulting MDU #0 Merkle root, and
+// computePolyfsManifestArtifacts consumes canonical builder bytes, computes
+// the PolyFS root from the MDU #0 Merkle root, and
 // returns the legacy manifest blob used by compatibility/debug proof paths.
-//
-// mdu0Bytes is mutated in-place and must be written after this function returns.
-func computePolyfsManifestArtifacts(mdu0Bytes []byte, rootsByMduIndex map[uint64][]byte, orderedSlabRoots [][]byte) (ManifestRoot, []byte, error) {
-	if err := materializeMdu0RootTable(mdu0Bytes, rootsByMduIndex); err != nil {
-		return ManifestRoot{}, nil, fmt.Errorf("materialize MDU #0 root table: %w", err)
-	}
+// The input is not modified.
+func computePolyfsManifestArtifacts(mdu0Bytes []byte, orderedSlabRoots [][]byte) (ManifestRoot, []byte, error) {
 
 	mdu0Root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Bytes)
 	if err != nil {

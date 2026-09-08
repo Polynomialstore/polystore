@@ -56,9 +56,6 @@ func TestGatewayFetch_ByPath(t *testing.T) {
 	}
 
 	mdu0Data, _ := b.Bytes()
-	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
-		t.Fatalf("materialize MDU #0 root table failed: %v", err)
-	}
 	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
 		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)
@@ -158,9 +155,6 @@ func TestGatewayFetch_DeputyUsesDealProviderWhenLocalProviderMissing(t *testing.
 	}
 
 	mdu0Data, _ := b.Bytes()
-	if err := materializeMdu0RootTable(mdu0Data, map[uint64][]byte{uint64(1) + b.GetWitnessCount(): mduRootFr}); err != nil {
-		t.Fatalf("materialize MDU #0 root table failed: %v", err)
-	}
 	rootBytes, err := crypto_ffi.ComputeMduMerkleRoot(mdu0Data)
 	if err != nil {
 		t.Fatalf("ComputeMduMerkleRoot(mdu0) failed: %v", err)

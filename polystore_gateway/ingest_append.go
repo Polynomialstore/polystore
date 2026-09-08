@@ -54,7 +54,8 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	for i := uint32(0); i < recordCount; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
-			continue
+			b.Free()
+			return nil, "", 0, err
 		}
 		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
 		end := rec.StartOffset + length
@@ -64,7 +65,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 	oldUserCount := uint64(0)
 	if maxEnd > 0 {
-		oldUserCount = (maxEnd + RawMduCapacity - 1) / RawMduCapacity
+		oldUserCount = 1 + (maxEnd-1)/RawMduCapacity
 	}
 
 	// Shard new file to produce new User Data MDUs.
@@ -76,7 +77,11 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Append a new file record starting at next MDU boundary.
-	baseName := normalizePolyfsRecordBasename(recordPath, filePath)
+	baseName, err := normalizePolyfsRecordBasename(recordPath, filePath)
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	if err := b.AppendFileWithFlags(baseName, shardOut.FileSize, oldUserCount*RawMduCapacity, fileFlags); err != nil {
 		b.Free()
 		return nil, "", 0, fmt.Errorf("AppendFileRecord failed: %w", err)
@@ -108,7 +113,6 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, err
 	}
 
-	rootsByMduIndex := make(map[uint64][]byte, len(witnessRoots)+len(userRoots))
 	orderedSlabRoots := make([][]byte, 0, len(witnessRoots)+len(userRoots))
 
 	// Update Witness roots in MDU #0 (indices 0..W-1).
@@ -122,8 +126,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (witness %d) failed: %w", i, err)
 		}
-		slabMduIndex := uint64(1) + uint64(i)
-		rootsByMduIndex[slabMduIndex] = rootBytes
+
 		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
@@ -139,8 +142,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 			b.Free()
 			return nil, "", 0, fmt.Errorf("SetRoot (user %d) failed: %w", i, err)
 		}
-		slabMduIndex := uint64(1) + witnessMduCount + uint64(i)
-		rootsByMduIndex[slabMduIndex] = rootBytes
+
 		orderedSlabRoots = append(orderedSlabRoots, rootBytes)
 	}
 
@@ -151,7 +153,7 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 		return nil, "", 0, err
 	}
 
-	parsedNewRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, rootsByMduIndex, orderedSlabRoots)
+	parsedNewRoot, manifestBlob, err := computePolyfsManifestArtifacts(mdu0Bytes, orderedSlabRoots)
 	if err != nil {
 		b.Free()
 		return nil, "", 0, err

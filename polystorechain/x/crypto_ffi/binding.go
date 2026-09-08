@@ -135,6 +135,8 @@ int polystore_verify_chained_proof(
 	void polystore_mdu0_builder_free(Mdu0BuilderPtr ptr);
 	Mdu0BuilderPtr polystore_mdu0_builder_load(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus);
 	Mdu0BuilderPtr polystore_mdu0_builder_load_with_commitments(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	Mdu0BuilderPtr polystore_mdu0_builder_load_legacy_recovery(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
+	Mdu0BuilderPtr polystore_mdu0_builder_stage_v2_from_trusted_legacy(const unsigned char* data_ptr, size_t len, unsigned long long max_user_mdus, unsigned long long commitments_per_mdu);
 	int polystore_mdu0_builder_bytes(Mdu0BuilderPtr ptr, unsigned char* out_ptr, size_t out_len);
 	int polystore_mdu0_append_file(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset);
 	int polystore_mdu0_append_file_with_flags(Mdu0BuilderPtr ptr, const char* path_ptr, unsigned long long size, unsigned long long start_offset, unsigned char flags);
@@ -157,6 +159,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"unsafe"
 
 	"polystorechain/x/polystorechain/types" // Import types for MDU_SIZE
@@ -183,12 +186,11 @@ type FileRecordV1 struct {
 	Path           [232]byte
 }
 
-func PackLengthAndFlags(length uint64, flags uint8) uint64 {
-	// Clear top 8 bits of length just in case
-	cleanLength := length & 0x00FFFFFFFFFFFFFF
-	// Shift flags to top
-	packedFlags := uint64(flags) << 56
-	return packedFlags | cleanLength
+func PackLengthAndFlags(length uint64, flags uint8) (uint64, error) {
+	if length > 0x00FFFFFFFFFFFFFF {
+		return 0, errors.New("file length exceeds 56-bit field")
+	}
+	return uint64(flags)<<56 | length, nil
 }
 
 func UnpackLengthAndFlags(val uint64) (length uint64, flags uint8) {
@@ -203,11 +205,17 @@ type Mdu0Builder struct {
 
 func NewMdu0Builder(maxUserMdus uint64) *Mdu0Builder {
 	ptr := C.polystore_mdu0_builder_new(C.ulonglong(maxUserMdus))
+	if ptr == nil {
+		return nil
+	}
 	return &Mdu0Builder{ptr: ptr}
 }
 
 func NewMdu0BuilderWithCommitments(maxUserMdus uint64, commitmentsPerMdu uint64) *Mdu0Builder {
 	ptr := C.polystore_mdu0_builder_new_with_commitments(C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
+	if ptr == nil {
+		return nil
+	}
 	return &Mdu0Builder{ptr: ptr}
 }
 
@@ -238,6 +246,33 @@ func LoadMdu0BuilderWithCommitments(data []byte, maxUserMdus uint64, commitments
 	return &Mdu0Builder{ptr: ptr}, nil
 }
 
+// LoadLegacyMdu0ForRecovery exposes the original raw FAT without authorizing
+// secured retrieval or modifying its bytes. The returned builder is read-only.
+func LoadLegacyMdu0ForRecovery(data []byte, maxUserMdus, commitmentsPerMdu uint64) (*Mdu0Builder, error) {
+	if len(data) != types.MDU_SIZE {
+		return nil, errors.New("invalid size")
+	}
+	ptr := C.polystore_mdu0_builder_load_legacy_recovery((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
+	if ptr == nil {
+		return nil, errors.New("invalid legacy recovery metadata")
+	}
+	return &Mdu0Builder{ptr: ptr}, nil
+}
+
+// StageMdu0V2FromTrustedLegacy creates a separate canonical generation. The caller
+// must establish the raw source's authority independently of its legacy KZG root
+// and activate the result through the existing content-generation transaction.
+func StageMdu0V2FromTrustedLegacy(data []byte, maxUserMdus, commitmentsPerMdu uint64) (*Mdu0Builder, error) {
+	if len(data) != types.MDU_SIZE {
+		return nil, errors.New("invalid size")
+	}
+	ptr := C.polystore_mdu0_builder_stage_v2_from_trusted_legacy((*C.uchar)(unsafe.Pointer(&data[0])), C.size_t(len(data)), C.ulonglong(maxUserMdus), C.ulonglong(commitmentsPerMdu))
+	if ptr == nil {
+		return nil, errors.New("legacy metadata cannot be staged as FAT v2")
+	}
+	return &Mdu0Builder{ptr: ptr}, nil
+}
+
 func (b *Mdu0Builder) Free() {
 	if b.ptr != nil {
 		C.polystore_mdu0_builder_free(b.ptr)
@@ -259,6 +294,9 @@ func (b *Mdu0Builder) AppendFile(path string, size uint64, startOffset uint64) e
 }
 
 func (b *Mdu0Builder) AppendFileWithFlags(path string, size uint64, startOffset uint64, flags uint8) error {
+	if len(path) == 0 || len(path) > 232 || strings.ContainsRune(path, '\x00') {
+		return errors.New("invalid file path length or NUL")
+	}
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
 	res := C.polystore_mdu0_append_file_with_flags(b.ptr, cPath, C.ulonglong(size), C.ulonglong(startOffset), C.uchar(flags))
@@ -279,6 +317,7 @@ func (b *Mdu0Builder) SetRoot(index uint64, root []byte) error {
 	return nil
 }
 
+// GetRoot returns the stored canonical Fr cell, not the original unreduced digest.
 func (b *Mdu0Builder) GetRoot(index uint64) ([]byte, error) {
 	out := make([]byte, 32)
 	res := C.polystore_mdu0_get_root(b.ptr, C.ulonglong(index), (*C.uchar)(unsafe.Pointer(&out[0])))
