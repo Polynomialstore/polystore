@@ -840,8 +840,6 @@ func main() {
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("failed to create upload dir %s: %v", uploadDir, err)
 	}
-	startGenerationRetention()
-
 	if !routerMode {
 		if err := initSessionDB(sessionDBPath); err != nil {
 			log.Fatalf("failed to open session db %s: %v", sessionDBPath, err)
@@ -860,6 +858,8 @@ func main() {
 
 		startSystemLivenessProver()
 	}
+	// Retention reads the session DB; publish it before starting maintenance.
+	startGenerationRetention()
 
 	r := mux.NewRouter()
 	// Legacy S3-style interface
