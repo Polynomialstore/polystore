@@ -101,7 +101,12 @@ PYHOME
 )"
 BIN="$CHAIN_HOME/polystorechaind"
 NODE_PID=""
+ARTIFACT_INITIALIZED=0
 cleanup() {
+  local exit_code=$?
+  if [ "$exit_code" -ne 0 ] && [ "$ARTIFACT_INITIALIZED" -eq 1 ]; then
+    python3 "$ARTIFACT_HELPER" abort "$OUTPUT" "$exit_code" || log "could not mark failed run aborted"
+  fi
   if [ -n "$NODE_PID" ] && kill -0 "$NODE_PID" 2>/dev/null; then
     log "stopping node pid $NODE_PID"
     kill "$NODE_PID" 2>/dev/null || true
@@ -416,6 +421,7 @@ json.dump({"schema_version": 2, "status": "running", "provenance": json.loads(os
   "started_unix_ns": time.time_ns()}, "blocks": [], "txs": [], "session_states": []},
   open(sys.argv[1], "w"), indent=1)
 PY
+ARTIFACT_INITIALIZED=1
 
 log "registering three funded providers"
 for i in "${!PROVIDER_ADDRS[@]}"; do
@@ -539,6 +545,8 @@ PY
     fi
   else
     log "session $i open transaction failed (recorded)"
+    record_skip submit-proof "$i" "open transaction failed; proof skipped"
+    record_skip confirm-session "$i" "open transaction failed; confirmation skipped"
   fi
 done
 sample_block

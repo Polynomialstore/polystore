@@ -154,6 +154,16 @@ def opened_session_id(tx):
     return raw[len(prefix):].hex()
 
 
+def abort_run(path, exit_code):
+    path = Path(path)
+    code = integer(exit_code, "exit_code", 1, 255)
+    doc = json.loads(path.read_text())
+    if doc.get("status") != "aborted_unknown_transaction":
+        doc["status"] = "aborted"
+    doc["exit_code"] = code
+    path.write_text(json.dumps(doc, indent=1))
+
+
 def session_state(value, session_id, deal, owner, provider, nonce, count, manifest, height):
     session = value["session"]
     if base64.b64decode(session["session_id"], validate=True) != bytes.fromhex(session_id.removeprefix("0x")):
@@ -210,6 +220,8 @@ def main():
         print(json.dumps(profile(*args[:4], json.loads(Path(args[4]).read_text()))))
     elif action == "provenance":
         print(json.dumps(provenance(*args)))
+    elif action == "abort":
+        abort_run(*args)
     elif action == "summary":
         path = Path(args[0])
         doc = json.loads(path.read_text())

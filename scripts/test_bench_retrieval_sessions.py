@@ -70,13 +70,17 @@ class BenchmarkHomeTest(unittest.TestCase):
             cargo.write_text("#!/bin/sh\nexit 89\n")
             cargo.chmod(0o755)
             home = root / "new-home"
-            env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home))
+            output = root / "previous-result.json"
+            previous = '{"status":"finished","sentinel":"preserve"}\n'
+            output.write_text(previous)
+            env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home), POLYSTORE_BENCH_OUTPUT=str(output))
             for keep in (False, True):
                 with self.subTest(keep=keep):
                     result = subprocess.run(["bash", str(self.script)] + (["--keep-home"] if keep else []), env=env, capture_output=True, text=True, timeout=10)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("cargo build --release failed", result.stderr)
                     self.assertEqual(home.is_dir(), keep)
+                    self.assertEqual(output.read_text(), previous)
 
     def test_binary_is_built_inside_each_unique_default_home(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -162,6 +166,34 @@ exec(compile(code, "<benchmark home>", "exec"))
 
 
 class BenchmarkArtifactTest(unittest.TestCase):
+    def test_abort_retains_outcomes_and_specific_unknown_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            for status, expected, code in (("running", "aborted", 1),
+                                           ("running", "aborted", 143),
+                                           ("finished", "aborted", 1),
+                                           ("aborted_unknown_transaction", "aborted_unknown_transaction", 1)):
+                with self.subTest(status=status, code=code):
+                    txs = [{"kind": "register-provider", "outcome": "checktx_rejected", "code": 11}]
+                    path.write_text(json.dumps({"status": status, "txs": txs}))
+                    artifact.abort_run(path, code)
+                    self.assertEqual(json.loads(path.read_text()), {"status": expected, "txs": txs, "exit_code": code})
+            with self.assertRaises(ValueError):
+                artifact.abort_run(path, 0)
+
+    def test_failed_open_accounts_for_each_unexecuted_stage(self):
+        doc = {"config": {"sessions": 1, "proofs_per_session": 2}, "txs": [
+            {"index": 1, "kind": "open-session", "outcome": "checktx_rejected"},
+            {"index": 1, "kind": "submit-proof", "outcome": "skipped"},
+            {"index": 1, "kind": "confirm-session", "outcome": "skipped"},
+        ]}
+        got = artifact.summarize(doc, 1, 1_000_000_001)
+        self.assertEqual(got["load_records"], 3)
+        self.assertEqual(got["load_txs_sent"], 1)
+        self.assertEqual(got["load_outcomes"]["skipped"], 2)
+        self.assertEqual(got["sessions_completed"], 0)
+        self.assertEqual(got["proofs_committed"], 0)
+
     def test_committed_requires_exact_identity_height_code_and_gas(self):
         valid = {"txhash": "AB" * 32, "height": "1", "code": 0, "gas_wanted": "500", "gas_used": "400"}
         self.assertEqual(artifact.committed_tx(valid, "ab" * 32), valid)

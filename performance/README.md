@@ -128,7 +128,11 @@ height, code, gas wanted, and gas used. An unknown outcome aborts before the
 signer is reused. Completion requires committed open, proof and confirmation
 transactions plus the matching session queried as `COMPLETED` at the committed
 confirmation height. Missing or malformed session queries do not count as
-completion. Counters distinguish setup from load and count actual committed
+completion. Failed opens explicitly record both unexecuted downstream stages.
+An unsuccessful exit marks this run's initialized artifact `aborted` with its
+exit code, preserving the more specific `aborted_unknown_transaction` status.
+Failures before artifact initialization leave previous output files untouched.
+Counters distinguish setup from load and count actual committed
 proofs and gas. Timing uses an OS monotonic clock shared between CLI processes,
 including Python 3.9 on macOS; the wall interval includes pacing, CLI submission,
 CheckTx, inclusion, and final session queries.
