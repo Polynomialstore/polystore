@@ -167,7 +167,11 @@ struct Fixture {
     root_table: Mdu0RootTableProof,
     proofs: Vec<BlobProof>,
     leaf_count: u64,
+    mdu_index: u64,
 }
+
+const CONTEXT_HASH: [u8; 32] = [17; 32];
+const ANCHOR_SEED: [u8; 32] = [29; 32];
 
 fn nonidentity(bytes: &[u8; 48]) {
     let point = Option::<bls12_381::G1Affine>::from(bls12_381::G1Affine::from_compressed(bytes))
@@ -178,18 +182,30 @@ fn nonidentity(bytes: &[u8; 48]) {
     );
 }
 
-fn fixture(ctx: &KzgContext, k: usize, m: usize) -> Fixture {
+fn fixture(
+    ctx: &KzgContext,
+    k: usize,
+    m: usize,
+    fresh: bool,
+    mdu_index: u64,
+    min_leaves: usize,
+) -> Fixture {
     // Same canonical nonconstant field pattern as setupBenchRetrievalEnv in Go.
     let mut data = vec![0u8; MDU_SIZE];
     for (i, cell) in data.chunks_exact_mut(32).enumerate() {
         cell[31] = (1 + i % 251) as u8;
     }
     let expanded = expand_mdu_encoded(ctx, &data, k, m).expect("RS expansion");
-    let commitments: Vec<[u8; 48]> = expanded
+    let mut commitments: Vec<[u8; 48]> = expanded
         .witness
         .iter()
         .map(|c| c.as_slice().try_into().unwrap())
         .collect();
+    // The maximum-depth probe pads only the authenticated Merkle statement.
+    // It does not claim a complete RS allocation or qualify that storage profile.
+    if min_leaves > commitments.len() {
+        commitments.resize(min_leaves, bls12_381::G1Affine::identity().to_compressed());
+    }
     let leaves: Vec<_> = commitments
         .iter()
         .map(|c| Blake2s256Hasher::hash(c))
@@ -197,13 +213,13 @@ fn fixture(ctx: &KzgContext, k: usize, m: usize) -> Fixture {
     let tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&leaves);
     let mdu_root = tree.root().unwrap();
     let mut mdu0 = vec![0u8; MDU_SIZE];
-    // MDU index 2 is root-table cell 1, as in the chain's existing fixtures.
-    mdu0[32..64].copy_from_slice(&encode_mdu_root_for_root_table(&mdu_root).unwrap());
+    let offset = usize::try_from(mdu_index - 1).unwrap() * 32;
+    mdu0[offset..offset + 32].copy_from_slice(&encode_mdu_root_for_root_table(&mdu_root).unwrap());
     let root = ctx
         .create_mdu_merkle_root(&ctx.mdu_to_kzg_commitments(&mdu0).unwrap())
         .unwrap();
     let root_table = ctx
-        .compute_mdu0_root_table_proof(&mdu0, 2, &mdu_root)
+        .compute_mdu0_root_table_proof(&mdu0, mdu_index, &mdu_root)
         .unwrap();
     nonidentity(&root_table.root_table_du_commitment);
     nonidentity(&root_table.root_table_opening_proof);
@@ -214,6 +230,16 @@ fn fixture(ctx: &KzgContext, k: usize, m: usize) -> Fixture {
             let mut z = [0u8; 32];
             z[0] = 42;
             z[2..10].copy_from_slice(&(row as u64 + 1).to_be_bytes());
+            if fresh {
+                z = polystore_core::retrieval_challenge::derive_z(
+                    &CONTEXT_HASH,
+                    &ANCHOR_SEED,
+                    row as u64,
+                    mdu_index,
+                    row as u32,
+                )
+                .unwrap();
+            }
             let (opening, y) = ctx.compute_proof(blob, &z).unwrap();
             nonidentity(&commitments[row]);
             nonidentity(&opening);
@@ -233,6 +259,7 @@ fn fixture(ctx: &KzgContext, k: usize, m: usize) -> Fixture {
         root_table,
         proofs,
         leaf_count: commitments.len() as u64,
+        mdu_index,
     }
 }
 
@@ -240,7 +267,7 @@ impl Fixture {
     fn verify_root_table(&self) -> i32 {
         ffi::polystore_verify_mdu0_root_table_proof(
             self.root.as_ptr(),
-            2,
+            self.mdu_index,
             self.mdu_root.as_ptr(),
             self.root_table.root_table_du_commitment.as_ptr(),
             self.root_table.root_table_du_merkle_proof.as_ptr(),
@@ -268,6 +295,35 @@ impl Fixture {
             .iter()
             .all(|p| self.verify_root_table() == 1 && self.verify_blob(p) == 1)
     }
+
+    fn session_batch(&self, count: usize) -> Vec<u8> {
+        assert!(count > 0 && count <= self.proofs.len());
+        let mut input = Vec::new();
+        input.extend(b"PSB1");
+        input.extend((count as u16).to_be_bytes());
+        input.extend((self.leaf_count as u32).to_be_bytes());
+        input.extend(self.root);
+        input.extend(CONTEXT_HASH);
+        input.extend(ANCHOR_SEED);
+        for proof in &self.proofs[..count] {
+            input.extend(self.mdu_index.to_be_bytes());
+            input.extend(proof.leaf.to_be_bytes());
+            input.extend(self.mdu_root);
+            input.extend(self.root_table.root_table_du_commitment);
+            input.extend(self.root_table.root_table_opening_proof);
+            input.extend(proof.commitment);
+            input.extend(proof.z);
+            input.extend(proof.y);
+            input.extend(proof.opening);
+            input.extend(
+                (self.root_table.root_table_du_merkle_proof.len() as u16 / 32).to_be_bytes(),
+            );
+            input.extend((proof.merkle_path.len() as u16 / 32).to_be_bytes());
+            input.extend(&self.root_table.root_table_du_merkle_proof);
+            input.extend(&proof.merkle_path);
+        }
+        input
+    }
 }
 
 fn report(k: usize, m: usize, stage: &str, count: usize, f: impl Fn() -> bool) {
@@ -292,6 +348,11 @@ fn report(k: usize, m: usize, stage: &str, count: usize, f: impl Fn() -> bool) {
 }
 
 fn main() {
+    let args: Vec<_> = std::env::args().skip(1).collect();
+    assert!(
+        args.is_empty() || args == ["--session-batch"],
+        "usage: verifier_allocations [--session-batch]"
+    );
     check_allocator();
     let setup = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../demos/kzg/trusted_setup.txt");
     let setup_path = CString::new(setup.to_str().unwrap()).unwrap();
@@ -300,9 +361,43 @@ fn main() {
     println!(
         "k,m,stage,proofs,pass,peak_requested_bytes,total_requested_bytes,allocation_calls,realloc_calls,retained_bytes"
     );
+    if !args.is_empty() {
+        for (mdu, leaves, stage) in [
+            (2, 0, "session_batch"),
+            (65536, 16384, "max_path_session_batch"),
+        ] {
+            eprintln!(
+                "generating fresh nonconstant K1/M1 fixture, MDU{mdu}, minimum leaves{leaves}, outside measurement"
+            );
+            let fixture = fixture(&ctx, 1, 1, true, mdu, leaves);
+            for count in [1, 2, 8, 32, 64] {
+                let input = fixture.session_batch(count);
+                assert!(fixture.verify_list(count));
+                assert_eq!(
+                    ffi::polystore_verify_polyfs_session_batch_v1(input.as_ptr(), input.len()),
+                    1
+                );
+                let mut invalid = input.clone();
+                invalid[106 + 220 + 31] ^= 1;
+                assert_eq!(
+                    ffi::polystore_verify_polyfs_session_batch_v1(invalid.as_ptr(), invalid.len()),
+                    0
+                );
+                report(1, 1, stage, count, || {
+                    ffi::polystore_verify_polyfs_session_batch_v1(input.as_ptr(), input.len()) == 1
+                });
+                if leaves == 0 {
+                    report(1, 1, "fresh_sequential_list", count, || {
+                        fixture.verify_list(count)
+                    });
+                }
+            }
+        }
+        return;
+    }
     for (k, m, counts) in [(8, 4, [1, 2, 8]), (2, 1, [1, 8, 32])] {
         eprintln!("generating nonconstant K{k}/M{m} fixture outside measurement");
-        let mut input = fixture(&ctx, k, m);
+        let mut input = fixture(&ctx, k, m, false, 2, 0);
         assert!(input.verify_list(input.proofs.len()));
         // A wrong value must reach KZG and fail with the same valid Merkle path.
         input.proofs[0].y[31] ^= 1;
