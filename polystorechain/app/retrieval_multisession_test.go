@@ -2,9 +2,9 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"runtime"
 	"strings"
@@ -18,9 +18,11 @@ import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	dbm "github.com/cosmos/cosmos-db"
 	"github.com/cosmos/cosmos-sdk/baseapp"
+	clienttx "github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -81,11 +83,22 @@ func retrievalNativeSign(tb testing.TB, a *App, key *secp256k1.PrivKey, sequence
 	account := a.AuthKeeper.GetAccount(retrievalNativeQuery(tb, a), sdk.AccAddress(key.PubKey().Address()))
 	gas := uint64(len(msgs)) * 1000000
 	require.LessOrEqual(tb, gas, uint64(types.MaxRetrievalV2BlockGas))
-	transaction, err := simtestutil.GenSignedMockTx(rand.New(rand.NewSource(1)), a.TxConfig(), msgs,
-		sdk.NewCoins(sdk.NewInt64Coin("aatom", retrievalNativeTxFee)), gas,
-		SimAppChainID, []uint64{account.GetAccountNumber()}, []uint64{sequence}, key)
+	config := a.TxConfig()
+	builder := config.NewTxBuilder()
+	require.NoError(tb, builder.SetMsgs(msgs...))
+	builder.SetMemo("")
+	builder.SetFeeAmount(sdk.NewCoins(sdk.NewInt64Coin("aatom", retrievalNativeTxFee)))
+	builder.SetGasLimit(gas)
+	mode, err := authsigning.APISignModeToInternal(config.SignModeHandler().DefaultMode())
 	require.NoError(tb, err)
-	signatures, err := transaction.(authsigning.Tx).GetSignaturesV2()
+	require.NoError(tb, builder.SetSignatures(signing.SignatureV2{PubKey: key.PubKey(), Data: &signing.SingleSignatureData{SignMode: mode}, Sequence: sequence}))
+	data := authsigning.SignerData{Address: sdk.AccAddress(key.PubKey().Address()).String(), ChainID: SimAppChainID, AccountNumber: account.GetAccountNumber(), Sequence: sequence, PubKey: key.PubKey()}
+	signature, err := clienttx.SignWithPrivKey(context.Background(), mode, data, builder, key, config, sequence)
+	require.NoError(tb, err)
+	require.NoError(tb, builder.SetSignatures(signature))
+	transaction := builder.GetTx()
+	require.Empty(tb, transaction.GetMemo())
+	signatures, err := transaction.GetSignaturesV2()
 	require.NoError(tb, err)
 	require.Len(tb, signatures, 1)
 	raw, err := a.TxConfig().TxEncoder()(transaction)
