@@ -2,8 +2,12 @@
 import os
 import base64
 import copy
+from decimal import Decimal
+from fractions import Fraction
 import hashlib
+from itertools import combinations
 import json
+from math import comb
 import shutil
 from pathlib import Path
 import subprocess
@@ -327,6 +331,135 @@ class BenchmarkArtifactTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):
                 artifact.fixture(directory, 1, 1, "zero-filled-v1")
+
+
+class RetrievalArithmeticTest(unittest.TestCase):
+    def test_encoding_constants_match_production_sources(self):
+        root = SCRIPT.parent.parent
+        kzg = (root / "polystore_core/src/kzg.rs").read_text()
+        coding = (root / "polystore_core/src/coding.rs").read_text()
+        challenge = (root / "polystorechain/pkg/retrievalchallenge/challenge.go").read_text()
+        # Fail visibly if the native encoding/profile or protocol ceiling changes.
+        self.assertIn(f"BLOB_SIZE: usize = {artifact.ENCODED_BLOB_BYTES};", kzg)
+        self.assertIn("MDU_SIZE: usize = 8 * 1024 * 1024;", kzg)
+        self.assertIn(f"SCALAR_BYTES: usize = {artifact.SCALAR_BYTES};", coding)
+        self.assertIn(f"SCALAR_PAYLOAD_BYTES: usize = {artifact.SCALAR_PAYLOAD_BYTES};", coding)
+        self.assertIn(f"DATA_SHARDS_NUM: usize = {artifact.DEFAULT_K};", coding)
+        self.assertIn(f"SHARDS_NUM: usize = {artifact.DEFAULT_K + artifact.DEFAULT_M};", coding)
+        self.assertRegex(challenge, rf"MaxSamples\s*= uint64\({artifact.MAX_AUDIT_SAMPLES}\)")
+
+    def test_denominators_against_enumerated_legal_windows(self):
+        unit = artifact.PAYLOAD_BLOB_BYTES
+        for k in (1, 2, 4, 8, 16, 32, 64):
+            for offset in (0, unit - 512, 63 * unit + 11, 64 * unit - 512, 130 * unit):
+                for length in (0, 1, 1024, unit, 64 * unit + 1, 193 * unit):
+                    with self.subTest(k=k, offset=offset, length=length):
+                        # Enumerate intersected encoded atoms and group actual
+                        # (MDU, slot, row) positions; independent of the shortcut.
+                        windows = {}
+                        for index in range((offset + length) // unit + 1):
+                            if length and index * unit < offset + length and (index + 1) * unit > offset:
+                                mdu, blob = divmod(index, 64)
+                                row, slot = divmod(blob, k)
+                                windows.setdefault((mdu, slot), []).append(row)
+                        for rows in windows.values():
+                            self.assertEqual(rows, list(range(rows[0], rows[-1] + 1)))
+                            self.assertLessEqual(len(rows), 64 // k)
+                        actual = artifact.retrieval_denominator(offset, length, k=k)
+                        blobs = sum(map(len, windows.values()))
+                        self.assertEqual(actual["unique_data_blobs"], blobs)
+                        self.assertEqual(actual["legal_session_windows"], len(windows))
+                        self.assertEqual(actual["user_mdus_touched"], len({mdu for mdu, _ in windows}))
+                        self.assertEqual(actual["verified_encoded_bytes"], blobs * 131072)
+                        self.assertEqual(actual["billed_encoded_bytes"], actual["verified_encoded_bytes"])
+
+    def test_frozen_payload_and_encoded_denominators(self):
+        report = artifact.arithmetic_report()
+        self.assertEqual(report["encoding"]["payload_blob_bytes"], 126976)
+        cases = report["denominators"]
+        for name, count in (("payload_1kib_inside", 1), ("payload_1kib_crossing", 2)):
+            self.assertEqual(cases[name]["requested_bytes"], 1024)
+            self.assertEqual(cases[name]["fresh_blob_openings"], count)
+            self.assertEqual(cases[name]["billed_encoded_bytes"], count * 131072)
+        encoded = cases["encoded_1gib_aligned"]
+        self.assertEqual(encoded["unique_data_blobs"], 8192)
+        self.assertEqual(encoded["verified_encoded_bytes"], 1 << 30)
+        logical = cases["payload_1gib_aligned"]
+        self.assertEqual((logical["unique_data_blobs"], logical["user_mdus_touched"],
+                          logical["legal_session_windows"], logical["billed_encoded_bytes"]),
+                         (8457, 133, 1064, 1108475904))
+        windows = {(i // 64, i % 64 % 8) for i in range(8457)}
+        self.assertEqual(len(windows), logical["legal_session_windows"])
+        self.assertEqual({slot for mdu, slot in windows if mdu == 132}, set(range(8)))
+        population = report["audit_population_for_payload_1gib"]
+        self.assertEqual(population["stored_encoded_blobs_per_slot_assignment"], 1064)
+        self.assertEqual(population["stored_encoded_blobs_across_all_slots"], 12768)
+
+    def test_range_integer_validation_and_precision(self):
+        unit = artifact.PAYLOAD_BLOB_BYTES
+        offset = ((1 << 53) // unit + 1) * unit
+        self.assertEqual(artifact.retrieval_denominator(offset, unit)["unique_data_blobs"], 1)
+        for args, kwargs in (((-1, 1), {}), ((0, True), {}), (((1 << 63) - 1, 1), {}),
+                             ((0, 1), {"k": 3}), ((0, 1), {"encoded": 1})):
+            with self.subTest(args=args, kwargs=kwargs), self.assertRaises(ValueError):
+                artifact.retrieval_denominator(*args, **kwargs)
+
+    def test_hypergeometric_against_exhaustive_distinct_subsets(self):
+        for population in range(10):
+            for unavailable in range(population + 1):
+                absent = set(range(unavailable))
+                for samples in range(population + 1):
+                    draws = list(combinations(range(population), samples))
+                    misses = sum(absent.isdisjoint(draw) for draw in draws)
+                    actual = artifact.sampling_miss(population, unavailable, samples)
+                    self.assertEqual(actual, Fraction(misses, len(draws)))
+                    if population:
+                        self.assertLessEqual(actual, Fraction(population - unavailable, population) ** samples)
+
+    def test_sampling_boundaries_and_exact_large_cases(self):
+        self.assertEqual(artifact.sampling_miss(0, 0, 0), 1)
+        self.assertEqual(artifact.sampling_miss(1, 1, 1), 0)
+        self.assertEqual(artifact.sampling_miss(1, 0, 1), 1)
+        self.assertEqual(artifact.sampling_miss(8192, 1, 132), 1 - Fraction(132, 8192))
+        self.assertEqual(artifact.sampling_miss(1064, 107, 132), Fraction(comb(957, 132), comb(1064, 132)))
+        self.assertGreater(artifact.sampling_miss(64, 7, 57), 0)
+        self.assertEqual(artifact.sampling_miss(64, 7, 58), 0)
+        for args in ((0, 1, 0), (1, 0, 2), (8192, 0, 4097), (1, -1, 0), (True, 0, 0)):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                artifact.sampling_miss(*args)
+
+    def test_fraction_bounds_have_exact_thresholds(self):
+        epsilon = Fraction(1, 1000000)
+        for available, samples in ((Fraction(9, 10), 132), (Fraction(99, 100), 1375)):
+            self.assertLessEqual(available ** samples, epsilon)
+            self.assertGreater(available ** (samples - 1), epsilon)
+        self.assertGreater(Fraction(9, 10) ** 64, epsilon)
+
+    def test_probability_serialization_does_not_cancel_or_underflow(self):
+        case = artifact.sampling_case(8192, 1, 132)
+        self.assertEqual(Decimal(case["detection_probability"]) * 100, Decimal("1.611328125"))
+        case = artifact.sampling_case((1 << 63) - 1, 1, 1)
+        self.assertGreater(Decimal(case["detection_probability"]), 0)
+        case = artifact.sampling_case(8192, 4096, 4096)
+        self.assertGreater(Decimal(case["miss_probability"]), 0)
+        self.assertLess(Decimal(case["miss_probability"]), Decimal("1e-2400"))
+
+    def test_offline_subcommand_is_self_contained_and_unqualified(self):
+        helper = SCRIPT.with_name("retrieval_bench_artifact.py")
+        # No repo cwd, node, setup, native library, network or binary is needed.
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([sys.executable, str(helper), "arithmetic"], cwd=directory,
+                                    text=True, capture_output=True, check=True, timeout=10)
+        doc = json.loads(result.stdout)
+        self.assertEqual(doc, artifact.arithmetic_report())
+        self.assertFalse(doc["qualification"])
+        self.assertFalse(doc["runtime_measured"])
+        self.assertEqual([item["bound_at_most_1e_minus_6"] for item in
+                          doc["sampling"]["fraction_bound_targets"]], [False, True, True])
+        result = subprocess.run([sys.executable, str(helper), "arithmetic", "ignored"],
+                                text=True, capture_output=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("takes no arguments", result.stderr)
 
 
 if __name__ == "__main__":
