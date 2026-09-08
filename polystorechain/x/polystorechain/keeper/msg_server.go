@@ -3290,8 +3290,12 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if session.ChallengeVersion == 2 && creator != session.AuthorizedProofProvider {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only the authorized proof provider may submit")
 	}
-	if _, err := k.Providers.Get(ctx, creator); err != nil {
-		return nil, sdkerrors.ErrUnauthorized.Wrap("proof provider is not registered")
+	// V2 authority was authenticated at open and cannot be revoked by a later
+	// registry change. Legacy admission retains its current-registration check.
+	if session.ChallengeVersion == 0 {
+		if _, err := k.Providers.Get(ctx, creator); err != nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("proof provider is not registered")
+		}
 	}
 	if isSessionExpired(ctx, &session) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")

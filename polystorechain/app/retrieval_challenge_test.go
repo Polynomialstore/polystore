@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/log"
+	"cosmossdk.io/math"
 	storetypes "cosmossdk.io/store/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -28,6 +30,10 @@ import (
 // miss ABCI2's absent LastBlockId and would not establish seed durability.
 func TestRetrievalChallengeABCIAnchorCommitAndRestart(t *testing.T) {
 	db := dbm.NewMemDB()
+	legacyID := bytes.Repeat([]byte{0x81}, 32)
+	legacyOwner := sdk.AccAddress(bytes.Repeat([]byte{0x82}, 20)).String()
+	legacy := types.RetrievalSession{SessionId: legacyID, Owner: legacyOwner, DealId: 9, ExpiresAt: 20, LockedFee: math.NewInt(17), Status: types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED}
+	legacyNonceKey := collections.Join(collections.Join(legacyOwner, uint64(9)), legacyOwner)
 	build := func() (*baseapp.BaseApp, keeper.Keeper) {
 		cfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})
 		app := baseapp.NewBaseApp("challenge-header-test", log.NewNopLogger(), db, nil, baseapp.SetChainID("challenge-header-test"))
@@ -43,6 +49,12 @@ func TestRetrievalChallengeABCIAnchorCommitAndRestart(t *testing.T) {
 			params.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
 			params.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
 			if err := k.Params.Set(ctx, params); err != nil {
+				return nil, err
+			}
+			if err := k.RetrievalSessions.Set(ctx, legacyID, legacy); err != nil {
+				return nil, err
+			}
+			if err := k.RetrievalSessionNonces.Set(ctx, legacyNonceKey, 7); err != nil {
 				return nil, err
 			}
 			for _, height := range []uint64{2, 3} {
@@ -94,6 +106,18 @@ func TestRetrievalChallengeABCIAnchorCommitAndRestart(t *testing.T) {
 	active, err := k.RetrievalV2Active(committed())
 	require.NoError(t, err)
 	require.True(t, active)
+	restored, err := k.RetrievalSessions.Get(committed(), legacyID)
+	require.NoError(t, err)
+	require.Equal(t, legacy, restored)
+	nonce, err := k.RetrievalSessionNonces.Get(committed(), legacyNonceKey)
+	require.NoError(t, err)
+	require.Equal(t, uint64(7), nonce)
+	_, err = keeper.NewMsgServerImpl(k).ConfirmRetrievalSession(committed().WithBlockHeight(2), &types.MsgConfirmRetrievalSession{Creator: legacyOwner, SessionId: legacyID})
+	require.ErrorContains(t, err, "refund-only")
+	unchanged, err := k.RetrievalSessions.Get(committed(), legacyID)
+	require.NoError(t, err)
+	require.Equal(t, restored, unchanged)
+
 	finalize(3, nil)
 	_, err = app.Commit()
 	require.NoError(t, err)

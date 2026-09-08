@@ -74,6 +74,7 @@ func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
 	deal.ManifestRoot = bytes.Repeat([]byte{0x99}, 32)
 	deal.CurrentGen++
 	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+	require.NoError(t, f.keeper.Providers.Remove(ctx, created.AssignedProviders[0]))
 	msg := &types.MsgSubmitRetrievalSessionProof{Creator: created.AssignedProviders[0], SessionId: opened.SessionId, Proofs: []types.ChainedProof{proof}}
 	_, err = server.SubmitRetrievalSessionProof(ctx, msg)
 	require.NoError(t, err)
