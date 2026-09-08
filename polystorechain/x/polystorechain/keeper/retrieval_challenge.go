@@ -62,6 +62,10 @@ func (k Keeper) activateRetrievalV2(ctx sdk.Context) error {
 	if err := params.Validate(); err != nil {
 		return err
 	}
+	block := ctx.ConsensusParams().Block
+	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalV2BlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
+		return fmt.Errorf("retrieval v2 activation requires bounded consensus gas and bytes within the qualified candidate profile")
+	}
 	// C4 integration must add its bounded assignment preflight here before
 	// coordinated activation. Merging this session slice does not qualify it.
 	return k.RetrievalV2ActivatedHeight.Set(ctx, params.RetrievalV2ActivationHeight)
@@ -82,7 +86,7 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		return nil
 	}
 	height := uint64(ctx.BlockHeight())
-	anchorHeight := height - 1
+	anchorHeight := height
 	pending, err := k.ChallengePendingAnchors.Has(ctx, anchorHeight)
 	if err != nil {
 		return err
@@ -95,8 +99,10 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		if len(anchor.Seed) != 0 {
 			return fmt.Errorf("challenge anchor already captured")
 		}
-		// At H+2 this is the committed H+1 block, not the current proposal hash.
-		seed := ctx.BlockHeader().LastBlockId.Hash
+		// ABCI2 BaseApp supplies req.Hash via HeaderHash, but leaves LastBlockId
+		// empty. Record the predetermined H+1 block hash in that block cache.
+		// The seed becomes durable only if H+1 commits; proofs start at H+2.
+		seed := ctx.HeaderHash()
 		if len(seed) == 32 {
 			anchor.Seed = append([]byte(nil), seed...)
 		}
@@ -194,6 +200,9 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 				return err
 			}
 		} else if err := k.RetrievalSessionGenerationRefs.Set(ctx, generationKey, refs-1); err != nil {
+			return err
+		}
+		if err := k.RetrievalSessionProofProvider.Remove(ctx, key.K2()); err != nil {
 			return err
 		}
 		if err := k.RetrievalSessionExpiryRefs.Remove(ctx, key); err != nil {

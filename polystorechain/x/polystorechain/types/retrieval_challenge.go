@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
@@ -18,6 +20,8 @@ const RetrievalSetupDigest = "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a67
 // Session profile ceilings are intentionally independent of audit quotas. Their
 // admitted maxima still require the deployment qualification in issue #260.
 const (
+	MaxRetrievalV2BlockGas                = int64(64000000)
+	MaxRetrievalV2BlockBytes              = int64(2 * 1024 * 1024)
 	MaxRetrievalSessionOpensPerBlock      = uint64(128)
 	MaxRetrievalSessionExpiryRefsPerBlock = uint64(128)
 	MaxLiveRetrievalSessionContexts       = uint64(8192)
@@ -30,7 +34,7 @@ const (
 // the existing fixed-width open ID. It cannot collide with a legacy ID without
 // a hash collision. Session nonces retain their original assigned-provider scope.
 func HashRetrievalSessionIDV2(legacyID []byte, chainID string, payee20 []byte) ([]byte, error) {
-	if len(legacyID) != 32 || len(payee20) != 20 || len(chainID) == 0 || len(chainID) > 50 {
+	if len(legacyID) != 32 || len(payee20) != 20 || len(chainID) == 0 || len(chainID) > 50 || !utf8.ValidString(chainID) || strings.ContainsRune(chainID, 0) {
 		return nil, fmt.Errorf("invalid v2 session ID inputs")
 	}
 	b := []byte("polystore/retrieval-session/v2\x00")

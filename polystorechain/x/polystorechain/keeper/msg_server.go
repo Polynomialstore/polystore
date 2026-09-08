@@ -3165,11 +3165,11 @@ func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.Msg
 	if isSessionExpired(ctx, &session) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
 	}
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
-		return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
-	}
 	if err := k.admitSessionVersion(ctx, session); err != nil {
 		return nil, err
+	}
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
 	}
 	switch session.Status {
 	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
@@ -3299,11 +3299,11 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if uint64(len(msg.Proofs)) != session.BlobCount {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof count mismatch for session blob_count")
 	}
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
-		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
-	}
 	if err := k.admitSessionVersion(ctx, session); err != nil {
 		return nil, err
+	}
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
 	}
 	switch session.Status {
 	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED:
@@ -3363,13 +3363,9 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		if err != nil {
 			return nil, err
 		}
-		startGlobal, overflow := mulUint64(session.StartMduIndex, stripe.leafCount)
-		if overflow {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("session range overflow")
-		}
-		startGlobal, overflow = addUint64(startGlobal, uint64(session.StartBlobIndex))
-		if overflow {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("session range overflow")
+		startGlobal, _, err := validatePolyFSRetrievalRange(deal, stripe, session.StartMduIndex, session.StartBlobIndex, session.BlobCount)
+		if err != nil {
+			return nil, err
 		}
 		for i, p := range msg.Proofs {
 			position, overflow := addUint64(startGlobal, uint64(i))
@@ -3378,11 +3374,13 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 			}
 		}
 	}
-	// Validate every target before the first FFI call or payee mutation. Shared S2
-	// structural admission and crypto prepayment are integrated at this boundary.
+	// Validate the whole batch before the first FFI call or payee mutation.
 	for _, p := range msg.Proofs {
-		if p.MduIndex <= deal.WitnessMdus || p.MduIndex >= deal.TotalMdus {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof target outside frozen user data")
+		if err := ValidateProofTarget(deal, &p); err != nil {
+			return nil, err
+		}
+		if err := ValidateChainedProofShape(deal.ManifestRoot, &p, stripe.leafCount); err != nil {
+			return nil, err
 		}
 	}
 	existing, err := k.RetrievalSessionProofProvider.Get(ctx, msg.SessionId)
@@ -3391,6 +3389,9 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 	if err == nil && existing != creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("session proofs already submitted by a different provider")
+	}
+	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
+		return nil, err
 	}
 	for i := range msg.Proofs {
 		ok, err := verifyPolyFSChainedProof(deal.ManifestRoot, &msg.Proofs[i], stripe.leafCount)

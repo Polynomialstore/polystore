@@ -19,6 +19,10 @@ func commitValidMode2ContentAndProof(
 	owner string,
 	dealID uint64,
 ) (string, types.ChainedProof) {
+	return commitMode2ContentAndProofData(t, f, ctx, msgServer, owner, dealID, make([]byte, 8*1024*1024))
+}
+
+func commitMode2ContentAndProofData(t *testing.T, f *fixture, ctx sdk.Context, msgServer types.MsgServer, owner string, dealID uint64, mduData []byte) (string, types.ChainedProof) {
 	t.Helper()
 
 	os.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
@@ -27,7 +31,6 @@ func commitValidMode2ContentAndProof(
 	}
 	require.NoError(t, crypto_ffi.Init("../../../trusted_setup.txt"))
 
-	mduData := make([]byte, 8*1024*1024)
 	dealAfterCreate, err := f.keeper.Deals.Get(ctx, dealID)
 	require.NoError(t, err)
 	require.NotNil(t, dealAfterCreate.Mode2Profile)

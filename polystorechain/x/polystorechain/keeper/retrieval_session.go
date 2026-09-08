@@ -19,7 +19,7 @@ func (k Keeper) admitSessionVersion(ctx sdk.Context, session types.RetrievalSess
 	}
 	switch session.ChallengeVersion {
 	case 0:
-		if active {
+		if active && session.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 			return sdkerrors.ErrInvalidRequest.Wrap("legacy retrieval session is expiry-refund-only after v2 activation")
 		}
 	case 2:
@@ -48,8 +48,24 @@ func (k Keeper) sessionProofPayee(ctx sdk.Context, session types.RetrievalSessio
 	if err != nil || len(addr) != 20 || addr.String() != pin {
 		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid accepted session proof provider")
 	}
-	if session.ChallengeVersion == 2 && pin != session.AuthorizedProofProvider {
-		return nil, sdkerrors.ErrUnauthorized.Wrap("accepted proof pin does not match authorized proof provider")
+	if session.ChallengeVersion == 2 {
+		if pin != session.AuthorizedProofProvider {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("accepted proof pin does not match authorized proof provider")
+		}
+		c, err := types.RetrievalChallengeContext(session)
+		if err != nil {
+			return nil, err
+		}
+		if c.ChainID != ctx.ChainID() || ctx.BlockHeight() < 0 || !c.Window.Contains(uint64(ctx.BlockHeight())) {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("outside session challenge response window")
+		}
+		anchor, err := k.ChallengeAnchors.Get(ctx, c.Window.Anchor)
+		if err != nil {
+			return nil, fmt.Errorf("session challenge seed unavailable: %w", err)
+		}
+		if len(anchor.Seed) != 32 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session challenge seed unavailable")
+		}
 	}
 	return addr, nil
 }
