@@ -93,6 +93,10 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo test --verbose
 
+      - name: Check independent PSB1 transcript vectors
+        if: matrix.crate == 'polystore_core'
+        run: python3 polystore_core/tests/testdata/check_session_batch_vectors.py
+
   # ------------------------------------------------------------------
   # FRONTEND (PolyStore Website)
   # ------------------------------------------------------------------

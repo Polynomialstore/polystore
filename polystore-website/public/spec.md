@@ -474,6 +474,14 @@ COMPLETED remains terminal. Default deployment stays inactive pending C4 and
 #256/#257/#260 qualification. The historical flow below applies to legacy operation
 where it differs from this versioned contract.
 
+The [v2 cryptographic verifier](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-crypto.md)
+uses one bounded PSB1 native call for every complete admitted v2 session, including
+singletons. It authenticates both Merkle hops and batches the root/blob KZG equations
+with transcript-derived nonzero weights. The internal maximum is 64 proofs/60522
+bytes; public slot/range limits still apply. Whole-list gas remains 500000 per proof.
+Native/WASM setup identity and strict received-byte validation are shared; provider
+and browser adoption remains an activation gate.
+
 
 PolyStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:
 
