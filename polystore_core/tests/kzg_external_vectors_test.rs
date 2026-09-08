@@ -95,3 +95,72 @@ fn ethereum_nonconstant_commitment_and_prover_vectors() {
         assert!(ctx.verify_proof(&commitment, &z, &y, &proof).unwrap());
     }
 }
+
+#[test]
+fn producer_openings_match_polynomial_quotients_and_reduced_cells() {
+    use bls12_381::{G1Affine, Scalar};
+    use polystore_core::utils::z_for_cell;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let ctx = KzgContext::load_from_file(root.join("polystorechain/trusted_setup.txt")).unwrap();
+    let be = |s: Scalar| {
+        let mut b = s.to_bytes();
+        b.reverse();
+        b
+    };
+    let scalar = |mut b: [u8; 32]| {
+        b.reverse();
+        Scalar::from_bytes(&b).unwrap()
+    };
+    let domain: Vec<_> = (0..4096).map(|i| scalar(z_for_cell(i))).collect();
+    let blob: Vec<_> = domain
+        .iter()
+        .flat_map(|x| be(Scalar::from(5) + Scalar::from(7) * x + Scalar::from(11) * x * x))
+        .collect();
+    let commitment = ctx.blob_to_commitment(&blob).unwrap();
+    // Analytic p(x)=5+7x+11x² has q(x)=7+11(x+z), including p'(z)
+    // at a domain point. The commitment path is independent of the prover MSM.
+    for z in [
+        Scalar::zero(),
+        Scalar::from(2),
+        domain[0],
+        domain[3],
+        domain[2048],
+        domain[4095],
+    ] {
+        let quotient: Vec<_> = domain
+            .iter()
+            .flat_map(|x| be(Scalar::from(7) + Scalar::from(11) * (x + z)))
+            .collect();
+        let (proof, y) = ctx.compute_proof(&blob, &be(z)).unwrap();
+        assert_eq!(proof, ctx.blob_to_commitment(&quotient).unwrap());
+        assert_eq!(
+            y,
+            be(Scalar::from(5) + Scalar::from(7) * z + Scalar::from(11) * z * z)
+        );
+        assert!(ctx.verify_proof(&commitment, &be(z), &y, &proof).unwrap());
+    }
+    for value in [Scalar::zero(), Scalar::from(13)] {
+        let constant = be(value).repeat(4096);
+        for z in [Scalar::zero(), domain[4095]] {
+            let (proof, y) = ctx.compute_proof(&constant, &be(z)).unwrap();
+            assert_eq!(proof, G1Affine::identity().to_compressed());
+            assert_eq!(y, be(value));
+        }
+    }
+    let mut reduced = vec![0u8; 131072];
+    reduced[31] = 13;
+    let mut noncanonical = reduced.clone();
+    let modulus =
+        hex::decode("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001").unwrap();
+    noncanonical[..32].copy_from_slice(&modulus);
+    noncanonical[31] += 13;
+    for z in [Scalar::zero(), domain[3], domain[4095]] {
+        assert_eq!(
+            ctx.compute_proof(&noncanonical, &be(z)).unwrap(),
+            ctx.compute_proof(&reduced, &be(z)).unwrap()
+        );
+    }
+    assert!(ctx.compute_proof(&blob, &modulus).is_err());
+    assert!(ctx.compute_proof(&blob, &[0u8; 31]).is_err());
+    assert!(ctx.compute_proof(&blob[..131071], &[0u8; 32]).is_err());
+}
