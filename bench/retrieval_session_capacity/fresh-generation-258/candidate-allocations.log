@@ -1,0 +1,8 @@
+   Compiling polystore_core v0.1.0 (/Users/michaelseiler/dev/polynomialstore/polystore-258-generation/polystore_core)
+    Finished `release` profile [optimized] target(s) in 1.76s
+     Running `target/release/examples/verifier_allocations --generation`
+k,m,stage,proofs,pass,peak_requested_bytes,total_requested_bytes,allocation_calls,realloc_calls,retained_bytes
+,,generation_off_domain,1,warm_first,622592,665336,888,3,0
+,,generation_off_domain,1,warm_repeat,622592,665336,888,3,0
+,,generation_interior_domain,1,warm_first,622592,665336,888,3,0
+,,generation_interior_domain,1,warm_repeat,622592,665336,888,3,0

@@ -1,0 +1,158 @@
+   Compiling polystore_core v0.1.0 (/Users/michaelseiler/dev/polynomialstore/polystore-258-generation/polystore_core)
+    Finished `release` profile [optimized] target(s) in 12.56s
+     Running unittests src/lib.rs (target/release/deps/polystore_core-d5b04fba78b84bff)
+
+running 36 tests
+test builder::tests::test_append_file_record ... ok
+test builder::tests::test_add_root ... ok
+test builder::tests::test_find_free_space_tombstone_splitting ... ok
+test builder::tests::test_init_empty_mdu0 ... ok
+test builder::tests::test_witness_count_uses_raw_payload_capacity ... ok
+test coding::tests::reconstruct_mdu_rejects_invalid_params ... ok
+test kzg::session_batch::tests::coefficient_rejection_is_finite_and_canonical ... ok
+test kzg::session_batch::tests::export_batch_fixture ... ignored
+test builder::tests::test_load_and_modify ... ok
+test coding::tests::encode_to_mdu_matches_reference_for_various_sizes ... ok
+test coding::tests::reconstruct_mdu_from_missing_shards ... ok
+test builder::tests::public_root_range_and_tail_boundaries_remain_strict ... ok
+test kzg::session_batch::tests::independent_python_transcript_and_coefficients ... ok
+test kzg::tests::bytes_to_scalars_accepts_arbitrary_blob_bytes ... ok
+test kzg::tests::bytes_to_scalars_matches_biguint_reduction ... ok
+test kzg::tests::fft_round_trip_4096 ... ok
+test coding::tests::expand_payload_flat_matches_encoded_mdu_path ... ok
+test kzg::tests::blob_to_commitment_profiled_matches_plain_commitment ... ok
+test coding::tests::expand_payload_flat_uncommitted_reconstructs_committed_output ... ok
+test kzg::tests::msm_matches_naive_sum_small_n ... ok
+test kzg::tests::webgpu_g1_layout_roundtrips_generator ... ok
+test layout::tests::test_bit_packing ... ok
+test layout::tests::test_serialization ... ok
+test layout::tests::test_struct_alignment ... ok
+test retrieval_challenge::tests::reject_entire_evaluation_domain_and_zero ... ok
+test retrieval_challenge::tests::rejection_bounds_are_finite_and_never_weakened ... ok
+test retrieval_challenge::tests::samples_cover_population_once_and_bound_allocation ... ok
+test utils::tests::frs_to_blobs_packs_scalars_in_order ... ok
+test utils::tests::z_for_cell_zero_is_one ... ok
+test kzg::tests::lagrange_commitment_blst_matches_scalar_msm_for_random_blob_prefix ... ok
+test kzg::tests::verify_proof_round_trip ... ok
+test kzg::tests::webgpu_fold_g1_window_sums_matches_direct_fold ... ok
+test kzg::session_batch::tests::nonconstant_merkle_geometry_and_variable_depth_boundaries ... ok
+test kzg::session_batch::tests::identities_remain_valid_and_transport_ffi_is_bounded ... ok
+test kzg::session_batch::tests::transcript_weights_defeat_equal_opposite_invalid_equations ... ok
+test kzg::session_batch::tests::batch_nonconstant_differential_and_all_or_nothing ... ok
+
+test result: ok. 35 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.24s
+
+     Running unittests src/bin/parity_native.rs (target/release/deps/parity_native-c8895de8773ad5f6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/coding_expand_test.rs (target/release/deps/coding_expand_test-0dd941c435d8ed64)
+
+running 3 tests
+test expand_mdu_nonzero_data_succeeds ... ignored
+test expand_mdu_zero_data_shapes_are_valid ... ignored
+test expand_mdu_rejects_wrong_size ... ok
+
+test result: ok. 1 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/expand_parity_test.rs (target/release/deps/expand_parity_test-9cb5723dc336ecf4)
+
+running 1 test
+test expand_mdu_native_and_wasm_pkg_hashes_match_expected ... ignored, Slow; run with `cargo test --release --test expand_parity_test -- --ignored`
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fat_v2_allocations_test.rs (target/release/deps/fat_v2_allocations_test-eb8aaab6907dd956)
+
+running 2 tests
+test borrowed_validation_and_record_access_do_not_allocate_slabs ... ok
+test maximum_active_inventory_uniqueness_validation_has_no_heap_allocation ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/fat_v2_test.rs (target/release/deps/fat_v2_test-b14d832a898b8c3b)
+
+running 14 tests
+test duplicate_active_paths_reject_all_mutations_atomically ... ok
+test migration_rejects_oversize_or_malformed_source_without_changing_it ... ok
+test new_fat_uses_fixed_v2_packing ... ok
+test ordinary_load_rejects_legacy_raw_fat ... ok
+test duplicate_active_paths_reject_loaded_wire_and_legacy_staging ... ok
+test explicit_legacy_recovery_is_immutable_and_staging_is_separate ... ok
+test ffi_load_modes_and_failed_operations_preserve_outputs ... ok
+test paths_and_extents_reject_before_mutation ... ok
+test records_cross_scalar_boundaries_and_ranges_are_bounded ... ok
+test root_cells_are_canonical_and_raw_digest_is_reduced_once ... ok
+test strict_load_rejects_all_noncanonical_wire_components ... ok
+test independent_python_full_slab_golden ... ok
+test failed_full_table_split_preserves_bytes ... ok
+test duplicate_active_paths_at_capacity_use_exact_full_path ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/kzg_endianness_test.rs (target/release/deps/kzg_endianness_test-47d2168d44a07e9c)
+
+running 3 tests
+test test_constant_polynomial_all_ones ... ok
+test test_kzg_big_endian_compatibility ... ok
+test test_manifest_inclusion_round_trip ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/kzg_external_vectors_test.rs (target/release/deps/kzg_external_vectors_test-66df854a9ea2a553)
+
+running 3 tests
+test ethereum_nonconstant_commitment_and_prover_vectors ... ok
+test ethereum_independent_verification_vectors ... ok
+test producer_openings_match_polynomial_quotients_and_reduced_cells ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+     Running tests/mdu0_root_table_test.rs (target/release/deps/mdu0_root_table_test-baefd14984ebb867)
+
+running 7 tests
+test performance_evidence_mdu0_root_table_verifier ... ignored, prints local timing/proof-size evidence for issue #214 PR body
+test root_table_position_boundaries ... ok
+test old_flat_manifest_boundary_fails_while_mdu0_path_passes ... ok
+test mdu0_merkle_root_generation_covers_64_du_commitments ... ok
+test mdu0_root_table_proof_rejects_tampering_and_invalid_indices ... ok
+test ffi_mdu0_root_table_proof_round_trip_covers_high_index ... ok
+test valid_mdu0_root_table_proofs_cover_boundary_indices ... ok
+
+test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.59s
+
+     Running tests/mode2_artifacts_v1_fixture_test.rs (target/release/deps/mode2_artifacts_v1_fixture_test-ff04b9f90efe47d9)
+
+running 1 test
+test mode2_artifacts_v1_fixture_k8m4_matches_hashes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/retrieval_challenge_test.rs (target/release/deps/retrieval_challenge_test-e522c432c3e48da6)
+
+running 2 tests
+test context_rejects_illegal_windows_layouts_and_overflow_before_sampling ... ok
+test independent_go_python_c2_vectors ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/verification_boundaries_test.rs (target/release/deps/verification_boundaries_test-508cdf272becbca1)
+
+running 6 tests
+test independent_root_table_coordinate_and_scalar_vectors ... ok
+test setup_identity_includes_unconsumed_trailer ... ok
+test merkle_membership_consumes_exact_path ... ok
+test strict_received_blob_and_packed_payload_are_distinct_contracts ... ok
+test setup_read_is_bounded_and_reinit_authenticates_requested_file ... ok
+test session_verification_ignores_producer_msm_override ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+   Doc-tests polystore_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
