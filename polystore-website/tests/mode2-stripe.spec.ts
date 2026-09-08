@@ -772,6 +772,10 @@ test.describe('mode2 streamed retrieval', () => {
 
   test('mode2 deal → shard → upload → commit → retrieve', async ({ page }, testInfo) => {
     test.setTimeout(mode2FastTestTimeoutMs)
+    const sourcePaths = ['../polystorechain', '../polystore_core', '../polystore_gateway', 'src']
+    // git diff cannot record untracked runtime sources. Reject them before funding/upload.
+    expect(execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...sourcePaths], { encoding: 'utf8' }),
+      'Track or remove untracked runtime sources before recording delivery provenance').toBe('')
 
     // The deployed default is disabled. The UI must wait for committed
     // activation before offering a paid download; only this isolated chain is active.
@@ -982,7 +986,7 @@ test.describe('mode2 streamed retrieval', () => {
       provenanceScope: 'checkout source and harness files only; running executable, native library and WASM identities are not recorded',
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       sourceTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
-      sourceDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', '../polystorechain', '../polystore_core', '../polystore_gateway', 'src'])).digest('hex'),
+      sourceDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', ...sourcePaths])).digest('hex'),
       harnessSha256: await Promise.all(['tests/mode2-stripe.spec.ts', 'tests/utils/deputyRetrieval.tsx'].map(async (file) => ({ file, sha256: crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex') }))),
       fixtureBytes: fileBytes.length, fixtureSha256: expectedHash,
       gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult,
