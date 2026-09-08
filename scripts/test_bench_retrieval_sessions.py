@@ -1050,9 +1050,19 @@ class PreparedRetrievalProofTest(unittest.TestCase):
         warmup = self.operation()
         warmup["phase"] = "warmup"
         empty = self.operation("empty", prepared=False)
-        with patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
-            report = self.run_operations([warmup, empty])
+        measurement_admitted = threading.Event()
+        def submit(job):
+            self.assertTrue(measurement_admitted.wait(5))
+            return self.submit(job)
+        def operations():
+            yield warmup
+            yield empty
+            # Resumption follows enqueue/accounting of the depleted slot.
+            measurement_admitted.set()
+        with patch.object(artifact, "scheduled_transaction", side_effect=submit):
+            report = self.run_operations(operations())
         self.assertTrue(report["warmup_overlapped_measurement"])
+        self.assertEqual(report["proof_submitted"], 1)
         self.assertEqual(report["phases"]["measurement"]["offered"], 0)
         self.assertEqual(report["phases"]["measurement"]["inventory_depleted"], 1)
 
