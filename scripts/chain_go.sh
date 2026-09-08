@@ -21,7 +21,8 @@ source_id="$(git hash-object go.mod go.sum)"
 if [[ "$1" == vendor || ! -f vendor/.polystore-source || "$(cat vendor/.polystore-source)" != "$source_id" ]]; then
   (
     backup="$(mktemp -d "${TMPDIR:-/tmp}/polystore-vendor.XXXXXX")"
-    git ls-files -z vendor > "$backup/paths"
+    # modules.txt describes the freshly generated dependency graph, not a patch.
+    git ls-files -z -- vendor ':(exclude)vendor/modules.txt' > "$backup/paths"
     tar -cf "$backup/patches.tar" --null -T "$backup/paths"
     restore_patches() {
       status=$?

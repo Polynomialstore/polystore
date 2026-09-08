@@ -22,6 +22,8 @@ class ChainGoTest(unittest.TestCase):
                 (chain / name).write_text("dependency v1\n")
             patch = chain / "vendor/correction.go"
             patch.write_text("tracked correction\n")
+            manifest = chain / "vendor/modules.txt"
+            manifest.write_text("dependency v1\n")
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             subprocess.run(["git", "-C", str(root), "add", "."], check=True)
             patch.write_text("uncommitted correction\n")
@@ -32,6 +34,7 @@ with open(os.environ["CALLS"], "a") as out:
     out.write(json.dumps([sys.argv[1:], os.environ.get("GOFLAGS")]) + "\\n")
 if sys.argv[1:] == ["mod", "vendor"]:
     pathlib.Path("vendor/correction.go").write_text("upstream without correction\\n")
+    pathlib.Path("vendor/modules.txt").write_text(pathlib.Path("go.mod").read_text())
     sys.exit(int(os.environ.get("VENDOR_EXIT", "0")))
 sys.exit(int(os.environ.get("BUILD_EXIT", "0")))
 ''')
@@ -56,6 +59,7 @@ sys.exit(int(os.environ.get("BUILD_EXIT", "0")))
             self.assertEqual(patch.read_text(), "uncommitted correction\n", "failed vendoring must preserve edits")
             self.assertEqual(run("test", "./...").returncode, 0)
             self.assertEqual(patch.read_text(), "uncommitted correction\n")
+            self.assertEqual(manifest.read_text(), "dependency v2\n", "keep regenerated metadata for the new dependency graph")
             self.assertEqual(run("vendor").returncode, 0)
             self.assertEqual(patch.read_text(), "uncommitted correction\n")
             shutil.copyfile(Path(__file__).resolve().parents[1] / "polystorechain/Makefile", chain / "Makefile")
