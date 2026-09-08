@@ -127,10 +127,17 @@ func validatePolyFSContentLayout(deal types.Deal, sizeBytes uint64, totalMdus ui
 }
 
 func isPolyFSUserDataMduTarget(deal types.Deal, mduIndex uint64) bool {
-	return mduIndex > deal.WitnessMdus
+	return mduIndex > deal.WitnessMdus && mduIndex < deal.TotalMdus
 }
 
 func validatePolyFSRetrievalRange(deal types.Deal, stripe stripeParams, startMduIndex uint64, startBlobIndex uint32, blobCount uint64) (uint64, uint64, error) {
+	if blobCount == 0 || uint64(startBlobIndex) >= stripe.leafCount {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("invalid retrieval blob range")
+	}
+	if deal.TotalMdus == 0 {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("legacy deal has no total_mdus; commit an explicit valid content layout before retrieval")
+	}
+
 	startBase, overflow := mulUint64(startMduIndex, stripe.leafCount)
 	if overflow {
 		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("start_mdu_index overflow")
@@ -158,13 +165,15 @@ func validatePolyFSRetrievalRange(deal types.Deal, stripe stripeParams, startMdu
 			return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
 	}
+	// A session is submitted atomically, so every open route must enforce the
+	// same proof count bound before charging or reserving its fees.
+	if err := ValidateProofCount(blobCount); err != nil {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
 	return startGlobal, endGlobal, nil
 }
 
 func flattenProofPath(path [][]byte) ([]byte, bool) {
-	if len(path) == 0 {
-		return nil, false
-	}
 	flattened := make([]byte, 0, len(path)*32)
 	for _, node := range path {
 		if len(node) != 32 {
@@ -176,23 +185,7 @@ func flattenProofPath(path [][]byte) ([]byte, bool) {
 }
 
 func verifyPolyFSChainedProof(polyfsRoot []byte, chainedProof *types.ChainedProof, leafCount uint64) (bool, error) {
-	if chainedProof == nil {
-		return false, nil
-	}
-	if chainedProof.MduIndex == 0 {
-		return false, nil
-	}
-	if len(polyfsRoot) != types.POLYFS_ROOT_SIZE ||
-		len(chainedProof.MduRootFr) != 32 ||
-		len(chainedProof.ManifestOpening) != 48 ||
-		len(chainedProof.RootTableDuCommitment) != 48 ||
-		len(chainedProof.BlobCommitment) != 48 ||
-		len(chainedProof.ZValue) != 32 ||
-		len(chainedProof.YValue) != 32 ||
-		len(chainedProof.KzgOpeningProof) != 48 {
-		return false, nil
-	}
-	if uint64(chainedProof.BlobIndex) >= leafCount {
+	if err := ValidateChainedProofShape(polyfsRoot, chainedProof, leafCount); err != nil {
 		return false, nil
 	}
 	rootTableMerkle, ok := flattenProofPath(chainedProof.RootTableDuMerklePath)
@@ -225,6 +218,12 @@ func verifyPolyFSChainedProof(polyfsRoot []byte, chainedProof *types.ChainedProo
 		chainedProof.YValue,
 		chainedProof.KzgOpeningProof,
 	)
+}
+
+// VerifyPolyFSChainedProof shares native verification with the EVM legacy route.
+// Its caller must prepay the entire admitted list before the first call.
+func VerifyPolyFSChainedProof(root []byte, proof *types.ChainedProof, leafCount uint64) (bool, error) {
+	return verifyPolyFSChainedProof(root, proof, leafCount)
 }
 
 // CreateDealFromEvm handles MsgCreateDealFromEvm to create a new storage deal
@@ -1342,7 +1341,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 	}
 
-	verifyChainedProof := func(chainedProof *types.ChainedProof, logInput bool, requireSlotAuth bool) (bool, error) {
+	verifyChainedProof := func(chainedProof *types.ChainedProof, requireSlotAuth bool) (bool, error) {
 		if chainedProof == nil {
 			return false, nil
 		}
@@ -1391,26 +1390,17 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			}
 		}
 
-		if logInput {
-			flattenedMerkle, _ := flattenProofPath(chainedProof.MerklePath)
-			flattenedRootTableMerkle, _ := flattenProofPath(chainedProof.RootTableDuMerklePath)
-			ctx.Logger().Info("VerifyChainedProof Input",
-				"PolyFSRoot", hex.EncodeToString(deal.ManifestRoot),
-				"MduIndex", chainedProof.MduIndex,
-				"MduRootFr", hex.EncodeToString(chainedProof.MduRootFr),
-				"RootTableDuCommitment", hex.EncodeToString(chainedProof.RootTableDuCommitment),
-				"RootTableMerklePath", hex.EncodeToString(flattenedRootTableMerkle),
-				"RootTableOpening", hex.EncodeToString(chainedProof.ManifestOpening),
-				"BlobCommitment", hex.EncodeToString(chainedProof.BlobCommitment),
-				"BlobIndex", chainedProof.BlobIndex,
-				"MerklePath", hex.EncodeToString(flattenedMerkle),
-				"ZValue", hex.EncodeToString(chainedProof.ZValue),
-				"YValue", hex.EncodeToString(chainedProof.YValue),
-				"KzgOpening", hex.EncodeToString(chainedProof.KzgOpeningProof),
-			)
-		}
-
 		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
+	}
+
+	proofCount, err := validateLivenessProofAdmission(deal, stripe.leafCount, msg)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	if proofCount != 0 {
+		if err := PrepayProofCrypto(ctx, proofCount); err != nil {
+			return nil, err
+		}
 	}
 
 	epochStartHeight := int64(1)
@@ -1495,7 +1485,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 
 		// Verify triple-proof.
-		ok, err := verifyChainedProof(&receipt.ProofDetails, false, false)
+		ok, err := verifyChainedProof(&receipt.ProofDetails, false)
 		if err != nil {
 			return sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
 		}
@@ -1572,7 +1562,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		bandwidthBytes += receipt.BytesServed
 
 		if err := k.RecordDealActivity(ctx, deal.Id, receipt.BytesServed, false); err != nil {
-			ctx.Logger().Error("failed to record deal activity", "error", err)
+			return err
 		}
 
 		if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, receipt.ProofDetails.MduIndex, receipt.ProofDetails.BlobIndex); err != nil {
@@ -1584,7 +1574,13 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	switch pt := msg.ProofType.(type) {
 	case *types.MsgProveLiveness_SystemProof:
-		ok, err := verifyChainedProof(pt.SystemProof, true, true)
+		// Admission failure preserves the legacy failure/evidence response, but
+		// cannot enter either verifier without the full crypto prepayment.
+		ok := false
+		var err error
+		if proofCount != 0 {
+			ok, err = verifyChainedProof(pt.SystemProof, true)
+		}
 		if err != nil {
 			ctx.Logger().Error("Triple Proof Verification Error", "err", err)
 			ok = false
@@ -1787,7 +1783,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			seenLeaves[chunk.LeafIndex] = struct{}{}
 
 			// Verify triple-proof.
-			ok, err := verifyChainedProof(&chunk.ProofDetails, false, false)
+			ok, err := verifyChainedProof(&chunk.ProofDetails, false)
 			if err != nil {
 				return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
 			}
@@ -1815,7 +1811,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			bandwidthBytes += chunk.RangeLen
 
 			if err := k.RecordDealActivity(ctx, deal.Id, chunk.RangeLen, false); err != nil {
-				ctx.Logger().Error("failed to record deal activity", "error", err)
+				return nil, err
 			}
 
 			if err := k.recordCreditForProof(ctx, msg.EpochId, deal, stripe, creator, chunk.ProofDetails.MduIndex, chunk.ProofDetails.BlobIndex); err != nil {
@@ -1863,8 +1859,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		//
 		// Units are the base denom (micro-NIL). Current placeholder pricing:
 		//   1 unit per KiB (rounded up).
-		const bytesPerUnit = uint64(1024)
-		units := (bandwidthBytes + bytesPerUnit - 1) / bytesPerUnit
+		units := LegacyReceiptUnits(bandwidthBytes)
 		if units == 0 {
 			units = 1
 		}
@@ -3432,8 +3427,8 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if len(msg.SessionId) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
-	if len(msg.Proofs) == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("proofs are required")
+	if err := ValidateProofCount(uint64(len(msg.Proofs))); err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
 
 	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
@@ -3494,7 +3489,10 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
 	}
-	startGlobal := session.StartMduIndex*stripe.leafCount + uint64(session.StartBlobIndex)
+	startGlobal, _, err := validatePolyFSRetrievalRange(deal, stripe, session.StartMduIndex, session.StartBlobIndex, session.BlobCount)
+	if err != nil {
+		return nil, err
+	}
 
 	activeProviderForMode2Slot := func(slot uint32) (string, bool) {
 		if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
@@ -3525,17 +3523,25 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
 	}
 
-	for i := uint64(0); i < session.BlobCount; i++ {
-		p := msg.Proofs[int(i)]
-
-		expectedGlobal := startGlobal + i
-		expectedMdu := expectedGlobal / stripe.leafCount
-		expectedBlob := expectedGlobal % stripe.leafCount
-
-		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
+	// Admit the whole legacy session list before any cryptographic work. V2's
+	// frozen challenge handler uses the same shape and prepayment functions.
+	for i := range msg.Proofs {
+		p := &msg.Proofs[i]
+		expectedGlobal := startGlobal + uint64(i)
+		if p.MduIndex != expectedGlobal/stripe.leafCount || uint64(p.BlobIndex) != expectedGlobal%stripe.leafCount {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
 		}
-
+		if err := ValidateProofTarget(deal, p); err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+		if err := ValidateChainedProofShape(deal.ManifestRoot, p, stripe.leafCount); err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+	}
+	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
+		return nil, err
+	}
+	for _, p := range msg.Proofs {
 		ok, err := verifyChainedProof(&p)
 		if err != nil {
 			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)

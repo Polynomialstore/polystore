@@ -90,7 +90,7 @@ func (app *App) initEVMMempool() error {
 	proposalHandler := baseapp.NewDefaultProposalHandler(cosmosMempool, app.App)
 	proposalHandler.SetSignerExtractionAdapter(ethSignerExtractor)
 	app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
-	app.SetProcessProposal(proposalHandler.ProcessProposalHandler())
+	app.SetProcessProposal(boundedProcessProposal(proposalHandler.ProcessProposalHandler()))
 
 	logger.Info("configured EVM mempool successfully")
 

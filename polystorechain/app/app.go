@@ -253,6 +253,9 @@ func New(
 	}
 
 	app.App = appBuilder.Build(db, traceStore, baseAppOptions...)
+	app.SetTxDecoder(boundedTxDecoder(app.txConfig.TxDecoder()))
+	proposalHandler := baseapp.NewDefaultProposalHandler(app.Mempool(), app.App)
+	app.SetProcessProposal(boundedProcessProposal(proposalHandler.ProcessProposalHandler()))
 
 	// register legacy modules
 	if err := app.registerIBCModules(appOpts); err != nil {
