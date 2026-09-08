@@ -461,6 +461,20 @@ Clients (Gateways, CLIs, browsers) SHOULD treat PolyStore as a content-addressed
 
 ### 7.2 Control Plane: Retrieval Sessions, Proof-of-Retrieval, and Completion (Planned → Mandated)
 
+**Version-2 SESSION override (inactive by default):** The exact wire, immutable
+authority, challenge, settlement and migration contract is
+[retrieval-v2-session-profile](docs/retrieval-v2-session-profile.md). Version 2 binds
+the effective payee to the native signer/EVM caller, freezes the content generation
+and full range, captures the fixed H+1 anchor and accepts H+2 through expiry. Every
+opened blob requires its expected fresh evaluation point. Ordinary session
+acceptance creates no storage-audit credit; completion records billed encoded
+coverage once. A public proof is not independent evidence of fresh byte delivery.
+Existing version-0 liabilities become expiry-refund-only upon coordinated activation;
+COMPLETED remains terminal. Default deployment stays inactive pending C4 and
+#256/#257/#260 qualification. The historical flow below applies to legacy operation
+where it differs from this versioned contract.
+
+
 PolyStore’s devnet is converging on a **Retrieval Session** control-plane that makes retrievals accountable and grief-resistant while staying aligned to PolyFS + Triple Proof and the protocol’s atomic units:
 
 * **Atomic unit:** 128 KiB **Blob** (`BLOB_SIZE`). All on-chain accounting is in blob counts / blob-aligned bytes.

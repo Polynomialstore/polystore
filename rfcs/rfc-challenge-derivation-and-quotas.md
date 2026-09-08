@@ -1,6 +1,6 @@
 # RFC: Challenge Derivation & Proof Quota Policy
 
-**Status:** Legacy v1 runtime; v2 primitives implemented, activation unavailable
+**Status:** Legacy v1 default; v2 primitives and SESSION runtime implemented, coordinated activation unqualified
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
@@ -11,11 +11,13 @@
 
 The pure Go package `polystorechain/pkg/retrievalchallenge` implements this section's
 serialization, response windows, distinct sampling and off-domain evaluation points.
-It has **no runtime caller or activation switch**. It does not authenticate an
-actor, setup artifact, block hash or snapshot, perform KZG verification, enforce
-payment/coverage accounting, or establish that bytes were delivered. Legacy v1
-runtime behavior remains unchanged. Issues #254–#257 and #260 own integration and
-qualification; this first #255 S0 slice does not complete #255.
+The SESSION keeper now authenticates its actors and immutable snapshots, captures
+fixed committed anchors, enforces exact proof targets and settles once. See the
+[session wire/profile/recovery contract](../docs/retrieval-v2-session-profile.md).
+Its scheduled activation defaults to disabled and remains unqualified until C4,
+#256/#257 and #260 pass. The pure package itself does not authenticate a setup,
+perform KZG verification or establish byte delivery. This SESSION slice does not
+complete the independent audit or deployment obligations of #255.
 
 This section supersedes the historical v1 assumptions below **for future v2
 activation**. In particular, ordinary retrieval cannot reduce independent storage
@@ -41,7 +43,7 @@ This fixture representation does not change the binary transcript.
 | chain_id | LP UTF-8 | Authenticated chain ID; 1–50 bytes, valid UTF-8, no NUL |
 | setup_digest | 32 bytes | SHA-256 of the exact accepted trusted-setup artifact; expected digest authenticated by the protocol profile |
 | kind | U8 | 1 = paid session; 2 = assigned storage audit |
-| context_id | 32 bytes | Existing session ID for kind 1; all zero for kind 2, whose identity is the bound epoch/assignment tuple |
+| context_id | 32 bytes | Versioned session ID from the session profile for kind 1; all zero for kind 2, whose identity is the bound epoch/assignment tuple |
 | deal_id, generation | U64 each | Frozen deal and content generation |
 | root | 32 bytes | Frozen PolyFS root |
 | assigned, payee | 20 bytes each | Canonical raw account addresses; distinct fields even when equal |

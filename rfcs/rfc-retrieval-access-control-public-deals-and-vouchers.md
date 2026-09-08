@@ -345,3 +345,15 @@ Protocol retrieval sessions use the same data-plane gate: they produce a normal 
 - `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md` (sessions required for all served bytes; batching preserved)
 - `rfcs/rfc-mode2-onchain-state.md` (REPAIRING slots + pending_provider authorization)
 - `rfc-retrieval-validation.md` (deputy/audit debt; will reference protocol sessions)
+
+## Version-2 proof authority (inactive by default)
+
+Opening policy and paying for retrieval do not authorize every public proof holder
+to submit or receive fees. The [v2 session profile](../docs/retrieval-v2-session-profile.md)
+freezes the assigned provider and effective authorized proof payee at open. A native
+signer or EVM caller must equal that payee. Owner/sponsored/protocol routes preserve
+their existing policy, voucher and task restrictions; protocol authority does not
+imply deputy authority. An empty deputy field normalizes to the assignment, and
+voucher restrictions cannot be widened through it. Mutable registration or deal
+updates after open cannot revoke the funded challenge. These rules are not a
+confidentiality or independently measured delivery guarantee.
