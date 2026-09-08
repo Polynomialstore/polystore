@@ -26,6 +26,7 @@ type slabIndexEntry struct {
 	mdu0ModTime  int64
 	manifestKey  string
 	witnessCount uint64
+	userCount    uint64
 	files        map[string]slabFileInfo
 }
 
@@ -90,6 +91,7 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 					mdu0ModTime:  mdu0Mod,
 					manifestKey:  expectedManifestKey,
 					witnessCount: meta.WitnessMdus,
+					userCount:    meta.UserMdus,
 					files:        slabIndexFilesFromMetadata(meta.FileRecords),
 				}
 				slabIndexCache.Store(dealDir, entry)
@@ -113,6 +115,13 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Without a sidecar, use the same immutable FAT allocation for both the
+	// user count and witness count, including deleted file extents.
+	userCount, err := fileTableUserMDUCount(b)
+	if err != nil {
+		return nil, err
+	}
+
 	files := slabIndexFilesFromMetadata(records)
 
 	witnessCount, err := inferWitnessCount(dealDir, b)
@@ -127,6 +136,7 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 		mdu0ModTime:  mdu0Mod,
 		manifestKey:  expectedManifestKey,
 		witnessCount: witnessCount,
+		userCount:    userCount,
 		files:        files,
 	}
 	slabIndexCache.Store(dealDir, entry)
