@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 
 import retrieval_bench_artifact as artifact
@@ -331,6 +332,145 @@ class BenchmarkArtifactTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):
                 artifact.fixture(directory, 1, 1, "zero-filled-v1")
+
+
+class RetrievalSchedulerTest(unittest.TestCase):
+    def test_fake_subprocess_load_bounds_signers_quarantine_and_accounting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / "fake_chain.py"
+            fake.write_text(textwrap.dedent('''\
+                import hashlib, json, os, pathlib, sys, time
+                mode, directory, name, signer, scenario, hash_key = sys.argv[1:7]
+                root = pathlib.Path(directory)
+                lock = root / (signer + ".lock")
+                txhash = hashlib.sha256(hash_key.encode()).hexdigest().upper()
+                def event(kind):
+                    fd = os.open(root / "events.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                    os.write(fd, (json.dumps({"kind": kind, "id": name, "signer": signer,
+                                             "ns": time.monotonic_ns()}) + "\\n").encode())
+                    os.close(fd)
+                if mode == "submit":
+                    try:
+                        lock.mkdir()
+                    except FileExistsError:
+                        event("signer_conflict")
+                        print(json.dumps({"code": 99}))
+                        sys.exit(1)
+                    event("submit")
+                    if name in ("warm-a", "warm-b"):
+                        (root / (name + ".ready")).touch()
+                        deadline = time.monotonic() + 2
+                        while not all((root / (other + ".ready")).exists() for other in ("warm-a", "warm-b")):
+                            if time.monotonic() > deadline:
+                                raise RuntimeError("global concurrency did not reach two")
+                            time.sleep(0.001)
+                        # Release only after the single artifact writer observes
+                        # admission of the entire initial burst; no timing race.
+                        while not (root / "release-warmup").exists():
+                            if time.monotonic() > deadline:
+                                raise RuntimeError("initial burst was not accounted")
+                            time.sleep(0.001)
+                    if scenario == "reject":
+                        lock.rmdir()
+                        event("rejected")
+                        print(json.dumps({"code": 7}))
+                    else:
+                        print(json.dumps({"code": 0, "txhash": txhash}))
+                elif scenario == "unknown":
+                    print("{}")  # HTTP/CLI success alone is no commit evidence.
+                else:
+                    assert sys.argv[7] == txhash
+                    lock.rmdir()
+                    event("committed")
+                    print(json.dumps({"txhash": txhash, "height": "4", "code": 0,
+                                      "gas_wanted": "1000000", "gas_used": "900000"}))
+            '''))
+
+            def job(name, signer, *, phase="measurement", offset=0, deps=(), scenario="success", operation=None, hash_key=None):
+                common = [str(root), name, signer, scenario, hash_key or name]
+                return {"id": name, "operation_id": operation or name, "phase": phase,
+                        "signer": signer, "offered_offset_ns": offset, "depends_on": list(deps),
+                        "timeout_seconds": 1,
+                        "submit": [sys.executable, str(fake), "submit", *common, "--from", signer],
+                        "query": [sys.executable, str(fake), "query", *common]}
+
+            jobs = [job("warm-a", "address-a", phase="warmup"), job("warm-b", "address-b", phase="warmup"),
+                    job("proof-a", "address-a", deps=("warm-a",), operation="session-a"),
+                    job("confirm-a", "address-a", deps=("proof-a",), operation="session-a"),
+                    job("lane-overflow", "address-a"),
+                    job("unknown-c", "address-c", scenario="unknown"), job("quarantined-c", "address-c"),
+                    job("lane-overflow-c", "address-c"), job("proof-d", "address-d"),
+                    job("duplicate-d", "address-d", deps=("proof-d",), hash_key="proof-d"),
+                    job("reject-r", "address-r", scenario="reject"), job("dependent-r", "address-z", deps=("reject-r",)),
+                    job("global-overflow", "address-e", offset=1)]
+            persisted = []
+            def record_transaction(item):
+                persisted.append(item)
+                if item["id"] == "global-overflow":
+                    (root / "release-warmup").touch()
+            report = artifact.schedule_transactions(jobs, max_in_flight=2, max_queued=8, max_queued_per_signer=2,
+                                                    record_transaction=record_transaction)
+            self.assertEqual(persisted, report["transactions"])
+            records = {item["id"]: item for item in report["transactions"]}
+            self.assertEqual(len(records), len(jobs))
+            self.assertEqual((report["peak_in_flight"], report["peak_queued"], report["peak_queued_per_signer"]), (2, 8, 2))
+            self.assertEqual(report["quarantined_signers"], ["address-c"])
+            for name in ("lane-overflow", "lane-overflow-c", "global-overflow"):
+                self.assertEqual((records[name]["outcome"], records[name]["error"]), ("not_submitted", "queue_full"))
+            self.assertEqual(records["unknown-c"]["outcome"], "unknown")
+            self.assertEqual(records["quarantined-c"]["error"], "signer_quarantined")
+            self.assertEqual(records["duplicate-d"]["outcome"], "duplicate")
+            self.assertEqual(records["reject-r"]["outcome"], "checktx_rejected")
+            self.assertEqual(records["dependent-r"]["outcome"], "skipped")
+            self.assertEqual(report["phases"]["warmup"]["outcomes"]["committed_success"], 2)
+            self.assertEqual(report["phases"]["measurement"]["outcomes"]["committed_success"], 3)
+            self.assertEqual(report["phases"]["measurement"]["offered"], 11)
+            self.assertTrue(report["warmup_overlapped_measurement"])
+            self.assertIsNone(report["completed_sessions"])
+            self.assertFalse(report["qualification"])
+            for planned in jobs:
+                item = records[planned["id"]]
+                self.assertEqual(item["offered_ns"], report["started_ns"] + planned["offered_offset_ns"])
+                self.assertGreaterEqual(item["terminal_latency_ns"], 0)
+                if item["started_ns"] is not None:
+                    self.assertGreaterEqual(item["queue_latency_ns"], 0)
+            operations = {item["operation_id"]: item for item in report["operations"]}
+            self.assertTrue(operations["session-a"]["all_transactions_committed"])
+            self.assertFalse(operations["duplicate-d"]["all_transactions_committed"])
+            self.assertGreater(operations["session-a"]["terminal_latency_ns"], 0)
+            events = [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()]
+            self.assertNotIn("signer_conflict", {item["kind"] for item in events})
+            self.assertEqual([item["id"] for item in events if item["kind"] == "submit" and item["signer"] == "address-c"], ["unknown-c"])
+            active = set()
+            for event in events:
+                if event["kind"] == "submit":
+                    self.assertNotIn(event["signer"], active)
+                    active.add(event["signer"])
+                    self.assertLessEqual(len(active), 2)
+                else:
+                    active.remove(event["signer"])
+            self.assertEqual(active, {"address-c"})
+
+            # Exhausted uncertainty credits stop unrelated queued broadcasts;
+            # releasing only the worker must never release the global budget.
+            exhausted = artifact.schedule_transactions(
+                [job("unknown-x", "address-x", scenario="unknown"), job("blocked-y", "address-y")],
+                max_in_flight=1, max_queued=1, max_queued_per_signer=1)
+            self.assertEqual(exhausted["transactions"][1]["error"], "unknown_capacity_exhausted")
+            self.assertIsNone(exhausted["transactions"][1]["started_ns"])
+
+    def test_scheduler_rejects_invalid_plan_before_launch(self):
+        job = {"id": "a", "operation_id": "a", "phase": "measurement", "signer": "address-a",
+               "offered_offset_ns": 0, "timeout_seconds": 1,
+               "submit": ["must-not-run", "--from", "address-a"], "query": ["must-not-run"]}
+        for changes in ({"submit": ["must-not-run", "--from", "key-alias"]}, {"depends_on": ["future"]},
+                        {"phase": "unknown"}, {"timeout_seconds": 0}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                artifact.schedule_transactions([dict(job, **changes)], max_in_flight=2, max_queued=2, max_queued_per_signer=1)
+        with self.assertRaisesRegex(ValueError, "cannot span"):
+            artifact.schedule_transactions([dict(job, phase="warmup"), dict(job, id="b")],
+                                           max_in_flight=2, max_queued=2, max_queued_per_signer=1)
 
 
 class RetrievalArithmeticTest(unittest.TestCase):
