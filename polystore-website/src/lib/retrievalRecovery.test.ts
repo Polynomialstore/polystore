@@ -62,3 +62,29 @@ test('witness list extraction crosses scalars and MDUs using total extent, inclu
   witness[1].bytes[0] = 1
   assert.throws(() => readUserCommitments(p, 10n, witness, new Uint8Array(32), crypto), /prefix/)
 })
+
+test('generation-scoped witness cache survives worker transfers, reuses admission and evicts after two entries', async () => {
+  const { createRecoveryCommitmentReader } = await import('./retrievalRecovery')
+  const p = { ...pin, k: 1, m: 255, rows: 64, leafCount: 16384, userMdus: 40n, metadataMdus: 5n, root: `0x${'11'.repeat(32)}`, generation: 1n } as PinnedGeneration
+  const mdu0 = new Uint8Array(8388608)
+  for (let index = 1; index <= 4; index++) mdu0[(index - 1) * 32] = index
+  const fetched: bigint[] = [], admitted: number[] = []
+  const reader = {
+    fetch: async (index: bigint) => { fetched.push(index); const bytes = new Uint8Array(8388608); bytes[0] = Number(index); return bytes },
+    verifyWitness: async (bytes: Uint8Array, cell: Uint8Array) => { assert.equal(bytes[0], cell[0], 'wrong generation root'); admitted.push(bytes[0]); return bytes },
+    readCommitments: async (_pin: PinnedGeneration, _ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[]) => {
+      // Real worker-client transfers these buffers; cached admission must keep
+      // its own bytes and not become an empty detached buffer after first use.
+      for (const entry of witness) { assert.equal(entry.bytes[0], Number(entry.index)); structuredClone(entry.bytes, { transfer: [entry.bytes.buffer] }); assert.equal(entry.bytes.length, 0) }
+      return new Uint8Array(48)
+    },
+  }
+  const read = createRecoveryCommitmentReader(p, mdu0, reader)
+  // Altering the caller's buffer cannot replace the roots pinned by this reader.
+  mdu0[0] = 42
+  for (const ordinal of [0n, 1n, 11n, 22n, 0n]) await read(ordinal)
+  assert.deepEqual(fetched, [1n, 2n, 3n, 1n]); assert.deepEqual(admitted, [1, 2, 3, 1])
+  const changed = createRecoveryCommitmentReader({ ...p, generation: 2n, root: `0x${'22'.repeat(32)}` }, mdu0, reader)
+  await assert.rejects(changed(0n), /wrong generation root/)
+  assert.equal(fetched.length, 5, 'another generation cannot reuse old authenticated bytes')
+})

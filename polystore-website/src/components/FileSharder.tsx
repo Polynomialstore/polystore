@@ -25,7 +25,7 @@ import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFe
 import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath'
 import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../lib/providerDiscovery'
 import { fetchPinnedGeneration } from '../lib/retrieval'
-import { fetchRecoveryCommitments, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { createRetrievalOutput, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
@@ -2058,19 +2058,20 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     if (pin.userMdus) recoveryWindows(pin, 0n)
     const output = await createRetrievalOutput(pin.userMdus * 8388608n)
     try {
+      const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
+        fetch: async (index) => {
+          let last: unknown
+          for (const e of endpoints.values()) {
+            try { return await providerFetchRetrievalMetadata(e?.baseUrl || appConfig.spBase, pin, index, signal) }
+            catch (error) { signal.throwIfAborted(); last = error }
+          }
+          throw last ?? new Error('witness unavailable')
+        },
+        verifyWitness: workerClient.verifyRetrievalWitness,
+        readCommitments: workerClient.readRetrievalCommitments,
+      }, signal)
       for (let ordinal = 0n; ordinal < pin.userMdus; ordinal++) {
-        const commitments = await fetchRecoveryCommitments(pin, ordinal, mdu0Bytes, {
-          fetch: async (index) => {
-            let last: unknown
-            for (const e of endpoints.values()) {
-              try { return await providerFetchRetrievalMetadata(e?.baseUrl || appConfig.spBase, pin, index, signal) }
-              catch (error) { signal.throwIfAborted(); last = error }
-            }
-            throw last ?? new Error('witness unavailable')
-          },
-          verifyWitness: workerClient.verifyRetrievalWitness,
-          readCommitments: workerClient.readRetrievalCommitments,
-        }, signal)
+        const commitments = await readCommitments(ordinal)
         await recoverRetrievalMdu(pin, ordinal, {
           open: (windows) => retrievalPayment.open(pin, windows, undefined, signal),
           fetchAndVerify: async (session) => {

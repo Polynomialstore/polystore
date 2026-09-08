@@ -89,16 +89,29 @@ export interface RecoveryMetadataReader {
   verifyWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array>
   readCommitments(pin: PinnedGeneration, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array>
 }
-// Keep only the at-most-two witness MDUs intersecting this user's commitment
-// list. Each enclosing MDU and the extracted list have separate root checks.
-export async function fetchRecoveryCommitments(pin: PinnedGeneration, ordinal: bigint, mdu0: Uint8Array, reader: RecoveryMetadataReader, signal?: AbortSignal): Promise<Uint8Array> {
+// One reader belongs to one immutable generation. Two verified witness MDUs
+// cover any legal user list; older entries are evicted before another is kept.
+export function createRecoveryCommitmentReader(pin: PinnedGeneration, mdu0: Uint8Array, reader: RecoveryMetadataReader, signal?: AbortSignal): (ordinal: bigint) => Promise<Uint8Array> {
   if (mdu0.length !== 8388608) throw new Error('missing authenticated MDU0')
-  const cell = (index: bigint) => mdu0.slice(Number(index - 1n) * 32, Number(index) * 32)
-  const witness: { index: bigint; bytes: Uint8Array }[] = []
-  for (const index of witnessSpan(pin, ordinal).indices) {
+  const frozen = { ...pin }, roots = mdu0.slice(0, 2 * 1024 * 1024)
+  const cache = new Map<bigint, Uint8Array>()
+  const cell = (index: bigint) => roots.slice(Number(index - 1n) * 32, Number(index) * 32)
+  return async (ordinal) => {
+    const witness: { index: bigint; bytes: Uint8Array }[] = []
+    for (const index of witnessSpan(frozen, ordinal).indices) {
+      signal?.throwIfAborted()
+      let bytes = cache.get(index)
+      if (!bytes) {
+        bytes = await reader.verifyWitness(await reader.fetch(index), cell(index))
+        if (bytes.length !== 8388608) throw new Error('incomplete authenticated witness')
+        if (cache.size === 2) cache.delete(cache.keys().next().value!)
+      }
+      cache.delete(index); cache.set(index, bytes)
+      // Transfer a bounded copy to the worker, retaining authenticated bytes
+      // for subsequent users in this generation (at most two 8MiB entries).
+      witness.push({ index, bytes: bytes.slice() })
+    }
     signal?.throwIfAborted()
-    witness.push({ index, bytes: await reader.verifyWitness(await reader.fetch(index), cell(index)) })
+    return reader.readCommitments(frozen, ordinal, witness, cell(frozen.metadataMdus + ordinal))
   }
-  signal?.throwIfAborted()
-  return reader.readCommitments(pin, ordinal, witness, cell(pin.metadataMdus + ordinal))
 }

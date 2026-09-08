@@ -6,7 +6,7 @@ import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
 import { account, fetchPinnedGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
-import { fetchRecoveryCommitments, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
@@ -180,6 +180,18 @@ export function useFetch() {
       const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
         for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
       }
+      const readCommitments = createRecoveryCommitmentReader(pin, mdu0, {
+        fetch: async (index) => {
+          let last: unknown
+          for (const base of bases) {
+            try { return await providerFetchRetrievalMetadata(base, pin, index, signal) }
+            catch (error) { signal.throwIfAborted(); last = error }
+          }
+          throw last ?? new Error('witness unavailable')
+        },
+        verifyWitness: workerClient.verifyRetrievalWitness,
+        readCommitments: workerClient.readRetrievalCommitments,
+      }, signal)
       // Process one MDU at a time. Recovery retains at most K shards and one
       // output MDU; file length never increases the in-memory working set.
       const processMdu = async (windows: RetrievalWindow[]) => {
@@ -197,18 +209,7 @@ export function useFetch() {
         }
         if (input.sponsoredAuth?.type === 'voucher') throw new Error('failed retrieval needs a fresh voucher for separately funded recovery')
         recoveryWindows(pin, ordinal)
-        const commitments = await fetchRecoveryCommitments(pin, ordinal, mdu0!, {
-          fetch: async (index) => {
-            let last: unknown
-            for (const base of bases) {
-              try { return await providerFetchRetrievalMetadata(base, pin, index, signal) }
-              catch (error) { signal.throwIfAborted(); last = error }
-            }
-            throw last ?? new Error('witness unavailable')
-          },
-          verifyWitness: workerClient.verifyRetrievalWitness,
-          readCommitments: workerClient.readRetrievalCommitments,
-        }, signal)
+        const commitments = await readCommitments(ordinal)
         await recoverRetrievalMdu(pin, ordinal, {
           open: (wave) => payment.open(pin, wave, input.sponsoredAuth, signal, deputy),
           fetchAndVerify: fetchSession,
