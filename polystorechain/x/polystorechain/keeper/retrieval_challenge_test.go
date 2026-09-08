@@ -31,7 +31,11 @@ func activateSessionFixture(t *testing.T, f *fixture) sdk.Context {
 }
 
 func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
-	f, _, server, owner, created, _ := setupRetrievalExpiryDeal(t)
+	f, bank, server, owner, created, _ := setupRetrievalExpiryDeal(t)
+	params, err := f.keeper.Params.Get(f.ctx)
+	require.NoError(t, err)
+	params.EpochLenBlocks = 4
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
 	ctx := activateSessionFixture(t, f)
 	data := make([]byte, types.MDU_SIZE)
 	for i := 0; i < len(data); i += 32 {
@@ -92,17 +96,35 @@ func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
 	// A retry budget below one proof's crypto price establishes that accepted-state
 	// retries cannot reenter prepaid verification or add another counter update.
 	retryCtx := ctx.WithBlockHeight(5).WithGasMeter(storetypes.NewGasMeter(499999))
+	require.Equal(t, uint64(1), (uint64(ctx.BlockHeight())-1)/params.EpochLenBlocks+1)
+	require.Equal(t, uint64(2), (uint64(retryCtx.BlockHeight())-1)/params.EpochLenBlocks+1)
+	beforeRetry := sessionStoreSnapshot(t, ctx, f.storeService)
+	transfersBefore := len(bank.transfers)
+	moduleBalanceBefore := bank.moduleBalances[types.ModuleName].String()
+	providerBalanceBefore := bank.accountBalances[created.AssignedProviders[0]].String()
 	_, err = server.SubmitRetrievalSessionProof(retryCtx, msg)
 	require.NoError(t, err)
 	unchanged, err := f.keeper.RetrievalSessions.Get(ctx, opened.SessionId)
 	require.NoError(t, err)
 	require.Equal(t, submitted, unchanged)
-	_, err = server.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: opened.SessionId})
+	require.Equal(t, beforeRetry, sessionStoreSnapshot(t, ctx, f.storeService), "cross-epoch proof retry cannot change any pin, credit, served or activity key")
+	require.Len(t, bank.transfers, transfersBefore)
+	require.Equal(t, moduleBalanceBefore, bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, providerBalanceBefore, bank.accountBalances[created.AssignedProviders[0]].String())
+	completionCtx := retryCtx.WithGasMeter(storetypes.NewInfiniteGasMeter())
+	_, err = server.ConfirmRetrievalSession(completionCtx, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: opened.SessionId})
 	require.NoError(t, err)
 	activity, err := f.keeper.DealActivityStates.Get(ctx, deal.Id)
 	require.NoError(t, err)
 	require.Equal(t, uint64(types.BlobSizeBytes), activity.BytesServedTotal)
 	require.Equal(t, uint64(1), activity.SuccessfulRetrievalsTotal)
+	// COMPLETED also remains a no-op in a later epoch, without recreating its pin.
+	retryCtx = ctx.WithBlockHeight(9).WithGasMeter(storetypes.NewGasMeter(499999))
+	require.Equal(t, uint64(3), (uint64(retryCtx.BlockHeight())-1)/params.EpochLenBlocks+1)
+	beforeRetry = sessionStoreSnapshot(t, ctx, f.storeService)
+	transfersBefore = len(bank.transfers)
+	moduleBalanceBefore = bank.moduleBalances[types.ModuleName].String()
+	providerBalanceBefore = bank.accountBalances[created.AssignedProviders[0]].String()
 	_, err = server.SubmitRetrievalSessionProof(retryCtx, msg)
 	require.NoError(t, err)
 	_, err = server.ConfirmRetrievalSession(retryCtx, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: opened.SessionId})
@@ -110,6 +132,10 @@ func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
 	after, err := f.keeper.DealActivityStates.Get(ctx, deal.Id)
 	require.NoError(t, err)
 	require.Equal(t, activity, after)
+	require.Equal(t, beforeRetry, sessionStoreSnapshot(t, ctx, f.storeService))
+	require.Len(t, bank.transfers, transfersBefore)
+	require.Equal(t, moduleBalanceBefore, bank.moduleBalances[types.ModuleName].String())
+	require.Equal(t, providerBalanceBefore, bank.accountBalances[created.AssignedProviders[0]].String())
 	_, err = f.keeper.RetrievalSessionProofProvider.Get(ctx, opened.SessionId)
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }
