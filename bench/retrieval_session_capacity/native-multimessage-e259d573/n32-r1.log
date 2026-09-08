@@ -1,0 +1,26 @@
+Initializing KZG with path: ../trusted_setup.txt
+goos: darwin
+goarch: arm64
+pkg: polystorechain/app
+cpu: Apple M3
+BenchmarkRetrievalNativeTransactions/N32/separate-2         	       3	 121836264 ns/op	      7902 envelope-B/op	         0 failures/op	        32.00 ffi-calls/op	    619606 gas/session	   3807268 ns/session	    119606 other-gas/session	     42510 pending-json-B	       262.7 sessions/s	    289948 sign-encode-ns/session	      2048 signature-B/op	     34366 tx-bytes/op	        32.00 txs/op	10468266 B/op	  156434 allocs/op
+BenchmarkRetrievalNativeTransactions/N32/batched-2          	       3	 105037541 ns/op	      2479 envelope-B/op	         0 failures/op	        32.00 ffi-calls/op	    575393 gas/session	   3282336 ns/session	     75393 other-gas/session	     42510 pending-json-B	       304.7 sessions/s	     11577 sign-encode-ns/session	        64.00 signature-B/op	     28943 tx-bytes/op	         1.000 txs/op	 4083845 B/op	   50095 allocs/op
+PASS
+        5.50 real         5.65 user         0.04 sys
+           236568576  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               13736  page reclaims
+                 940  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                  92  signals received
+                   6  voluntary context switches
+                6972  involuntary context switches
+         80779888914  instructions retired
+         21450489256  cycles elapsed
+           172393216  peak memory footprint

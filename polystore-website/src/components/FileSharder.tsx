@@ -1,64 +1,65 @@
-import { committedPolyfsLayout } from '../domain/polyfsLayout'
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
-import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react';
-import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { pickExpansionWorkerCount } from '../lib/expansionWorkers';
-import { workerClient } from '../lib/worker-client';
-import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import type { FrozenSession } from '../lib/retrieval'
+import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAccount } from 'wagmi'
+import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
+import { lcdFetchDeal } from '../api/lcdClient'
+import { providerFetchRetrievalMetadata } from '../api/providerClient'
+import { appConfig } from '../config'
+import { useBumpDealSetupSlot } from '../hooks/useBumpDealSetupSlot'
 import { useDirectCommit } from '../hooks/useDirectCommit'; // New import
-import { useBumpDealSetupSlot } from '../hooks/useBumpDealSetupSlot';
-import { appConfig } from '../config';
-import { formatDuration } from '../lib/duration';
-import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath';
+import { useDirectUpload } from '../hooks/useDirectUpload'; // New import
+import { useLocalGateway } from '../hooks/useLocalGateway'
+import { useRetrievalSessions } from '../hooks/useRetrievalSessions'
+import { useTransportRouter } from '../hooks/useTransportRouter'
+import { normalizeManifestRoot } from '../lib/cacheFreshness'
+import { formatDuration } from '../lib/duration'
+import { pickExpansionWorkerCount } from '../lib/expansionWorkers'
+import { maybeWrapPolyceZstd, peekPolyceHeader, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce'
+import { classifyPolyfsCommitError } from '../lib/polyfsCommitError'
+import {
+  assertPolyfsRootCell, parsePolyfsFilesFromMdu0,
+  parsePolyfsRootTableFromMdu0
+} from '../lib/polyfsLocal'
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch'
+import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath'
+import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../lib/providerDiscovery'
+import { fetchPinnedGeneration } from '../lib/retrieval'
+import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
+import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteDealDirectory,
   listDealFiles,
   readManifestBlob,
   readManifestRoot,
   readMdu,
-  readSlabMetadata,
   readShard,
+  readSlabMetadata,
   writeManifestRoot,
-  writeSlabMetadata,
   writeSlabGenerationAtomically,
-} from '../lib/storage/OpfsAdapter';
-import {
-  mode2RowsForK,
-  parsePolyfsFilesFromMdu0,
-  parsePolyfsRootTableFromMdu0,
-  reconstructMduFromMode2SlotSlices,
-} from '../lib/polyfsLocal';
-import { decodeRawPrefixFromMdu, inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch';
-import { lcdFetchDeal } from '../api/lcdClient';
-import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient';
-import { providerFetchMdu, providerFetchMduWindowWithSession } from '../api/providerClient';
-import { parseServiceHint } from '../lib/serviceHint';
-import { resolveProviderEndpoints } from '../lib/providerDiscovery';
-import { useLocalGateway } from '../hooks/useLocalGateway';
-import { maybeWrapPolyceZstd, peekPolyceHeader, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce';
-import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode';
-import { postSparseArtifact } from '../lib/upload/sparseTransport';
-import { expandSparseBytes, makeSparseArtifact } from '../lib/upload/sparseArtifacts';
-import { normalizeManifestRoot } from '../lib/cacheFreshness';
+  writeSlabMetadata,
+} from '../lib/storage/OpfsAdapter'
+import { isGatewayMode2UploadEnabled, isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { createUploadEngine, type UploadTarget, type UploadTaskEvent } from '../lib/upload/engine'
+import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery'
+import { createSparseHttpTransportPort } from '../lib/upload/httpTransport'
+import { collectMode2SlotFailures, isRecoverableMode2SlotFailure } from '../lib/upload/mode2Recovery'
 import {
   buildUploadPlan,
   nonTrivialBlobsForPayload,
   PLANNER_BLOBS_PER_MDU,
   PLANNER_TRIVIAL_BLOB_WEIGHT,
   weightedWorkForMdu,
-} from '../lib/upload/planner';
-import { createUploadEngine, type UploadTaskEvent, type UploadTarget } from '../lib/upload/engine';
-import { createSparseHttpTransportPort } from '../lib/upload/httpTransport';
-import { pickUploadParallelism } from '../lib/upload/uploadParallelism';
-import { bootstrapAppendBaseFromMdus as buildBootstrappedAppendBase } from '../lib/upload/bootstrapAppendBase';
-import { materializeBootstrapGeneration } from '../lib/upload/bootstrapGeneration';
-import { resolveMode2AppendBase } from '../lib/upload/resolveAppendBase';
-import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery';
-import { collectMode2SlotFailures, isRecoverableMode2SlotFailure } from '../lib/upload/mode2Recovery';
-import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot';
-import { classifyPolyfsCommitError } from '../lib/polyfsCommitError';
-import { waitForTransactionReceipt } from '../lib/evmRpc';
+} from '../lib/upload/planner'
+import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot'
+import { readAppendMdu, resolveMode2AppendBase, type AppendMdu, type ExistingLocalAppendBase } from '../lib/upload/resolveAppendBase'
+import { expandSparseBytes, makeSparseArtifact } from '../lib/upload/sparseArtifacts'
+import { postSparseArtifact } from '../lib/upload/sparseTransport'
+import { pickUploadParallelism } from '../lib/upload/uploadParallelism'
 import {
   createUploadPipelineStatus,
   normalizeKzgBackendStatus,
@@ -69,13 +70,8 @@ import {
   type UploadPipelinePhase,
   type UploadPipelineStatus,
   type UploadStatusTone,
-} from '../lib/uploadStatus';
-import {
-  decodeComputeRetrievalSessionIdsResult,
-  encodeComputeRetrievalSessionIdsData,
-  encodeConfirmRetrievalSessionsData,
-  encodeOpenRetrievalSessionsData,
-} from '../lib/polystorePrecompile';
+} from '../lib/uploadStatus'
+import { workerClient } from '../lib/worker-client'
 
 interface ShardItem {
   id: number;
@@ -690,8 +686,10 @@ function buildMode2UploadTarget(baseUrl: string): UploadTarget {
 
 export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }: FileSharderProps) {
   const { isConnected, address } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient({ chainId: appConfig.chainId });
+  const retrievalPayment = useRetrievalSessions(), retrievalTransport = useTransportRouter()
+  const retrievalCleanup = useRef<(() => Promise<void>) | null>(null)
+  const retrievalAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => { retrievalAbort.current?.abort(); void retrievalCleanup.current?.().catch(() => {}) }, [])
   const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
@@ -716,7 +714,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
-  const [compressUploads, setCompressUploads] = useState(true)
+  // Secured retrieval has no bounded PolyCE decoder yet. Keep new uploads
+  // retrievable while preserving support for existing compressed allocations.
+  const [compressUploads] = useState(false)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -1138,75 +1138,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       fileInputRef.current.value = ''
     }
   }, [resetUpload])
-
-  const openRetrievalWindows = useCallback(
-    async (
-      params: {
-        manifestRoot: string
-        requests: Array<{
-          key: string
-          provider: string
-          startMduIndex: number
-          startBlobIndex: number
-          blobCount: number
-        }>
-      },
-    ): Promise<Map<string, `0x${string}`>> => {
-      if (!publicClient) throw new Error('EVM RPC client unavailable')
-      if (!walletClient) throw new Error('Wallet not connected')
-      const signer = (walletClient.account?.address || address) as `0x${string}` | undefined
-      if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to open retrieval sessions')
-      if (params.requests.length === 0) return new Map<string, `0x${string}`>()
-      const requests = params.requests.map((request, idx) => ({
-        dealId: BigInt(dealId),
-        provider: request.provider,
-        manifestRoot: params.manifestRoot as `0x${string}`,
-        startMduIndex: BigInt(request.startMduIndex),
-        startBlobIndex: request.startBlobIndex,
-        blobCount: BigInt(request.blobCount),
-        nonce: BigInt(Date.now() + idx),
-        expiresAt: 0n,
-      }))
-      const computeCall = await publicClient.call({
-        account: signer,
-        to: appConfig.polystorePrecompile as `0x${string}`,
-        data: encodeComputeRetrievalSessionIdsData(requests),
-      })
-      const computeData = computeCall.data as `0x${string}`
-      if (!computeData || computeData === '0x') throw new Error('computeRetrievalSessionIds returned empty data')
-      const { sessionIds } = decodeComputeRetrievalSessionIdsResult(computeData)
-      if (sessionIds.length !== requests.length) throw new Error('computeRetrievalSessionIds returned unexpected session count')
-      const openTxHash = await walletClient.sendTransaction({
-        account: signer,
-        to: appConfig.polystorePrecompile as `0x${string}`,
-        data: encodeOpenRetrievalSessionsData(requests),
-        value: 0n,
-        chain: walletClient.chain ?? undefined,
-      })
-      await waitForTransactionReceipt(openTxHash)
-      return new Map(params.requests.map((request, idx) => [request.key, sessionIds[idx] as `0x${string}`]))
-    },
-    [address, dealId, publicClient, walletClient],
-  )
-
-  const confirmMduRetrievalSessions = useCallback(
-    async (sessionIds: readonly `0x${string}`[]) => {
-      if (sessionIds.length === 0) return
-      if (!publicClient) throw new Error('EVM RPC client unavailable')
-      if (!walletClient) throw new Error('Wallet not connected')
-      const signer = (walletClient.account?.address || address) as `0x${string}` | undefined
-      if (!signer || !String(signer).startsWith('0x')) throw new Error('Connect wallet to confirm retrieval sessions')
-      const txHash = await walletClient.sendTransaction({
-        account: signer,
-        to: appConfig.polystorePrecompile as `0x${string}`,
-        data: encodeConfirmRetrievalSessionsData(sessionIds),
-        value: 0n,
-        chain: walletClient.chain ?? undefined,
-      })
-      await waitForTransactionReceipt(txHash)
-    },
-    [address, publicClient, walletClient],
-  )
 
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
   const gatewayMode2Enabled = isMode2 && !appConfig.gatewayDisabled
@@ -2104,177 +2035,95 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     }
   }, [addLog, dealId, localGateway.url])
 
-  const bootstrapMode2AppendBaseFromNetwork = useCallback(async (): Promise<{
-    baseMdu0Bytes: Uint8Array
-    existingUserMdus: Array<{ index: number; data: Uint8Array }>
-    existingUserCount: number
-    existingMaxEnd: number
-    appendStartOffset: number
-  } | null> => {
-    const manifestRoot = normalizeManifestRoot(baseManifestRoot)
-    const owner = String(dealOwner || '').trim()
-    if (!manifestRoot || !owner || !stripeParams) {
-      return null
-    }
-    const head = await lcdFetchDeal(appConfig.lcdBase, dealId)
-    if (!head || head.id !== dealId || normalizeManifestRoot(head.cid) !== manifestRoot || head.owner !== owner) throw new Error('committed append generation changed or unavailable')
-    const { totalMdus, witnessMdus: witnessCount, userMdus: userCount } = committedPolyfsLayout(head)
-    const dataSlotProviders = slotProviders
-      .map((value, slot) => ({
-        slot,
-        provider: String(value || '').trim(),
-        base: String(slotBases[slot] || appConfig.spBase || '').trim().replace(/\/$/, ''),
-      }))
-      .filter((entry) => entry.provider && entry.base)
-      .slice(0, Math.max(1, stripeParams.k))
-    if (dataSlotProviders.length < Math.max(1, stripeParams.k)) {
-      throw new Error('missing Mode 2 slot providers for bootstrap retrieval')
-    }
-    const rows = mode2RowsForK(stripeParams.k)
-
-    const fetchCommittedMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
-      if (mduIndex === 0) {
-        addLog(`> Bootstrap fetch: fetching committed ${kindLabel} metadata...`)
-        let lastError: unknown = null
-        for (const entry of dataSlotProviders) {
-          try {
-            return await providerFetchMdu(entry.base, manifestRoot, mduIndex, { dealId, owner })
-          } catch (err) {
-            lastError = err
-          }
-        }
-        const msg = lastError instanceof Error ? lastError.message : String(lastError || 'metadata provider fetch failed')
-        throw new Error(`failed to fetch committed ${kindLabel} metadata: ${msg}`)
-      }
-      addLog(`> Bootstrap fetch: opening retrieval sessions for committed ${kindLabel} slices...`)
-      const requests = dataSlotProviders.map((entry) => ({
-        key: `${mduIndex}:${entry.slot}`,
-        provider: entry.provider,
-        startMduIndex: mduIndex,
-        startBlobIndex: entry.slot * rows,
-        blobCount: rows,
-      }))
-      const sessions = await openRetrievalWindows({ manifestRoot, requests })
+  const bootstrapMode2AppendBaseFromNetwork = useCallback(async (): Promise<ExistingLocalAppendBase | null> => {
+    if (!baseManifestRoot || !stripeParams) return null
+    retrievalAbort.current?.abort()
+    const controller = new AbortController()
+    retrievalAbort.current = controller
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30 * 60_000)])
+    const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    if (pin.root !== normalizeManifestRoot(baseManifestRoot) || pin.owner !== dealOwner || pin.layout !== 2 || pin.k !== stripeParams.k || pin.m !== stripeParams.m) throw new Error('committed append generation changed')
+    retrievalPayment.requireWallet()
+    await workerClient.initRetrievalWasm()
+    const endpoints = new Map<string, Awaited<ReturnType<typeof resolveProviderEndpointByAddress>>>()
+    for (const assignment of pin.assignments) endpoints.set(assignment.provider, await resolveProviderEndpointByAddress(appConfig.lcdBase, assignment.provider))
+    let mdu0Bytes: Uint8Array | undefined, records: Awaited<ReturnType<typeof workerClient.verifyRetrievalMetadata>> | undefined, lastError: unknown
+    for (const assignment of pin.assignments) {
       try {
-        addLog(`> Bootstrap fetch: fetching committed ${kindLabel} slices...`)
-        const slotSlices = await Promise.all(
-          dataSlotProviders.map(async (entry) => {
-            const sessionId = sessions.get(`${mduIndex}:${entry.slot}`)
-            if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel} slot ${entry.slot}`)
-            const data = await providerFetchMduWindowWithSession(entry.base, manifestRoot, mduIndex, {
-              dealId,
-              owner,
-              sessionId,
-              startBlobIndex: entry.slot * rows,
-              blobCount: rows,
-            })
-            return { slot: entry.slot, data }
-          }),
-        )
-        return reconstructMduFromMode2SlotSlices(slotSlices, stripeParams.k)
-      } finally {
-        await confirmMduRetrievalSessions(Array.from(sessions.values()))
-      }
+        const bytes = await providerFetchRetrievalMetadata(endpoints.get(assignment.provider)?.baseUrl || appConfig.spBase, pin, 0n, signal)
+        records = await workerClient.verifyRetrievalMetadata(bytes, pin); mdu0Bytes = bytes; break
+      } catch (error) { signal.throwIfAborted(); lastError = error }
     }
-
-    addLog('> Mode 2 append: local slab missing/stale; bootstrapping committed slab from provider retrieval...')
-    const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0')
-    const files = parsePolyfsFilesFromMdu0(mdu0Bytes)
-    if (!files.length) {
-      addLog('> Mode 2 append bootstrap: no committed PolyFS files found on provider.')
-      return null
+    if (!mdu0Bytes || !records) throw lastError ?? new Error('authenticated append metadata unavailable')
+    validateRetrievalAllocation(pin, records)
+    // Complete user MDUs are needed for append; each session remains one slot
+    // in one MDU. Preflight all required assignment states before any funding.
+    if (pin.userMdus) recoveryWindows(pin, 0n)
+    const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
+    const output = job.output
+    let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
+    const gatewayBase = localGateway.url || appConfig.gatewayBase
+    const availableProofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' }) ? gatewayBase : undefined
+    const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
+      const proofBase = job.state.pending?.proofBase ?? availableProofBase
+      job.prepare(ordinal, sessions, proofBase)
+      const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+        confirm: (wave) => retrievalPayment.confirm(wave, signal, job.key), signal,
+        gatewayBase: proofBase,
+      })
+      if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
+      for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
+      job.complete(ordinal, outcomes)
+      if (job.state.cleanup) { await retrievalPayment.forget(job.state.cleanup, job.key); job.cleaned() }
     }
-
-    parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
-    if (files.some((file) => file.start_offset + file.size_bytes > userCount * RAW_MDU_CAPACITY)) throw new Error('file map exceeds committed user capacity')
-    const userMduIndexes = Array.from({ length: userCount }, (_, idx) => 1 + witnessCount + idx)
-
-    const userMdus = await Promise.all(
-      userMduIndexes.map(async (mduIndex, idx) => {
-        const data = await fetchCommittedMdu(mduIndex, `user mdu_${mduIndex}`)
-        return { index: idx, data }
-      }),
-    )
-
-    const bootstrapped = buildBootstrappedAppendBase({
-      rawMduCapacity: RAW_MDU_CAPACITY,
-      mdu0Bytes,
-      userMdus,
-      decodeRawMdu: decodeRawPrefixFromMdu,
-    })
-    if (!bootstrapped) {
-      addLog('> Mode 2 append bootstrap: no committed PolyFS files found on provider.')
-      return null
-    }
-
     try {
-      await deleteDealDirectory(dealId)
-      const materialized = await materializeBootstrapGeneration({
-        baseMdu0Bytes: bootstrapped.baseMdu0Bytes,
-        existingUserMdus: bootstrapped.existingUserMdus,
-        expectedManifestRoot: manifestRoot,
-        rsK: stripeParams.k,
-        rsM: stripeParams.m,
-        rawMduCapacity: RAW_MDU_CAPACITY,
-        encodeToMdu,
-        loadMdu0Builder: (data, maxUserMdus, commitmentsPerMdu) =>
-          workerClient.loadMdu0Builder(data, maxUserMdus, commitmentsPerMdu),
-        setMdu0Root: (index, root) => workerClient.setMdu0Root(index, root),
-        getMdu0Bytes: () => workerClient.getMdu0Bytes(),
-        expandMduRs: (data, k, m) => workerClient.expandMduRs(data, k, m),
-        expandPayloadRs: (data, k, m) => workerClient.expandPayloadRs(data, k, m),
-        shardFile: (data) => workerClient.shardFile(data),
-        computeManifest: (roots) => workerClient.computeManifest(roots),
-      })
-      addLog(`> Mode 2 append bootstrap: verified committed PolyFS root ${materialized.manifestRoot}.`)
-      await writeSlabGenerationAtomically(dealId, {
-        manifestRoot: materialized.manifestRoot,
-        manifestBlob: materialized.manifestBlob,
-        mdus: [
-          { index: 0, data: materialized.mdu0Bytes },
-          ...materialized.witnessMdus.map((mdu) => ({ index: mdu.index, data: mdu.data })),
-          ...materialized.userMdus.map((mdu) => ({
-            index: 1 + materialized.witnessCount + mdu.index,
-            data: mdu.data,
-          })),
-        ],
-        shards: materialized.shardSets.flatMap((set) =>
-          set.shards.map((shard, slot) => ({
-            mduIndex: 1 + materialized.witnessCount + set.index,
-            slot,
-            data: shard.data,
-            fullSize: shard.fullSize,
-          })),
-        ),
-        metadata: {
-          schema_version: 1,
-          generation_id: `bootstrap-${materialized.manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
-          deal_id: dealId,
-          manifest_root: materialized.manifestRoot,
-          owner,
-          redundancy: { k: stripeParams.k, m: stripeParams.m, n: stripeParams.k + stripeParams.m },
-          source: 'browser_bootstrap_retrieval',
-          created_at: new Date().toISOString(),
-          last_validated_at: new Date().toISOString(),
-          witness_mdus: materialized.witnessCount,
-          user_mdus: bootstrapped.existingUserCount,
-          total_mdus: 1 + materialized.witnessCount + bootstrapped.existingUserCount,
-          file_records: bootstrapped.files.map((file) => ({
-            path: file.path,
-            start_offset: Number(file.start_offset || 0),
-            size_bytes: Number(file.size_bytes || 0),
-            flags: Number(file.flags || 0),
-          })),
+      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+        confirm: async () => {}, gatewayBase: availableProofBase ?? previousBase, signal,
+      }), (sessions) => retrievalPayment.forget(sessions, job.key), signal)
+      unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
+      const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
+        fetch: async (index) => {
+          let last: unknown
+          for (const e of endpoints.values()) {
+            try { return await providerFetchRetrievalMetadata(e?.baseUrl || appConfig.spBase, pin, index, signal) }
+            catch (error) { signal.throwIfAborted(); last = error }
+          }
+          throw last ?? new Error('witness unavailable')
         },
-      })
-      bootstrapped.baseMdu0Bytes = materialized.mdu0Bytes
-      addLog(`> Mode 2 append bootstrap: cached committed slab locally (${bootstrapped.files.length} files, ${bootstrapped.existingUserCount} user MDUs, ${materialized.witnessCount} witness MDUs).`)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      addLog(`> Mode 2 append bootstrap warning: failed to persist reconstructed slab locally (${msg}).`)
+        verifyWitness: workerClient.verifyRetrievalWitness,
+        readCommitments: workerClient.readRetrievalCommitments,
+      }, signal)
+      for (let ordinal = 0n; ordinal < pin.userMdus; ordinal++) {
+        if (ordinal <= job.state.through) continue
+        if (job.state.pending) {
+          if (job.state.pending.ordinal !== ordinal) throw new Error('saved append cursor does not match generation')
+          await confirm(ordinal, job.state.pending.sessions); continue
+        }
+        const commitments = await readCommitments(ordinal)
+        await recoverRetrievalMdu(pin, ordinal, {
+          open: (windows) => retrievalPayment.open(pin, windows, undefined, signal, undefined, job.key),
+          fetchAndVerify: async (session) => {
+            const e = endpoints.get(session.payee)
+            return (await retrievalTransport.fetchWindow({ session, directBase: e?.baseUrl || appConfig.spBase, p2pTarget: e?.p2pTarget, signal })).data
+          },
+          reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
+          consumeAndFlush: async (encoded) => { validateRetrievalMduPacking(pin, records, ordinal, encoded); await output.write(ordinal * 8388608n, encoded); await output.flush() },
+          confirm: (sessions) => confirm(ordinal, sessions),
+        }, signal)
+        addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
+      }
+      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Connect the trusted local gateway and retry before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
+      const file = await output.file()
+      job.finish()
+      await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
+      const existingMaxEnd = records.reduce((end, r) => r.start_offset + r.size_bytes > end ? r.start_offset + r.size_bytes : end, 0n)
+      return { baseMdu0Bytes: mdu0Bytes, existingUserCount: Number(pin.userMdus), existingMaxEnd: Number(existingMaxEnd), appendStartOffset: Number(pin.userMdus) * RAW_MDU_CAPACITY,
+        existingUserMdus: Array.from({ length: Number(pin.userMdus) }, (_, index) => ({ index, read: async () => new Uint8Array(await file.slice(index * 8388608, (index + 1) * 8388608).arrayBuffer()) })) }
+    } catch (error) {
+      await job.retain()
+      throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
     }
-    return bootstrapped
-  }, [addLog, baseManifestRoot, confirmMduRetrievalSessions, dealId, dealOwner, openRetrievalWindows, slotBases, slotProviders, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;
@@ -3300,16 +3149,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                     return await rehydrateGatewayFromOpfs()
                   },
                   bootstrapFromNetwork: async () => {
-                    if (!normalizeManifestRoot(baseManifestRoot)) return false
-                    addLog('> Browser cache is incomplete; retrieving committed index from providers (wallet approval required)...')
-                    setShardProgress((p) => ({
-                      ...p,
-                      phase: 'planning',
-                      label: 'Fetching committed index MDUs from providers...',
-                      currentOpStartedAtMs: p.currentOpStartedAtMs ?? performance.now(),
-                    }))
-                    const bootstrapped = await bootstrapMode2AppendBaseFromNetwork()
-                    return Boolean(bootstrapped)
+                    addLog('> Missing gateway history requires the verified browser append path.')
+                    return false
                   },
                 })
                 recoveredGatewayState = recovered.ok
@@ -3581,8 +3422,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }))
       }
       let baseMdu0Bytes: Uint8Array | null = null;
-      let existingUserMdus: { index: number; data: Uint8Array }[] = [];
+      let existingUserMdus: AppendMdu[] = [];
       let existingUserCount = 0;
+      let authenticatedUserRoots: Uint8Array[] = [];
     let existingMaxEnd = 0
 
     if (useMode2) {
@@ -3593,18 +3435,22 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       const loadLocalAppendBase = async () => {
         const mdu0 = await readMdu(dealId, 0)
         if (!mdu0) return null
-        const files = parsePolyfsFilesFromMdu0(mdu0)
-        if (files.length <= 0) return null
-        const existing = await inferWitnessCountFromOpfs(dealId, files)
+        const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, AbortSignal.timeout(60_000))
+        if (pin.root !== normalizeManifestRoot(baseManifestRoot)) throw new Error('local append generation changed')
+        const records = await workerClient.verifyRetrievalMetadata(mdu0, pin)
+        validateRetrievalAllocation(pin, records)
+        const existing = { userCount: Number(pin.userMdus), slabStartIdx: Number(pin.metadataMdus),
+          maxEnd: Number(records.reduce((end, r) => r.start_offset + r.size_bytes > end ? r.start_offset + r.size_bytes : end, 0n)) }
         if (existing.userCount <= 0) return null
 
-        const localUserMdus: { index: number; data: Uint8Array }[] = []
+        const localUserMdus: AppendMdu[] = []
         for (let i = 0; i < existing.userCount; i++) {
-          const mdu = await readMdu(dealId, existing.slabStartIdx + i)
-          if (!mdu) {
-            throw new Error(`missing local MDU: mdu_${existing.slabStartIdx + i}.bin`)
-          }
-          localUserMdus.push({ index: i, data: mdu })
+          const index = i
+          localUserMdus.push({ index, read: async () => {
+            const mdu = await readMdu(dealId, existing.slabStartIdx + index)
+            if (!mdu) throw new Error(`missing local MDU: mdu_${existing.slabStartIdx + index}.bin`)
+            return mdu
+          } })
         }
 
         return {
@@ -3621,13 +3467,17 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           localManifestRoot,
           chainManifestRoot: baseManifestRoot,
           loadLocal: loadLocalAppendBase,
-          clearLocal: () => deleteDealDirectory(dealId).catch(() => undefined),
           bootstrapFromNetwork: bootstrapMode2AppendBaseFromNetwork,
           addLog,
           formatBytes,
         })
         baseMdu0Bytes = resolvedAppendBase.baseMdu0Bytes
         existingUserMdus = resolvedAppendBase.existingUserMdus
+        if (resolvedAppendBase.baseMdu0Bytes) {
+          const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, AbortSignal.timeout(60_000))
+          if (pin.root !== normalizeManifestRoot(baseManifestRoot)) throw new Error('append generation changed before preparation')
+          authenticatedUserRoots = parsePolyfsRootTableFromMdu0(resolvedAppendBase.baseMdu0Bytes, Number(pin.totalMdus - 1n)).slice(Number(pin.metadataMdus - 1n))
+        }
         existingUserCount = resolvedAppendBase.existingUserCount
         existingMaxEnd = resolvedAppendBase.existingMaxEnd
         browserPerfEndPhase('append_bootstrap', {
@@ -3816,7 +3666,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             let encodeMs = 0
 
             if (isExisting) {
-              encodedMdu = existingUserMdus[i].data
+              encodedMdu = await readAppendMdu(existingUserMdus[i])
             } else {
               const newIndex = i - existingUserCount
               const start = newIndex * RawMduCapacity
@@ -3918,6 +3768,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
             userMdus[i] = makePreparedMdu(i, encodedMdu)
 
             const rootBytes = toU8(result.mdu_root)
+            if (isExisting) assertPolyfsRootCell(rootBytes, authenticatedUserRoots[i])
             userRoots[i] = rootBytes
             const witnessFlat = toU8(result.witness_flat)
             witnessDataBlobs[i] = witnessFlat
@@ -4072,7 +3923,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               let encodeMs = 0;
 
               if (isExisting) {
-                encodedMdu = existingUserMdus[i].data;
+                encodedMdu = await readAppendMdu(existingUserMdus[i]);
               } else {
                 const newIndex = i - existingUserCount;
                 const start = newIndex * RawMduCapacity;
@@ -4139,6 +3990,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
               const workerQueueMs = Math.max(0, wasmMs - workerTotalMs);
 
               const rootBytes = toU8(result.mdu_root);
+              if (isExisting) assertPolyfsRootCell(rootBytes, authenticatedUserRoots[i])
               userRoots.push(rootBytes);
               console.log(
                 `[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes)
@@ -4938,6 +4790,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }));
         setShards([]);
     } finally {
+        retrievalAbort.current?.abort(); retrievalAbort.current = null
+        await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = null
         setProcessing(false);
     }
   }, [addLog, baseManifestRoot, bootstrapMode2AppendBaseFromNetwork, browserPerfEndPhase, browserPerfLog, browserPerfStartPhase, browserPerfStartRun, compressUploads, dealId, dealSetupStatus, ensureWasmReady, gatewayMode2Enabled, isConnected, localGateway.status, localGateway.url, rehydrateGatewayFromOpfs, resetUpload, stripeParams, stripeParamsLoaded, updateUploadKzgStatus, updateUploadStatus]);
@@ -5697,7 +5551,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
                               </label>
                             </div>
-                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-pointer">
+                            <label className="mt-3 inline-flex items-center gap-2 text-[10px] font-mono-data uppercase tracking-[0.2em] text-muted-foreground cursor-not-allowed">
                               <div className={`flex h-4 w-4 items-center justify-center border transition-colors ${compressUploads ? 'bg-primary border-primary' : 'bg-transparent border-border'}`}>
                                 {compressUploads && <div className="h-1.5 w-1.5 bg-primary-foreground" />}
                               </div>
@@ -5706,10 +5560,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
                                 className="hidden"
                                 checked={compressUploads}
                                 data-testid="mdu-compress-toggle"
-                                disabled={processing || activeUploading}
-                                onChange={(e) => setCompressUploads(e.target.checked)}
+                                disabled
                               />
-                              <span>Compress before upload</span>
+                              <span>Compression unavailable: secured downloads do not yet support compressed files</span>
                             </label>
                           </div>
                         ) : null}

@@ -237,6 +237,7 @@ ensure_polystore_core() {
       polystore_compute_mdu_root_from_witness_flat \
       polystore_expand_mdu_rs \
       polystore_reconstruct_mdu_rs \
+      polystore_reconstruct_slot_rs \
       polystore_mdu0_builder_new_with_commitments \
       polystore_mdu0_builder_load_with_commitments \
       polystore_compute_mdu0_root_table_proof \
@@ -244,11 +245,11 @@ ensure_polystore_core() {
       polystore_encode_payload_to_mdu \
       polystore_decode_payload_from_mdu; do
       if [ "$nm_supports_dash_d" = "1" ]; then
-        if ! nm -D "$file" 2>/dev/null | awk '{print $3}' | sed 's/@.*$//' | grep -Fxq "$sym"; then
+        if ! nm -D "$file" 2>/dev/null | awk '{print $3}' | sed 's/^_//; s/@.*$//' | grep -Fx "$sym" >/dev/null; then
           return 1
         fi
       else
-        if ! nm "$file" 2>/dev/null | awk '{print $3}' | sed 's/@.*$//' | grep -Fxq "$sym"; then
+        if ! nm "$file" 2>/dev/null | awk '{print $3}' | sed 's/^_//; s/@.*$//' | grep -Fx "$sym" >/dev/null; then
           return 1
         fi
       fi
@@ -511,6 +512,9 @@ def set_bool_param(key, env_key):
 
 # Existing uint64 overrides.
 set_uint_param("eip712_chain_id", "EVM_CHAIN_ID")
+set_uint_param("retrieval_v2_activation_height", "POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT")
+if int(params.get("retrieval_v2_activation_height", "0")) > 0:
+    data["consensus"]["params"]["block"].update(max_bytes="2097152", max_gas="64000000")
 set_uint_param("month_len_blocks", "POLYSTORE_MONTH_LEN_BLOCKS")
 set_uint_param("epoch_len_blocks", "POLYSTORE_EPOCH_LEN_BLOCKS")
 set_uint_param("quota_bps_per_epoch_hot", "POLYSTORE_QUOTA_BPS_PER_EPOCH_HOT")

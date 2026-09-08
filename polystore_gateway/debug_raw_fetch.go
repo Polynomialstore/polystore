@@ -167,12 +167,18 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if requireOnchainSession {
-		dealDir, err = resolveDealDirForDeal(onchainSession.DealId, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(onchainSession.DealId, manifestRoot, rawManifestRoot)
 	} else if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

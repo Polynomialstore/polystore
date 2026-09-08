@@ -5,12 +5,14 @@ import (
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+
+	"polystorechain/x/polystorechain/types"
 )
 
 // MaxTransactionBytes is a consensus validation limit, not a local mempool
 // preference. Changes require a coordinated binary upgrade. A 64-proof session
 // and the bounded precompile calldata fit within this outer envelope.
-const MaxTransactionBytes = 1 << 20
+const MaxTransactionBytes = types.MaxTransactionBytes
 
 func boundedTxDecoder(decode sdk.TxDecoder) sdk.TxDecoder {
 	return func(raw []byte) (sdk.Tx, error) {

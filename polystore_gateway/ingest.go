@@ -161,7 +161,19 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	}
 
 	// 8. Commit to Storage
-	dealDir := filepath.Join(uploadDir, parsedRoot.Key)
+	finalDir := filepath.Join(uploadDir, parsedRoot.Key)
+	dealDir, err := os.MkdirTemp(uploadDir, "staging-")
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	defer os.RemoveAll(dealDir)
+	releaseFinal, err := leaseGenerationPaths(finalDir, dealDir)
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	defer releaseFinal()
 	if err := os.MkdirAll(dealDir, 0755); err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -220,5 +232,10 @@ func IngestNewDeal(ctx context.Context, filePath string, maxUserMdus uint64, rec
 	// The original code returned b.
 	// But in Rust FFI, b needs explicit Free.
 	// If I return it, caller owns it.
+	releaseFinal() // Hand private staging to the exclusive publisher.
+	if err := publishImmutableGeneration(dealDir, finalDir); err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	return b, parsedRoot.Canonical, allocatedLength, nil
 }

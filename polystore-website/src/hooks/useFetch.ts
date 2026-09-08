@@ -1,47 +1,32 @@
-import { useState } from 'react'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
-import { type Hex } from 'viem'
-
+import { useEffect, useRef, useState } from 'react'
+import type { Hex } from 'viem'
+import { gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
-import { ethToPolystoreAddress } from '../lib/address'
-import { normalizeDealId } from '../lib/dealId'
-import { buildRetrievalRequestTypedData } from '../lib/eip712'
-import { waitForTransactionReceipt } from '../lib/evmRpc'
-import {
-  decodeComputeRetrievalSessionIdsResult,
-  encodeComputeRetrievalSessionIdsData,
-  encodeConfirmRetrievalSessionsData,
-  encodeOpenRetrievalSessionsData,
-  encodeOpenRetrievalSessionsSponsoredData,
-} from '../lib/polystorePrecompile'
-import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
-import { decodePolyceV1 } from '../lib/polyce'
-import { classifyWalletError } from '../lib/walletErrors'
-import {
-  resolveProviderEndpoint,
-  resolveProviderEndpointByAddress,
-  resolveProviderEndpoints,
-  resolveProviderP2pEndpoint,
-  resolveProviderP2pEndpointByAddress,
-} from '../lib/providerDiscovery'
-import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
-import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
-import { useTransportRouter } from './useTransportRouter'
+import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
+import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
+import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
+import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
+import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
-import { classifyError, isRetryable } from '../lib/transport/errors'
-import { allowNonGatewayBackends, isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { classifyWalletError } from '../lib/walletErrors'
+import { workerClient } from '../lib/worker-client'
+import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
+import { useRetrievalSessions } from './useRetrievalSessions'
+import { useTransportRouter } from './useTransportRouter'
 
 export interface FetchInput {
+  signal?: AbortSignal
   dealId: string
   manifestRoot: string
   owner: string
   filePath: string
   /**
-   * Base URL for the service hosting `/gateway/*` retrieval endpoints.
-   * Defaults to `appConfig.gatewayBase`.
-   *
-   * In thick-client flows, this often needs to point at the Storage Provider (`appConfig.spBase`)
-   * because the local gateway may not have the slab on disk.
+   * Optional provider HTTP base for metadata and direct retries.
+   * The configured `appConfig.gatewayBase` uses `/gateway/*` relay routes;
+   * other bases use provider routes. Every response is verified locally.
    */
   serviceBase?: string
   rangeStart?: number
@@ -51,6 +36,7 @@ export interface FetchInput {
   mduSizeBytes?: number
   blobSizeBytes?: number
   decodePolyce?: boolean
+  authorizedProofProvider?: string
   sponsoredAuth?: SponsoredRetrievalAuth
   routePreference?: RoutePreference
 }
@@ -122,853 +108,187 @@ export type SponsoredRetrievalAuth =
   | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
   | { type: 'voucher'; voucher: VoucherAuthInput }
 
-const FETCH_STALL_HINT_MS = 20_000
-
-const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
-
-function readLocalGatewayConnectedHint(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(LOCAL_GATEWAY_CONNECTED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
-  if (chunks.length === 0) return new Uint8Array(0)
-  if (chunks.length === 1) return chunks[0]
-  const total = chunks.reduce((sum, part) => sum + part.byteLength, 0)
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const part of chunks) {
-    out.set(part, offset)
-    offset += part.byteLength
-  }
-  return out
-}
-
-function decodeHttpError(bodyText: string): string {
-  const trimmed = bodyText?.trim?.() ? bodyText.trim() : String(bodyText ?? '')
-  if (!trimmed) return 'request failed'
-  try {
-    const json = JSON.parse(trimmed)
-    if (json && typeof json === 'object') {
-      if (typeof json.error === 'string' && json.error.trim()) {
-        const hint = typeof json.hint === 'string' && json.hint.trim() ? ` (${json.hint.trim()})` : ''
-        return `${json.error.trim()}${hint}`
-      }
-      if (typeof json.message === 'string' && json.message.trim()) {
-        return json.message.trim()
-      }
-    }
-  } catch (e) {
-    void e
-  }
-  return trimmed
-}
-
-function shouldRetryWithAlternateProvider(err: unknown): boolean {
-  const { errorClass } = classifyError(err)
-  return isRetryable(errorClass) || errorClass === 'provider_mismatch' || errorClass === 'http_4xx'
-}
-
 export function useFetch() {
-  const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient({ chainId: appConfig.chainId })
-  const transport = useTransportRouter()
+  const payment = useRetrievalSessions(), transport = useTransportRouter()
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
   const [receiptError, setReceiptError] = useState<string | null>(null)
   const [lastPlan, setLastPlan] = useState<RetrievalPlanSummary | null>(null)
-  const [progress, setProgress] = useState<FetchProgress>({
-    phase: 'idle',
-    filePath: '',
-    chunksFetched: 0,
-    chunkCount: 0,
-    bytesFetched: 0,
-    bytesTotal: 0,
-    receiptsSubmitted: 0,
-    receiptsTotal: 0,
-  })
+  const [progress, setProgress] = useState<FetchProgress>({ phase: 'idle', filePath: '', chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
+  const active = useRef<AbortController | null>(null)
+  const saved = useRef<{ url: string; cleanup: () => Promise<void> } | null>(null)
+  useEffect(() => () => { active.current?.abort(); if (saved.current) { URL.revokeObjectURL(saved.current.url); void saved.current.cleanup() } }, [])
 
-  async function fetchFile(input: FetchInput): Promise<FetchResult | null> {
-    setLoading(true)
-    setDownloadUrl(null)
-    setReceiptStatus('idle')
-    setReceiptError(null)
-    setProgress({
-      phase: 'idle',
-      filePath: String(input.filePath || ''),
-      chunksFetched: 0,
-      chunkCount: 0,
-      bytesFetched: 0,
-      bytesTotal: 0,
-      receiptsSubmitted: 0,
-      receiptsTotal: 0,
-    })
-
+  async function fetchFile(input: FetchInput): Promise<FetchResult> {
+    active.current?.abort()
+    const controller = new AbortController(); active.current = controller
+    const signal = input.signal ? AbortSignal.any([input.signal, controller.signal]) : controller.signal
+    setLoading(true); setReceiptStatus('idle'); setReceiptError(null); setLastPlan(null)
+    setProgress({ phase: 'idle', filePath: input.filePath, chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
+    let checkpoint: Awaited<ReturnType<typeof openRetrievalCheckpoint>> | null = null
     try {
-      if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
-      if (!walletClient) throw new Error('Wallet not connected')
-      if (!publicClient) throw new Error('EVM RPC client unavailable')
-      const signerAddress = (walletClient.account?.address || address) as Hex
-
-      const dealId = normalizeDealId(input.dealId)
-      const owner = String(input.owner ?? '').trim()
-      if (!owner) throw new Error('owner is required')
-      const filePath = String(input.filePath || '').trim()
-      if (!filePath) throw new Error('filePath is required')
-
-      const manifestRoot = String(input.manifestRoot || '').trim() as Hex
-      if (!manifestRoot.startsWith('0x')) throw new Error('manifestRoot must be 0x-prefixed hex bytes')
-
-      const blobSizeBytes = Number(input.blobSizeBytes || 128 * 1024)
-      const mduSizeBytes = Number(input.mduSizeBytes || 8 * 1024 * 1024)
-      const wantRangeStart = Math.max(0, Number(input.rangeStart ?? 0))
-      const wantRangeLen = Math.max(0, Number(input.rangeLen ?? 0))
-      const wantFileSize = typeof input.fileSizeBytes === 'number' ? Number(input.fileSizeBytes) : 0
-
-      let effectiveRangeLen = wantRangeLen
-      if (effectiveRangeLen === 0) {
-        if (!wantFileSize) throw new Error('fileSizeBytes is required for full downloads (rangeLen=0)')
-        if (wantRangeStart >= wantFileSize) throw new Error('rangeStart beyond EOF')
-        effectiveRangeLen = wantFileSize - wantRangeStart
+      const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
+      const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+      payment.requireWallet()
+      if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
+      await workerClient.initRetrievalWasm()
+      const endpoints = new Map<string, ProviderEndpoint | null>()
+      const endpoint = async (provider: string) => {
+        if (!endpoints.has(provider)) endpoints.set(provider, await resolveProviderEndpointByAddress(appConfig.lcdBase, provider))
+        return endpoints.get(provider)
       }
-      const shouldDecodePolyce =
-        input.decodePolyce !== false &&
-        wantRangeStart === 0 && wantFileSize > 0 && effectiveRangeLen === wantFileSize
-
-      const hasMeta =
-        typeof input.fileStartOffset === 'number' &&
-        typeof input.fileSizeBytes === 'number' &&
-        typeof input.mduSizeBytes === 'number' &&
-        typeof input.blobSizeBytes === 'number'
-
-      const chunks =
-        hasMeta
-          ? planPolyfsFileRangeChunks({
-              fileStartOffset: input.fileStartOffset!,
-              fileSizeBytes: input.fileSizeBytes!,
-              rangeStart: wantRangeStart,
-              rangeLen: effectiveRangeLen,
-              mduSizeBytes: input.mduSizeBytes!,
-              blobSizeBytes: input.blobSizeBytes!,
-            })
-          : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
-
-      if (!hasMeta && effectiveRangeLen > blobSizeBytes) {
-        throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
+      const bases = new Set([input.serviceBase, appConfig.gatewayDisabled ? undefined : appConfig.gatewayBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
+      for (const assignment of pin.assignments) { const e = await endpoint(assignment.provider); if (e?.baseUrl) bases.add(e.baseUrl); if (bases.size >= 4) break }
+      const fetchMetadata = (base: string, index: bigint) => {
+        const get = base.replace(/\/$/, '') === appConfig.gatewayBase.replace(/\/$/, '') ? gatewayFetchRetrievalMetadata : providerFetchRetrievalMetadata
+        return get(base, pin, index, signal)
       }
-
-      const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
-      const preferenceOverride: RoutePreference | undefined = input.routePreference
-      const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
-      const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
-      const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
-      const trustedGatewayBase = isTrustedLocalGatewayBase(appConfig.gatewayBase)
-      const localGatewayConnected = readLocalGatewayConnectedHint()
-      const gatewayTransportEnabled = isGatewayTransportEnabled({
-        gatewayDisabled: appConfig.gatewayDisabled,
-        gatewayBase: appConfig.gatewayBase,
-        localGatewayConnected,
-      })
-      const gatewayModeActive =
-        gatewayTransportEnabled &&
-        (preferenceOverride === 'prefer_gateway' ||
-          preferenceOverride === 'gateway_only' ||
-          (preferenceOverride === undefined &&
-            transport.preference !== 'prefer_direct_sp' &&
-            transport.preference !== 'prefer_p2p' &&
-            localGatewayConnected))
-
-      let gatewayP2pTarget: P2pTarget | undefined
-      if (
-        appConfig.p2pEnabled &&
-        gatewayTransportEnabled &&
-        !p2pEndpoint?.target
-      ) {
-        const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
-        for (const addr of addrs) {
-          const target = multiaddrToP2pTarget(addr)
-          if (target) {
-            gatewayP2pTarget = target
-            break
-          }
+      let mdu0: Uint8Array | undefined
+      let records: Awaited<ReturnType<typeof workerClient.verifyRetrievalMetadata>> | undefined, lastError: unknown
+      for (const base of bases) {
+        try { const bytes = await fetchMetadata(base, 0n); records = await workerClient.verifyRetrievalMetadata(bytes, pin); mdu0 = bytes; break } catch (error) { signal.throwIfAborted(); lastError = error }
+      }
+      if (!records || !mdu0) throw lastError ?? new Error('authenticated metadata unavailable')
+      validateRetrievalAllocation(pin, records)
+      const file = records.find((r) => r.path === input.filePath && r.path !== '')
+      if (!file) throw new Error('file absent from authenticated generation')
+      const exactNumber = (n: number | undefined, fallback: bigint) => n === undefined ? fallback : Number.isSafeInteger(n) && n >= 0 ? u64(String(n)) : (() => { throw new Error('invalid exact file range') })()
+      const start = exactNumber(input.rangeStart, 0n), length = exactNumber(input.rangeLen === 0 ? undefined : input.rangeLen, file.size_bytes - start)
+      if (start < 0n || length < 0n || start + length > file.size_bytes) throw new Error('file range outside authenticated extent')
+      let count = 0
+      if (length) for (const window of planRetrievalWindows(pin, file, start, length, true)) {
+        if (!pin.assignments[window.slot].active) {
+          if (input.sponsoredAuth?.type === 'voucher') throw new Error('unavailable slot requires a fresh recovery authorization before payment')
+          recoveryWindows(pin, window.mduIndex - pin.metadataMdus)
         }
+        count++
       }
-
-      const planP2pTarget = p2pEndpoint?.target || gatewayP2pTarget || undefined
-      const providerEndpointCache = new Map<string, Awaited<ReturnType<typeof resolveProviderEndpointByAddress>> | null>()
-      const providerP2pCache = new Map<string, Awaited<ReturnType<typeof resolveProviderP2pEndpointByAddress>> | null>()
-      const providerFallbackOrder: string[] = []
-      const seenFallbackProviders = new Set<string>()
-      const rememberFallbackProvider = (provider: string) => {
-        const normalized = String(provider || '').trim()
-        if (!normalized || seenFallbackProviders.has(normalized)) return
-        seenFallbackProviders.add(normalized)
-        providerFallbackOrder.push(normalized)
+      if (input.sponsoredAuth?.type === 'voucher' && count !== 1) throw new Error('voucher must authorize exactly one legal window before payment')
+      // Storage availability and all allocation/layout checks precede funding.
+      checkpoint = await openRetrievalCheckpoint([payment.scope(), 'download', pin.dealId, pin.root, pin.generation, file.path, start, length, deputy, input.sponsoredAuth ?? { type: 'none' }], length)
+      setProgress((p) => ({ ...p, chunkCount: count, bytesTotal: Number(length), receiptsTotal: count }))
+      setLastPlan({ capturedAtMs: Date.now(), dealId: pin.dealId.toString(), manifestRoot: pin.root, filePath: file.path, routePreference: input.routePreference,
+        mduSizeBytes: RAW_MDU_CAPACITY_BYTES, blobSizeBytes: BLOB_SIZE_BYTES, leafCount: BigInt(pin.leafCount), globalStart: (pin.metadataMdus + (file.start_offset + start) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), globalEnd: (pin.metadataMdus + (file.start_offset + start + (length || 1n) - 1n) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), providers: [] })
+      let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
+      let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
+      const job = checkpoint, sink = job.output
+      const availableProofBase = () => isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
+      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+        // Durable settlement rows are written only after the original ACK commits.
+        confirm: async () => {}, gatewayBase: availableProofBase() ?? previousBase, signal,
+      }), (sessions) => payment.forget(sessions, job.key), signal)
+      unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
+      setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
+      let currentOrdinal = -1n
+      const fetchSession = async (session: FrozenSession) => {
+        setProgress((p) => ({ ...p, phase: 'fetching' }))
+        const e = await endpoint(session.payee)
+        const result = await transport.fetchWindow({ session, directBase: e?.baseUrl || input.serviceBase, p2pTarget: e?.p2pTarget, preference: input.routePreference, signal })
+        route = result.backend; return result.data
       }
-
-      const getProviderEndpoint = async (provider: string) => {
-        if (providerEndpointCache.has(provider)) return providerEndpointCache.get(provider) ?? null
-        const endpoint = await resolveProviderEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
-        providerEndpointCache.set(provider, endpoint)
-        return endpoint
-      }
-      const getProviderP2pEndpoint = async (provider: string) => {
-        if (providerP2pCache.has(provider)) return providerP2pCache.get(provider) ?? null
-        const endpoint = await resolveProviderP2pEndpointByAddress(appConfig.lcdBase, provider).catch(() => null)
-        providerP2pCache.set(provider, endpoint)
-        return endpoint
-      }
-
-      const resolvedProviderEndpoints = await resolveProviderEndpoints(appConfig.lcdBase, dealId).catch(() => [])
-      for (const endpoint of resolvedProviderEndpoints) {
-        const provider = String(endpoint?.provider || '').trim()
-        if (!provider) continue
-        rememberFallbackProvider(provider)
-        providerEndpointCache.set(provider, endpoint)
-        if (endpoint.p2pTarget) {
-          providerP2pCache.set(provider, { provider, target: endpoint.p2pTarget })
-        }
-      }
-
-      const parts: Uint8Array[] = []
-      let bytesFetched = 0
-      let receiptsSubmitted = 0
-      let chunksFetched = 0
-      let lastChunkProgressAt = Date.now()
-      let stallHintShown = false
-      let finalRoute = ''
-      let finalCacheSource = ''
-      let finalCacheFreshness = ''
-      let finalProvider = ''
-
-      type PlannedChunk = {
-        rangeStart: number
-        rangeLen: number
-        provider: string
-        startMduIndex: bigint
-        startBlobIndex: number
-        blobCount: bigint
-        planBackend: string
-        planEndpoint?: string
-      }
-
-      const plannedChunks: PlannedChunk[] = []
-      for (const c of chunks) {
-        const planResult = await transport.plan({
-          manifestRoot,
-          owner,
-          dealId,
-          filePath,
-          rangeStart: c.rangeStart,
-          rangeLen: c.rangeLen,
-          directBase,
-          p2pTarget: planP2pTarget,
-          preference: preferenceOverride,
+      const confirm = async (sessions: readonly FrozenSession[]) => {
+        setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
+        const gatewayBase = job.state.pending?.proofBase ?? availableProofBase()
+        job.prepare(currentOrdinal, sessions, gatewayBase)
+        const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+          confirm: (wave) => payment.confirm(wave, signal, job.key), signal,
+          gatewayBase,
+          onConfirmed: () => { confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
         })
-
-        const planJson = planResult.data
-        const provider = String(planJson.provider || '').trim()
-        if (!provider) throw new Error('gateway plan did not return provider')
-        const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
-        const startBlobIndex = Number(planJson.start_blob_index || 0)
-        const blobCount = BigInt(Number(planJson.blob_count || 0))
-        if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
-        if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
-        if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
-        rememberFallbackProvider(provider)
-
-        plannedChunks.push({
-          rangeStart: c.rangeStart,
-          rangeLen: c.rangeLen,
-          provider,
-          startMduIndex,
-          startBlobIndex,
-          blobCount,
-          planBackend: planResult.backend,
-          planEndpoint: planResult.trace?.chosen?.endpoint,
-        })
+        if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
+        for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
+        job.complete(currentOrdinal, outcomes)
+        if (job.state.cleanup) { await payment.forget(job.state.cleanup, job.key); job.cleaned() }
       }
-
-      const leafCount = BigInt(Math.max(1, Math.floor(mduSizeBytes / blobSizeBytes)))
-      const providerGroups = new Map<string, {
-        provider: string
-        chunks: PlannedChunk[]
-        globalStart: bigint
-        globalEnd: bigint
-      }>()
-
-      for (const chunk of plannedChunks) {
-        const globalStart = chunk.startMduIndex * leafCount + BigInt(chunk.startBlobIndex)
-        const globalEnd = globalStart + chunk.blobCount - 1n
-        const existing = providerGroups.get(chunk.provider)
-        if (existing) {
-          existing.chunks.push(chunk)
-          if (globalStart < existing.globalStart) existing.globalStart = globalStart
-          if (globalEnd > existing.globalEnd) existing.globalEnd = globalEnd
-        } else {
-          providerGroups.set(chunk.provider, {
-            provider: chunk.provider,
-            chunks: [chunk],
-            globalStart,
-            globalEnd,
-          })
-        }
+      const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
+        for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
       }
-
-      setProgress((p) => ({
-        ...p,
-        phase: 'opening_session_tx',
-        filePath,
-        chunkCount: chunks.length,
-        bytesTotal: effectiveRangeLen,
-        receiptsSubmitted: 0,
-        receiptsTotal: providerGroups.size > 0 ? 2 : 0,
-      }))
-
-      const groups = Array.from(providerGroups.values())
-      if (groups.length === 0) {
-        throw new Error('retrieval planner returned no provider groups')
-      }
-      const globalRangeStart = groups.reduce(
-        (min, group) => (group.globalStart < min ? group.globalStart : min),
-        groups[0].globalStart,
-      )
-      const globalRangeEnd = groups.reduce(
-        (max, group) => (group.globalEnd > max ? group.globalEnd : max),
-        groups[0].globalEnd,
-      )
-
-      setLastPlan({
-        capturedAtMs: Date.now(),
-        dealId,
-        manifestRoot,
-        filePath,
-        routePreference: preferenceOverride,
-        mduSizeBytes,
-        blobSizeBytes,
-        leafCount,
-        globalStart: globalRangeStart,
-        globalEnd: globalRangeEnd,
-        providers: groups.map((group) => {
-          const groupStartMdu = group.globalStart / leafCount
-          const groupStartBlob = Number(group.globalStart % leafCount)
-          const groupBlobCount = group.globalEnd - group.globalStart + 1n
-          const exampleChunk = group.chunks[0]
-          return {
-            provider: group.provider,
-            backend: exampleChunk?.planBackend || 'unknown',
-            endpoint: exampleChunk?.planEndpoint,
-            startMduIndex: groupStartMdu,
-            startBlobIndex: groupStartBlob,
-            blobCount: groupBlobCount,
+      const readCommitments = createRecoveryCommitmentReader(pin, mdu0, {
+        fetch: async (index) => {
+          let last: unknown
+          for (const base of bases) {
+            try { return await fetchMetadata(base, index) }
+            catch (error) { signal.throwIfAborted(); last = error }
           }
-        }),
-      })
-
-      const openBaseNonce = BigInt(Date.now())
-      let openNonceOffset = BigInt(groups.length)
-      const openRequests = groups.map((group, index) => {
-        const groupStartMdu = group.globalStart / leafCount
-        const groupStartBlob = Number(group.globalStart % leafCount)
-        const groupBlobCount = group.globalEnd - group.globalStart + 1n
-        return {
-          dealId: BigInt(dealId),
-          provider: group.provider,
-          manifestRoot,
-          startMduIndex: groupStartMdu,
-          startBlobIndex: groupStartBlob,
-          blobCount: groupBlobCount,
-          nonce: openBaseNonce + BigInt(index),
-          expiresAt: 0n,
+          throw last ?? new Error('witness unavailable')
+        },
+        verifyWitness: workerClient.verifyRetrievalWitness,
+        readCommitments: workerClient.readRetrievalCommitments,
+      }, signal)
+      // Process one MDU at a time. Recovery retains at most K shards and one
+      // output MDU; file length never increases the in-memory working set.
+      const processMdu = async (windows: RetrievalWindow[]) => {
+        const ordinal = windows[0].mduIndex - pin.metadataMdus
+        currentOrdinal = ordinal
+        if (ordinal <= job.state.through) return
+        if (job.state.pending) {
+          if (job.state.pending.ordinal !== ordinal) throw new Error('saved retrieval cursor does not match file')
+          await confirm(job.state.pending.sessions); return
         }
-      })
-
-      const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
-      const computeCall = await publicClient.call({
-        account: signerAddress,
-        to: appConfig.polystorePrecompile as Hex,
-        data: computeData,
-      })
-      const computeResult = computeCall.data as Hex
-      if (!computeResult || computeResult === '0x') {
-        throw new Error('computeRetrievalSessionIds call returned empty data')
-      }
-      const { providers: computedProviders, sessionIds: computedSessionIds } =
-        decodeComputeRetrievalSessionIdsResult(computeResult)
-      const sessionsByProvider = new Map<string, Hex>()
-      for (let i = 0; i < computedProviders.length; i++) {
-        const provider = String(computedProviders[i] || '').trim()
-        const sessionId = computedSessionIds[i]
-        if (!provider || !sessionId) continue
-        sessionsByProvider.set(provider, sessionId)
-      }
-      for (const group of groups) {
-        if (!sessionsByProvider.has(group.provider)) {
-          throw new Error(`computeRetrievalSessionIds did not return session for ${group.provider}`)
-        }
-      }
-
-      const callerPolystoreAddress = ethToPolystoreAddress(signerAddress)
-      const isDealOwner = callerPolystoreAddress && callerPolystoreAddress === owner
-      const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
-      const authType =
-        sponsoredAuth.type === 'allowlist' ? 1 : sponsoredAuth.type === 'voucher' ? 2 : 0
-      if (authType === 2 && openRequests.length > 1) {
-        throw new Error('voucher auth requires a single provider range')
-      }
-      const allowlistLeafIndex = sponsoredAuth.type === 'allowlist' ? sponsoredAuth.leafIndex : 0
-      const allowlistMerklePath = sponsoredAuth.type === 'allowlist' ? sponsoredAuth.merklePath : []
-      const voucher = sponsoredAuth.type === 'voucher' ? sponsoredAuth.voucher : undefined
-      const voucherNonce = voucher ? BigInt(voucher.nonce) : 0n
-      const voucherExpiresAt = voucher?.expiresAt ? BigInt(voucher.expiresAt) : 0n
-      const voucherRedeemer = voucher?.redeemer ?? ''
-      const voucherProvider = voucher?.provider ?? ''
-      const voucherSignature = voucher?.signature ?? ('0x' as Hex)
-      const buildSponsoredOpenRequests = <T extends {
-        dealId: bigint
-        provider: string
-        manifestRoot: Hex
-        startMduIndex: bigint
-        startBlobIndex: number
-        blobCount: bigint
-        nonce: bigint
-        expiresAt: bigint
-      }>(requests: T[]) =>
-        requests.map((request) => ({
-          ...request,
-          maxTotalFee: 0n,
-          authType,
-          allowlistLeafIndex,
-          allowlistMerklePath,
-          voucherRedeemer,
-          voucherProvider,
-          voucherExpiresAt,
-          voucherNonce,
-          voucherSignature,
-        }))
-
-      const openSessionsOnChain = async <T extends {
-        dealId: bigint
-        provider: string
-        manifestRoot: Hex
-        startMduIndex: bigint
-        startBlobIndex: number
-        blobCount: bigint
-        nonce: bigint
-        expiresAt: bigint
-      }>(requests: T[]) => {
-        const openTxData = encodeOpenRetrievalSessionsData(requests)
-        const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(buildSponsoredOpenRequests(requests))
-        const openTxHash = await walletClient.sendTransaction({
-          account: signerAddress,
-          to: appConfig.polystorePrecompile as Hex,
-          data: isDealOwner ? openTxData : sponsoredTxData,
-          gas: 7_000_000n,
-        })
-        await waitForTransactionReceipt(openTxHash)
-      }
-
-      await openSessionsOnChain(openRequests)
-
-      const ensureSessionForProvider = async (provider: string): Promise<Hex | null> => {
-        const normalized = String(provider || '').trim()
-        if (!normalized) return null
-        const existing = sessionsByProvider.get(normalized)
-        if (existing) return existing
-        if (authType === 2) return null
-
-        const request = {
-          dealId: BigInt(dealId),
-          provider: normalized,
-          manifestRoot,
-          startMduIndex: globalRangeStart / leafCount,
-          startBlobIndex: Number(globalRangeStart % leafCount),
-          blobCount: globalRangeEnd - globalRangeStart + 1n,
-          nonce: openBaseNonce + openNonceOffset,
-          expiresAt: 0n,
-        }
-        openNonceOffset += 1n
-
-        const computeData = encodeComputeRetrievalSessionIdsData([request])
-        const computeCall = await publicClient.call({
-          account: signerAddress,
-          to: appConfig.polystorePrecompile as Hex,
-          data: computeData,
-        })
-        const computeResult = computeCall.data as Hex
-        if (!computeResult || computeResult === '0x') return null
-        const computed = decodeComputeRetrievalSessionIdsResult(computeResult)
-        let sessionId: Hex | null = null
-        for (let i = 0; i < computed.providers.length; i++) {
-          const computedProvider = String(computed.providers[i] || '').trim()
-          if (computedProvider !== normalized) continue
-          sessionId = computed.sessionIds[i] || null
-          break
-        }
-        if (!sessionId) return null
-
-        await openSessionsOnChain([request])
-        sessionsByProvider.set(normalized, sessionId)
-        return sessionId
-      }
-
-      receiptsSubmitted = 1
-      setProgress((p) => ({
-        ...p,
-        phase: 'fetching',
-        chunkCount: chunks.length,
-        bytesTotal: effectiveRangeLen,
-        receiptsSubmitted,
-      }))
-
-      let metaAuth:
-        | {
-            reqSig: string
-            reqNonce: number
-            reqExpiresAt: number
-            signedRangeStart: number
-            signedRangeLen: number
-          }
-        | undefined
-
-      const shouldSignMetaAuth = (err: unknown): boolean => {
-        if (!(err instanceof Error)) return false
-        const msg = decodeHttpError(err.message)
-        return /req_sig is required/i.test(msg) || /range must be signed/i.test(msg)
-      }
-
-      const signMetaAuth = async () => {
-        const now = Math.floor(Date.now() / 1000)
-        const reqNonce = Math.floor(Math.random() * 1_000_000_000) + Date.now()
-        const reqExpiresAt = now + 9 * 60
-        const typedData = buildRetrievalRequestTypedData(
-          {
-            deal_id: Number(dealId),
-            file_path: filePath,
-            range_start: wantRangeStart,
-            range_len: effectiveRangeLen,
-            nonce: reqNonce,
-            expires_at: reqExpiresAt,
-          },
-          appConfig.chainId,
-        )
-        const typedDataForViem = typedData as {
-          domain: {
-            name: string
-            version: string
-            chainId: number
-            verifyingContract: Hex
-          }
-          types: Record<string, readonly { name: string; type: string }[]>
-          primaryType: 'RetrievalRequest'
-          message: Record<string, unknown>
-        }
-
-        const reqSig = await walletClient.signTypedData({
-          account: signerAddress,
-          domain: {
-            ...typedDataForViem.domain,
-            chainId: BigInt(typedDataForViem.domain.chainId),
-          },
-          types: typedDataForViem.types,
-          primaryType: typedDataForViem.primaryType,
-          message: typedDataForViem.message,
-        })
-
-        metaAuth = {
-          reqSig,
-          reqNonce,
-          reqExpiresAt,
-          signedRangeStart: wantRangeStart,
-          signedRangeLen: effectiveRangeLen,
-        }
-        return metaAuth
-      }
-
-      const usedSessionsByProvider = new Map<string, Hex>()
-      for (const group of groups) {
-        const provider = group.provider
-        const primarySessionId = sessionsByProvider.get(provider)
-        if (!primarySessionId) {
-          throw new Error(`missing session for provider ${provider}`)
-        }
-
-        const providerEndpoint = await getProviderEndpoint(provider)
-        const providerP2pEndpoint = await getProviderP2pEndpoint(provider)
-        const fetchP2pTarget =
-          providerP2pEndpoint?.target ||
-          (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
-          gatewayP2pTarget
-
-        let fetchDirectBase =
-          providerEndpoint?.baseUrl ||
-          group.chunks.find((c) => c.planBackend === 'direct_sp')?.planEndpoint ||
-          (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
-          (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
-        if (!providerEndpoint && group.chunks.every((c) => c.planBackend !== 'direct_sp')) {
-          fetchDirectBase = undefined
-        }
-
-        for (const c of group.chunks) {
-          const candidateProviders = allowNonGatewayBackends(preferenceOverride ?? transport.preference)
-            ? [provider, ...providerFallbackOrder.filter((candidate) => candidate !== provider)]
-            : [provider]
-          let rangeResult: Awaited<ReturnType<typeof transport.fetchRange>> | null = null
-          let selectedProvider = provider
-          let selectedSessionId: Hex | null = primarySessionId
-          let lastFetchError: unknown = null
-
-          for (const candidateProvider of candidateProviders) {
-            if (!stallHintShown && Date.now() - lastChunkProgressAt >= FETCH_STALL_HINT_MS) {
-              stallHintShown = true
-              setProgress((p) => ({
-                ...p,
-                message: `No chunk progress for ${Math.floor(FETCH_STALL_HINT_MS / 1000)}s; retrieval still in flight`,
-              }))
-            }
-            const candidateSessionId =
-              candidateProvider === provider
-                ? primarySessionId
-                : await ensureSessionForProvider(candidateProvider)
-            if (!candidateSessionId) continue
-
-            const candidateEndpoint =
-              candidateProvider === provider ? providerEndpoint : await getProviderEndpoint(candidateProvider)
-            const candidateP2pEndpoint =
-              candidateProvider === provider ? providerP2pEndpoint : await getProviderP2pEndpoint(candidateProvider)
-            const candidateDirectBase =
-              candidateEndpoint?.baseUrl ||
-              (candidateProvider === provider
-                ? fetchDirectBase
-                : undefined)
-            const candidateP2pTarget =
-              candidateP2pEndpoint?.target ||
-              (candidateProvider === provider
-                ? fetchP2pTarget
-                : undefined)
-
-            if (candidateProvider !== provider && !candidateDirectBase && !candidateP2pTarget) {
-              continue
-            }
-
-            const fetchReq = {
-              manifestRoot,
-              owner,
-              dealId,
-              filePath,
-              rangeStart: c.rangeStart,
-              rangeLen: c.rangeLen,
-              sessionId: candidateSessionId,
-              expectedProvider: candidateProvider,
-              directBase: candidateDirectBase,
-              p2pTarget: candidateP2pTarget,
-              preference:
-                candidateProvider === provider
-                  ? preferenceOverride
-                  : (gatewayModeActive ? 'prefer_gateway' : ('prefer_direct_sp' as RoutePreference)),
-            }
-
-            try {
-              rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
-            } catch (err) {
-              if (!metaAuth && shouldSignMetaAuth(err)) {
-                setProgress((p) => ({ ...p, message: 'Sign the download request to authorize retrieval' }))
-                metaAuth = await signMetaAuth()
-                try {
-                  rangeResult = await transport.fetchRange({ ...fetchReq, auth: metaAuth })
-                } catch (signedErr) {
-                  lastFetchError = signedErr
-                  if (candidateProvider !== provider || shouldRetryWithAlternateProvider(signedErr)) {
-                    continue
-                  }
-                  throw signedErr
-                }
-              } else {
-                lastFetchError = err
-                if (candidateProvider !== provider || shouldRetryWithAlternateProvider(err)) {
-                  continue
-                }
-                throw err
-              }
-            }
-
-            if (rangeResult) {
-              selectedProvider = candidateProvider
-              selectedSessionId = candidateSessionId
-              break
-            }
-          }
-
-          if (!rangeResult) {
-            throw (lastFetchError instanceof Error ? lastFetchError : new Error('failed to fetch chunk from any provider'))
-          }
-          if (!selectedSessionId) {
-            throw new Error(`missing retrieval session for provider ${selectedProvider}`)
-          }
-          usedSessionsByProvider.set(selectedProvider, selectedSessionId)
-          if (selectedProvider !== provider) {
-            setProgress((p) => ({
-              ...p,
-              message: `Primary provider unavailable; failed over to ${selectedProvider.slice(0, 12)}…`,
-            }))
-          }
-
-          const buf = rangeResult.data.bytes
-          parts.push(buf)
-          bytesFetched += buf.byteLength
-          chunksFetched += 1
-          lastChunkProgressAt = Date.now()
-          stallHintShown = false
-
-          const route = rangeResult.backend
-          const freshness = (rangeResult.data.cacheFreshness || '').trim()
-          const freshnessReason = (rangeResult.data.cacheFreshnessReason || '').trim()
-          const cacheSource =
-            route === 'gateway'
-              ? 'gateway_mdu_cache'
-              : route === 'direct_sp'
-                ? 'network_fetch'
-                : route === 'libp2p'
-                  ? 'network_fetch_p2p'
-                  : 'network_fetch'
-          finalRoute = route
-          finalCacheSource = cacheSource
-          finalCacheFreshness = freshness
-          finalProvider = selectedProvider
-          const progressMessage =
-            freshness && freshnessReason
-              ? `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource} freshness=${freshness} (${freshnessReason})`
-              : freshness
-                ? `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource} freshness=${freshness}`
-                : `route=${route} provider=${selectedProvider.slice(0, 12)}... cache=${cacheSource}`
-
-          setProgress((p) => ({
-            ...p,
-            phase: 'fetching',
-            chunksFetched: Math.min(p.chunkCount || chunks.length, chunksFetched),
-            bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
-            route,
-            cacheSource,
-            cacheFreshness: freshness || undefined,
-            message: progressMessage,
-          }))
-        }
-      }
-
-      setProgress((p) => ({
-        ...p,
-        phase: 'confirming_session_tx',
-        receiptsSubmitted,
-      }))
-
-      const sessionIds = Array.from(usedSessionsByProvider.values())
-      if (sessionIds.length === 0) {
-        throw new Error('no retrieval sessions were used during fetch')
-      }
-      let confirmError: string | null = null
-      try {
-        const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
-        const confirmTxHash = await walletClient.sendTransaction({
-          account: signerAddress,
-          to: appConfig.polystorePrecompile as Hex,
-          data: confirmTxData,
-          gas: 3_000_000n,
-        })
-        await waitForTransactionReceipt(confirmTxHash)
-        receiptsSubmitted = 2
-      } catch (err) {
-        confirmError = classifyWalletError(err, 'Confirm retrieval failed').message
-      }
-
-      setProgress((p) => ({
-        ...p,
-        phase: 'submitting_proof_request',
-        receiptsSubmitted,
-        message: confirmError ? `Receipt confirmation failed: ${confirmError}` : p.message,
-      }))
-
-      let proofSubmissionError: string | null = null
-      if (!confirmError) {
-        for (const [provider, sessionId] of usedSessionsByProvider.entries()) {
-          // `session-proof` forwarding currently relies on the local Gateway app.
-          // Keep file download successful even when the local gateway is not running.
+        let fetchFailed = false
+        if (windows.every((w) => pin.assignments[w.slot].active)) {
           try {
-            if (!gatewayTransportEnabled || !trustedGatewayBase) {
-              throw new Error('trusted local gateway unavailable for session-proof forwarding')
-            }
-            const proofBase = appConfig.gatewayBase
-            const proofRes = await fetch(`${proofBase}/gateway/session-proof?deal_id=${encodeURIComponent(dealId)}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ session_id: sessionId, provider }),
-            })
-            if (!proofRes.ok) {
-              const text = await proofRes.text().catch(() => '')
-              throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
-            }
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            if (!proofSubmissionError) proofSubmissionError = msg
-            console.warn('session-proof forwarding failed; download still succeeds', { provider, error: msg })
-          }
+            await executeRetrievalWindows(windows, {
+              open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key) },
+              fetchAndVerify: async (session) => { try { return await fetchSession(session) } catch (error) { fetchFailed = true; throw error } },
+              consume, flush: () => sink.flush(), confirm,
+            }, signal, 64)
+            return
+          } catch (error) { signal.throwIfAborted(); if (!fetchFailed) throw error }
         }
+        if (input.sponsoredAuth?.type === 'voucher') throw new Error('failed retrieval needs a fresh voucher for separately funded recovery')
+        recoveryWindows(pin, ordinal)
+        const commitments = await readCommitments(ordinal)
+        await recoverRetrievalMdu(pin, ordinal, {
+          open: (wave) => payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key),
+          fetchAndVerify: fetchSession,
+          reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
+          consumeAndFlush: async (encoded) => {
+            validateRetrievalMduPacking(pin, records, ordinal, encoded)
+            for (const window of windows) {
+              const selected = new Uint8Array(window.blobCount * BLOB_SIZE_BYTES)
+              window.slices.forEach((slice, i) => selected.set(encoded.subarray(slice.encodedBlobIndex * BLOB_SIZE_BYTES, (slice.encodedBlobIndex + 1) * BLOB_SIZE_BYTES), i * BLOB_SIZE_BYTES))
+              await consume(window, selected)
+            }
+            await sink.flush()
+          }, confirm,
+        }, signal)
       }
-
-      let payload = concatUint8Arrays(parts)
-      if (shouldDecodePolyce) {
-        try {
-          const decoded = await decodePolyceV1(payload)
-          if (decoded.wrapped) {
-            payload = decoded.payload
-          }
-        } catch (err) {
-          console.warn('PolyCE decode failed, returning raw bytes', err)
+      if (length) {
+        let windows: RetrievalWindow[] = []
+        let completed = 0
+        const flush = async () => {
+          if (!windows.length) return
+          await processMdu(windows)
+          logicalBytes += windows.reduce((sum, w) => sum + w.slices.reduce((n, slice) => n + slice.length, 0), 0)
+          completed += windows.length
+          setProgress((p) => ({ ...p, bytesFetched: logicalBytes, chunksFetched: completed }))
+          windows = []
         }
+        for (const window of planRetrievalWindows(pin, file, start, length, true)) {
+          if (windows.length && windows[0].mduIndex !== window.mduIndex) await flush()
+          windows.push(window)
+        }
+        await flush()
       }
-      const blob = new Blob([payload] as BlobPart[], { type: 'application/octet-stream' })
+      const blob = await sink.file()
       const url = URL.createObjectURL(blob)
-      setDownloadUrl(url)
-
-      const receiptPipelineError = [confirmError, proofSubmissionError].filter(Boolean).join('; ')
-      if (receiptPipelineError) {
-        setReceiptStatus('failed')
-        setReceiptError(`Receipt pipeline failed (download succeeded): ${receiptPipelineError}`)
-      } else {
-        setReceiptStatus('submitted')
-      }
-      setProgress((p) => ({
-        ...p,
-        phase: 'done',
-        receiptsSubmitted: receiptsSubmitted,
-        message: receiptPipelineError ? `Download complete; receipt pipeline failed: ${receiptPipelineError}` : p.message,
-      }))
-
-      return {
-        url,
-        blob,
-        route: finalRoute || undefined,
-        cacheSource: finalCacheSource || undefined,
-        cacheFreshness: finalCacheFreshness || undefined,
-        provider: finalProvider || undefined,
-      }
-    } catch (e) {
-      console.error(e)
-      const walletError = classifyWalletError(e, 'Fetch failed')
-      const errorMessage = walletError.message
-      setProgress((p) => ({ ...p, phase: 'error', message: errorMessage }))
-      setReceiptStatus('failed')
-      setReceiptError(errorMessage)
-      return null
-    } finally {
-      setLoading(false)
-    }
+      let cleanup: (() => Promise<void>) | undefined
+      try { cleanup = await job.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
+      if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
+      // The same output is needed to retry settlement without another download.
+      // A retained checkpoint owns its bytes across URL replacement and unmount.
+      saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpoint = null
+      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file when the trusted local gateway is available to settle the saved sessions without another payment or download.` : undefined
+      setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
+      setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
+      return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
+    } catch (error) {
+      const message = classifyWalletError(error, 'Fetch failed').message + (checkpoint ? ' Saved retrieval progress is retained in this browser. Retry the same file to resume and reconcile its existing sessions.' : '')
+      if (active.current === controller) { setProgress((p) => ({ ...p, phase: 'error', message })); setReceiptStatus('failed'); setReceiptError(message) }
+      throw new Error(message)
+    } finally { await checkpoint?.retain().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
-
-  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan }
+  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
 }

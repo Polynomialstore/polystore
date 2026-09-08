@@ -164,6 +164,12 @@ func listDealGenerationDetails(dealID uint64, now time.Time) ([]dealGenerationDe
 }
 
 func describeDealGenerationDir(generationDir string, activeKey string, now time.Time, retentionTTL time.Duration) dealGenerationDetail {
+	release, err := leaseGenerationPaths(generationDir)
+	if err != nil {
+		return dealGenerationDetail{Status: "unavailable"}
+	}
+	defer release()
+
 	manifestRoot := inferManifestRootForDealDir(generationDir)
 	detail := dealGenerationDetail{
 		ManifestRoot:  manifestRoot,
@@ -214,6 +220,12 @@ func describeDealGenerationDir(generationDir string, activeKey string, now time.
 }
 
 func classifyDealGenerationStatus(snapshot *dealGenerationStatusSnapshot, generationDir string, now time.Time) {
+	release, err := leaseGenerationPaths(generationDir)
+	if err != nil {
+		return
+	}
+	defer release()
+
 	if snapshot == nil {
 		return
 	}

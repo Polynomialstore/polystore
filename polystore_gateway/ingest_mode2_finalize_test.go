@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"polystorechain/x/polystorechain/types"
 )
 
-func TestMode2FinalizeStagingDir_MergesIntoExistingDir(t *testing.T) {
+func TestMode2FinalizeStagingDir_PreservesConflictsAndSlowLocks(t *testing.T) {
 	base := t.TempDir()
 	finalDir := filepath.Join(base, "final")
 	if err := os.MkdirAll(finalDir, 0o755); err != nil {
@@ -56,8 +59,38 @@ func TestMode2FinalizeStagingDir_MergesIntoExistingDir(t *testing.T) {
 		t.Fatalf("WriteFile(marker) failed: %v", err)
 	}
 
+	if err := mode2FinalizeStagingDir(stagingDir, finalDir); !errors.Is(err, errGenerationConflict) {
+		t.Fatalf("conflicting incomplete destination accepted: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(finalDir, "manifest.bin")); err != nil || !bytes.Equal(got, []byte("partial")) {
+		t.Fatal("conflicting destination was mutated", err)
+	}
+	if _, err := os.Stat(stagingDir); err != nil {
+		t.Fatal("failed publication lost source", err)
+	}
+	// Test-owned repair removes the incomplete fixture; production never does so.
+	if err := os.RemoveAll(finalDir); err != nil {
+		t.Fatal(err)
+	}
+	lock := filepath.Join(base, ".final.lock")
+	if err := os.WriteFile(lock, []byte("slow writer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-3 * time.Minute)
+	if err := os.Chtimes(lock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err == nil {
+		t.Fatal("broke old live lock")
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatal("removed unexplained lock", err)
+	}
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
 	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
-		t.Fatalf("mode2FinalizeStagingDir failed: %v", err)
+		t.Fatal(err)
 	}
 
 	if _, err := os.Stat(stagingDir); !os.IsNotExist(err) {

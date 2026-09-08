@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/types"
 )
 
 func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {
@@ -87,7 +89,7 @@ func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadSlabIndex_FallbackSynthesizesSlabMetadata(t *testing.T) {
+func TestLoadSlabIndex_FallbackPreservesHistoricalMetadata(t *testing.T) {
 	useTempUploadDir(t)
 
 	manifestRoot := mustTestManifestRoot(t, "slab-metadata-fallback")
@@ -132,7 +134,11 @@ func TestLoadSlabIndex_FallbackSynthesizesSlabMetadata(t *testing.T) {
 		t.Fatalf("unexpected file info: %+v", info)
 	}
 
-	meta, err := readSlabMetadataFile(dealDir)
+	raw, err := os.ReadFile(slabMetadataPathForDealDir(dealDir))
+	if err != nil || string(raw) != "{corrupt" {
+		t.Fatal("read rewrote historical metadata", err)
+	}
+	meta, err := loadSlabMetadataWithFallback(dealDir)
 	if err != nil {
 		t.Fatalf("expected synthesized slab metadata file, got error: %v", err)
 	}
@@ -162,4 +168,75 @@ func stringsRepeat(ch string, n int) string {
 		out[i] = ch[0]
 	}
 	return string(out)
+}
+
+func TestLoadSlabIndexRetainsAllocatedUserCount(t *testing.T) {
+	initCryptoForTest(t)
+	for _, tc := range []struct {
+		name         string
+		tombstone    bool
+		sidecarUsers uint64
+		wantUsers    uint64
+	}{
+		{"no_sidecar", false, 0, 2},
+		{"deleted_tail_no_sidecar", true, 0, 2},
+		{"sidecar_preallocation", false, 3, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := crypto_ffi.NewMdu0BuilderWithCommitments(2, 96)
+			defer b.Free()
+			for i, name := range []string{"first", "tail"} {
+				if err := b.AppendFile(name, 100, uint64(i)*RawMduCapacity); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mdu0, err := b.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.tombstone {
+				// Clear the second record's path in native FAT v2 storage, leaving
+				// its allocated extent intact as the native deletion format does.
+				for logical := 128 + 256 + 24; logical < 128+2*256; logical++ {
+					mdu0[16*types.BLOB_SIZE+logical/31*32+1+logical%31] = 0
+				}
+			}
+			root, err := crypto_ffi.ComputeMduMerkleRoot(mdu0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(t.TempDir(), hex.EncodeToString(root))
+			if err := os.Mkdir(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "mdu_0.bin"), mdu0, 0600); err != nil {
+				t.Fatal(err)
+			}
+			// Only filenames are needed to resolve this provider's allocation.
+			if err := os.WriteFile(filepath.Join(dir, "mdu_3_slot_0.bin"), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if tc.sidecarUsers > 0 {
+				witness := uint64(1)
+				meta, err := newSlabMetadataDocument(slabMetadataBuildOptions{
+					GenerationID: hex.EncodeToString(root),
+					ManifestRoot: "0x" + hex.EncodeToString(root),
+					WitnessMdus:  &witness, UserMdus: &tc.sidecarUsers,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := writeSlabMetadataFile(dir, meta); err != nil {
+					t.Fatal(err)
+				}
+			}
+			entry, err := loadSlabIndex(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entry.userCount != tc.wantUsers || entry.witnessCount != 1 {
+				t.Fatalf("user=%d witness=%d; want user=%d witness=1", entry.userCount, entry.witnessCount, tc.wantUsers)
+			}
+		})
+	}
 }

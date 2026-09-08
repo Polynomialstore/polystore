@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -360,45 +361,8 @@ func merkleRootAndPath(leaves [][32]byte, leafIndex int) ([]byte, [][]byte) {
 		return make([]byte, 32), nil
 	}
 
-	level := make([][32]byte, len(leaves))
-	copy(level, leaves)
-	idx := leafIndex
-	path := make([][]byte, 0, 10)
-
-	for len(level) > 1 {
-		if idx%2 == 0 {
-			if idx+1 < len(level) {
-				h := make([]byte, 32)
-				copy(h, level[idx+1][:])
-				path = append(path, h)
-			}
-		} else {
-			h := make([]byte, 32)
-			copy(h, level[idx-1][:])
-			path = append(path, h)
-		}
-
-		next := make([][32]byte, 0, (len(level)+1)/2)
-		for i := 0; i < len(level); i += 2 {
-			left := level[i]
-			if i+1 < len(level) {
-				right := level[i+1]
-				var pair [64]byte
-				copy(pair[:32], left[:])
-				copy(pair[32:], right[:])
-				next = append(next, blake2s.Sum256(pair[:]))
-				continue
-			}
-			// rs_merkle propagates the left node when no sibling exists.
-			next = append(next, left)
-		}
-		level = next
-		idx /= 2
-	}
-
-	root := make([]byte, 32)
-	copy(root, level[0][:])
-	return root, path
+	tree := buildProofMerkleTree(leaves)
+	return bytes.Clone(tree[len(tree)-1][0][:]), proofMerklePath(tree, leafIndex)
 }
 
 func splitMerkleProof32(flat []byte) ([][]byte, error) {

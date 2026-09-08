@@ -10,6 +10,13 @@ export class PolyStoreWasm {
   static validate_trusted_setup(bytes: Uint8Array): void;
   commit_received_blob(blob: Uint8Array): Uint8Array;
   static validate_packed_payload(encoded: Uint8Array, raw_len: number): void;
+  /**
+   * Recover only the 8MiB data MDU from exactly K authenticated shards.
+   * Authentication belongs to the caller. Exact-K admission caps supplied
+   * bytes at 8MiB, missing data at another 8MiB and the Rust output at 8MiB;
+   * absent parity remains absent even for K=1/M=255.
+   */
+  static reconstruct_mdu_from_shards(input: Array<any>, k: number, m: number): Uint8Array;
   constructor(trusted_setup_bytes: Uint8Array);
   expand_file(data: Uint8Array): any;
   expand_mdu_rs(mdu_bytes: Uint8Array, k: number, m: number): any;
@@ -65,6 +72,7 @@ export interface InitOutput {
   readonly polystorewasm_validate_trusted_setup: (a: number, b: number) => [number, number];
   readonly polystorewasm_commit_received_blob: (a: number, b: number, c: number) => [number, number, number];
   readonly polystorewasm_validate_packed_payload: (a: number, b: number, c: number) => [number, number];
+  readonly polystorewasm_reconstruct_mdu_from_shards: (a: any, b: number, c: number) => [number, number, number];
   readonly polystorewasm_new: (a: number, b: number) => [number, number, number];
   readonly polystorewasm_expand_file: (a: number, b: number, c: number) => [number, number, number];
   readonly polystorewasm_expand_mdu_rs: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -102,8 +110,10 @@ export interface InitOutput {
   readonly wasmmdu0builder_get_witness_count: (a: number) => bigint;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
   readonly __wbindgen_externrefs: WebAssembly.Table;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }

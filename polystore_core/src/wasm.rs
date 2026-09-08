@@ -5,7 +5,7 @@ use crate::coding::{
 };
 use crate::kzg::KzgContext;
 use crate::kzg::{
-    BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode,
+    set_pippenger_window_override, set_wasm_msm_basis_mode, BLOBS_PER_MDU, BLOB_SIZE,
 };
 use crate::layout::FileRecordV1;
 use js_sys::{BigInt, Date, JsString, Uint8Array};
@@ -90,6 +90,68 @@ impl PolyStoreWasm {
         }
         crate::coding::validate_packed_payload(encoded, raw_len as usize)
             .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Recover only the 8MiB data MDU from exactly K authenticated shards.
+    /// Authentication belongs to the caller. Exact-K admission caps supplied
+    /// bytes at 8MiB, missing data at another 8MiB and the Rust output at 8MiB;
+    /// absent parity remains absent even for K=1/M=255.
+    pub fn reconstruct_mdu_from_shards(
+        input: js_sys::Array,
+        k: f64,
+        m: f64,
+    ) -> Result<Uint8Array, JsValue> {
+        if !k.is_finite()
+            || !m.is_finite()
+            || k.fract() != 0.0
+            || m.fract() != 0.0
+            || k < 1.0
+            || k > 64.0
+            || m < 1.0
+            || m > 255.0
+        {
+            return Err(JsValue::from_str("Invalid reconstruction geometry"));
+        }
+        let k = k as usize;
+        let m = m as usize;
+        if !js_sys::Array::is_array(input.as_ref())
+            || BLOBS_PER_MDU % k != 0
+            || k + m > 256
+            || input.length() as usize != k + m
+        {
+            return Err(JsValue::from_str("Invalid reconstruction shape"));
+        }
+        let shard_len = BLOBS_PER_MDU / k * BLOB_SIZE;
+        let mut present = 0usize;
+        // Retain handles and validate the entire bounded input before copying
+        // any shard bytes into owned Rust buffers.
+        let mut handles = Vec::with_capacity(k + m);
+        for value in input.iter() {
+            if value.is_null() {
+                handles.push(None);
+            } else {
+                let bytes = value
+                    .dyn_into::<Uint8Array>()
+                    .map_err(|_| JsValue::from_str("Shard must be Uint8Array or null"))?;
+                if bytes.length() as usize != shard_len {
+                    return Err(JsValue::from_str("Invalid reconstruction shard length"));
+                }
+                present += 1;
+                handles.push(Some(bytes));
+            }
+        }
+        if present != k {
+            return Err(JsValue::from_str(
+                "Exactly K authenticated shards are required",
+            ));
+        }
+        let mut shards: Vec<Option<Vec<u8>>> = handles
+            .iter()
+            .map(|value| value.as_ref().map(Uint8Array::to_vec))
+            .collect();
+        let bytes = crate::coding::reconstruct_mdu_from_shards(&mut shards, k, m)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(bytes.as_slice()))
     }
 
     #[wasm_bindgen(constructor)]

@@ -1,6 +1,8 @@
 import type { PolyfsFileEntry } from '../domain/polyfs'
-import { asNonNegativeInteger, POLYFS_FAT_LOGICAL_BYTES, POLYFS_FILE_RECORD_CAPACITY,
-  POLYFS_ROOT_TABLE_CAPACITY } from '../domain/polyfsLayout'
+import {
+  asNonNegativeInteger, POLYFS_FAT_LOGICAL_BYTES, POLYFS_FILE_RECORD_CAPACITY,
+  POLYFS_ROOT_TABLE_CAPACITY
+} from '../domain/polyfsLayout'
 import { validatePolyfsRecordPath } from './polyfsPath'
 
 export const MDU_SIZE_BYTES = 8 * 1024 * 1024
@@ -80,15 +82,25 @@ export function decodePolyfsFileRecord(bytes: Uint8Array): {
   return { path, start_offset: start, size_bytes: size, timestamp: view.getBigUint64(16, true), flags: Number(packed >> 56n) }
 }
 
-export function parsePolyfsFilesFromMdu0(mdu0: Uint8Array): PolyfsFileEntry[] {
+export function parsePolyfsRecordsFromMdu0(mdu0: Uint8Array): ReturnType<typeof decodePolyfsFileRecord>[] {
   const count = validatedRecordCount(mdu0)
-  const files: PolyfsFileEntry[] = []
+  const records: ReturnType<typeof decodePolyfsFileRecord>[] = []
   const paths = new Set<string>()
   for (let i = 0; i < count; i++) {
     const record = decodePolyfsFileRecord(readPolyfsFatRange(mdu0, FILE_TABLE_HEADER_SIZE + i * FILE_RECORD_SIZE, FILE_RECORD_SIZE))
+    if (record.path) {
+      if (paths.has(record.path)) throw new Error('duplicate active file path')
+      paths.add(record.path)
+    }
+    records.push(record)
+  }
+  return records
+}
+
+export function parsePolyfsFilesFromMdu0(mdu0: Uint8Array): PolyfsFileEntry[] {
+  const files: PolyfsFileEntry[] = []
+  for (const record of parsePolyfsRecordsFromMdu0(mdu0)) {
     if (!record.path) continue
-    if (paths.has(record.path)) throw new Error('duplicate active file path')
-    paths.add(record.path)
     const start = asNonNegativeInteger(Number(record.start_offset), 'start offset')
     const size = asNonNegativeInteger(Number(record.size_bytes), 'file size')
     asNonNegativeInteger(start + size, 'file end')
@@ -147,4 +159,13 @@ export function reconstructMduFromMode2SlotSlices(
     }
   }
   return mdu
+}
+
+// Root-table cells store the public Merkle digest reduced once modulo BLS12-381
+// Fr. Compare with that representation, never relabel a cell as the raw digest.
+export function assertPolyfsRootCell(digest: Uint8Array, cell: Uint8Array): void {
+  if (digest.length !== 32 || cell.length !== 32) throw new Error('invalid root identity')
+  const integer = (bytes: Uint8Array) => bytes.reduce((n, b) => (n << 8n) | BigInt(b), 0n)
+  const modulus = integer(FR), expected = integer(cell)
+  if (expected >= modulus || integer(digest) % modulus !== expected) throw new Error('MDU does not match authenticated root-table cell')
 }
