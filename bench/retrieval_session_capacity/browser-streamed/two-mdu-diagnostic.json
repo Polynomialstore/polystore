@@ -1,0 +1,600 @@
+{
+  "qualification": false,
+  "kind": "single-pair-browser-retrieval-diagnostic",
+  "payload_bytes": 16252928,
+  "topology": "one local validator, twelve provider processes, one user-gateway and Chromium on one shared host",
+  "limits": "One pair; no repetition dispersion, saturation, WAN or full-size qualification. System liveness disabled in this isolated browser profile.",
+  "variants": {
+    "serial": {
+      "provenance": {
+        "product_head": "8b6e2b692e1c88635af4a91c4895e21f866b11e1",
+        "browser_head": "c809b476644baf919610e004cca46449dd2a23fe",
+        "settlement_revision": "d4ecc5f0",
+        "variant": "serial",
+        "qualification": false,
+        "source_hashes": {
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/polystorechaind": "4e36719b5fcd303823f88d16fa8c8a7113e2294bd1c9555012f2c3a2c3e6ee45",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_gateway/polystore_gateway": "08f29104e5ad3039fa0064e5cf0e413a2042a7b1203f333c70ac949cfcefa2ea",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_cli/target/release/polystore_cli": "a45898dbe96187bbd2cf861978394e254317faac212c1d12077af0216b8e1460",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+          "polystore-website/src/lib/retrievalSettlement.ts": "2050117161292fb1439fa8571a1b6c61bd4dbbf6801220d5e2708fadb0fe58fc",
+          "polystore-website/tests/mode2-stripe.spec.ts": "30bb626f513c8775add42bb979ff6cbe33fb48cbae3bc54a0d828dbc5fb99974"
+        }
+      },
+      "result": {
+        "size": 16252928,
+        "route": "gateway",
+        "expectedMdus": 2,
+        "expectedSessions": 16,
+        "expectedBlobs": 128,
+        "expectedHash": "e9c81f8ebd06d39e60a764974665b3e556e60587ba23289988e69490c23dbd24",
+        "dealId": "0",
+        "uploadMs": 4693,
+        "proofRequests": [
+          {
+            "id": "0x5356ff0fe43995b32f716ed856258ad57c1ca01fc64186d966c982114ef82b9f",
+            "startMs": 1788872472044,
+            "endMs": 1788872476954
+          },
+          {
+            "id": "0x97ce97e9aca11acf355b6cc63833c82a4e5e14b011889168f6aef5d43ab1fd2b",
+            "startMs": 1788872476954,
+            "endMs": 1788872481799
+          },
+          {
+            "id": "0xa87401899bf2e2c55c5c562d3336f9b33eb69760e6a6f950ba7b631ea3b9d9da",
+            "startMs": 1788872481799,
+            "endMs": 1788872487131
+          },
+          {
+            "id": "0xbfcd76857f3d908fa2d1fc75af52835431e685a63745cb36c86ed22ae4ce0783",
+            "startMs": 1788872487131,
+            "endMs": 1788872491960
+          },
+          {
+            "id": "0x3ed87facb6c1207339643611fe1a36d8f61c6a084408b8fd2d749cd72295f832",
+            "startMs": 1788872491960,
+            "endMs": 1788872496791
+          },
+          {
+            "id": "0x69b911a1b638a630d357cc5a81a65fb882797cc9e9ab4eac7ac32304243deb9d",
+            "startMs": 1788872496791,
+            "endMs": 1788872502119
+          },
+          {
+            "id": "0x58188ca7aad697aa1b762c5c37e4bc5b87a68b10efb620ba08ffcffd32fd38b8",
+            "startMs": 1788872502119,
+            "endMs": 1788872506942
+          },
+          {
+            "id": "0xb44749aeed6add9d454685a477a68376f701d403780de8f0d761ddf19841fc38",
+            "startMs": 1788872506942,
+            "endMs": 1788872512270
+          },
+          {
+            "id": "0x644546ed1803a1f3559e541ddccb4bdf477888c8cbe9e0e929c11375c101dc9f",
+            "startMs": 1788872559328,
+            "endMs": 1788872562096
+          },
+          {
+            "id": "0x0957f442917736e02cdf027061d2bd7d493f7feb1e659782d6903f90a4d85e52",
+            "startMs": 1788872562097,
+            "endMs": 1788872567313
+          },
+          {
+            "id": "0x49e240e5b0fa89c383ddbff57a80df5b278e4c2f9289a005d3e30c45891cfb37",
+            "startMs": 1788872567313,
+            "endMs": 1788872572512
+          },
+          {
+            "id": "0xdc689ac3ea0de6ac5bc5bdf40f9c74c7d99fc81f612f2a7dc5ded2c1e868399d",
+            "startMs": 1788872572512,
+            "endMs": 1788872577208
+          },
+          {
+            "id": "0x0d70c267fa48d17b68d56065ad7b10d7759837eee231a93241b67bd466265483",
+            "startMs": 1788872577208,
+            "endMs": 1788872582403
+          },
+          {
+            "id": "0xd3708df75eb55ad952c96401bc4edbcfc7fa70c22031fe27347ba93b8de6c3f0",
+            "startMs": 1788872582403,
+            "endMs": 1788872587603
+          },
+          {
+            "id": "0x8cd2fb4924038614b67a1c4ea29f1bb2052fc30fef92019220fb3b6912d7a017",
+            "startMs": 1788872587603,
+            "endMs": 1788872592292
+          },
+          {
+            "id": "0xe26cb6ee9119c3c546e02c61d5c3711429037681746fc8311214b7c6b629cdfe",
+            "startMs": 1788872592293,
+            "endMs": 1788872597485
+          }
+        ],
+        "windows": [
+          {
+            "id": "0x5356ff0fe43995b32f716ed856258ad57c1ca01fc64186d966c982114ef82b9f",
+            "gateway": true
+          },
+          {
+            "id": "0x97ce97e9aca11acf355b6cc63833c82a4e5e14b011889168f6aef5d43ab1fd2b",
+            "gateway": true
+          },
+          {
+            "id": "0xa87401899bf2e2c55c5c562d3336f9b33eb69760e6a6f950ba7b631ea3b9d9da",
+            "gateway": true
+          },
+          {
+            "id": "0xbfcd76857f3d908fa2d1fc75af52835431e685a63745cb36c86ed22ae4ce0783",
+            "gateway": true
+          },
+          {
+            "id": "0x3ed87facb6c1207339643611fe1a36d8f61c6a084408b8fd2d749cd72295f832",
+            "gateway": true
+          },
+          {
+            "id": "0x69b911a1b638a630d357cc5a81a65fb882797cc9e9ab4eac7ac32304243deb9d",
+            "gateway": true
+          },
+          {
+            "id": "0x58188ca7aad697aa1b762c5c37e4bc5b87a68b10efb620ba08ffcffd32fd38b8",
+            "gateway": true
+          },
+          {
+            "id": "0xb44749aeed6add9d454685a477a68376f701d403780de8f0d761ddf19841fc38",
+            "gateway": true
+          },
+          {
+            "id": "0x644546ed1803a1f3559e541ddccb4bdf477888c8cbe9e0e929c11375c101dc9f",
+            "gateway": true
+          },
+          {
+            "id": "0x0957f442917736e02cdf027061d2bd7d493f7feb1e659782d6903f90a4d85e52",
+            "gateway": true
+          },
+          {
+            "id": "0x49e240e5b0fa89c383ddbff57a80df5b278e4c2f9289a005d3e30c45891cfb37",
+            "gateway": true
+          },
+          {
+            "id": "0xdc689ac3ea0de6ac5bc5bdf40f9c74c7d99fc81f612f2a7dc5ded2c1e868399d",
+            "gateway": true
+          },
+          {
+            "id": "0x0d70c267fa48d17b68d56065ad7b10d7759837eee231a93241b67bd466265483",
+            "gateway": true
+          },
+          {
+            "id": "0xd3708df75eb55ad952c96401bc4edbcfc7fa70c22031fe27347ba93b8de6c3f0",
+            "gateway": true
+          },
+          {
+            "id": "0x8cd2fb4924038614b67a1c4ea29f1bb2052fc30fef92019220fb3b6912d7a017",
+            "gateway": true
+          },
+          {
+            "id": "0xe26cb6ee9119c3c546e02c61d5c3711429037681746fc8311214b7c6b629cdfe",
+            "gateway": true
+          }
+        ],
+        "retrievalMs": 170079,
+        "actualBytes": 16252928,
+        "actualHash": "e9c81f8ebd06d39e60a764974665b3e556e60587ba23289988e69490c23dbd24",
+        "success": true,
+        "blobs": 128,
+        "sessions": [
+          {
+            "id": "0x5356ff0fe43995b32f716ed856258ad57c1ca01fc64186d966c982114ef82b9f",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1svrv2nmhz7kystety0l5dz40e7527v2jp5qdfx",
+            "updatedHeight": "35"
+          },
+          {
+            "id": "0x97ce97e9aca11acf355b6cc63833c82a4e5e14b011889168f6aef5d43ab1fd2b",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1rzh4uvwuf54thakyl7stu2k7ugxulhf9swelve",
+            "updatedHeight": "36"
+          },
+          {
+            "id": "0xa87401899bf2e2c55c5c562d3336f9b33eb69760e6a6f950ba7b631ea3b9d9da",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1havgvvzyawsgaeq338q9lp05geexk2yt0uxpdg",
+            "updatedHeight": "37"
+          },
+          {
+            "id": "0xbfcd76857f3d908fa2d1fc75af52835431e685a63745cb36c86ed22ae4ce0783",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1xxls5as4xskfctkyaqu80dmzghgf3yuxlq6g9v",
+            "updatedHeight": "38"
+          },
+          {
+            "id": "0x3ed87facb6c1207339643611fe1a36d8f61c6a084408b8fd2d749cd72295f832",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil14lltz6szv8nszdalm3k0zd4e4ehgd44fkm5w3u",
+            "updatedHeight": "39"
+          },
+          {
+            "id": "0x69b911a1b638a630d357cc5a81a65fb882797cc9e9ab4eac7ac32304243deb9d",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil19gewxvmef37zgepdywg9v3y9gxlg79fd78s5gu",
+            "updatedHeight": "40"
+          },
+          {
+            "id": "0x58188ca7aad697aa1b762c5c37e4bc5b87a68b10efb620ba08ffcffd32fd38b8",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1rcl67z9vwkk7ysh3u7uvdfg6l6ljd77zz2w055",
+            "updatedHeight": "41"
+          },
+          {
+            "id": "0xb44749aeed6add9d454685a477a68376f701d403780de8f0d761ddf19841fc38",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1zfulcejlqte708h972k8chlee4nd652rvxtd9r",
+            "updatedHeight": "42"
+          },
+          {
+            "id": "0x644546ed1803a1f3559e541ddccb4bdf477888c8cbe9e0e929c11375c101dc9f",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1svrv2nmhz7kystety0l5dz40e7527v2jp5qdfx",
+            "updatedHeight": "52"
+          },
+          {
+            "id": "0x0957f442917736e02cdf027061d2bd7d493f7feb1e659782d6903f90a4d85e52",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1rzh4uvwuf54thakyl7stu2k7ugxulhf9swelve",
+            "updatedHeight": "53"
+          },
+          {
+            "id": "0x49e240e5b0fa89c383ddbff57a80df5b278e4c2f9289a005d3e30c45891cfb37",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1havgvvzyawsgaeq338q9lp05geexk2yt0uxpdg",
+            "updatedHeight": "54"
+          },
+          {
+            "id": "0xdc689ac3ea0de6ac5bc5bdf40f9c74c7d99fc81f612f2a7dc5ded2c1e868399d",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1xxls5as4xskfctkyaqu80dmzghgf3yuxlq6g9v",
+            "updatedHeight": "55"
+          },
+          {
+            "id": "0x0d70c267fa48d17b68d56065ad7b10d7759837eee231a93241b67bd466265483",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil14lltz6szv8nszdalm3k0zd4e4ehgd44fkm5w3u",
+            "updatedHeight": "56"
+          },
+          {
+            "id": "0xd3708df75eb55ad952c96401bc4edbcfc7fa70c22031fe27347ba93b8de6c3f0",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil19gewxvmef37zgepdywg9v3y9gxlg79fd78s5gu",
+            "updatedHeight": "57"
+          },
+          {
+            "id": "0x8cd2fb4924038614b67a1c4ea29f1bb2052fc30fef92019220fb3b6912d7a017",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1rcl67z9vwkk7ysh3u7uvdfg6l6ljd77zz2w055",
+            "updatedHeight": "58"
+          },
+          {
+            "id": "0xe26cb6ee9119c3c546e02c61d5c3711429037681746fc8311214b7c6b629cdfe",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1zfulcejlqte708h972k8chlee4nd652rvxtd9r",
+            "updatedHeight": "59"
+          }
+        ]
+      }
+    },
+    "parallel": {
+      "provenance": {
+        "product_head": "8b6e2b692e1c88635af4a91c4895e21f866b11e1",
+        "browser_head": "c809b476644baf919610e004cca46449dd2a23fe",
+        "settlement_revision": "988cf4c6",
+        "variant": "parallel",
+        "qualification": false,
+        "source_hashes": {
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/polystorechaind": "4e36719b5fcd303823f88d16fa8c8a7113e2294bd1c9555012f2c3a2c3e6ee45",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_gateway/polystore_gateway": "08f29104e5ad3039fa0064e5cf0e413a2042a7b1203f333c70ac949cfcefa2ea",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_cli/target/release/polystore_cli": "a45898dbe96187bbd2cf861978394e254317faac212c1d12077af0216b8e1460",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+          "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+          "polystore-website/src/lib/retrievalSettlement.ts": "30ca62d1f364ae33241df72216b958371a909a36a882301604de257f4c866cb7",
+          "polystore-website/tests/mode2-stripe.spec.ts": "30bb626f513c8775add42bb979ff6cbe33fb48cbae3bc54a0d828dbc5fb99974"
+        }
+      },
+      "result": {
+        "size": 16252928,
+        "route": "gateway",
+        "expectedMdus": 2,
+        "expectedSessions": 16,
+        "expectedBlobs": 128,
+        "expectedHash": "e9c81f8ebd06d39e60a764974665b3e556e60587ba23289988e69490c23dbd24",
+        "dealId": "0",
+        "uploadMs": 4171,
+        "proofRequests": [
+          {
+            "id": "0x1e3e1499a34fbdb6530947de02fccd9f1f097fdf9bf1b7da32a13040c16d0775",
+            "startMs": 1788872834537,
+            "endMs": 1788872839011
+          },
+          {
+            "id": "0x566d8fa16bd1222316ea45bbca2886000e9f3a61cdef7cbb6967dddf0819c796",
+            "startMs": 1788872834537,
+            "endMs": 1788872839005
+          },
+          {
+            "id": "0x5263c6d0e0d8a1c06aa5cb364df6c0ef540103e6cb9b4548428f8c0e1aa89de9",
+            "startMs": 1788872834537,
+            "endMs": 1788872839008
+          },
+          {
+            "id": "0x53cd46af09159e329b6c07e73fe5d90026340c964e1b12f0fb90d93f2872bcde",
+            "startMs": 1788872834537,
+            "endMs": 1788872839014
+          },
+          {
+            "id": "0xd8ab053744625a2a6a004fa36c26b8b72a95c1f4bd321baa253443920f9ddf96",
+            "startMs": 1788872839005,
+            "endMs": 1788872844498
+          },
+          {
+            "id": "0x9787cf83f714d08299ac6c1192e07fdf2ad756dd1cfce9160c89f56ea30c1dd2",
+            "startMs": 1788872839008,
+            "endMs": 1788872844438
+          },
+          {
+            "id": "0x66e17d1af7efe6f171532110a5b8afc0125bccb9d94c1d10e4ce1ed19da905fd",
+            "startMs": 1788872839011,
+            "endMs": 1788872844494
+          },
+          {
+            "id": "0x249870d45c51b90477919b277a0ccabcb8a7ff3aae21b9dc07d642f76d6fa398",
+            "startMs": 1788872839014,
+            "endMs": 1788872844458
+          },
+          {
+            "id": "0x42c9679fc3d251569a926c45f9004aa00b175636150834906f1629896e118151",
+            "startMs": 1788872889211,
+            "endMs": 1788872894483
+          },
+          {
+            "id": "0x409ade031177a27f3a3d797ac69ea712ddbd549c47a07402b93634313b3f132d",
+            "startMs": 1788872889211,
+            "endMs": 1788872894481
+          },
+          {
+            "id": "0xe30fbbcb147d905e0db99a43de785ef2469bd62f6b8fb6c7aa71320a3b3c9ca2",
+            "startMs": 1788872889211,
+            "endMs": 1788872894481
+          },
+          {
+            "id": "0xd0db116c07f9e54a13a2cb6013eda8ed3fd700bb31e2c7b029c2118ae9a6f5ca",
+            "startMs": 1788872889211,
+            "endMs": 1788872894486
+          },
+          {
+            "id": "0x608a134328edd86536b984cb7f98c795e8a9bfecf140fa2d19603330872a0b21",
+            "startMs": 1788872894481,
+            "endMs": 1788872899761
+          },
+          {
+            "id": "0xe9b44e9bc28794148483b94b5be50fd103c71537d9172087bf207a1e050a2829",
+            "startMs": 1788872894481,
+            "endMs": 1788872899762
+          },
+          {
+            "id": "0xae69646cf6fbdf8251e3617efc69ee24f9635cb8e1b572abea2795af77ebac7c",
+            "startMs": 1788872894483,
+            "endMs": 1788872899762
+          },
+          {
+            "id": "0x13d14b0bebf494f6c94bbadea656e45defea0e9955e0052b54ec21248adb0209",
+            "startMs": 1788872894486,
+            "endMs": 1788872899756
+          }
+        ],
+        "windows": [
+          {
+            "id": "0x1e3e1499a34fbdb6530947de02fccd9f1f097fdf9bf1b7da32a13040c16d0775",
+            "gateway": true
+          },
+          {
+            "id": "0x566d8fa16bd1222316ea45bbca2886000e9f3a61cdef7cbb6967dddf0819c796",
+            "gateway": true
+          },
+          {
+            "id": "0x5263c6d0e0d8a1c06aa5cb364df6c0ef540103e6cb9b4548428f8c0e1aa89de9",
+            "gateway": true
+          },
+          {
+            "id": "0x53cd46af09159e329b6c07e73fe5d90026340c964e1b12f0fb90d93f2872bcde",
+            "gateway": true
+          },
+          {
+            "id": "0xd8ab053744625a2a6a004fa36c26b8b72a95c1f4bd321baa253443920f9ddf96",
+            "gateway": true
+          },
+          {
+            "id": "0x9787cf83f714d08299ac6c1192e07fdf2ad756dd1cfce9160c89f56ea30c1dd2",
+            "gateway": true
+          },
+          {
+            "id": "0x66e17d1af7efe6f171532110a5b8afc0125bccb9d94c1d10e4ce1ed19da905fd",
+            "gateway": true
+          },
+          {
+            "id": "0x249870d45c51b90477919b277a0ccabcb8a7ff3aae21b9dc07d642f76d6fa398",
+            "gateway": true
+          },
+          {
+            "id": "0x42c9679fc3d251569a926c45f9004aa00b175636150834906f1629896e118151",
+            "gateway": true
+          },
+          {
+            "id": "0x409ade031177a27f3a3d797ac69ea712ddbd549c47a07402b93634313b3f132d",
+            "gateway": true
+          },
+          {
+            "id": "0xe30fbbcb147d905e0db99a43de785ef2469bd62f6b8fb6c7aa71320a3b3c9ca2",
+            "gateway": true
+          },
+          {
+            "id": "0xd0db116c07f9e54a13a2cb6013eda8ed3fd700bb31e2c7b029c2118ae9a6f5ca",
+            "gateway": true
+          },
+          {
+            "id": "0x608a134328edd86536b984cb7f98c795e8a9bfecf140fa2d19603330872a0b21",
+            "gateway": true
+          },
+          {
+            "id": "0xe9b44e9bc28794148483b94b5be50fd103c71537d9172087bf207a1e050a2829",
+            "gateway": true
+          },
+          {
+            "id": "0xae69646cf6fbdf8251e3617efc69ee24f9635cb8e1b572abea2795af77ebac7c",
+            "gateway": true
+          },
+          {
+            "id": "0x13d14b0bebf494f6c94bbadea656e45defea0e9955e0052b54ec21248adb0209",
+            "gateway": true
+          }
+        ],
+        "retrievalMs": 109451,
+        "actualBytes": 16252928,
+        "actualHash": "e9c81f8ebd06d39e60a764974665b3e556e60587ba23289988e69490c23dbd24",
+        "success": true,
+        "blobs": 128,
+        "sessions": [
+          {
+            "id": "0x1e3e1499a34fbdb6530947de02fccd9f1f097fdf9bf1b7da32a13040c16d0775",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1u3qjwfrt7yyc2g57nn6hcdn8dz53vjed4tlzc0",
+            "updatedHeight": "35"
+          },
+          {
+            "id": "0x566d8fa16bd1222316ea45bbca2886000e9f3a61cdef7cbb6967dddf0819c796",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1ezdt00zln7axe6nayw2ktac6s8xw4p45czakmm",
+            "updatedHeight": "35"
+          },
+          {
+            "id": "0x5263c6d0e0d8a1c06aa5cb364df6c0ef540103e6cb9b4548428f8c0e1aa89de9",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil17lwqc7ddwj5hwle9zhkzzc5h8v6qt59aenzfy8",
+            "updatedHeight": "35"
+          },
+          {
+            "id": "0x53cd46af09159e329b6c07e73fe5d90026340c964e1b12f0fb90d93f2872bcde",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1whrzhpu26s3ejnuezlag62x9e30y9ckm8nhdgx",
+            "updatedHeight": "35"
+          },
+          {
+            "id": "0xd8ab053744625a2a6a004fa36c26b8b72a95c1f4bd321baa253443920f9ddf96",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil14awuen4y5qrty9vh3nv3utfmezf7hcmqygmgjv",
+            "updatedHeight": "36"
+          },
+          {
+            "id": "0x9787cf83f714d08299ac6c1192e07fdf2ad756dd1cfce9160c89f56ea30c1dd2",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil15hs9gww3ql5pmud9ht8xtzq9365gzkp6j0eh2g",
+            "updatedHeight": "36"
+          },
+          {
+            "id": "0x66e17d1af7efe6f171532110a5b8afc0125bccb9d94c1d10e4ce1ed19da905fd",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1ajpsvt65z75ql04zlepq25k59nm85vferna284",
+            "updatedHeight": "36"
+          },
+          {
+            "id": "0x249870d45c51b90477919b277a0ccabcb8a7ff3aae21b9dc07d642f76d6fa398",
+            "mdu": "2",
+            "blobs": 8,
+            "payee": "nil1ynfg7p2jn3n3j3vmpm2e9ekyxwt6luxr07effu",
+            "updatedHeight": "36"
+          },
+          {
+            "id": "0x42c9679fc3d251569a926c45f9004aa00b175636150834906f1629896e118151",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1u3qjwfrt7yyc2g57nn6hcdn8dz53vjed4tlzc0",
+            "updatedHeight": "46"
+          },
+          {
+            "id": "0x409ade031177a27f3a3d797ac69ea712ddbd549c47a07402b93634313b3f132d",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1ezdt00zln7axe6nayw2ktac6s8xw4p45czakmm",
+            "updatedHeight": "46"
+          },
+          {
+            "id": "0xe30fbbcb147d905e0db99a43de785ef2469bd62f6b8fb6c7aa71320a3b3c9ca2",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil17lwqc7ddwj5hwle9zhkzzc5h8v6qt59aenzfy8",
+            "updatedHeight": "46"
+          },
+          {
+            "id": "0xd0db116c07f9e54a13a2cb6013eda8ed3fd700bb31e2c7b029c2118ae9a6f5ca",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1whrzhpu26s3ejnuezlag62x9e30y9ckm8nhdgx",
+            "updatedHeight": "46"
+          },
+          {
+            "id": "0x608a134328edd86536b984cb7f98c795e8a9bfecf140fa2d19603330872a0b21",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil14awuen4y5qrty9vh3nv3utfmezf7hcmqygmgjv",
+            "updatedHeight": "47"
+          },
+          {
+            "id": "0xe9b44e9bc28794148483b94b5be50fd103c71537d9172087bf207a1e050a2829",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil15hs9gww3ql5pmud9ht8xtzq9365gzkp6j0eh2g",
+            "updatedHeight": "47"
+          },
+          {
+            "id": "0xae69646cf6fbdf8251e3617efc69ee24f9635cb8e1b572abea2795af77ebac7c",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1ajpsvt65z75ql04zlepq25k59nm85vferna284",
+            "updatedHeight": "47"
+          },
+          {
+            "id": "0x13d14b0bebf494f6c94bbadea656e45defea0e9955e0052b54ec21248adb0209",
+            "mdu": "3",
+            "blobs": 8,
+            "payee": "nil1ynfg7p2jn3n3j3vmpm2e9ekyxwt6luxr07effu",
+            "updatedHeight": "47"
+          }
+        ]
+      }
+    }
+  },
+  "observed_retrieval_change_fraction": -0.3564696405787899
+}

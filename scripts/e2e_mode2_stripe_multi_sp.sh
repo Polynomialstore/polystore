@@ -67,6 +67,21 @@ export POLYSTORE_DISABLE_SYSTEM_LIVENESS="${POLYSTORE_DISABLE_SYSTEM_LIVENESS:-1
 # so providers don't starve under heavy concurrent disk/network IO.
 export POLYSTORE_MODE2_UPLOAD_PARALLELISM="${POLYSTORE_MODE2_UPLOAD_PARALLELISM:-16}"
 
+# Opt-in real payload gate. The default is two raw MDUs for local comparison;
+# CI can select exactly 1 GiB. The test checks free disk before any funding.
+if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then
+  export E2E_MODE2_STREAMED_BYTES="${E2E_MODE2_STREAMED_BYTES:-16252928}"
+  case "$E2E_MODE2_STREAMED_BYTES" in
+    16252928|1073741824) ;;
+    *) echo "ERROR: streamed retrieval supports 16252928 or 1073741824 bytes" >&2; exit 1 ;;
+  esac
+  export E2E_MODE2_FAST=0 PROVIDER_COUNT=12 VITE_DEFAULT_RS_K=8 VITE_DEFAULT_RS_M=4
+  export CGO_ENABLED=1 POLYSTORE_CORE_LIB_DIR="$ROOT_DIR/polystore_core/target/release"
+  export POLYSTORE_POLYCE=0 POLYSTORE_FAKE_INGEST=0 POLYSTORE_FAST_INGEST=0
+  export POLYSTORE_MODE2_ENCODE_PARALLELISM=1 POLYSTORE_MODE2_UPLOAD_PARALLELISM=2
+  export E2E_MODE2_GREP='mode2 streamed authenticated retrieval'
+fi
+
 echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
 if [ -z "${E2E_STACK_PROFILE:-}" ]; then
   if [ "$PROVIDER_COUNT" -ge 12 ]; then
@@ -96,6 +111,9 @@ if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
   (cd "$ROOT_DIR/polystore-website" && npx playwright install --with-deps chromium)
 fi
 playwright_args=("$E2E_MODE2_SPEC")
+if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then
+  playwright_args+=(--retries=0 --workers=1)
+fi
 if [ -n "$E2E_MODE2_GREP" ]; then
   playwright_args+=(--grep "$E2E_MODE2_GREP")
 fi

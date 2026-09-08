@@ -1,7 +1,12 @@
-import { test, expect, type Locator, type Page } from '@playwright/test'
+import { test, expect, type Download, type Locator, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import { createWriteStream } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import path from 'node:path'
+import { parsePinnedGeneration } from '../src/lib/retrieval'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
@@ -99,7 +104,7 @@ async function openFileActionMenuItem(page: Page, filePath: string, testId: stri
   return item
 }
 
-async function readDownloadedBytes(download: Awaited<ReturnType<Page['waitForEvent']>>): Promise<Buffer> {
+async function readDownloadedBytes(download: Download): Promise<Buffer> {
   const p = await download.path()
   if (p) return fs.readFile(p)
   const stream = await download.createReadStream()
@@ -139,7 +144,8 @@ async function waitForDownloadEventOrFailure(
   page: Page,
   timeout: number,
   baselineFailure: string,
-): Promise<Awaited<ReturnType<Page['waitForEvent']>> | null> {
+  onPoll?: () => Promise<void>,
+): Promise<Download | null> {
   const outcomePromise = page
     .waitForEvent('download', { timeout })
     .then((download) => ({ kind: 'download' as const, download }))
@@ -147,6 +153,7 @@ async function waitForDownloadEventOrFailure(
 
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
+    await onPoll?.()
     const outcome = await Promise.race([
       outcomePromise,
       page.waitForTimeout(500).then(() => null),
@@ -547,6 +554,205 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
   expect(await isConnected()).toBe(true)
 }
+
+async function hashCheckedDownload(download: Pick<Download, 'createReadStream' | 'cancel'>, checkDisk: () => Promise<void>) {
+  let failure: unknown, checking: Promise<void> | undefined
+  let stream: Readable | null = null
+  const check = () => {
+    if (!checking && !failure) checking = checkDisk().catch(async (error) => {
+      failure = error
+      stream?.destroy()
+      await download.cancel().catch(() => {})
+    }).finally(() => { checking = undefined })
+    return checking
+  }
+  // The event announces the start of a download. Keep the guard alive while
+  // createReadStream waits and while Chromium/Node finish consuming its bytes.
+  const timer = setInterval(() => { void check() }, 5000)
+  try {
+    await check()
+    if (failure) throw failure
+    stream = await download.createReadStream()
+    if (failure) throw failure
+    if (!stream) throw new Error('download stream unavailable')
+    const hash = crypto.createHash('sha256')
+    let bytes = 0
+    for await (const chunk of stream) { bytes += chunk.length; hash.update(chunk) }
+    await check()
+    if (failure) throw failure
+    return { bytes, digest: hash.digest('hex') }
+  } catch (error) { throw failure ?? error }
+  finally { clearInterval(timer); stream?.destroy(); await checking }
+}
+
+test('streamed download disk guard cancels after the download event', async () => {
+  for (const waitingForStream of [true, false]) {
+    let checks = 0, cancelled = false
+    let endDownload!: () => void
+    const pending = new Promise<void>((resolve) => { endDownload = resolve })
+    const stream = new Readable({ read() {} })
+    stream.push(Buffer.from('first'))
+    const download = {
+      createReadStream: async () => {
+        if (waitingForStream) { await pending; throw new Error('download cancelled') }
+        return stream
+      },
+      // Once Playwright returns a stream, its download is already complete.
+      cancel: async () => { cancelled = true; if (waitingForStream) endDownload() },
+    }
+    await expect(hashCheckedDownload(download, async () => {
+      if (++checks === 2) throw new Error('scratch space below 2 GiB')
+    })).rejects.toThrow('scratch space below 2 GiB')
+    expect(cancelled).toBe(true)
+    expect(checks).toBe(2)
+    if (!waitingForStream) expect(stream.destroyed).toBe(true)
+    stream.destroy()
+  }
+})
+
+test.describe('mode2 streamed retrieval', () => {
+  test.skip(!hasLocalStack || process.env.E2E_MODE2_STREAMED !== '1', 'opt-in real streamed retrieval')
+  test.use({ acceptDownloads: true })
+  test.describe.configure({ retries: 0 })
+
+  test('mode2 streamed authenticated retrieval', async ({ page }, testInfo) => {
+    const size = Number(process.env.E2E_MODE2_STREAMED_BYTES || 16_252_928)
+    expect([16_252_928, 1_073_741_824]).toContain(size)
+    const large = size === 1_073_741_824
+    const route = process.env.E2E_MODE2_STREAMED_ROUTE || 'gateway'
+    expect(['gateway', 'provider']).toContain(route)
+    const downloadTimeout = large ? 3 * 60 * 60_000 : 15 * 60_000
+    test.setTimeout(large ? 4 * 60 * 60_000 : 30 * 60_000)
+    const expectedMdus = large ? 133 : 2, expectedSessions = large ? 1064 : 16, expectedBlobs = large ? 8457 : 128
+    const fileName = 'mode2-streamed.bin', fixture = testInfo.outputPath(fileName)
+    await fs.mkdir(testInfo.outputDir, { recursive: true })
+    const diskPaths = [process.cwd(), testInfo.outputDir, tmpdir(), process.env.POLYSTORE_HOME || path.resolve('../_artifacts')]
+    const checkDisk = async (minimumGiB: number) => {
+      for (const directory of diskPaths) {
+        const disk = await fs.statfs(directory)
+        expect(disk.bavail * disk.bsize, `free disk at ${directory}`).toBeGreaterThanOrEqual(minimumGiB * 2 ** 30)
+      }
+    }
+    await checkDisk(large ? 12 : 2)
+    const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.alloc(32, 0x57), Buffer.alloc(16))
+    const hash = crypto.createHash('sha256'), zeros = Buffer.alloc(1024 * 1024)
+    async function* source() {
+      for (let offset = 0; offset < size; offset += zeros.length) {
+        const chunk = cipher.update(zeros.subarray(0, Math.min(zeros.length, size - offset)))
+        hash.update(chunk); yield chunk
+      }
+      const last = cipher.final(); hash.update(last); yield last
+    }
+    const summary: Record<string, unknown> = { size, route, expectedMdus, expectedSessions, expectedBlobs }
+    try {
+      await pipeline(Readable.from(source()), createWriteStream(fixture, { flags: 'wx' }))
+      const expectedHash = hash.digest('hex')
+      summary.expectedHash = expectedHash
+      if (large) expect(expectedHash).toBe('5806efdf1f91fa2b8ab62f7b5e16541c0f866227cfe977238bd2ec9789664d9e')
+      // Gateway FormData upload streams the disk-backed File. Fail closed if
+      // gateway failure would select the whole-file browser sharding fallback.
+      await page.addInitScript((name) => {
+        const original = File.prototype.arrayBuffer
+        File.prototype.arrayBuffer = function () {
+          if (this.name === name) return Promise.reject(new Error('streamed fixture requires gateway ingest'))
+          return original.call(this)
+        }
+      }, fileName)
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+      await ensureWalletConnected(page)
+      await waitForGatewayConnected(page)
+      await checkDisk(large ? 12 : 2) // Before faucet, deal creation, or paid retrieval.
+      await ensureWalletFunded(page, 180_000)
+      await ensureCreateDealDrawerOpen(page)
+      await page.getByTestId('alloc-submit').click()
+      const title = page.getByTestId('workspace-deal-title')
+      await expect(title).toHaveText(/Deal #\d+/, { timeout: 180_000 })
+      await dismissCreateDealDrawer(page)
+      const dealId = (await title.textContent())?.match(/#(\d+)/)?.[1]
+      expect(dealId).toBeTruthy()
+      summary.dealId = dealId
+      await page.getByTestId(`deal-row-${dealId}`).click()
+      await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
+      const uploadStarted = Date.now()
+      await page.getByTestId('mdu-file-input').setInputFiles(fixture)
+      await completeUploadAndCommit(page.getByTestId('mdu-upload'), page.getByTestId('mdu-commit'), fileName, dealId!, 30 * 60_000)
+      summary.uploadMs = Date.now() - uploadStarted
+      await waitForDealFileRow(page, dealId!, fileName)
+      const lcd = process.env.VITE_LCD_BASE || `http://localhost:${process.env.LCD_PORT || 1317}`
+      const dealResponse = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/deals/${dealId}`, { timeout: 15_000 })
+      expect(dealResponse.ok()).toBe(true)
+      const pin = parsePinnedGeneration(await dealResponse.json(), process.env.CHAIN_ID || '31337', BigInt(dealResponse.headers()['x-cosmos-block-height']), BigInt(dealId!))
+      expect([pin.k, pin.m, Number(pin.userMdus), pin.assignments.length]).toEqual([8, 4, expectedMdus, 12])
+      const listing = await page.request.get(`${configuredGatewayBase}/gateway/list-files/${pin.root}?deal_id=${dealId}&owner=${pin.owner}`, { timeout: 15_000 })
+      expect(listing.ok()).toBe(true)
+      const { files } = await listing.json()
+      expect(files).toEqual([expect.objectContaining({ path: fileName, size_bytes: size, flags: 0, start_offset: 0 })])
+
+      const windows: Array<{ id: string; gateway: boolean }> = []
+      const proofRequests: Array<{ id: string; startMs: number; endMs?: number }> = []
+      const pendingProofs = new Map<import('@playwright/test').Request, typeof proofRequests[number]>()
+      page.on('request', (request) => {
+        const url = new URL(request.url()), id = request.headers()['x-polystore-session-id']
+        if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) windows.push({ id, gateway: isGatewayOrigin(url.origin) })
+        if (url.pathname === '/gateway/session-proof' && request.method() === 'POST') {
+          const entry = { id: request.postDataJSON().session_id as string, startMs: Date.now() }
+          proofRequests.push(entry); pendingProofs.set(request, entry)
+        }
+      })
+      page.on('requestfinished', (request) => { const entry = pendingProofs.get(request); if (entry) { entry.endMs = Date.now(); pendingProofs.delete(request) } })
+      summary.proofRequests = proofRequests
+      summary.windows = windows
+      await checkDisk(2)
+      const button = await openFileActionMenuItem(page, fileName, route === 'gateway' ? 'deal-detail-download-gateway-provider' : 'deal-detail-download-sp')
+      const retrievalStarted = Date.now()
+      let checkedAt = 0
+      const [download] = await Promise.all([
+        waitForDownloadEventOrFailure(page, downloadTimeout, await readDownloadFailureBanner(page), async () => {
+          if (Date.now() - checkedAt >= 5000) { await checkDisk(2); checkedAt = Date.now() }
+        }), button.click(),
+      ])
+      if (!download) throw new Error(`streamed download event missing: ${await captureDownloadDiagnostics(page)}`)
+      try {
+        const { bytes, digest } = await hashCheckedDownload(download, () => checkDisk(2))
+        summary.retrievalMs = Date.now() - retrievalStarted
+        summary.actualBytes = bytes; summary.actualHash = digest
+        expect(bytes).toBe(size); expect(digest).toBe(expectedHash)
+      } finally { await download.delete() }
+      expect(windows).toHaveLength(expectedSessions)
+      const ids = [...new Set(windows.map((window) => window.id))]
+      expect(ids).toHaveLength(expectedSessions)
+      expect(windows.every((window) => window.gateway === (route === 'gateway'))).toBe(true)
+      await expect(page.getByRole('status').filter({ hasText: /unsettled provider payment/ })).toHaveCount(0)
+      let blobs = 0
+      const mdus = new Set<string>()
+      const settled = []
+      for (let offset = 0; offset < ids.length; offset += 4) {
+        const batch = await Promise.all(ids.slice(offset, offset + 4).map(async (id) => {
+          expect(id).toMatch(/^0x[0-9a-f]{64}$/)
+          const encoded = Buffer.from(id.slice(2), 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
+          const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions/${encoded}`, { timeout: 15_000 })
+          expect(response.ok()).toBe(true)
+          expect(response.headers()['x-cosmos-block-height']).toMatch(/^[1-9][0-9]*$/)
+          const { session } = await response.json()
+          expect(Buffer.from(session.session_id, 'base64').toString('hex')).toBe(id.slice(2))
+          expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_COMPLETED')
+          expect(String(session.deal_id ?? 0)).toBe(dealId)
+          expect(Buffer.from(session.manifest_root, 'base64').toString('hex')).toBe(pin.root.slice(2))
+          return { id, mdu: String(session.start_mdu_index), blobs: Number(session.blob_count), payee: session.authorized_proof_provider, updatedHeight: session.updated_height }
+        }))
+        for (const entry of batch) { blobs += entry.blobs; mdus.add(entry.mdu); settled.push(entry) }
+      }
+      expect(blobs).toBe(expectedBlobs); expect(mdus.size).toBe(expectedMdus)
+      Object.assign(summary, { success: true, blobs, sessions: settled })
+      console.log(`[streamed retrieval] ${size} bytes, ${expectedSessions} completed sessions, ${blobs} blobs, ${summary.retrievalMs}ms`)
+    } finally {
+      try {
+        await fs.writeFile(testInfo.outputPath('retrieval-summary.json'), JSON.stringify(summary, null, 2))
+      } finally { await fs.rm(fixture, { force: true }) }
+    }
+  })
+})
 
   test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')

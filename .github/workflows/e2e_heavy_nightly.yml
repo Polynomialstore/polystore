@@ -15,12 +15,18 @@ on:
         required: true
         default: false
         type: boolean
+      run_mode2_large:
+        description: 'Run the guarded 1 GiB authenticated retrieval instead of the small Mode2 suite'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   e2e-mode2-heavy:
     name: E2E Mode2 Stripe (Heavy 12 SPs)
-    if: ${{ github.event_name == 'schedule' || inputs.run_mode2_heavy }}
+    if: ${{ github.event_name == 'schedule' || inputs.run_mode2_heavy || inputs.run_mode2_large }}
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.run_mode2_large && 270 || 360 }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
     steps:
@@ -91,6 +97,8 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_INSTALL: '1'
           PROVIDER_COUNT: '12'
+          E2E_MODE2_STREAMED: ${{ inputs.run_mode2_large && '1' || '0' }}
+          E2E_MODE2_STREAMED_BYTES: '1073741824'
         run: |
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           scripts/e2e_mode2_stripe_multi_sp.sh
@@ -101,9 +109,12 @@ jobs:
         with:
           name: e2e-mode2-heavy-artifacts
           path: |
-            _artifacts/devnet_alpha_multi_sp/**
-            polystore-website/test-results/**
-            polystore-website/playwright-report/**
+            _artifacts/devnet_alpha_multi_sp/*.log
+            polystore-website/test-results/**/retrieval-summary.json
+            polystore-website/test-results/**/error-context.md
+            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.png' || '' }}
+            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.zip' || '' }}
+            ${{ !inputs.run_mode2_large && 'polystore-website/playwright-report/**' || '' }}
           if-no-files-found: ignore
 
   e2e-libp2p-relay:

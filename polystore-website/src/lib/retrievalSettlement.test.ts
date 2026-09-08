@@ -16,6 +16,61 @@ const payload = (s: FrozenSession, status = 'success', hash = txHash) => ({ stat
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
 const confirm = async () => {}
 
+test('four independent payees submit concurrently with bounded work and ordered outcomes', async () => {
+  const sessions = Array.from({ length: 8 }, (_, i) => session(i + 1))
+  const release: Array<() => void> = [], started: number[] = [], completed: number[] = []
+  const gates = sessions.map((_, i) => new Promise<void>((resolve) => { release[i] = resolve }))
+  let active = 0, peak = 0
+  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+    fetchFn: async (_, init) => {
+      const index = sessions.findIndex((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)
+      started.push(index); peak = Math.max(peak, ++active)
+      await gates[index]
+      active--; completed.push(index)
+      return json(payload(sessions[index]))
+    },
+  })
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assert.deepEqual(started, [0, 1, 2, 3])
+    for (const index of [3, 2, 1, 0]) release[index]()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assert.equal(started.length, 8)
+    assert.equal(peak, 4)
+    assert.deepEqual(completed, [3, 2, 1, 0])
+  } finally {
+    release.forEach((resolve) => resolve())
+    await work
+  }
+  assert.deepEqual((await work).map((outcome) => [outcome.sessionId, outcome.state]), sessions.map((s) => [s.sessionId, 'committed']))
+})
+
+test('sessions sharing a frozen deputy remain serial while distinct payees make progress', async () => {
+  const sessions = [session(1), { ...session(2), payee: session(1).payee }, session(3)]
+  let releaseFirst!: () => void
+  const first = new Promise<void>((resolve) => { releaseFirst = resolve })
+  const started: string[] = [], active = new Set<string>()
+  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+    fetchFn: async (_, init) => {
+      const s = sessions.find((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)!
+      assert.equal(active.has(s.payee), false)
+      active.add(s.payee); started.push(s.sessionId)
+      if (s === sessions[0]) await first
+      active.delete(s.payee)
+      return json(payload(s))
+    },
+  })
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    assert.deepEqual(started, [sessions[0].sessionId, sessions[2].sessionId])
+  } finally {
+    releaseFirst()
+    await work
+  }
+  assert.deepEqual(started, [sessions[0].sessionId, sessions[2].sessionId, sessions[1].sessionId])
+  assert.deepEqual((await work).map((outcome) => outcome.sessionId), sessions.map((s) => s.sessionId))
+})
+
 test('ACK commits before singular requests, preserving each immutable deputy and exact deal ID', async () => {
   const sessions = [session(1), session(2)], events: string[] = []
   const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
@@ -176,5 +231,29 @@ test('one post-ACK deadline bounds the whole wave and prevents dispatch after ex
   })
   assert.equal(posts, 1)
   assert.equal(outcomes.length, 3)
+  assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
+})
+
+test('shared deadline cancels all four active workers without dispatching queued sessions', async (t) => {
+  const deadlines: AbortController[] = []
+  t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 95_000)
+    const controller = new AbortController(); deadlines.push(controller); return controller.signal
+  })
+  const sessions = Array.from({ length: 64 }, (_, i) => session(i + 1))
+  let posts = 0
+  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+    fetchFn: async (_, init) => {
+      posts++
+      return new Promise<Response>((_, reject) => {
+        init!.signal!.addEventListener('abort', () => reject(new Error('response lost')), { once: true })
+      })
+    },
+  })
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  try { assert.equal(posts, 4) } finally { deadlines[0].abort(new Error('wave expired')) }
+  const outcomes = await work
+  assert.equal(posts, 4)
+  assert.deepEqual(outcomes.map((o) => o.sessionId), sessions.map((s) => s.sessionId))
   assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
 })
