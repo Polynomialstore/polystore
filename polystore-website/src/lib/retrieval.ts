@@ -202,7 +202,9 @@ export function parseFrozenSession(payload: unknown, height: bigint, expected: {
     contextHash: base64(response.challenge_context_hash, 32), seed: (response.challenge_seed === undefined || response.challenge_seed === '') ? null : base64(response.challenge_seed, 32) }
 }
 export async function fetchFrozenSession(lcd: string, expected: Parameters<typeof parseFrozenSession>[2], signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenSession> {
-  unhex(expected.sessionId, 32)
-  const result = await committedQuery(lcd, `/polystorechain/polystorechain/v1/retrieval-sessions/${expected.sessionId.slice(2)}`, undefined, signal, fetchFn)
+  // The generated LCD path decodes protobuf bytes as base64, not hex. Use
+  // URL-safe base64 so IDs containing '/' remain one path segment.
+  const id = btoa(String.fromCharCode(...unhex(expected.sessionId, 32))).replace(/\+/g, '-').replace(/\//g, '_')
+  const result = await committedQuery(lcd, `/polystorechain/polystorechain/v1/retrieval-sessions/${encodeURIComponent(id)}`, undefined, signal, fetchFn)
   return parseFrozenSession(result.payload, result.height, expected)
 }

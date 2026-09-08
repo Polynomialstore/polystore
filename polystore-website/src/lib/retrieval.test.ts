@@ -1,7 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { bech32 } from 'bech32'
-import { planRetrievalWindows, parsePinnedGeneration, u64, type PinnedGeneration } from './retrieval'
+import { fetchFrozenSession, planRetrievalWindows, parsePinnedGeneration, u64, type PinnedGeneration } from './retrieval'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 const deal = () => ({ id: '9007199254740993', manifest_root: btoa('\x01'.repeat(32)), owner: address(1),
@@ -62,4 +65,41 @@ test('trusted LCD query requires exact committed height and bounds/cancels respo
   const pending = readBoundedResponse(new Response(new ReadableStream<Uint8Array>({ cancel() { cancelled = true } })), 3, controller.signal)
   controller.abort(new Error('cancelled retrieval'))
   await assert.rejects(pending, /cancelled retrieval/); assert.equal(cancelled, true)
+})
+
+test('session LCD query sends exactly 32 protobuf bytes through a URL-safe base64 HTTP path', async () => {
+  const fixture = JSON.parse(await readFile(new URL('../../../testdata/retrieval-window-v2/session.json', import.meta.url), 'utf8'))
+  const generation: PinnedGeneration = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n,
+    root: `0x${Buffer.from(fixture.session.manifest_root, 'base64').toString('hex')}`, owner: fixture.session.owner,
+    endHeight: 100n, layout: 2, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: 2n, userMdus: 1n, totalMdus: 3n, assignments: [] }
+  const window = { mduIndex: 2n, slot: 1, provider: fixture.session.provider, startBlobIndex: 8, blobCount: 2, slices: [] }
+  for (const id of [Buffer.alloc(32, 1), Buffer.from('fbff'.repeat(16), 'hex')]) {
+    const response = structuredClone(fixture)
+    // The fixture's one-byte session domain precedes its 32 bytes of 0x01.
+    const context = Buffer.from(response.challenge_context, 'base64'), at = context.indexOf(Buffer.alloc(33, 1)) + 1
+    assert.ok(at > 0)
+    id.copy(context, at)
+    response.session.session_id = id.toString('base64')
+    response.challenge_context = context.toString('base64')
+    response.challenge_context_hash = createHash('sha256').update(context).digest('base64')
+    let received: Buffer | undefined
+    const server = createServer((request, result) => {
+      const path = new URL(request.url!, 'http://localhost').pathname
+      const prefix = '/polystorechain/polystorechain/v1/retrieval-sessions/'
+      const segment = decodeURIComponent(path.slice(prefix.length))
+      if (!path.startsWith(prefix) || !/^[A-Za-z0-9_-]{43}=$/.test(segment)) { result.writeHead(400); result.end(); return }
+      received = Buffer.from(segment, 'base64url')
+      if (received.length !== 32 || !received.equals(id)) { result.writeHead(400); result.end(); return }
+      result.writeHead(200, { 'content-type': 'application/json', 'x-cosmos-block-height': '12' }); result.end(JSON.stringify(response))
+    })
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const address = server.address(); assert.ok(address && typeof address !== 'string')
+      const sessionId = `0x${id.toString('hex')}`
+      const session = await fetchFrozenSession(`http://127.0.0.1:${address.port}`, { sessionId, pin: generation, window, owner: fixture.session.owner, payee: fixture.session.authorized_proof_provider, funding: 1 })
+      assert.equal(session.sessionId, sessionId); assert.deepEqual(received, id)
+    } finally { server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())) }
+  }
+  assert.match(Buffer.from('fbff'.repeat(16), 'hex').toString('base64'), /\+/)
+  assert.match(Buffer.from('fbff'.repeat(16), 'hex').toString('base64'), /\//)
 })
