@@ -9,11 +9,13 @@ from itertools import combinations
 import json
 from math import comb
 import shutil
+import signal
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest.mock import patch
 
@@ -461,6 +463,42 @@ class ScheduledTransactionTest(unittest.TestCase):
                      "import os,time; os.close(1); os.close(2); time.sleep(10)"):
             with self.subTest(body=body), self.assertRaises(subprocess.TimeoutExpired):
                 artifact.run_bounded_command([sys.executable, "-c", body], artifact.monotonic_ns() + 100_000_000)
+
+    def test_timeout_kills_descendant_after_command_leader_exits(self):
+        pidfile = self.root / "descendant.pid"
+        # The direct child exits, but its descendant keeps both captured pipes
+        # open. Killing only the direct child cannot clean up this command.
+        body = """
+import pathlib, subprocess, sys
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+pathlib.Path(sys.argv[1]).write_text(str(child.pid))
+"""
+        descendant = None
+        try:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                artifact.run_bounded_command([sys.executable, "-c", body, str(pidfile)],
+                                             artifact.monotonic_ns() + 1_000_000_000)
+            descendant = int(pidfile.read_text())
+            # An orphan can briefly be a zombie before the OS reaps it. Unlike
+            # kill(pid, 0), process state distinguishes that from a live child.
+            deadline = artifact.monotonic_ns() + 1_000_000_000
+            while True:
+                state = subprocess.run(["ps", "-o", "stat=", "-p", str(descendant)],
+                                       capture_output=True, text=True, timeout=1).stdout.strip()
+                if not state or state.startswith("Z"):
+                    break
+                if artifact.monotonic_ns() >= deadline:
+                    self.fail("descendant survived the command timeout: " + state)
+                time.sleep(0.01)
+        finally:
+            # Also clean up if the regression fails against the old adapter.
+            if descendant is None and pidfile.exists():
+                descendant = int(pidfile.read_text())
+            if descendant is not None:
+                try:
+                    os.kill(descendant, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 class RetrievalSchedulerTest(unittest.TestCase):

@@ -17,6 +17,7 @@ from pathlib import Path
 import platform
 import re
 import selectors
+import signal
 import subprocess
 import sys
 import time
@@ -197,7 +198,8 @@ def run_bounded_command(argv, deadline):
     remaining()
     # Only failure to launch is an OSError to the caller. Once launched, pipe
     # failures cannot establish that no broadcast took place.
-    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as process:
+        failed = True
         try:
             output = [bytearray(), bytearray()]
             total = 0
@@ -216,13 +218,20 @@ def run_bounded_command(argv, deadline):
                             pipes.unregister(key.fileobj)
             process.wait(timeout=remaining())
             remaining()
-            return subprocess.CompletedProcess(argv, process.returncode,
-                                               output[0].decode("utf-8"), output[1].decode("utf-8", errors="replace"))
+            result = subprocess.CompletedProcess(argv, process.returncode,
+                                                 output[0].decode("utf-8"), output[1].decode("utf-8", errors="replace"))
+            failed = False
+            return result
         except OSError as error:
             raise ValueError("CLI output unavailable: " + str(error)) from error
         finally:
-            if process.poll() is None:
-                process.kill()
+            if failed:
+                # Descendants can inherit the pipes after the leader exits.
+                # The new session makes this group exclusively ours to stop.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             process.wait()
 
 
