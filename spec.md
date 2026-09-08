@@ -463,7 +463,7 @@ Clients (Gateways, CLIs, browsers) SHOULD treat PolyStore as a content-addressed
 
 **Version-2 SESSION override (inactive by default):** The exact wire, immutable
 authority, challenge, settlement and migration contract is
-[retrieval-v2-session-profile](docs/retrieval-v2-session-profile.md). Version 2 binds
+[retrieval-v2-session-profile](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-session-profile.md). Version 2 binds
 the effective payee to the native signer/EVM caller, freezes the content generation
 and full range, captures the fixed H+1 anchor and accepts H+2 through expiry. Every
 opened blob requires its expected fresh evaluation point. Ordinary session
@@ -624,7 +624,7 @@ These evidence types collectively support the retrievability invariant: for each
 ### 7.6 Proof Demand Policy
 
 **V2 candidate, disabled by default:** the
-[frozen storage obligation contract](docs/retrieval-v2-storage-audits.md) supersedes
+[frozen storage obligation contract](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-storage-audits.md) supersedes
 organic credit subtraction and storage/health equivalence in §7.2/§7.5 when v2
 is activated. ACTIVE assignments freeze independent `Q=min(U,snapshot_quota)`
 challenges before the epoch anchor; metadata is excluded and each selected
