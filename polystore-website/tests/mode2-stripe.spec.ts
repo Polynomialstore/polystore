@@ -1,5 +1,6 @@
 import { test, expect, type Download, type Locator, type Page } from '@playwright/test'
 import crypto from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import { createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -769,7 +770,7 @@ test.describe('mode2 streamed retrieval', () => {
   test.use({ acceptDownloads: true })
   test.describe.configure({ retries: process.env.CI && !isMode2Fast ? 1 : 0 })
 
-  test('mode2 deal → shard → upload → commit → retrieve', async ({ page }) => {
+  test('mode2 deal → shard → upload → commit → retrieve', async ({ page }, testInfo) => {
     test.setTimeout(mode2FastTestTimeoutMs)
 
     // The deployed default is disabled. The UI must wait for committed
@@ -839,21 +840,113 @@ test.describe('mode2 streamed retrieval', () => {
         windows.push({ gateway: isGatewayOrigin(new URL(request.url()).origin), session })
       }
     })
+    const lcd = process.env.VITE_LCD_BASE || `http://localhost:${process.env.LCD_PORT || 1317}`
+    const api = '/polystorechain/polystorechain/v1'
+    const query = async (resource: string, height?: string) => {
+      const response = await page.request.get(lcd + resource, {
+        headers: height ? { 'x-cosmos-block-height': height } : {}, timeout: 15_000,
+      })
+      expect(response.ok()).toBe(true)
+      const observedHeight = response.headers()['x-cosmos-block-height']
+      expect(observedHeight).toMatch(/^[1-9][0-9]*$/)
+      if (height) expect(observedHeight).toBe(height)
+      return { body: await response.json(), height: observedHeight }
+    }
+    const sessionPath = (id: string) => `${api}/retrieval-sessions/${encodeURIComponent(Buffer.from(id.slice(2), 'hex').toString('base64url') + '=')}`
+    const stake = async (payee: string, height: string) => {
+      const { body } = await query(`/cosmos/bank/v1beta1/balances/${payee}/by_denom?denom=stake`, height)
+      expect(body.balance.denom).toBe('stake')
+      return String(body.balance.amount)
+    }
+    type Opened = { id: string; payee: string; assigned: string; root: string; height: string; locked: string; stake: string; mdu: string; startBlob: number; blobs: number; contextHash: string }
+    const opened = new Map<string, Opened>()
+    const proofOutcomes = new Map<string, { tx_hash: string; provider: string; ackHeight: string }>()
+    const settlements: object[] = []
+    let rejectedWindow: { session: string; status: number; error: string } | undefined
+    // Inspect live authority before forwarding a paid window. No response or
+    // authorization is fabricated; the negative request changes only a hint.
+    await page.route(/\/(?:gateway|sp\/retrieval)\/mdu\//, async (route) => {
+      const request = route.request(), headers = request.headers(), id = headers['x-polystore-session-id']
+      if (!id) return route.continue()
+      expect(id).toMatch(/^0x[0-9a-f]{64}$/)
+      if (!opened.has(id)) {
+        const { body: { session, challenge_context_hash }, height } = await query(sessionPath(id))
+        expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_OPEN')
+        expect(Buffer.from(session.session_id, 'base64').toString('hex')).toBe(id.slice(2))
+        expect(String(session.deal_id ?? 0)).toBe(dealId)
+        opened.set(id, { id, payee: session.authorized_proof_provider, assigned: session.provider,
+          root: session.manifest_root, height, locked: session.locked_fee,
+          mdu: String(session.start_mdu_index), startBlob: Number(session.start_blob_index), blobs: Number(session.blob_count),
+          contextHash: challenge_context_hash,
+          stake: await stake(session.authorized_proof_provider, height) })
+        if (!rejectedWindow) {
+          const bad = await page.request.get(request.url(), { headers: {
+            ...headers, 'x-polystore-blob-count': String(Number(session.blob_count) + 1),
+          } })
+          expect(bad.status()).toBe(400)
+          const rejection = await bad.json()
+          expect(rejection.error).toBe('window hint does not match frozen session')
+          rejectedWindow = { session: id, status: bad.status(), error: rejection.error }
+        }
+      }
+      await route.continue()
+    })
+    await page.route('**/gateway/session-proof?*', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'POST') return route.continue()
+      const input = request.postDataJSON()
+      const { body: { session }, height: ackHeight } = await query(sessionPath(input.session_id))
+      expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_USER_CONFIRMED')
+      expect(session.authorized_proof_provider).toBe(input.provider)
+      const response = await route.fetch({ timeout: 100_000 })
+      const result = await response.json()
+      expect(response.status()).toBe(200)
+      expect(result.session_id).toBe(input.session_id)
+      expect(result.tx_hash).toMatch(/^[0-9a-fA-F]{64}$/)
+      proofOutcomes.set(input.session_id, { tx_hash: result.tx_hash, provider: input.provider, ackHeight })
+      await route.fulfill({ response })
+    })
     const assertSettled = async () => {
       await expect(page.getByRole('status').filter({ hasText: /unsettled provider payment/ })).toHaveCount(0)
       const ids = [...new Set(windows.map((window) => window.session))]
       expect(ids.length).toBeGreaterThan(0)
-      await expect.poll(async () => Promise.all(ids.map(async (id) => {
-        expect(id).toMatch(/^0x[0-9a-f]{64}$/)
-        const encoded = Buffer.from(id.slice(2), 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
-        const lcd = process.env.VITE_LCD_BASE || `http://localhost:${process.env.LCD_PORT || 1317}`
-        const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions/${encodeURIComponent(encoded)}`)
+      for (const id of ids) {
+        const before = opened.get(id)!, outcome = proofOutcomes.get(id)!
+        expect(before).toBeDefined(); expect(outcome).toBeDefined()
+        expect(outcome.provider).toBe(before.payee)
+        const response = await page.request.get(`${lcd}/cosmos/tx/v1beta1/txs/${outcome.tx_hash}`)
         expect(response.ok()).toBe(true)
-        expect(response.headers()['x-cosmos-block-height']).toMatch(/^[1-9][0-9]*$/)
-        const { session } = await response.json()
-        expect(Buffer.from(session.session_id, 'base64').toString('hex')).toBe(id.slice(2))
-        return session.status
-      })), { timeout: 30_000 }).toEqual(ids.map(() => 'RETRIEVAL_SESSION_STATUS_COMPLETED'))
+        const { tx, tx_response: committed } = await response.json()
+        expect(committed.txhash.toUpperCase()).toBe(outcome.tx_hash.toUpperCase())
+        expect(Number(committed.code)).toBe(0)
+        expect(committed.height).toMatch(/^[1-9][0-9]*$/)
+        expect(tx.body.messages).toHaveLength(1)
+        expect(tx.body.messages[0]['@type']).toBe('/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProof')
+        expect(Buffer.from(tx.body.messages[0].session_id, 'base64').toString('hex')).toBe(id.slice(2))
+        expect(tx.body.messages[0].creator).toBe(before.payee)
+        const { body: { session } } = await query(sessionPath(id), committed.height)
+        expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_COMPLETED')
+        expect(session.authorized_proof_provider).toBe(before.payee)
+        expect(session.provider).toBe(before.assigned)
+        expect(session.manifest_root).toBe(before.root)
+        expect(String(session.updated_height)).toBe(committed.height)
+        expect(session.locked_fee).toBe('0')
+        const { body: { params } } = await query(`${api}/params`, committed.height)
+        const locked = BigInt(before.locked), burn = (locked * BigInt(params.retrieval_burn_bps) + 9999n) / 10000n
+        const payout = locked - burn
+        expect(payout).toBeGreaterThan(0n)
+        const transfers = committed.events.filter((event: { type: string }) => event.type === 'transfer')
+          .map((event: { attributes: Array<{ key: string; value: string }> }) => Object.fromEntries(event.attributes.map(({ key, value }) => [key, value])))
+          .filter((event: Record<string, string>) => event.recipient === before.payee)
+        expect(transfers).toHaveLength(1)
+        expect(transfers[0].amount).toBe(`${payout}stake`)
+        settlements.push({ ...before, txHash: committed.txhash, ackHeight: outcome.ackHeight, settledHeight: committed.height,
+          status: session.status, burn: String(burn), payout: String(payout), transfer: transfers[0],
+          // Normal mint/reward accounting remains enabled. Balance change is
+          // corroboration only; the scoped committed transfer proves payout.
+          stakeAfter: await stake(before.payee, committed.height) })
+      }
+      return ids.map((id) => opened.get(id)!)
     }
     const gatewayButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway-provider')
     const gatewayBytes = await readDownloadBytes(page, gatewayButton, mode2FastMaybeDownloadMs)
@@ -861,9 +954,34 @@ test.describe('mode2 streamed retrieval', () => {
     expect(gatewayBytes.equals(fileBytes)).toBe(true)
     expect(windows.length).toBeGreaterThan(0)
     expect(windows.every((window) => window.gateway)).toBe(true)
-    await assertSettled()
+    const primarySessions = await assertSettled()
     await expect(routeEl).toContainText(/gateway/i)
     await expect(fileRow).toBeVisible()
+    const expectedHash = crypto.createHash('sha256').update(fileBytes).digest('hex')
+    const dealView = await query(`${api}/deals/${dealId}`, primarySessions[0].height)
+    const deputy = dealView.body.deal.mode2_slots.find((slot: { provider: string }) => slot.provider !== primarySessions[0].assigned)?.provider
+    expect(deputy).toBeTruthy()
+    windows.length = 0
+    const deputyResult = await page.evaluate(async (input) => {
+      const modulePath = '/tests/utils/deputyRetrieval.tsx'
+      const { retrieveWithDeputy } = await import(/* @vite-ignore */ modulePath) as typeof import('./utils/deputyRetrieval')
+      return retrieveWithDeputy(input)
+    }, { dealId, owner: dealView.body.deal.owner, manifestRoot: '0x' + Buffer.from(primarySessions[0].root, 'base64').toString('hex'),
+      filePath, authorizedProofProvider: deputy, routePreference: 'prefer_gateway' as const })
+    expect(deputyResult).toEqual({ bytes: fileBytes.length, sha256: expectedHash })
+    const deputySessions = await assertSettled()
+    expect(deputySessions.every((session) => session.payee === deputy && session.assigned !== deputy)).toBe(true)
+    expect(rejectedWindow).toBeDefined()
+    await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', body: Buffer.from(JSON.stringify({
+      scope: '160 KiB live browser retrieval and explicit deputy; no capacity claim',
+      sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      runtimeTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
+      runtimeDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', '../polystorechain', '../polystore_core', '../polystore_gateway', 'src'])).digest('hex'),
+      harnessSha256: await Promise.all(['tests/mode2-stripe.spec.ts', 'tests/utils/deputyRetrieval.tsx'].map(async (file) => ({ file, sha256: crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex') }))),
+      fixtureBytes: fileBytes.length, fixtureSha256: expectedHash,
+      gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult,
+      rejectedWindow, sessions: settlements,
+    }, null, 2)) })
     if (isMode2Fast) return
 
     const gatewaySessions = new Set(windows.map((window) => window.session))
