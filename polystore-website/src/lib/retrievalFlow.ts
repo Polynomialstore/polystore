@@ -6,11 +6,14 @@ const RAW_MDU = BigInt(RAW_MDU_CAPACITY_BYTES)
 // Current native/browser append producers allocate a fresh MDU for each file.
 // A FAT alone cannot distinguish alternative packing of two partial files into
 // one scalar. Reject that shape before payment, including tombstone overlaps.
+// FAT lengths describe stored bytes even for transformed files. Preserve those
+// extents for append; planRetrievalWindows rejects a selected transformed file
+// until its bounded decoder is supported, without blocking unrelated files.
 export function validateRetrievalAllocation(pin: PinnedGeneration, records: readonly RetrievalFile[]): void {
   const extents = records.filter((r) => r.size_bytes > 0n).slice().sort((a, b) => a.start_offset < b.start_offset ? -1 : a.start_offset > b.start_offset ? 1 : 0)
   let end = 0n
   for (const file of extents) {
-    if (file.flags !== 0 || file.start_offset % RAW_MDU !== 0n || file.start_offset < end || file.start_offset + file.size_bytes > pin.userMdus * RAW_MDU) throw new Error('unsupported transformed or ambiguous packed allocation before payment')
+    if (file.start_offset % RAW_MDU !== 0n || file.start_offset < end || file.start_offset + file.size_bytes > pin.userMdus * RAW_MDU) throw new Error('unsupported or ambiguous packed allocation before payment')
     end = ((file.start_offset + file.size_bytes + RAW_MDU - 1n) / RAW_MDU) * RAW_MDU
   }
 }

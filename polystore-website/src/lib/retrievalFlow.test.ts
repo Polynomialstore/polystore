@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCipheriv, createHash } from 'node:crypto'
-import { decodeRetrievalOutput, decodeRetrievalSlice, executeRetrievalWindows, validateRetrievalAllocation, type RetrievalFlow } from './retrievalFlow'
+import { decodeRetrievalOutput, decodeRetrievalSlice, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking, type RetrievalFlow } from './retrievalFlow'
 import { planRetrievalWindows, type PinnedGeneration, type FrozenSession, type RetrievalFile, type RetrievalWindow } from './retrieval'
 
 const pin = { layout: 2, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: 2n, userMdus: 133n, assignments: Array.from({ length: 12 }, (_, i) => ({ provider: `provider${i}`, active: true })) } as unknown as PinnedGeneration
@@ -22,11 +22,62 @@ test('decoder preserves producer right-aligned short chunks and rejects reserved
   }
 })
 
-test('allocation preflight rejects overlapping/scalar-ambiguous and transformed files', () => {
+test('allocation preflight rejects overlapping/scalar-ambiguous and out-of-bounds files', () => {
   const file = { path: 'a', start_offset: 0n, size_bytes: 1n, flags: 0 }
   validateRetrievalAllocation(pin, [file, { ...file, path: 'b', start_offset: 8126464n }])
-  for (const change of [{ start_offset: 1n }, { flags: 1 }, { size_bytes: 999999999999n }]) assert.throws(() => validateRetrievalAllocation(pin, [{ ...file, ...change }]))
+  for (const change of [{ start_offset: 1n }, { size_bytes: 999999999999n }]) assert.throws(() => validateRetrievalAllocation(pin, [{ ...file, ...change }]))
   assert.throws(() => validateRetrievalAllocation(pin, [file, { ...file, path: '', start_offset: 31n }]))
+})
+
+
+test('transformed siblings do not block untransformed downloads or permit ambiguous extents', async () => {
+  const requested = { path: 'plain', start_offset: 8126464n, size_bytes: 32n, flags: 0 }
+  const raw = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
+  for (const flags of [1, 2, 3, 4, 128]) {
+    for (const path of ['transformed', '']) {
+      const sibling = { path, start_offset: 0n, size_bytes: 79n, flags }
+      const records = [requested, sibling]
+      validateRetrievalAllocation(pin, records)
+      const output = new Uint8Array(32), events: string[] = []
+      await executeRetrievalWindows(planRetrievalWindows(pin, requested, 0n, 32n), {
+        open: async (windows) => { events.push('open'); return windows.map((window) => ({ window }) as FrozenSession) },
+        fetchAndVerify: async () => packed(raw),
+        consume: async (window, bytes) => { for (const part of decodeRetrievalOutput(pin, requested, window, bytes)) output.set(part.bytes, Number(part.offset)) },
+        flush: async () => { events.push('flush') },
+        confirm: async () => { events.push('confirm') },
+      })
+      assert.deepEqual(output, raw)
+      assert.deepEqual(events, ['open', 'flush', 'confirm'])
+      for (const change of [{ start_offset: 1n }, { size_bytes: 8126465n }, { size_bytes: 999999999999n }]) {
+        assert.throws(() => validateRetrievalAllocation(pin, [requested, { ...sibling, ...change }]), /allocation/)
+      }
+      const rejected = harness()
+      await assert.rejects(executeRetrievalWindows(planRetrievalWindows(pin, sibling, 0n, 1n), rejected.flow), /transformed.*before payment/)
+      assert.deepEqual(rejected.events, [], 'selected transformed extent must fail before opening a funded session')
+    }
+  }
+})
+
+test('compressed append allocation uses stored length and preserves encoded bytes', async () => {
+  const { maybeWrapPolyceZstd, decodePolyceV1, POLYCE_FLAG_COMPRESSION_ZSTD } = await import('./polyce')
+  const original = Uint8Array.from({ length: 4096 }, (_, i) => i % 37)
+  const wrapped = await maybeWrapPolyceZstd(original)
+  assert.equal(wrapped.encoding, 'zstd')
+  assert.equal(wrapped.wrapped, true)
+  assert.ok(wrapped.bytes.length < original.length)
+  const compressed = { path: 'compressed', start_offset: 0n, size_bytes: BigInt(wrapped.bytes.length), flags: POLYCE_FLAG_COMPRESSION_ZSTD }
+  const records = [compressed, { path: 'plain', start_offset: 8126464n, size_bytes: 1n, flags: 0 }]
+  validateRetrievalAllocation(pin, records)
+  const encoded = new Uint8Array(8388608)
+  encoded.set(packed(wrapped.bytes))
+  const before = createHash('sha256').update(encoded).digest('hex')
+  validateRetrievalMduPacking(pin, records, 0n, encoded)
+  assert.equal(createHash('sha256').update(encoded).digest('hex'), before)
+  const stored = decodeRetrievalSlice(encoded.subarray(0, 131072), wrapped.bytes.length, 0, wrapped.bytes.length)
+  assert.deepEqual(stored, wrapped.bytes)
+  assert.deepEqual((await decodePolyceV1(stored)).payload, original)
+  const bad = encoded.slice(); bad[131073] = 1
+  assert.throws(() => validateRetrievalMduPacking(pin, records, 0n, bad), /padding/)
 })
 
 const windows = () => planRetrievalWindows(pin, { path: 'a', start_offset: 0n, size_bytes: 8126464n * 3n, flags: 0 }, 0n, 8126464n * 3n)
