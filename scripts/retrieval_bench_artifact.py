@@ -20,6 +20,7 @@ import re
 import selectors
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -261,7 +262,7 @@ def scheduled_transaction(job):
         return json.loads(output)
 
     started = monotonic_ns()
-    deadline = started + job["timeout_seconds"] * 1000000000
+    deadline = min(started + job["timeout_seconds"] * 1000000000, job.get("_deadline_ns", (1 << 63) - 1))
     try:
         submitted = run_bounded_command(job["submit"], deadline)
     except OSError as error:
@@ -313,7 +314,204 @@ def scheduled_transaction(job):
     return dict(result, error="committed result unavailable: " + result["error"])
 
 
-def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_signer, record_transaction=None):
+def validate_scheduled_command(job):
+    signer = job.get("signer", "")
+    if not isinstance(signer, str) or not signer or signer != signer.lower():
+        raise ValueError("signer must be the resolved canonical address")
+    for field in ("submit", "query"):
+        argv = job.get(field)
+        if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) or not arg for arg in argv):
+            raise ValueError(field + " must be a nonempty argv list")
+        if sum(len(arg.encode()) for arg in argv) > 1024 * 1024:
+            raise ValueError(field + " argv exceeds 1 MiB")
+    submit = job["submit"]
+    if submit.count("--from") != 1 or any(arg.startswith("--from=") for arg in submit):
+        raise ValueError("submit must use exactly one --from <resolved signer>")
+    position = submit.index("--from")
+    if position + 1 == len(submit) or submit[position + 1] != signer:
+        raise ValueError("submit --from does not match resolved signer")
+    job["timeout_seconds"] = integer(job["timeout_seconds"], "timeout_seconds", 1, 60)
+
+
+def execute_scheduled_transaction(job):
+    if "_lifecycle" not in job or job["kind"] != "submit-proof":
+        return scheduled_transaction(job)
+    lifecycle, state = job["_lifecycle"], job["_state"]
+    began = monotonic_ns()
+    deadline = began + job["timeout_seconds"] * 10**9
+    try:
+        # The sole integration function must query the canonical anchored
+        # context and build the existing proof, honoring this absolute deadline.
+        # It runs on this already bounded worker, never the admission writer.
+        prepared = lifecycle.prepare_session_proof(state["operation"], state["session_id"], deadline)
+        if not isinstance(prepared, dict) or prepared.get("session_id") != state["session_id"]:
+            raise ValueError("prepared proof session does not match committed open")
+        for field in ("context_hash", "seed"):
+            if not isinstance(prepared.get(field), str) or not re.fullmatch(r"[0-9a-f]{64}", prepared[field]):
+                raise ValueError("prepared proof requires canonical " + field)
+        command_job = dict(job, submit=prepared["submit"], _deadline_ns=deadline)
+        validate_scheduled_command(command_job)
+        if monotonic_ns() >= deadline:
+            raise TimeoutError("proof preparation exhausted the stage deadline")
+    except Exception as error:
+        # Preparation has no broadcast authority. A failed/malformed builder
+        # must never turn into a signed transaction or quarantine the account.
+        return {"outcome": "not_submitted", "error": "proof_preparation_failed: " + str(error)[-8192:],
+                "preparation_latency_ns": monotonic_ns() - began}
+    preparation_ns = monotonic_ns() - began
+    result = scheduled_transaction(command_job)
+    return dict(result, session_id=state["session_id"], context_hash=prepared["context_hash"], seed=prepared["seed"],
+                preparation_latency_ns=preparation_ns)
+
+
+class RetrievalLifecycleJournal:
+    """One writer, disk-backed run-wide dedup, and the concrete open/proof/confirm stages.
+
+    This does not establish proof validity from metadata. The integrating native
+    builder owns authoritative context/anchor reads and cryptographic generation.
+    No session-completion count is exposed until final state/economic checks land.
+    """
+    stages = ("open-session", "submit-proof", "confirm")
+
+    def __init__(self, path, signers, prepare_session_proof):
+        self.path = Path(path)
+        if not callable(prepare_session_proof):
+            raise ValueError("prepare_session_proof is required")
+        if not isinstance(signers, (list, tuple)) or not 1 <= len(signers) <= 128:
+            raise ValueError("declare 1..128 resolved signers before admission")
+        if any(not isinstance(s, str) or not s or s != s.lower() for s in signers) or len(set(signers)) != len(signers):
+            raise ValueError("declared signers must be unique canonical addresses")
+        self.signers, self.prepare_session_proof = frozenset(signers), prepare_session_proof
+        # Exclusive creation prevents accidental append/replay of an old run.
+        descriptor = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.close(descriptor)
+        self.db = sqlite3.connect(self.path)
+        self.db.executescript("""
+            PRAGMA journal_mode=WAL;
+            PRAGMA synchronous=NORMAL;
+            PRAGMA cache_size=-2048;
+            CREATE TABLE operations (id TEXT PRIMARY KEY, phase TEXT NOT NULL, result TEXT);
+            CREATE TABLE hashes (hash TEXT PRIMARY KEY);
+            CREATE TABLE transactions (id TEXT PRIMARY KEY, phase TEXT NOT NULL, outcome TEXT NOT NULL, result TEXT NOT NULL);
+            CREATE TABLE run (status TEXT NOT NULL, result TEXT);
+            INSERT INTO run(status) VALUES ('running');
+        """)
+        self.previous_offset, self.measurement_seen = 0, False
+
+    def initial(self, operation):
+        if not isinstance(operation, dict) or len(json.dumps(operation).encode()) > 65536:
+            raise ValueError("operation must be a JSON object of at most 64 KiB")
+        operation = json.loads(json.dumps(operation))
+        identity, phase = operation.get("operation_id"), operation.get("phase")
+        if not isinstance(identity, str) or not 1 <= len(identity) <= 256:
+            raise ValueError("operation_id must contain 1..256 characters")
+        if phase not in ("warmup", "measurement") or (self.measurement_seen and phase == "warmup"):
+            raise ValueError("warmup must precede measurement")
+        self.measurement_seen |= phase == "measurement"
+        offset = integer(operation["offered_offset_ns"], "offered_offset_ns", self.previous_offset)
+        self.previous_offset = offset
+        operation["offered_offset_ns"] = offset
+        for stage in self.stages:
+            template = operation[stage]
+            if template.get("signer") not in self.signers:
+                raise ValueError("stage signer is not a declared resolved account")
+            # The provider submit argv is supplied only after the anchored
+            # proof exists. Validate the known query/deadline/signing identity now.
+            check = dict(template)
+            if stage == "submit-proof":
+                if "submit" in template:
+                    raise ValueError("fresh proof submit must be built after committed open")
+                check["submit"] = ["pending-proof", "--from", template["signer"]]
+            validate_scheduled_command(check)
+            template["timeout_seconds"] = check["timeout_seconds"]
+        if not any("{session_id}" in arg for arg in operation["confirm"]["submit"]):
+            raise ValueError("confirmation must bind the newly opened session ID")
+        state = {"operation": operation, "session_id": None, "committed_stages": 0}
+        return self.stage_job(state, "open-session")
+
+    def stage_job(self, state, stage):
+        operation = state["operation"]
+        template = json.loads(json.dumps(operation[stage]))
+        if stage == "confirm":
+            template["submit"] = [arg.replace("{session_id}", state["session_id"]) for arg in template["submit"]]
+        return dict(template, id=json.dumps([operation["operation_id"], stage], separators=(",", ":")),
+                    operation_id=operation["operation_id"], phase=operation["phase"],
+                    offered_offset_ns=operation["offered_offset_ns"], kind=stage, depends_on=[],
+                    _state=state, _lifecycle=self)
+
+    def admit(self, job):
+        with self.db:
+            self.db.execute("INSERT INTO operations(id, phase) VALUES (?, ?)", (job["operation_id"], job["phase"]))
+
+    def record(self, job, item):
+        state = job["_state"]
+        next_job, error = None, None
+        with self.db:
+            txhash = item.get("txhash")
+            if txhash:
+                if not re.fullmatch(r"[0-9a-fA-F]{64}", txhash):
+                    raise ValueError("invalid adapter transaction hash")
+                item["txhash"] = txhash.upper()
+                inserted = self.db.execute("INSERT OR IGNORE INTO hashes VALUES (?)", (item["txhash"],)).rowcount
+                if not inserted:
+                    item["original_outcome"], item["outcome"] = item["outcome"], "duplicate"
+            if item["outcome"] == "committed_success":
+                state["committed_stages"] += 1
+                try:
+                    if job["kind"] == "open-session":
+                        state["session_id"] = opened_session_id(item)
+                        next_job = self.stage_job(state, "submit-proof")
+                    elif job["kind"] == "submit-proof":
+                        next_job = self.stage_job(state, "confirm")
+                except (ValueError, KeyError, TypeError) as invalid:
+                    error = "stage_response_invalid: " + str(invalid)
+            self.db.execute("INSERT INTO transactions VALUES (?, ?, ?, ?)",
+                            (item["id"], item["phase"], item["outcome"], json.dumps(item)))
+            if next_job is None:
+                result = {"operation_id": job["operation_id"], "phase": job["phase"],
+                          "all_transactions_committed": state["committed_stages"] == 3 and error is None,
+                          "session_id": state["session_id"], "last_stage": job["kind"],
+                          "terminal_latency_ns": item["terminal_latency_ns"],
+                          "error": error or item.get("error", "")}
+                self.db.execute("UPDATE operations SET result=? WHERE id=?", (json.dumps(result), job["operation_id"]))
+        return next_job
+
+    def phases(self):
+        phases = {phase: {"offered": 0, "offered_operations": 0, "outcomes": {}} for phase in ("warmup", "measurement")}
+        for phase, outcome, count in self.db.execute("SELECT phase, outcome, COUNT(*) FROM transactions GROUP BY phase, outcome"):
+            phases[phase]["offered"] += count
+            phases[phase]["outcomes"][outcome] = count
+        for phase, count in self.db.execute("SELECT phase, COUNT(*) FROM operations GROUP BY phase"):
+            phases[phase]["offered_operations"] = count
+        return phases
+
+
+def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_session_proof,
+                                 max_in_flight, max_queued, max_queued_per_signer):
+    """Incremental open -> anchored proof -> confirm preparation; no runtime qualification.
+
+    Operations arrive in absolute offered-offset order with one lookahead. The
+    builder may only read context/build a proof, never broadcast, and must honor
+    its deadline. It returns existing submit argv plus session_id/context_hash/
+    seed provenance. All stages retain the operation's original offered time.
+    Final rows live in the SQLite ledger, not an ever-growing in-memory list.
+    """
+    lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof)
+    try:
+        result = schedule_transactions(operations, max_in_flight=max_in_flight, max_queued=max_queued,
+                                       max_queued_per_signer=max_queued_per_signer, _lifecycle=lifecycle)
+        with lifecycle.db:
+            lifecycle.db.execute("UPDATE run SET status='finished', result=?", (json.dumps(result),))
+        return result
+    except BaseException as error:
+        with lifecycle.db:
+            lifecycle.db.execute("UPDATE run SET status='aborted', result=?", (str(error)[-8192:],))
+        raise
+    finally:
+        lifecycle.db.close()
+
+
+def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_signer, record_transaction=None, _lifecycle=None):
     """Bounded transaction scheduling foundation, not a runtime benchmark mode.
 
     Jobs are prepared in offered-offset order, with dependency IDs referring only
@@ -327,12 +525,13 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
     max_in_flight = integer(max_in_flight, "max_in_flight", 1, 128)
     max_queued = integer(max_queued, "max_queued", 1, 8192)
     max_queued_per_signer = integer(max_queued_per_signer, "max_queued_per_signer", 1, max_queued)
-    integer(len(jobs), "jobs", 1, 8192)
+    if _lifecycle is None:
+        integer(len(jobs), "jobs", 1, 8192)
     if record_transaction is not None and not callable(record_transaction):
         raise ValueError("record_transaction must be callable")
-    jobs = [dict(job) for job in jobs]
+    jobs = [dict(job) for job in jobs] if _lifecycle is None else iter(jobs)
     known, operation_phases, previous_offset, measurement_seen = set(), {}, 0, False
-    for job in jobs:
+    for job in jobs if _lifecycle is None else ():
         if not isinstance(job.get("id"), str) or not job["id"] or job["id"] in known:
             raise ValueError("transaction IDs must be unique nonempty strings")
         if not isinstance(job.get("operation_id"), str) or not job["operation_id"]:
@@ -349,25 +548,14 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         previous_offset = offset
         if not isinstance(job.get("depends_on", []), list) or any(dep not in known for dep in job.get("depends_on", [])):
             raise ValueError("dependencies must identify earlier transactions")
-        signer = job.get("signer", "")
-        if not isinstance(signer, str) or not signer or signer != signer.lower():
-            raise ValueError("signer must be the resolved canonical address")
-        for field in ("submit", "query"):
-            if not isinstance(job.get(field), list) or not job[field] or any(not isinstance(arg, str) or not arg for arg in job[field]):
-                raise ValueError(field + " must be a nonempty argv list")
-        submit = job["submit"]
-        if submit.count("--from") != 1 or any(arg.startswith("--from=") for arg in submit):
-            raise ValueError("submit must use exactly one --from <resolved signer>")
-        position = submit.index("--from")
-        if position + 1 == len(submit) or submit[position + 1] != signer:
-            raise ValueError("submit --from does not match resolved signer")
-        job["timeout_seconds"] = integer(job["timeout_seconds"], "timeout_seconds", 1, 60)
+        validate_scheduled_command(job)
         known.add(job["id"])
 
     start = monotonic_ns()
     pending, running, active, quarantined, records, finished, seen_hashes = [], {}, set(), {}, [], {}, set()
-    peak_pending = peak_running = peak_signer_pending = 0
+    peak_pending = peak_running = peak_signer_pending = peak_operation_states = 0
     warmup_overlap = False
+    followups = []
 
     def record(job, result, started=None):
         # Only this coordinator mutates accounting. Duplicate hashes remain
@@ -378,15 +566,24 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 "finished_ns": monotonic_ns(), **result}
         if item["outcome"] == "unknown":
             quarantined[job["signer"]] = job["phase"]
-        if item.get("txhash"):
+        if _lifecycle is None and item.get("txhash"):
             if item["txhash"] in seen_hashes:
                 item["original_outcome"], item["outcome"] = item["outcome"], "duplicate"
             else:
                 seen_hashes.add(item["txhash"])
         item["queue_latency_ns"] = None if started is None else started - item["offered_ns"]
         item["terminal_latency_ns"] = item["finished_ns"] - item["offered_ns"]
-        records.append(item)
-        finished[job["id"]] = item
+        if _lifecycle is not None:
+            item["enqueued_ns"] = job["_enqueued_ns"]
+            item["queue_latency_ns"] = None if started is None else started - item["enqueued_ns"]
+            item["stage_latency_ns"] = item["finished_ns"] - item["enqueued_ns"]
+        if _lifecycle is None:
+            records.append(item)
+            finished[job["id"]] = item
+        else:
+            next_job = _lifecycle.record(job, item)
+            if next_job is not None:
+                followups.append(next_job)
         if record_transaction is not None:
             record_transaction(dict(item))
 
@@ -408,13 +605,38 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                     pending.remove(job)
                     active.add(job["signer"])
                     began = monotonic_ns()
-                    running[executor.submit(scheduled_transaction, job)] = (job, began)
+                    running[executor.submit(execute_scheduled_transaction, job)] = (job, began)
                     # Unknown broadcasts still consume the global in-flight
                     # budget, even after their worker stops polling.
                     peak_running = max(peak_running, len(running) + len(quarantined))
 
-        index = 0
-        while index < len(jobs) or pending or running:
+        source = iter(jobs)
+        exhausted = object()
+        def next_offered():
+            item = next(source, exhausted)
+            if item is exhausted:
+                return None
+            return _lifecycle.initial(item) if _lifecycle is not None else item
+
+        offered = next_offered()
+        def enqueue(job):
+            nonlocal warmup_overlap, peak_pending, peak_signer_pending
+            job["_enqueued_ns"] = monotonic_ns()
+            # A finished worker can leave an unresolved warmup broadcast.
+            warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
+                item["phase"] == "warmup" for item in pending + followups + [item for item, _ in running.values()]))
+            signer_queued = sum(item["signer"] == job["signer"] for item in pending)
+            if job["signer"] in quarantined:
+                record(job, {"outcome": "not_submitted", "error": "signer_quarantined"})
+            elif len(pending) >= max_queued or signer_queued >= max_queued_per_signer:
+                record(job, {"outcome": "not_submitted", "error": "queue_full"})
+            else:
+                pending.append(job)
+                peak_pending = max(peak_pending, len(pending))
+                peak_signer_pending = max(peak_signer_pending, signer_queued + 1)
+                dispatch()
+
+        while offered is not None or pending or running or followups:
             for future in list(running):
                 if future.done():
                     job, began = running.pop(future)
@@ -427,24 +649,23 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                         result = {"outcome": "unknown", "error": str(error)[-8192:]}
                     record(job, result, began)
             dispatch()
-            while index < len(jobs) and start + jobs[index]["offered_offset_ns"] <= monotonic_ns():
-                job = jobs[index]
-                index += 1
-                # A finished worker can leave an unresolved warmup broadcast.
-                warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
-                    item["phase"] == "warmup" for item in pending + [item for item, _ in running.values()]))
-                signer_queued = sum(item["signer"] == job["signer"] for item in pending)
-                if job["signer"] in quarantined:
-                    record(job, {"outcome": "not_submitted", "error": "signer_quarantined"})
-                elif len(pending) >= max_queued or signer_queued >= max_queued_per_signer:
-                    record(job, {"outcome": "not_submitted", "error": "queue_full"})
-                else:
-                    pending.append(job)
-                    peak_pending = max(peak_pending, len(pending))
-                    peak_signer_pending = max(peak_signer_pending, signer_queued + 1)
-                    dispatch()
-            if index < len(jobs) or pending or running:
-                delay = max(0, (start + jobs[index]["offered_offset_ns"] - monotonic_ns()) / 1e9) if index < len(jobs) else 0.001
+            while followups:
+                enqueue(followups.pop(0))
+            while offered is not None and start + offered["offered_offset_ns"] <= monotonic_ns():
+                job = offered
+                if _lifecycle is not None:
+                    _lifecycle.admit(job)
+                enqueue(job)
+                offered = next_offered()
+                # Yield to completed workers even under an indefinitely due
+                # offered stream. The schedule never resets to completion time.
+                if _lifecycle is not None:
+                    break
+            if _lifecycle is not None:
+                retained = pending + followups + [item for item, _ in running.values()] + ([offered] if offered else [])
+                peak_operation_states = max(peak_operation_states, len({id(item["_state"]) for item in retained}))
+            if offered is not None or pending or running or followups:
+                delay = max(0, (start + offered["offered_offset_ns"] - monotonic_ns()) / 1e9) if offered is not None else 0.001
                 time.sleep(min(0.001 if running else 0.05, delay))
 
     phases = {}
@@ -461,7 +682,7 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                            "phase": items[0]["phase"],
                            "all_transactions_committed": all(item["outcome"] == "committed_success" for item in items),
                            "terminal_latency_ns": max(item["finished_ns"] for item in items) - min(item["offered_ns"] for item in items)})
-    return {"schema_version": 1, "kind": "retrieval-scheduler-preparation", "qualification": False,
+    report = {"schema_version": 1, "kind": "retrieval-scheduler-preparation", "qualification": False,
             "started_ns": start, "finished_ns": monotonic_ns(), "transactions": records,
             "phases": phases, "operations": operations, "completed_sessions": None,
             "automatic_submission_retries": False, "quarantined_signers": sorted(quarantined),
@@ -470,6 +691,11 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
             "limits": {"max_in_flight": max_in_flight, "max_queued": max_queued,
                        "max_queued_per_signer": max_queued_per_signer},
             "completion_basis": "transaction evidence only; final session state and fresh-proof runtime integration are required"}
+    if _lifecycle is not None:
+        report.update(kind="incremental-retrieval-lifecycle-preparation", journal_path=str(_lifecycle.path),
+                      transactions=None, operations=None, phases=_lifecycle.phases(),
+                      peak_retained_operation_states=peak_operation_states)
+    return report
 
 
 def fixture(directory, sessions, proofs, pattern):

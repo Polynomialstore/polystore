@@ -2,6 +2,7 @@
 import os
 import base64
 import copy
+from concurrent.futures import Future
 from decimal import Decimal
 from fractions import Fraction
 import hashlib
@@ -11,6 +12,7 @@ import json
 from math import comb
 import shutil
 import signal
+import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -672,6 +674,237 @@ class RetrievalSchedulerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot span"):
             artifact.schedule_transactions([dict(job, phase="warmup"), dict(job, id="b")],
                                            max_in_flight=2, max_queued=2, max_queued_per_signer=1)
+
+
+class IncrementalRetrievalLifecycleTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.fake = self.root / "chain.py"
+        self.fake.write_text(textwrap.dedent('''\
+            import hashlib, json, os, pathlib, sys
+            mode, directory, operation, stage, signer, scenario = sys.argv[1:7]
+            root = pathlib.Path(directory)
+            sid = hashlib.sha256(operation.encode()).hexdigest()
+            txhash = hashlib.sha256((operation + stage).encode()).hexdigest().upper()
+            lock = root / (signer + ".lock")
+            def event(kind):
+                fd = os.open(root / "events.jsonl", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                os.write(fd, (json.dumps(dict(kind=kind, operation=operation, stage=stage, signer=signer)) + "\\n").encode())
+                os.close(fd)
+            if mode == "submit":
+                assert sys.argv[sys.argv.index("--from") + 1] == signer
+                if stage != "open-session":
+                    assert sys.argv[7] == sid, "reused or substituted session ID"
+                try:
+                    lock.mkdir()
+                except FileExistsError:
+                    event("conflicting_signer")
+                    raise
+                event("submit")
+                print(json.dumps(dict(code=0, txhash=txhash)))
+            elif scenario == "unknown" and stage == "submit-proof":
+                print("{}")
+            else:
+                assert sys.argv[-1] == txhash
+                lock.rmdir()
+                event("commit")
+                data = ""
+                if stage == "open-session":
+                    prefix = "12670A412F706F6C7973746F7265636861696E2E706F6C7973746F7265636861696E2E76312E4D73674F70656E52657472696576616C53657373696F6E526573706F6E736512220A20"
+                    data = "00" if scenario == "bad-open" else prefix + sid
+                print(json.dumps(dict(code=0, txhash=txhash, height="12", gas_used="50", gas_wanted="100", data=data)))
+            '''))
+        self.built = []
+
+    def operation(self, identity, phase="measurement", offset=0, scenario="success"):
+        stages = {}
+        for stage, signer in (("open-session", "owner-a"), ("submit-proof", "provider-a"), ("confirm", "owner-a")):
+            common = [str(self.root), identity, stage, signer, scenario]
+            job = {"signer": signer, "query": [sys.executable, str(self.fake), "query", *common], "timeout_seconds": 1}
+            if stage != "submit-proof":
+                job["submit"] = [sys.executable, str(self.fake), "submit", *common,
+                                 *(["{session_id}"] if stage == "confirm" else []), "--from", signer]
+            stages[stage] = job
+        return dict(operation_id=identity, phase=phase, offered_offset_ns=offset, scenario=scenario, **stages)
+
+    def prepare(self, operation, session_id, deadline):
+        self.assertGreater(deadline, artifact.monotonic_ns())
+        self.assertEqual(session_id, hashlib.sha256(operation["operation_id"].encode()).hexdigest())
+        self.built.append((operation["operation_id"], session_id))
+        submit = [sys.executable, str(self.fake), "submit", str(self.root), operation["operation_id"],
+                  "submit-proof", "provider-a", operation["scenario"], session_id, "--from", "provider-a"]
+        return {"submit": submit, "session_id": session_id,
+                "context_hash": hashlib.sha256((session_id + "context").encode()).hexdigest(),
+                "seed": hashlib.sha256((session_id + "seed").encode()).hexdigest()}
+
+    def run_operations(self, operations, **kwargs):
+        return artifact.schedule_retrieval_lifecycles(iter(operations), journal_path=self.root / "run.sqlite",
+            signers=["owner-a", "provider-a"], prepare_session_proof=self.prepare,
+            max_in_flight=2, max_queued=4, max_queued_per_signer=2, **kwargs)
+
+    def rows(self, table):
+        with sqlite3.connect(self.root / "run.sqlite") as db:
+            return [json.loads(row[0]) for row in db.execute(f"SELECT result FROM {table}")]
+
+    def test_real_subprocess_fresh_ids_seed_stages_and_unknown_quarantine(self):
+        report = self.run_operations([self.operation("good", "warmup"),
+            self.operation("uncertain", "warmup", 0, "unknown"),
+            self.operation("after", "measurement")])
+        transactions = self.rows("transactions")
+        operations = {row["operation_id"]: row for row in self.rows("operations")}
+        self.assertTrue(operations["good"]["all_transactions_committed"])
+        self.assertFalse(operations["uncertain"]["all_transactions_committed"])
+        self.assertFalse(operations["after"]["all_transactions_committed"])
+        self.assertEqual(report["quarantined_signers"], ["provider-a"])
+        self.assertTrue(report["warmup_overlapped_measurement"])
+        self.assertIsNone(report["transactions"])
+        self.assertIsNone(report["operations"])
+        self.assertIsNone(report["completed_sessions"])
+        self.assertFalse(report["qualification"])
+        self.assertEqual([name for name, _ in self.built], ["good", "uncertain"])
+        proof = next(row for row in transactions if row["operation_id"] == "good" and row["kind"] == "submit-proof")
+        self.assertEqual(proof["seed"], hashlib.sha256((proof["session_id"] + "seed").encode()).hexdigest())
+        self.assertIn("preparation_latency_ns", proof)
+        for row in transactions:
+            self.assertNotIn("submit", row)
+            self.assertNotIn("_state", row)
+            self.assertGreaterEqual(row["terminal_latency_ns"], 0)
+        events = [json.loads(line) for line in (self.root / "events.jsonl").read_text().splitlines()]
+        self.assertNotIn("conflicting_signer", {event["kind"] for event in events})
+        active = set()
+        for event in events:
+            if event["kind"] == "submit":
+                self.assertNotIn(event["signer"], active)
+                active.add(event["signer"])
+                self.assertLessEqual(len(active), 2)
+            else:
+                active.remove(event["signer"])
+        self.assertEqual(active, {"provider-a"})
+
+    def test_committed_open_with_bad_response_cannot_build_proof_or_confirm(self):
+        report = self.run_operations([self.operation("bad", scenario="bad-open")])
+        self.assertEqual(self.built, [])
+        self.assertEqual(len(self.rows("transactions")), 1)
+        self.assertEqual(self.rows("transactions")[0]["outcome"], "committed_success")
+        self.assertIn("stage_response_invalid", self.rows("operations")[0]["error"])
+        self.assertEqual(report["quarantined_signers"], [])
+
+    def test_more_than_8192_operations_over_simulated_15_minutes_keep_bounded_state(self):
+        now, consumed = [0], [0]
+        class ImmediateExecutor:
+            def __init__(self, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def submit(self, function, job):
+                future = Future()
+                future.set_result(function(job))
+                return future
+        def source():
+            for index in range(10000):
+                consumed[0] += 1
+                yield self.operation(str(index), "warmup" if index < 10 else "measurement", index * 100_000_000)
+        def reject(job):
+            # At most one future operation was read while this operation ran.
+            self.assertLessEqual(consumed[0], int(job["operation_id"]) + 2)
+            self.assertEqual(now[0], job["offered_offset_ns"])
+            return {"outcome": "checktx_rejected", "code": 7}
+        def advance(seconds):
+            now[0] += max(1, round(seconds * 1e9))
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+             patch.object(artifact.time, "sleep", side_effect=advance), \
+             patch.object(artifact, "ThreadPoolExecutor", ImmediateExecutor), \
+             patch.object(artifact, "scheduled_transaction", side_effect=reject):
+            report = self.run_operations(source())
+        self.assertEqual(consumed[0], 10000)
+        self.assertGreaterEqual(report["finished_ns"] - report["started_ns"], 900 * 10**9)
+        self.assertLessEqual(report["peak_retained_operation_states"], 2)
+        self.assertEqual(report["phases"]["measurement"]["offered_operations"], 9990)
+        self.assertEqual(report["phases"]["measurement"]["outcomes"]["checktx_rejected"], 9990)
+        with sqlite3.connect(self.root / "run.sqlite") as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 10000)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM operations WHERE result IS NULL").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT status FROM run").fetchone()[0], "finished")
+
+    def test_builder_mismatch_and_expired_deadline_never_broadcast(self):
+        for fault in ("session_id", "seed", "signer", "deadline"):
+            with self.subTest(fault=fault):
+                ledger = artifact.RetrievalLifecycleJournal(self.root / (fault + ".sqlite"), ["owner-a", "provider-a"], self.prepare)
+                self.addCleanup(ledger.db.close)
+                job = ledger.initial(self.operation(fault))
+                state = job["_state"]
+                state["session_id"] = hashlib.sha256(fault.encode()).hexdigest()
+                proof = ledger.stage_job(state, "submit-proof")
+                now = [0]
+                def prepare(operation, session_id, deadline):
+                    value = self.prepare(operation, session_id, deadline)
+                    if fault in ("session_id", "seed"):
+                        value[fault] = "invalid"
+                    elif fault == "signer":
+                        value["submit"][-1] = "owner-a"
+                    else:
+                        now[0] = deadline
+                    return value
+                ledger.prepare_session_proof = prepare
+                with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+                     patch.object(artifact, "scheduled_transaction") as submit:
+                    result = artifact.execute_scheduled_transaction(proof)
+                self.assertEqual(result["outcome"], "not_submitted")
+                submit.assert_not_called()
+
+    def test_run_wide_hash_dedup_stops_a_repeated_open_before_preparation(self):
+        def committed(job):
+            identity = "first" if job["operation_id"] == "repeat" else job["operation_id"]
+            txhash = hashlib.sha256((identity + job["kind"]).encode()).hexdigest().upper()
+            result = {"outcome": "committed_success", "txhash": txhash}
+            if job["kind"] == "open-session":
+                result["data"] = OPEN_RESPONSE_DATA[:-64] + hashlib.sha256(job["operation_id"].encode()).hexdigest()
+            return result
+        with patch.object(artifact, "scheduled_transaction", side_effect=committed):
+            report = self.run_operations([self.operation("first"), self.operation("repeat")])
+        rows = self.rows("transactions")
+        self.assertEqual(sum(row["outcome"] == "duplicate" for row in rows), 1)
+        self.assertEqual([name for name, _ in self.built], ["first"])
+        self.assertEqual(report["phases"]["measurement"]["outcomes"]["committed_success"], 3)
+        self.assertFalse(next(row for row in self.rows("operations") if row["operation_id"] == "repeat")["all_transactions_committed"])
+
+    def test_invalid_late_operation_aborts_ledger_without_restarting_the_stream(self):
+        with patch.object(artifact, "scheduled_transaction", return_value={"outcome": "checktx_rejected"}):
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                self.run_operations([self.operation("first"), None])
+        with sqlite3.connect(self.root / "run.sqlite") as db:
+            self.assertEqual(db.execute("SELECT status FROM run").fetchone()[0], "aborted")
+        with self.assertRaises(FileExistsError):
+            self.run_operations([self.operation("first")])
+
+    def test_proof_preparation_and_commit_use_one_stage_deadline(self):
+        now, deadlines = [0], []
+        ledger = artifact.RetrievalLifecycleJournal(self.root / "deadline.sqlite", ["owner-a", "provider-a"], self.prepare)
+        self.addCleanup(ledger.db.close)
+        state = ledger.initial(self.operation("deadline"))["_state"]
+        state["session_id"] = hashlib.sha256(b"deadline").hexdigest()
+        proof = ledger.stage_job(state, "submit-proof")
+        def prepare(operation, session_id, deadline):
+            value = self.prepare(operation, session_id, deadline)
+            now[0] = 800_000_000
+            return value
+        def command(argv, deadline):
+            deadlines.append(deadline)
+            if len(deadlines) == 1:
+                now[0] += 50_000_000
+                value = {"code": 0, "txhash": "AB" * 32}
+            else:
+                now[0] += 300_000_000
+                value = {"code": 0, "txhash": "AB" * 32, "height": "3", "gas_used": "1", "gas_wanted": "2"}
+            return subprocess.CompletedProcess(argv, 0, json.dumps(value), "")
+        ledger.prepare_session_proof = prepare
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+             patch.object(artifact, "run_bounded_command", side_effect=command):
+            result = artifact.execute_scheduled_transaction(proof)
+        self.assertEqual(result["outcome"], "unknown")
+        self.assertEqual(result["preparation_latency_ns"], 800_000_000)
+        self.assertEqual(deadlines, [1_000_000_000, 1_000_000_000])
 
 
 class FourValidatorLifecycleTest(unittest.TestCase):
