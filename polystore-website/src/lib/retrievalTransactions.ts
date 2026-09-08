@@ -1,5 +1,12 @@
 import type { Hex } from 'viem'
 
+// Cover modest state-dependent execution drift (including protobuf height
+// boundaries), not arbitrary state changes. Bigint keeps large estimates exact.
+export function retrievalGasLimit(estimate: bigint): bigint {
+  if (estimate <= 0n) throw new Error('invalid retrieval gas estimate')
+  return (estimate * 120n + 99n) / 100n + 10_000n
+}
+
 const PREFIX = 'polystore-retrieval-v1:'
 // A 1 GiB download has 133 MDU waves: one open, ACK, and settlement
 // record per wave, plus its output cursor. Never evict unresolved payments.
