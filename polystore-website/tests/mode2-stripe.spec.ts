@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import path from 'node:path'
-import { parsePinnedGeneration } from '../src/lib/retrieval'
+import { parsePinnedGeneration, RAW_BLOB_BYTES } from '../src/lib/retrieval'
 import { retrievalFailureEvidence } from './utils/retrievalFailureEvidence'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
@@ -770,7 +770,8 @@ test.describe('mode2 streamed retrieval', () => {
   test.use({ acceptDownloads: true })
   test.describe.configure({ retries: process.env.CI && !isMode2Fast ? 1 : 0 })
 
-  test('mode2 deal → shard → upload → commit → retrieve', async ({ page }, testInfo) => {
+  for (const fixtureKiB of [1, 160]) {
+  test(`mode2 deal → shard → upload → commit → retrieve (${fixtureKiB} KiB)`, async ({ page }, testInfo) => {
     test.setTimeout(mode2FastTestTimeoutMs)
     const sourcePaths = ['../polystorechain', '../polystore_core', '../polystore_gateway', 'src', '../scripts']
     // Include the runner, stack launchers and chain_go.sh; reject untracked sources before funding/upload.
@@ -787,8 +788,9 @@ test.describe('mode2 streamed retrieval', () => {
       body: JSON.stringify({ params: { retrieval_v2_activation_height: '0' } }),
     }))
 
-    const filePath = 'mode2-small.bin'
-    const fileBytes = crypto.randomBytes(160 * 1024) // spans multiple blobs without compressing to a tiny payload
+    const filePath = `mode2-small-${fixtureKiB}kib.bin`
+    const fileBytes = crypto.randomBytes(fixtureKiB * 1024) // nonconstant payload at both one-blob and cross-slot boundaries
+    const expectedBlobs = Math.ceil(fileBytes.length / RAW_BLOB_BYTES)
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
@@ -963,6 +965,7 @@ test.describe('mode2 streamed retrieval', () => {
     expect(windows.length).toBeGreaterThan(0)
     expect(windows.every((window) => window.gateway)).toBe(true)
     const primarySessions = await assertSettled()
+    expect(primarySessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
     await expect(routeEl).toContainText(/gateway/i)
     await expect(fileRow).toBeVisible()
     const expectedHash = crypto.createHash('sha256').update(fileBytes).digest('hex')
@@ -979,11 +982,12 @@ test.describe('mode2 streamed retrieval', () => {
       filePath, authorizedProofProvider: deputy, routePreference: 'prefer_gateway' as const })
     expect(deputyResult).toEqual({ bytes: fileBytes.length, sha256: expectedHash })
     const deputySessions = await assertSettled()
+    expect(deputySessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
     expect(deputySessions.every((session) => session.payee === deputy && session.assigned !== deputy)).toBe(true)
     expect(rejectedWindow).toBeDefined()
     const accountingPath = testInfo.outputPath('retrieval-delivery-accounting.json')
     await fs.writeFile(accountingPath, JSON.stringify({
-      scope: '160 KiB live browser retrieval and explicit deputy; no capacity claim',
+      scope: `${fixtureKiB} KiB live browser retrieval and explicit deputy; no capacity claim`,
       provenanceScope: 'checkout source and harness files only; running executable, native library and WASM identities are not recorded',
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       sourceTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src', 'scripts'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
@@ -994,7 +998,7 @@ test.describe('mode2 streamed retrieval', () => {
       rejectedWindow, sessions: settlements,
     }, null, 2))
     await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', path: accountingPath })
-    if (isMode2Fast) return
+    if (isMode2Fast || fixtureKiB === 1) return
 
     const gatewaySessions = new Set(windows.map((window) => window.session))
     windows.length = 0
@@ -1018,6 +1022,7 @@ test.describe('mode2 streamed retrieval', () => {
     expect(windows.some((window) => !window.gateway)).toBe(true)
     await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i)
   })
+  }
 
   test('mode2 upload without gateway supports verified provider download', async ({ page }) => {
     test.setTimeout(mode2FastTestTimeoutMs)
