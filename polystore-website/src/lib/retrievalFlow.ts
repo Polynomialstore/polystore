@@ -49,7 +49,7 @@ export function decodeRetrievalOutput(pin: PinnedGeneration, file: RetrievalFile
 export async function waitForRetrievalChallenge(lcd: string, expected: Parameters<typeof fetchFrozenSession>[1], signal: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenSession> {
   // The supplied timeout covers body reads and polling. Absence of the committed
   // anchor may delay retrieval; it never selects a replacement seed.
-  while (true) {
+  for (;;) {
     signal.throwIfAborted()
     const session = await fetchFrozenSession(lcd, expected, signal, fetchFn)
     if (session.seed && session.height >= session.openedHeight + 2n) return session
@@ -76,7 +76,7 @@ export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>
   if (!Number.isSafeInteger(waveLimit) || waveLimit < 1 || waveLimit > 64) throw new Error('invalid wave bound')
   const iterator = windows[Symbol.iterator]()
   let completed = 0, encodedBytes = 0n
-  while (true) {
+  for (;;) {
     const wave: RetrievalWindow[] = []
     while (wave.length < waveLimit) { const next = iterator.next(); if (next.done) break; wave.push(next.value) }
     if (!wave.length) return
@@ -102,33 +102,22 @@ export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>
 export async function createRetrievalOutput(length: bigint) {
   if (length < 0n || length > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('unsupported output length')
   if (!navigator.storage?.getDirectory) throw new Error('file-backed browser storage is required before payment')
-  const root = await navigator.storage.getDirectory()
-  const dir = await root.getDirectoryHandle('retrieval-output', { create: true })
-  const name = crypto.randomUUID()
-  const handle = await dir.getFileHandle(name, { create: true })
-  let writer: FileSystemWritableFileStream | null = null
+  const { workerClient } = await import('./worker-client')
+  const id = await workerClient.retrievalOutput({ action: 'create', length: Number(length) }) as string
   let removed = false
-  const cleanup = async () => {
-    if (removed) return
-    removed = true
-    await writer?.abort().catch(() => {})
-    writer = null
-    await dir.removeEntry(name)
+  return {
+    async write(offset: bigint, bytes: Uint8Array) {
+      if (offset < 0n || offset + BigInt(bytes.length) > length || removed) throw new Error('output write out of range')
+      await workerClient.retrievalOutput({ action: 'write', id, offset: Number(offset), bytes })
+    },
+    async flush() { await workerClient.retrievalOutput({ action: 'flush', id }) },
+    async file() { return await workerClient.retrievalOutput({ action: 'file', id }) as File },
+    async cleanup() {
+      if (removed) return
+      await workerClient.retrievalOutput({ action: 'remove', id })
+      removed = true
+    },
   }
-  try {
-    writer = await handle.createWritable()
-    await writer.truncate(Number(length))
-    return {
-      async write(offset: bigint, bytes: Uint8Array) {
-        if (offset < 0n || offset + BigInt(bytes.length) > length || removed) throw new Error('output write out of range')
-        if (!writer) writer = await handle.createWritable({ keepExistingData: true })
-        await writer.write({ type: 'write', position: Number(offset), data: bytes as Uint8Array<ArrayBuffer> })
-      },
-      async flush() { if (writer) { await writer.close(); writer = null } },
-      async file() { if (writer) { await writer.close(); writer = null }; const file = await handle.getFile(); if (BigInt(file.size) !== length) throw new Error('output length mismatch'); return file },
-      cleanup,
-    }
-  } catch (error) { await cleanup(); throw error }
 }
 
 // Complete encoded MDU admission for append: preserve the physical allocation

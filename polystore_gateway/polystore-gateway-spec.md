@@ -235,7 +235,11 @@ defines the strict received-byte and PSB1 verifier boundaries.
    producers' fresh-MDU allocation. Ambiguous overlapping/partial-MDU allocation,
    unsupported encrypted/compressed/transformed ranges and unavailable bounded
    output storage are rejected before funding. The browser uses file-backed OPFS
-   output; it does not allocate the whole download in memory. Legacy raw-v1 FAT
+   output through one Worker-owned in-place access handle per download, with
+   at most four live outputs per tab and 8 MiB per write. Each wave is flushed
+   before ACK without copying the previous file. Missing in-place OPFS support
+   fails before funding; a quota/write/flush failure prevents that wave's ACK.
+   It does not allocate the whole download in memory. Legacy raw-v1 FAT
    recovery is an explicit migration path, not an implicit paid-read rewrite.
 3. Open legal windows within one user MDU and one provider slot. The browser
    uses ordered bounded waves (normally up to 16 contexts) and rechecks that the

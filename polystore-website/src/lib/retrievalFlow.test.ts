@@ -42,7 +42,7 @@ function harness(failure?: string) {
   }
   return { flow, events, controller }
 }
-test('only fully verified, decoded and durably closed waves are acknowledged', async () => {
+test('only fully verified, decoded and durably flushed waves are acknowledged', async () => {
   const good = harness()
   await executeRetrievalWindows(windows(), good.flow)
   assert.equal(good.events[0], 'open:16')
@@ -160,42 +160,54 @@ test('1KiB arbitrary-offset ranges decode exactly within/across blobs and at a p
   }
 })
 
-test('file-backed sink closes each wave, preserves earlier writes and cleans up failed output', async () => {
-  const { createRetrievalOutput } = await import('./retrievalFlow')
+test('worker output writes in place, flushes before ACK and rejects partial persistence', async () => {
+  const { retrievalOutput } = await import('./storage/retrievalOutput')
   const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
   const events: string[] = []
-  let persisted = new Uint8Array(), rejectClose = false
+  let persisted = new Uint8Array(), rejectFlush = false, maxWrite = Infinity
   const handle = {
-    async createWritable(options?: { keepExistingData?: boolean }) {
-      events.push(options?.keepExistingData ? 'reopen' : 'create')
-      let staged = options?.keepExistingData ? persisted.slice() : new Uint8Array()
+    async createSyncAccessHandle() {
+      events.push('open')
       return {
-        async truncate(size: number) { staged = new Uint8Array(size) },
-        async write(value: { position: number; data: Uint8Array }) { events.push('write'); staged.set(value.data, value.position) },
-        async close() { events.push('close'); if (rejectClose) throw new Error('disk close failure'); persisted = staged },
-        async abort() { events.push('abort') },
+        truncate(size: number) { persisted = new Uint8Array(size) },
+        write(bytes: Uint8Array, { at }: { at: number }) { events.push('write'); const n = Math.min(bytes.length, maxWrite); persisted.set(bytes.subarray(0, n), at); return n },
+        flush() { events.push('flush'); if (rejectFlush) throw new Error('disk flush failure') },
+        close() { events.push('close') },
       }
     },
     async getFile() { return new File([persisted], 'output') },
   }
   const dir = { async getFileHandle() { return handle }, async removeEntry() { events.push('remove') } }
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { storage: { async getDirectory() { return { async getDirectoryHandle() { return dir } } } } } })
+  const ids: string[] = []
   try {
-    const output = await createRetrievalOutput(4n)
-    await output.write(0n, new Uint8Array([1, 2])); await output.flush()
-    await output.write(2n, new Uint8Array([3, 4])); await output.flush()
-    assert.deepEqual(new Uint8Array(await (await output.file()).arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
-    assert.deepEqual(events, ['create', 'write', 'close', 'reopen', 'write', 'close'])
-    await assert.rejects(output.write(4n, new Uint8Array([1])), /range/)
-    await output.cleanup(); await output.cleanup(); assert.equal(events.filter((e) => e === 'remove').length, 1)
-    const failing = await createRetrievalOutput(1n)
-    rejectClose = true
+    const id = await retrievalOutput({ action: 'create', length: 4 }) as string; ids.push(id)
+    await retrievalOutput({ action: 'write', id, offset: 0, bytes: new Uint8Array([1, 2]) }); await retrievalOutput({ action: 'flush', id })
+    await retrievalOutput({ action: 'write', id, offset: 2, bytes: new Uint8Array([3, 4]) }); await retrievalOutput({ action: 'flush', id })
+    assert.deepEqual(events, ['open', 'write', 'flush', 'write', 'flush'])
+    assert.equal(events.filter((e) => e === 'open').length, 1)
+    await assert.rejects(retrievalOutput({ action: 'write', id, offset: 4, bytes: new Uint8Array([1]) }), /range/)
+    maxWrite = 1
+    await retrievalOutput({ action: 'write', id, offset: 1, bytes: new Uint8Array([2, 3, 4]) })
+    assert.equal(events.filter((e) => e === 'write').length, 5)
+    maxWrite = 0
+    await assert.rejects(retrievalOutput({ action: 'write', id, offset: 0, bytes: new Uint8Array([1]) }), /incomplete/)
+    maxWrite = Infinity
+    rejectFlush = true
     const flow = harness()
-    flow.flow.flush = () => failing.flush()
-    await assert.rejects(executeRetrievalWindows(windows(), flow.flow), /disk close failure/)
+    flow.flow.flush = async () => { await retrievalOutput({ action: 'flush', id }) }
+    await assert.rejects(executeRetrievalWindows(windows(), flow.flow), /disk flush failure/)
     assert.ok(!flow.events.some((e) => e.startsWith('ack:')))
-    await failing.cleanup(); assert.deepEqual(events.slice(-2), ['abort', 'remove'])
+    rejectFlush = false
+    const file = await retrievalOutput({ action: 'file', id }) as File
+    assert.deepEqual(new Uint8Array(await file.arrayBuffer()), new Uint8Array([1, 2, 3, 4]))
+    await assert.rejects(retrievalOutput({ action: 'write', id, offset: 0, bytes: new Uint8Array([1]) }), /closed/)
+    await retrievalOutput({ action: 'remove', id }); await retrievalOutput({ action: 'remove', id })
+    assert.equal(events.filter((e) => e === 'remove').length, 1)
+    for (let i = 0; i < 4; i++) ids.push(await retrievalOutput({ action: 'create', length: 0 }) as string)
+    await assert.rejects(retrievalOutput({ action: 'create', length: 0 }), /too many/)
   } finally {
+    for (const id of ids) await retrievalOutput({ action: 'remove', id })
     if (original) Object.defineProperty(globalThis, 'navigator', original)
     else Reflect.deleteProperty(globalThis, 'navigator')
   }

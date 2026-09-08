@@ -14,6 +14,7 @@ import {
 import init, { PolyStoreWasm, WasmMdu0Builder } from '../lib/polystoreCoreRuntime.js'
 import { readUserCommitments, verifyWitnessMdu, verifyRecoveredMdu } from '../lib/retrievalRecovery'
 import { verifyRetrievalMetadata, verifyRetrievalWindow } from '../lib/retrievalWire'
+import { retrievalOutput } from '../lib/storage/retrievalOutput'
 import {
   committedExpansionToUserMduBrowserKzgResult,
   commitUserMduBatchUncommittedWithBrowserKzg,
@@ -276,6 +277,10 @@ self.onmessage = async (event) => {
         };
 
         switch (type) {
+            case 'retrievalOutput': {
+                result = await retrievalOutput(payload);
+                break;
+            }
             case 'initRetrievalWasm': {
                 PolyStoreWasm.validate_trusted_setup(payload.trustedSetupBytes);
                 if (!polyStoreWasmInstance) polyStoreWasmInstance = new PolyStoreWasm(payload.trustedSetupBytes);

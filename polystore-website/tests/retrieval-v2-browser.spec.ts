@@ -1,7 +1,10 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
+import type { FrozenSession, PinnedGeneration, RetrievalWindow } from '../src/lib/retrieval'
 
 // Use a separately started Vite server. An installed Chromium executable can
 // be selected without downloading Playwright's browser bundle.
@@ -51,11 +54,11 @@ test('secured selected window uses real Chromium Worker/WASM and OPFS before sim
   const run = () => page.evaluate(async ({ query, expectedHash }) => {
     const module = (path: string) => import(/* @vite-ignore */ path)
     const { workerClient } = await module('/src/lib/worker-client.ts')
-    const { fetchFrozenSession, planRetrievalWindows } = await module('/src/lib/retrieval.ts')
+    const { fetchFrozenSession, planRetrievalWindows } = await module('/src/lib/retrieval.ts') as typeof import('../src/lib/retrieval')
     const { executeRetrievalWindows, decodeRetrievalOutput, createRetrievalOutput, validateRetrievalAllocation } = await module('/src/lib/retrievalFlow.ts')
     const { providerFetchRetrievalMetadata, providerFetchRetrievalWindow } = await module('/src/api/providerClient.ts')
     const s = query.session
-    const pin = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n,
+    const pin: PinnedGeneration = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n,
       root: `0x${Array.from(atob(s.manifest_root), (v) => v.charCodeAt(0).toString(16).padStart(2, '0')).join('')}`, owner: s.owner,
       endHeight: 100n, layout: 2, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: 2n, userMdus: 1n, totalMdus: 3n,
       assignments: Array.from({ length: 12 }, () => ({ provider: s.provider, active: true })) }
@@ -65,19 +68,19 @@ test('secured selected window uses real Chromium Worker/WASM and OPFS before sim
     validateRetrievalAllocation(pin, records); events.push('metadata_verified')
     const file = records.find((r: { path: string }) => r.path === 'payload.bin')
     if (!file) throw new Error('authenticated file missing')
-    const window = Array.from(planRetrievalWindows(pin, file, 0n, file.size_bytes)).find((w: any) => w.slot === 1) as any
+    const window = Array.from(planRetrievalWindows(pin, file, 0n, file.size_bytes)).find((w) => w.slot === 1)
     if (!window || window.startBlobIndex !== 8 || window.blobCount !== 2) throw new Error('fixture selected window mismatch')
-    const expected = { sessionId: `0x${'01'.repeat(32)}`, pin, window, owner: s.owner, payee: s.authorized_proof_provider, funding: 1 }
+    const expected: Parameters<typeof fetchFrozenSession>[1] = { sessionId: `0x${'01'.repeat(32)}`, pin, window, owner: s.owner, payee: s.authorized_proof_provider, funding: 1 }
     const output = await createRetrievalOutput(2n * 126976n)
     let ack = 0, written = 0n, hash = '', error = ''
     try {
       await executeRetrievalWindows([window], {
         open: async () => [await fetchFrozenSession(location.origin, expected)],
-        fetchAndVerify: async (session: any) => {
+        fetchAndVerify: async (session: FrozenSession) => {
           const bytes = await workerClient.verifyRetrievalWindow(session, await providerFetchRetrievalWindow(location.origin, session))
           events.push('window_verified'); return bytes
         },
-        consume: async (window: any, bytes: Uint8Array) => {
+        consume: async (window: RetrievalWindow, bytes: Uint8Array) => {
           // Save the fixture's selected slot payloads in proof order. This is
           // a window artifact, not a claim to reconstruct the other file slots.
           for (const part of decodeRetrievalOutput(pin, file, window, bytes)) { await output.write(written, part.bytes); written += BigInt(part.bytes.length) }
@@ -105,4 +108,51 @@ test('secured selected window uses real Chromium Worker/WASM and OPFS before sim
   expect(invalid.error).toContain('received bytes'); expect(invalid.ack).toBe(0); expect(invalid.written).toBe(0)
   expect(invalid.events).toEqual(['metadata_verified'])
   expect(sessionQueries).toBe(2); expect(metadataQueries).toBe(2); expect(windowQueries).toBe(2)
+})
+
+test('1GiB OPFS output preserves every flushed chunk through one in-place handle', async () => {
+  test.setTimeout(120_000)
+  const chunk = Buffer.alloc(8388608)
+  for (let i = 0; i < chunk.length; i++) chunk[i] = (i * 17 + (i >>> 8)) & 255
+  const hashes = Array.from({ length: 128 }, (_, i) => {
+    chunk.writeUInt32LE(i, 0); chunk.writeUInt32LE(i ^ 0xabcdef, chunk.length - 4)
+    return createHash('sha256').update(chunk).digest('hex')
+  })
+  // Playwright's ephemeral context hit its storage ceiling below 1GiB on
+  // this host. Use a fresh disk-backed profile, never the user's Chrome data.
+  const profile = await mkdtemp(join(tmpdir(), 'polystore-opfs-257-'))
+  let context: Awaited<ReturnType<typeof chromium.launchPersistentContext>> | undefined
+  try {
+    context = await chromium.launchPersistentContext(profile, {
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+      headless: true, baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:5173',
+    })
+    const page = await context.newPage()
+    await page.route('**/retrieval-output-harness', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>OPFS output check</title>' }))
+    await page.goto('/retrieval-output-harness')
+    const result = await page.evaluate(async (hashes) => {
+      const path = '/src/lib/retrievalFlow.ts'
+      const { createRetrievalOutput } = await import(/* @vite-ignore */ path) as typeof import('../src/lib/retrievalFlow')
+      const bytes = new Uint8Array(8388608), view = new DataView(bytes.buffer)
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 17 + (i >>> 8)) & 255
+      const output = await createRetrievalOutput(1073741824n)
+      let flushed = 0
+      try {
+        for (let i = 0; i < 128; i++) {
+          view.setUint32(0, i, true); view.setUint32(bytes.length - 4, i ^ 0xabcdef, true)
+          await output.write(BigInt(i * bytes.length), bytes)
+          await output.flush(); flushed++
+        }
+        const file = await output.file()
+        if (file.size !== 1073741824) throw new Error('output length mismatch')
+        for (let i = 0; i < 128; i++) {
+          const bytes = await file.slice(i * 8388608, (i + 1) * 8388608).arrayBuffer()
+          const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (v) => v.toString(16).padStart(2, '0')).join('')
+          if (hash !== hashes[i]) throw new Error(`wrong persisted chunk ${i}`)
+        }
+        return { size: file.size, flushed }
+      } finally { await output.cleanup() }
+    }, hashes)
+    expect(result).toEqual({ size: 1073741824, flushed: 128 })
+  } finally { try { await context?.close() } finally { await rm(profile, { recursive: true, force: true }) } }
 })

@@ -6,6 +6,7 @@ import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from
 import type { FrozenSession, PinnedGeneration } from './retrieval'
 import { readBoundedResponse } from './retrieval'
 import type { RetrievalEnvelope, verifyRetrievalMetadata } from './retrievalWire'
+import type { RetrievalOutputRequest } from './storage/retrievalOutput'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 import { recommendedUserMduKzgBatchCapForWebGpuAdapter } from './upload/userMduKzgBatch'
 import { UserMduKzgScheduler } from './upload/userMduKzgScheduler'
@@ -412,6 +413,9 @@ async function expandStripeWithScheduledKzg(
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
+  async retrievalOutput(request: RetrievalOutputRequest): Promise<string | File | undefined> {
+    return sendMessageToWorker('retrievalOutput', request) as Promise<string | File | undefined>
+  },
   async initRetrievalWasm(): Promise<void> {
     const signal = AbortSignal.timeout(30_000)
     const response = await fetch('/trusted_setup.txt', { signal })
