@@ -1,28 +1,30 @@
 import { useCallback, useMemo } from 'react'
-import { appConfig } from '../config'
+import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import {
-  gatewayFetchSlabLayout,
   gatewayFetchManifestInfo,
   gatewayFetchMduKzg,
+  gatewayFetchSlabLayout,
   gatewayListFiles,
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
-import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
-import { providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
-import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
+import { gatewayFetchRetrievalWindow, providerFetchRetrievalWindow, providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
+import { appConfig } from '../config'
 import { useTransportContext } from '../context/TransportContext'
-import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
-import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
-import { classifyStatus, TransportError } from '../lib/transport/errors'
-import { libp2pFetchRange } from '../lib/transport/libp2pClient'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import type { P2pTarget } from '../lib/multiaddr'
+import type { FrozenSession } from '../lib/retrieval'
+import { classifyStatus, TransportError } from '../lib/transport/errors'
+import { libp2pFetchRange, libp2pFetchRetrievalWindow } from '../lib/transport/libp2pClient'
 import {
   allowNonGatewayBackends,
   isGatewayTransportEnabled,
   isTrustedLocalGatewayBase,
   resolveTransportPreference,
 } from '../lib/transport/mode'
+import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
+import type { DecisionTrace, RoutePreference, TransportCandidate, TransportOutcome } from '../lib/transport/types'
+import { workerClient } from '../lib/worker-client'
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
@@ -634,6 +636,29 @@ export function useTransportRouter() {
     }
   }, [recordTrace, resolveDirectBase, resolvePreference])
 
+  const fetchWindow = useCallback(async (req: { session: FrozenSession; directBase?: string; p2pTarget?: P2pTarget; preference?: RoutePreference; signal?: AbortSignal }): Promise<TransportOutcome<Uint8Array>> => {
+    const effectivePreference = resolvePreference(req.preference)
+    const candidates: TransportCandidate<Uint8Array>[] = []
+    const verify = async (get: (signal: AbortSignal) => ReturnType<typeof providerFetchRetrievalWindow>, signal: AbortSignal) => {
+      const activeSignal = req.signal ? AbortSignal.any([req.signal, signal]) : signal
+      activeSignal.throwIfAborted()
+      const bytes = await workerClient.verifyRetrievalWindow(req.session, await get(activeSignal))
+      activeSignal.throwIfAborted()
+      return bytes
+    }
+    if (!appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()) {
+      candidates.push({ backend: 'gateway', endpoint: appConfig.gatewayBase, execute: (signal) => verify((s) => gatewayFetchRetrievalWindow(appConfig.gatewayBase, req.session, s), signal) })
+    }
+    if (req.directBase && allowNonGatewayBackends(effectivePreference)) candidates.push({ backend: 'direct_sp', endpoint: req.directBase, execute: (signal) => verify((s) => providerFetchRetrievalWindow(req.directBase!, req.session, s), signal) })
+    if (req.p2pTarget && appConfig.p2pEnabled && allowNonGatewayBackends(effectivePreference)) candidates.push({ backend: 'libp2p', endpoint: req.p2pTarget.multiaddr, execute: (signal) => verify((s) => libp2pFetchRetrievalWindow(req.p2pTarget!.multiaddr, req.session, s), signal) })
+    if (!candidates.length) throw new Error('No secured retrieval transport available')
+    try {
+      const result = await executeWithFallback('fetch', candidates, { preference: effectivePreference, timeoutMs: 60_000, maxAttemptsPerBackend: 1 })
+      recordTrace(result.trace)
+      return result
+    } catch (error) { if (error instanceof TransportTraceError) recordTrace(error.trace); throw error }
+  }, [recordTrace, resolvePreference])
+
   return useMemo(() => ({
     preference,
     lastTrace,
@@ -645,5 +670,6 @@ export function useTransportRouter() {
     manifestInfo,
     mduKzg,
     fetchRange,
-  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg, fetchRange])
+    fetchWindow,
+  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg, fetchRange, fetchWindow])
 }

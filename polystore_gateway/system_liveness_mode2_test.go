@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -132,18 +133,49 @@ func TestSystemLivenessGeneratesProofAfterMode2Append(t *testing.T) {
 	}
 	mdu0Path := filepath.Join(finalDir, "mdu_0.bin")
 
-	var seed [32]byte
-	for userOrdinal := uint64(0); userOrdinal < appended.userMdus; userOrdinal++ {
-		mduIndex := uint64(1) + appended.witnessMdus + userOrdinal
-		for slot := uint64(0); slot < stripe.slotCount; slot++ {
-			blobIndex := uint32(slot * stripe.rows)
-			proof, err := generateSystemChainedProof(context.Background(), seed, dealID, finalDir, mdu0Path, stripe, mduIndex, blobIndex)
-			if err != nil {
-				t.Fatalf("generateSystemChainedProof user_mdu=%d slot=%d failed: %v", userOrdinal, slot, err)
+	for layoutIndex, layout := range []string{"gateway_metadata", "provider_without_metadata"} {
+		t.Run(layout, func(t *testing.T) {
+			if layout == "provider_without_metadata" {
+				// Provider artifact uploads contain MDU #0, witnesses and slot
+				// shards, but no gateway slab_meta.json. After append, the first
+				// user's last scalar is inside the complete witness payload.
+				if err := os.Remove(slabMetadataPathForDealDir(finalDir)); err != nil {
+					t.Fatal(err)
+				}
 			}
+			var seed [32]byte
+			for userOrdinal := uint64(0); userOrdinal < appended.userMdus; userOrdinal++ {
+				mduIndex := uint64(1) + appended.witnessMdus + userOrdinal
+				for slot := uint64(0); slot < stripe.slotCount; slot++ {
+					blobIndex := uint32(slot * stripe.rows)
+					proof, err := generateSystemChainedProof(context.Background(), seed, dealID, finalDir, mdu0Path, stripe, mduIndex, blobIndex)
+					if err != nil {
+						t.Fatalf("generateSystemChainedProof user_mdu=%d slot=%d failed: %v", userOrdinal, slot, err)
+					}
+					requirePolyFSProofVerifies(t, appended.manifestRoot.Bytes[:], proof, stripe.leafCount)
 
-			requirePolyFSProofVerifies(t, appended.manifestRoot.Bytes[:], proof, stripe.leafCount)
-		}
+					shardPath := filepath.Join(finalDir, "mdu_"+strconv.FormatUint(mduIndex, 10)+"_slot_"+strconv.FormatUint(slot, 10)+".bin")
+					// Use a distinct epoch per layout so the second case exercises
+					// the reader instead of reusing the proof-header cache.
+					payload, _, err := generateProofHeaderJSON(context.Background(), dealID, uint64(layoutIndex+1), mduIndex, shardPath, mdu0Path, 0, uint64(blobIndex), stripe.leafCount, 0)
+					if err != nil {
+						t.Fatalf("generateProofHeaderJSON user_mdu=%d slot=%d failed: %v", userOrdinal, slot, err)
+					}
+					var decoded struct {
+						ProofDetails types.ChainedProof `json:"proof_details"`
+					}
+					if err := json.Unmarshal(payload, &decoded); err != nil {
+						t.Fatal(err)
+					}
+					requirePolyFSProofVerifies(t, appended.manifestRoot.Bytes[:], &decoded.ProofDetails, stripe.leafCount)
+				}
+			}
+			if layout == "provider_without_metadata" {
+				if _, err := os.Stat(slabMetadataPathForDealDir(finalDir)); !os.IsNotExist(err) {
+					t.Fatalf("proof reads must not create generation metadata: %v", err)
+				}
+			}
+		})
 	}
 }
 

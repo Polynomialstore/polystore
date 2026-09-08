@@ -1,13 +1,15 @@
-import { createLibp2p } from 'libp2p'
-import type { Libp2p } from 'libp2p'
-import { webSockets } from '@libp2p/websockets'
-import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
-import { identify } from '@libp2p/identify'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
+import { identify } from '@libp2p/identify'
 import { mplex } from '@libp2p/mplex'
+import { webSockets } from '@libp2p/websockets'
 import { multiaddr } from '@multiformats/multiaddr'
+import type { Libp2p } from 'libp2p'
+import { createLibp2p } from 'libp2p'
 import { Uint8ArrayList } from 'uint8arraylist'
+import { record, uint, type FrozenSession } from '../retrieval'
+import { parseRetrievalEnvelope, RETRIEVAL_FRAMING_LIMIT, RETRIEVAL_METADATA_LIMIT } from '../retrievalWire'
 
 const P2P_PROTOCOL = '/polystore/fetch/1.0.0'
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -171,4 +173,47 @@ export async function libp2pFetchRange(
   const bytes = await abortable(signal, readAll(stream, MAX_RESPONSE_BYTES))
   const parsed = parseResponse(bytes)
   return parsed
+}
+
+export function encodeRetrievalWindowRequest(session: FrozenSession): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({ kind: 'retrieval_window_v2', manifest_root: session.pin.root,
+    deal_id: session.pin.dealId.toString(), mdu_index: session.window.mduIndex.toString(), start_blob_index: session.window.startBlobIndex,
+    blob_count: String(session.window.blobCount), owner: session.owner, session_id: session.sessionId }))
+}
+
+export function parseRetrievalWindowFrame(bytes: Uint8Array, maxBody: number): Response {
+  if (bytes.length < 4) throw new Error('truncated P2P header')
+  const length = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0)
+  if (!length || length > RETRIEVAL_FRAMING_LIMIT || length > bytes.length - 4) throw new Error('invalid P2P header length')
+  const header = record(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes.subarray(4, 4 + length))))
+  const bodyLength = uint(header.body_len, maxBody), status = uint(header.status, 599)
+  if (status < 200 || bytes.length !== 4 + length + bodyLength) throw new Error('invalid P2P response frame')
+  const headers = new Headers()
+  for (const [key, value] of Object.entries(record(header.headers))) {
+    if (typeof value !== 'string') throw new Error('invalid P2P response header')
+    headers.append(key, value)
+  }
+  return new Response(Uint8Array.from(bytes.subarray(4 + length)).buffer, { status, headers })
+}
+
+export async function libp2pFetchRetrievalWindow(addr: string, session: FrozenSession, signal?: AbortSignal) {
+  const deadline = AbortSignal.timeout(60_000)
+  const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+  activeSignal.throwIfAborted()
+  const node = await getLibp2pNode()
+  const stream = await node.dialProtocol(multiaddr(addr), P2P_PROTOCOL, { signal: activeSignal, runOnLimitedConnection: addr.includes('/p2p-circuit') })
+  const abort = () => stream.abort(new Error('retrieval aborted'))
+  activeSignal.addEventListener('abort', abort, { once: true })
+  try {
+    activeSignal.throwIfAborted()
+    stream.send(encodeRetrievalWindowRequest(session))
+    await stream.close({ signal: activeSignal })
+    const maxBody = session.window.blobCount * 131072 + RETRIEVAL_METADATA_LIMIT + RETRIEVAL_FRAMING_LIMIT
+    const bytes = await readAll(stream, 4 + RETRIEVAL_FRAMING_LIMIT + maxBody)
+    activeSignal.throwIfAborted()
+    return await parseRetrievalEnvelope(parseRetrievalWindowFrame(bytes, maxBody), session, activeSignal)
+  } catch (error) {
+    stream.abort(error instanceof Error ? error : new Error(String(error)))
+    throw error
+  } finally { activeSignal.removeEventListener('abort', abort) }
 }

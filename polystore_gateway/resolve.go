@@ -360,29 +360,34 @@ func GetFileMetaByPath(dealDir, filePath string) (startOffset uint64, length uin
 	return startOffset, length, witnessCount, nil
 }
 
-// inferWitnessCount derives W for a slab by counting on-disk MDUs and
-// computing the current user-data high water mark from FileRecords.
-func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error) {
-	// Compute user-data MDU count from FileRecords (ceil(maxEnd / 8MiB)).
+// fileTableUserMDUCount includes tombstone extents: deleting a path does not
+// shorten the allocation or repack the immutable generation's witness stream.
+func fileTableUserMDUCount(b *crypto_ffi.Mdu0Builder) (uint64, error) {
 	var maxEnd uint64
-	count := b.GetRecordCount()
-	for i := uint32(0); i < count; i++ {
+	for i := uint32(0); i < b.GetRecordCount(); i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
 			return 0, err
 		}
-		if rec.Path[0] == 0 {
-			continue
-		}
 		length, _ := crypto_ffi.UnpackLengthAndFlags(rec.LengthAndFlags)
-		end := rec.StartOffset + length
-		if end > maxEnd {
+		if rec.StartOffset > ^uint64(0)-length {
+			return 0, fmt.Errorf("file record extent overflows")
+		}
+		if end := rec.StartOffset + length; end > maxEnd {
 			maxEnd = end
 		}
 	}
-	userCount := uint64(0)
-	if maxEnd > 0 {
-		userCount = 1 + (maxEnd-1)/RawMduCapacity
+	if maxEnd == 0 {
+		return 0, nil
+	}
+	return 1 + (maxEnd-1)/RawMduCapacity, nil
+}
+
+// inferWitnessCount derives W from on-disk MDUs and allocated FAT extents.
+func inferWitnessCount(dealDir string, b *crypto_ffi.Mdu0Builder) (uint64, error) {
+	userCount, err := fileTableUserMDUCount(b)
+	if err != nil {
+		return 0, err
 	}
 
 	entries, err := os.ReadDir(dealDir)

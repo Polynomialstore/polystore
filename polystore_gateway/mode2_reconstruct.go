@@ -68,6 +68,12 @@ func resetMode2ReconstructStatsForTest() {
 }
 
 func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams, sessionID string) (string, error) {
+	releaseGeneration, leaseErr := leaseGenerationPaths(dealDir)
+	if leaseErr != nil {
+		return "", leaseErr
+	}
+	defer releaseGeneration()
+
 	path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
@@ -287,6 +293,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	if err != nil {
 		return "", err
 	}
+	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(mduBytes); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
@@ -296,7 +303,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		os.Remove(tmp.Name())
 		return "", err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := publishImmutableArtifact(tmp.Name(), path); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -318,16 +325,26 @@ func fetchShardFromProvider(ctx context.Context, baseURL string, dealID uint64, 
 	q.Set("slot", strconv.FormatUint(slot, 10))
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := mode2ShardHTTPClient.Do(req)
+	// Recovery sends credentials only to the resolved provider endpoint.
+	client := *mode2ShardHTTPClient
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return nil, fmt.Errorf("shard fetch failed: %s", string(body))
 	}
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(types.MDU_SIZE)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > types.MDU_SIZE {
+		return nil, fmt.Errorf("shard exceeds maximum size")
+	}
+	return body, nil
 }
 
 func reconstructMduFromDataShards(shards [][]byte, dataShards uint64, rows uint64) ([]byte, error) {

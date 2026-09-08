@@ -1,11 +1,10 @@
-import test from 'node:test'
 import assert from 'node:assert/strict'
+import test from 'node:test'
 
 import { resolveMode2AppendBase } from './resolveAppendBase'
 
 test('resolveMode2AppendBase prefers fresh local slab state', async () => {
   const logs: string[] = []
-  let clearCalls = 0
   let bootstrapCalls = 0
 
   const result = await resolveMode2AppendBase({
@@ -13,9 +12,6 @@ test('resolveMode2AppendBase prefers fresh local slab state', async () => {
     chainManifestRoot: '0xaaaa',
     addLog: (message) => logs.push(message),
     formatBytes: (bytes) => `${bytes} bytes`,
-    clearLocal: async () => {
-      clearCalls += 1
-    },
     loadLocal: async () => ({
       baseMdu0Bytes: new Uint8Array([1]),
       existingUserMdus: [{ index: 0, data: new Uint8Array([2]) }],
@@ -31,14 +27,12 @@ test('resolveMode2AppendBase prefers fresh local slab state', async () => {
 
   assert.equal(result.source, 'local')
   assert.equal(result.appendStartOffset, 1024)
-  assert.equal(clearCalls, 0)
   assert.equal(bootstrapCalls, 0)
   assert.deepEqual(logs, ['> Mode 2 append: found 1 existing user MDUs; starting new file at 1024 bytes.'])
 })
 
-test('resolveMode2AppendBase clears stale local slab and bootstraps from network', async () => {
+test('resolveMode2AppendBase preserves stale local slab and bootstraps from network', async () => {
   const logs: string[] = []
-  let clearCalls = 0
   let loadCalls = 0
   let bootstrapCalls = 0
 
@@ -46,9 +40,6 @@ test('resolveMode2AppendBase clears stale local slab and bootstraps from network
     localManifestRoot: '0xaaaa',
     chainManifestRoot: '0xbbbb',
     addLog: (message) => logs.push(message),
-    clearLocal: async () => {
-      clearCalls += 1
-    },
     loadLocal: async () => {
       loadCalls += 1
       return null
@@ -67,8 +58,7 @@ test('resolveMode2AppendBase clears stale local slab and bootstraps from network
 
   assert.equal(result.source, 'bootstrap')
   assert.equal(result.appendStartOffset, 8192)
-  assert.equal(clearCalls, 1)
-  assert.equal(loadCalls, 1)
+  assert.equal(loadCalls, 0)
   assert.equal(bootstrapCalls, 1)
   assert.deepEqual(logs, [
     '> Mode 2 append: local slab manifest 0xaaaa is stale; bootstrapping from current committed root 0xbbbb.',
@@ -83,7 +73,6 @@ test('resolveMode2AppendBase falls back to bootstrap after local load failure', 
     localManifestRoot: '',
     chainManifestRoot: '0xbbbb',
     addLog: (message) => logs.push(message),
-    clearLocal: async () => undefined,
     loadLocal: async () => {
       throw new Error('missing local MDU: mdu_2.bin')
     },
@@ -109,7 +98,6 @@ test('resolveMode2AppendBase returns empty when no chain manifest exists', async
   const result = await resolveMode2AppendBase({
     localManifestRoot: '',
     chainManifestRoot: '',
-    clearLocal: async () => undefined,
     loadLocal: async () => null,
     bootstrapFromNetwork: async () => {
       bootstrapCalls += 1
@@ -129,7 +117,6 @@ test('resolveMode2AppendBase rejects when committed chain root exists but bootst
       resolveMode2AppendBase({
         localManifestRoot: '',
         chainManifestRoot: '0xcccc',
-        clearLocal: async () => undefined,
         loadLocal: async () => null,
         bootstrapFromNetwork: async () => null,
       }),

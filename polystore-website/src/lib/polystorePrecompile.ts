@@ -353,6 +353,21 @@ export type SponsoredRetrievalSessionInput = RetrievalSessionInput & {
   voucherSignature: Hex
 }
 
+// Same reviewed ABI tuples with the explicit v2 payee appended. Keep the
+// legacy encoders available to tooling which deliberately targets old sessions.
+const RETRIEVAL_V2_ABI = POLYSTORE_PRECOMPILE_ABI.filter((entry) => entry.type === 'function' &&
+  ['computeRetrievalSessionIds', 'openRetrievalSessions', 'openRetrievalSessionsSponsored'].includes(entry.name))
+  .map((entry) => {
+    if (entry.type !== 'function') throw new Error('invalid retrieval ABI')
+    const tuple = entry.inputs[0] as { name: string; type: string; components: readonly unknown[] }
+    return { ...entry, inputs: [{ ...tuple, components: [...tuple.components, { name: 'authorizedProofProvider', type: 'string' }] }] }
+  }) as Abi
+
+export type RetrievalSessionV2Input = RetrievalSessionInput & { authorizedProofProvider: string }
+export function encodeRetrievalV2Data(method: 'computeRetrievalSessionIds' | 'openRetrievalSessions' | 'openRetrievalSessionsSponsored', sessions: readonly (RetrievalSessionV2Input | (SponsoredRetrievalSessionInput & RetrievalSessionV2Input))[]): Hex {
+  return encodeFunctionData({ abi: RETRIEVAL_V2_ABI, functionName: method, args: [sessions] })
+}
+
 export type ComputeRetrievalSessionIdsResult = {
   providers: string[]
   sessionIds: Hex[]

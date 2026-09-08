@@ -32,7 +32,8 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	if err != nil {
 		return nil, "", 0, err
 	}
-	oldDir, err := resolveDealDir(parsedExisting, existingManifestRoot)
+	oldDir, releaseGeneration, err := openLegacyGeneration(parsedExisting, existingManifestRoot)
+	defer releaseGeneration()
 	if err != nil {
 		return nil, "", 0, fmt.Errorf("failed to resolve existing slab dir: %w", err)
 	}
@@ -160,7 +161,19 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	// Commit new slab to storage under uploads/<manifestRoot>.
-	newDir := filepath.Join(uploadDir, parsedNewRoot.Key)
+	finalDir := filepath.Join(uploadDir, parsedNewRoot.Key)
+	newDir, err := os.MkdirTemp(uploadDir, "staging-")
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	defer os.RemoveAll(newDir)
+	releaseFinal, err := leaseGenerationPaths(finalDir, newDir)
+	if err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
+	defer releaseFinal()
 	if err := os.MkdirAll(newDir, 0o755); err != nil {
 		b.Free()
 		return nil, "", 0, err
@@ -224,6 +237,11 @@ func IngestAppendToDeal(ctx context.Context, filePath, existingManifestRoot stri
 	}
 
 	allocatedLength := totalMdus
+	releaseFinal() // Hand private staging to the exclusive publisher.
+	if err := publishImmutableGeneration(newDir, finalDir); err != nil {
+		b.Free()
+		return nil, "", 0, err
+	}
 	return b, parsedNewRoot.Canonical, allocatedLength, nil
 }
 
@@ -363,7 +381,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.Create(dst)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return err
 	}

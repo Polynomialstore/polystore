@@ -38,3 +38,5 @@ blst = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 blst = "0.3"
+# RS reconstruction uses parking_lot/instant; bind its clock to the browser.
+instant = { version = "0.1.13", features = ["wasm-bindgen"] }

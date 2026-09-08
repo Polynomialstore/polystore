@@ -53,6 +53,12 @@ int polystore_expand_payload_rs(
 	    unsigned char* out_mdu_bytes,
 	    size_t out_mdu_bytes_len
 	);
+    int polystore_reconstruct_slot_rs(
+        const unsigned char* packed, size_t packed_len,
+        const unsigned char* indices, size_t indices_len,
+        unsigned long long k, unsigned long long m, unsigned long long target,
+        unsigned char* output, size_t output_len
+    );
 	int polystore_verify_mdu_proof(
 	    const unsigned char* mdu_merkle_root,
 	    const unsigned char* challenged_kzg_commitment,
@@ -587,6 +593,44 @@ func ReconstructMduRs(shards [][]byte, present []bool, k uint64, m uint64) ([]by
 		return nil, fmt.Errorf("polystore_reconstruct_mdu_rs failed with code: %d", res)
 	}
 	return out, nil
+}
+
+// ReconstructSlotRs reconstructs one data or parity slot from exactly K shards.
+// Compact input keeps native admission independent of absent parity size.
+// Callers must authenticate source and reconstructed bytes against commitments.
+func ReconstructSlotRs(shards [][]byte, k, m, target uint64) ([]byte, error) {
+	if k == 0 || k > 64 || 64%k != 0 || m == 0 || m > 255 || k+m > 256 || target >= k+m || uint64(len(shards)) != k+m {
+		return nil, errors.New("invalid RS geometry")
+	}
+	size := types.MDU_SIZE / int(k)
+	indices := make([]byte, 0, int(k))
+	for slot, shard := range shards {
+		if shard == nil {
+			continue
+		}
+		if len(shard) != size {
+			return nil, errors.New("invalid shard size")
+		}
+		indices = append(indices, byte(slot))
+	}
+	if uint64(len(indices)) != k {
+		return nil, errors.New("exactly K shards required")
+	}
+	packed := make([]byte, types.MDU_SIZE)
+	for i, slot := range indices {
+		copy(packed[i*size:(i+1)*size], shards[int(slot)])
+	}
+	output := make([]byte, size)
+	result := C.polystore_reconstruct_slot_rs(
+		(*C.uchar)(unsafe.Pointer(&packed[0])), C.size_t(len(packed)),
+		(*C.uchar)(unsafe.Pointer(&indices[0])), C.size_t(len(indices)),
+		C.ulonglong(k), C.ulonglong(m), C.ulonglong(target),
+		(*C.uchar)(unsafe.Pointer(&output[0])), C.size_t(len(output)),
+	)
+	if result != 0 {
+		return nil, fmt.Errorf("polystore_reconstruct_slot_rs failed: %d", result)
+	}
+	return output, nil
 }
 
 // ComputeManifestProof computes a KZG proof for a specific MDU inclusion in the Manifest.

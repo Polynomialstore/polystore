@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -421,25 +420,7 @@ func loadSlabMetadataWithFallback(dealDir string) (*slabMetadataDocument, error)
 		return meta, nil
 	}
 
-	metaPath := slabMetadataPathForDealDir(dealDir)
-	metaExists := false
-	if _, statErr := os.Stat(metaPath); statErr == nil {
-		metaExists = true
-		log.Printf("loadSlabMetadataWithFallback: unreadable slab metadata at %s (using synthesized fallback): %v", metaPath, err)
-	}
-
-	synthesized, synthErr := synthesizeSlabMetadataFromMdu0(dealDir)
-	if synthErr != nil {
-		return nil, synthErr
-	}
-
-	// Preserve existing metadata files (including forward-compatible schemas) on read fallback.
-	if metaExists {
-		return synthesized, nil
-	}
-
-	if writeErr := writeSlabMetadataFile(dealDir, synthesized); writeErr != nil {
-		log.Printf("loadSlabMetadataWithFallback: failed to persist synthesized metadata at %s: %v", metaPath, writeErr)
-	}
-	return synthesized, nil
+	// Recovery reads may synthesize a view, but never rewrite an immutable
+	// generation or promote unauthenticated counts into durable authority.
+	return synthesizeSlabMetadataFromMdu0(dealDir)
 }

@@ -146,6 +146,16 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
         .expect("blob_to_commitment");
     assert_eq!(expanded.witness[0], c0.to_vec());
 
+    // Shard hashes match fixture artifacts for slab_index = 1 + W + user_ordinal, W=1, user_ordinal=0 => 2.
+    for (slot, shard) in expanded.shards.iter().enumerate() {
+        let name = format!("mdu_2_slot_{slot}.bin");
+        let expected = fixture
+            .artifact_sha256
+            .get(&name)
+            .unwrap_or_else(|| panic!("missing artifact hash for {name}"));
+        assert_eq!(sha256_hex0x(shard), *expected, "{name} hash mismatch");
+    }
+
     // Reconstruct from <=M missing shards.
     let mut shards_opt: Vec<Option<Vec<u8>>> = expanded.shards.into_iter().map(Some).collect();
     shards_opt[0] = None;
@@ -154,6 +164,8 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
     let reconstructed =
         reconstruct_mdu_from_shards(&mut shards_opt, fixture.k, fixture.m).expect("reconstruct");
     assert_eq!(reconstructed, encoded_user);
+    assert!(shards_opt[0].is_some() && shards_opt[3].is_some());
+    assert!(shards_opt[9].is_none(), "unused parity remains absent");
 
     // User MDU root from witness commitments.
     let commitments: Vec<KzgCommitment> = witness_flat
@@ -224,16 +236,5 @@ fn mode2_artifacts_v1_fixture_k8m4_matches_hashes() {
         manifest
     );
 
-    // Shard hashes match fixture artifacts for slab_index = 1 + W + user_ordinal, W=1, user_ordinal=0 => 2.
-    for (slot, shard) in shards_opt.iter().enumerate() {
-        let shard = shard
-            .as_ref()
-            .expect("shard should be present after reconstruct");
-        let name = format!("mdu_2_slot_{slot}.bin");
-        let expected = fixture
-            .artifact_sha256
-            .get(&name)
-            .unwrap_or_else(|| panic!("missing artifact hash for {name}"));
-        assert_eq!(sha256_hex0x(shard), *expected, "{name} hash mismatch");
-    }
+
 }

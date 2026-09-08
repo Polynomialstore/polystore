@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,27 +35,5 @@ func stagedUploadDir(dealID uint64, generationID string) string {
 }
 
 func promoteStagedUploadGeneration(dealID uint64, generationID string, finalDir string) error {
-	stageDir := stagedUploadDir(dealID, generationID)
-	entries, err := os.ReadDir(stageDir)
-	if err != nil {
-		return fmt.Errorf("read staged upload generation: %w", err)
-	}
-	if err := ensureUploadRootDir(finalDir); err != nil {
-		return fmt.Errorf("create final slab directory: %w", err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			return fmt.Errorf("staged upload generation contains unexpected directory %q", entry.Name())
-		}
-		src := filepath.Join(stageDir, entry.Name())
-		dst := filepath.Join(finalDir, entry.Name())
-		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("replace existing staged artifact %q: %w", entry.Name(), err)
-		}
-		if err := os.Rename(src, dst); err != nil {
-			return fmt.Errorf("promote staged artifact %q: %w", entry.Name(), err)
-		}
-	}
-	_ = os.Remove(stageDir)
-	return nil
+	return publishImmutableGeneration(stagedUploadDir(dealID, generationID), finalDir)
 }

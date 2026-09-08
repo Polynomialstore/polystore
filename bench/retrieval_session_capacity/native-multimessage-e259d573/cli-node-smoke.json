@@ -1,0 +1,568 @@
+{
+  "status": "pass",
+  "qualification": false,
+  "scope": "native CLI proof settlement; no browser byte-delivery or capacity claim",
+  "binary_sha256": "070711399548ce9a0e2c18fb5f359c9656eaa8590676aa218adc704114d3a3b3",
+  "library_sha256": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+  "setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "harness_sha256": "ca0b0bb09b6df57790668444605b46a47b90b28672712605ccc044bd1c586dd5",
+  "fixture_sha256": "fa5524c55442dbbbc8fca15ed7615330ff32d812e34d46e75e012d01bba454f3",
+  "source_revision": "53b2c1084ae652f7c6fac2dc9961cd4182093174",
+  "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "transactions": [
+    {
+      "txhash": "293AEEFA09F53EB26048AC898CC1DAA587417D4DD03FDD07B134C784D047AA01",
+      "height": "3",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9000/http"
+      ],
+      "signer": "provider0",
+      "wall_seconds": 1.2900119159999992
+    },
+    {
+      "txhash": "4BB3D93245F4317BA40048C92EE59AEE0D1AC751115B0EAD39D642027A4624B0",
+      "height": "4",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9001/http"
+      ],
+      "signer": "provider1",
+      "wall_seconds": 0.9296447089999997
+    },
+    {
+      "txhash": "6500166859E4CF12E9505009E86F998796ED87C6280EC7F834415C5325011FFF",
+      "height": "5",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9002/http"
+      ],
+      "signer": "provider2",
+      "wall_seconds": 1.102734208000001
+    },
+    {
+      "txhash": "C9D109D5F54ECE65E1213C5561D27A043A9CDA6DDDD4A03714F2878C636EE45B",
+      "height": "6",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9003/http"
+      ],
+      "signer": "provider3",
+      "wall_seconds": 0.8545928749999998
+    },
+    {
+      "txhash": "68E4CACB6B30BF8F63E5A69F6BA4D7317B3930777A3A8CDC84BAC351DB65CAEB",
+      "height": "7",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9004/http"
+      ],
+      "signer": "provider4",
+      "wall_seconds": 1.1015645839999983
+    },
+    {
+      "txhash": "C08A77878C416176AD32C27C9B56D44D7CE5875D5E3EF431929F08111F164ACB",
+      "height": "8",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9005/http"
+      ],
+      "signer": "provider5",
+      "wall_seconds": 1.1444212080000007
+    },
+    {
+      "txhash": "FBA01825EAB9D6F8E5E7150870A1ECF7E1A85C0B036A7BF752352EF1D77EED9B",
+      "height": "9",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9006/http"
+      ],
+      "signer": "provider6",
+      "wall_seconds": 1.084487084000001
+    },
+    {
+      "txhash": "845B5805FACBED871D10B2CA8A402CE8B5F52A3E00801C083355BD16BD432C42",
+      "height": "10",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9007/http"
+      ],
+      "signer": "provider7",
+      "wall_seconds": 0.8430047920000003
+    },
+    {
+      "txhash": "F91CFD9811FC4EE5FA9AA0EF463A62396FD7014937157354F7170CBE17BFDE29",
+      "height": "11",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9008/http"
+      ],
+      "signer": "provider8",
+      "wall_seconds": 1.09725525
+    },
+    {
+      "txhash": "45D06FDFE3D004D13A8A64DC693D78B6644A36EEE430D80A89D712D34AE6BA4A",
+      "height": "12",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9009/http"
+      ],
+      "signer": "provider9",
+      "wall_seconds": 1.0917230420000017
+    },
+    {
+      "txhash": "640AE98A934A88C9B1EAD8D8753BF9DBD653A0B82783C238C0308A530FC3B885",
+      "height": "13",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9010/http"
+      ],
+      "signer": "provider10",
+      "wall_seconds": 1.083971083999998
+    },
+    {
+      "txhash": "DCC32E4E13328763CA263D6349DFC2FCB06989E1ADA6F3A96772ED632C2B4CAA",
+      "height": "14",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "71946",
+      "command": [
+        "register-provider",
+        "General",
+        "100000000000",
+        "--endpoint",
+        "/ip4/127.0.0.1/tcp/9011/http"
+      ],
+      "signer": "provider11",
+      "wall_seconds": 0.8371677500000025
+    },
+    {
+      "txhash": "69EEC7548BE2F050649A7EB75E94ED9039855E97ED4CAA17C6A3BCBBC4B65ECE",
+      "height": "15",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "173649",
+      "command": [
+        "create-deal",
+        "100000",
+        "100000000",
+        "10000000",
+        "--service-hint",
+        "General:rs=8+4"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 1.105014582999999
+    },
+    {
+      "txhash": "35BDD9A659BB14577448CCBC514752F1643566D7105B6DAF52B3BD1FF44CE651",
+      "height": "16",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "243063",
+      "command": [
+        "update-deal-content",
+        "--deal-id",
+        "0",
+        "--cid",
+        "0x411644595ce4f2d9ca4f32be6e83b3e06be85d6c7c39583c4f5e34f315da62e8",
+        "--size",
+        "8126464",
+        "--total-mdus",
+        "3",
+        "--witness-mdus",
+        "1"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 1.1011320419999997
+    },
+    {
+      "txhash": "4A7BA5F244C6917356056F336490E09838D1666C4DEADE473999A587F92C302B",
+      "height": "17",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "190880",
+      "command": [
+        "create-deal",
+        "100000",
+        "100000000",
+        "10000000",
+        "--service-hint",
+        "General:rs=8+4"
+      ],
+      "signer": "owner1",
+      "wall_seconds": 0.8397646670000007
+    },
+    {
+      "txhash": "4A7C7DE022035C73140388E4D02797CFE02F472FC04091DDC55DC6D0FFC89FF1",
+      "height": "18",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "254075",
+      "command": [
+        "update-deal-content",
+        "--deal-id",
+        "1",
+        "--cid",
+        "0x411644595ce4f2d9ca4f32be6e83b3e06be85d6c7c39583c4f5e34f315da62e8",
+        "--size",
+        "8126464",
+        "--total-mdus",
+        "3",
+        "--witness-mdus",
+        "1"
+      ],
+      "signer": "owner1",
+      "wall_seconds": 1.0866116659999996
+    },
+    {
+      "txhash": "659369D8FE42EBE7566511966A7C66FAC90C3A6246B3E619C81745DD38159F38",
+      "height": "19",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "452931",
+      "command": [
+        "open-retrieval-session",
+        "--deal-id",
+        "0",
+        "--provider",
+        "nil1tc900375qe5w5p79qrea7rqy5m2389xmjkzgtj",
+        "--manifest-root",
+        "0x411644595ce4f2d9ca4f32be6e83b3e06be85d6c7c39583c4f5e34f315da62e8",
+        "--start-mdu-index",
+        "2",
+        "--start-blob-index",
+        "0",
+        "--blob-count",
+        "1",
+        "--nonce",
+        "1",
+        "--expires-at",
+        "500",
+        "--challenge-version",
+        "2",
+        "--authorized-proof-provider",
+        "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 1.0854033339999987
+    },
+    {
+      "txhash": "B9051A442DD415994AF5B8327F6558A1B23DEEDFF623D042630D362A962E2BA7",
+      "height": "20",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "64310",
+      "command": [
+        "confirm-retrieval-session",
+        "--session-id",
+        "d20c79dfdf26b340ce5ecae3017309120095d7e69710420547dead2d0751e072"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 1.0974977920000022
+    },
+    {
+      "txhash": "AE79EC1CFFF8A2ACDA0E0A4AEA818CFC731182EE0EC353B8239E60570AE8397A",
+      "height": "21",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "454121",
+      "command": [
+        "open-retrieval-session",
+        "--deal-id",
+        "1",
+        "--provider",
+        "nil14rkp25fyym2dz957wtdg2a83dx6zjazsu0mm3c",
+        "--manifest-root",
+        "0x411644595ce4f2d9ca4f32be6e83b3e06be85d6c7c39583c4f5e34f315da62e8",
+        "--start-mdu-index",
+        "2",
+        "--start-blob-index",
+        "0",
+        "--blob-count",
+        "1",
+        "--nonce",
+        "2",
+        "--expires-at",
+        "500",
+        "--challenge-version",
+        "2",
+        "--authorized-proof-provider",
+        "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w"
+      ],
+      "signer": "owner1",
+      "wall_seconds": 0.8427071670000004
+    },
+    {
+      "txhash": "3872B6A8456E27789F6E53A6E8D9D1A0DCDF46E6B385B6BD40B1B918A882FD4C",
+      "height": "22",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "64478",
+      "command": [
+        "confirm-retrieval-session",
+        "--session-id",
+        "ca3d8d5ea8fe7d1a3c2fe7b8b54e679f6b510f0c13ccf86ba5cd6fca3ee6f206"
+      ],
+      "signer": "owner1",
+      "wall_seconds": 1.101392666999999
+    },
+    {
+      "txhash": "23D7DDD507B85BCA7C5301A932D125FBB1F6F8CF9F9D53A8CF5ABD31880B5F8F",
+      "height": "23",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "439370",
+      "command": [
+        "open-retrieval-session",
+        "--deal-id",
+        "0",
+        "--provider",
+        "nil1tc900375qe5w5p79qrea7rqy5m2389xmjkzgtj",
+        "--manifest-root",
+        "0x411644595ce4f2d9ca4f32be6e83b3e06be85d6c7c39583c4f5e34f315da62e8",
+        "--start-mdu-index",
+        "2",
+        "--start-blob-index",
+        "0",
+        "--blob-count",
+        "1",
+        "--nonce",
+        "3",
+        "--expires-at",
+        "500",
+        "--challenge-version",
+        "2",
+        "--authorized-proof-provider",
+        "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 0.9128336660000009
+    },
+    {
+      "txhash": "B4C14B84B9DBA6E8B3302F288F4857E850C1FC34A175E0FB624BE3C8D8AB761C",
+      "height": "24",
+      "code": 0,
+      "gas_wanted": "2000000",
+      "gas_used": "64310",
+      "command": [
+        "confirm-retrieval-session",
+        "--session-id",
+        "d72fcd6b7d3a67b2dc0b75e6c2bd070dc75b272ab59544060f9a83bcfea10a8e"
+      ],
+      "signer": "owner0",
+      "wall_seconds": 1.0926056660000008
+    },
+    {
+      "txhash": "A6E8FBCC2106C75B6CB2F29190C4F69DE414F58C450465118045783E337FFCFF",
+      "height": "25",
+      "code": 0,
+      "gas_wanted": "1886905",
+      "gas_used": "1195468",
+      "command": [
+        "submit-retrieval-proof",
+        "/tmp/polystore-254-execution/257-cli-node-smoke-3/batch.json"
+      ],
+      "signer": "provider0",
+      "wall_seconds": 0.3428268750000001
+    },
+    {
+      "txhash": "6DFFCB0BE321425FC0CFCEED745AA2BCB57445EDE56A80814EA2B7311C7B2F30",
+      "height": "26",
+      "code": 0,
+      "gas_wanted": "967310",
+      "gas_used": "620681",
+      "command": [
+        "submit-retrieval-proof",
+        "/tmp/polystore-254-execution/257-cli-node-smoke-3/single.json"
+      ],
+      "signer": "provider0",
+      "wall_seconds": 0.857947166999999
+    }
+  ],
+  "node_id": "e2a278041c7967b11667de8d49439c268b5f098f",
+  "cors_preflight_status": 200,
+  "cors_pinned_height": "1",
+  "session_ids": [
+    "d20c79dfdf26b340ce5ecae3017309120095d7e69710420547dead2d0751e072",
+    "ca3d8d5ea8fe7d1a3c2fe7b8b54e679f6b510f0c13ccf86ba5cd6fca3ee6f206",
+    "d72fcd6b7d3a67b2dc0b75e6c2bd070dc75b272ab59544060f9a83bcfea10a8e"
+  ],
+  "challenge_points": [
+    "604ec81fb232e6fb903cf67b102d924a0650616caf23e3fd64773ab2aae32abe",
+    "56eede84f9415a51e0513ac305e427bba828e8011d249d4caa6562b9192b31a3",
+    "5b1b500ee82ba25aa15fb6cdd9353574066f40c299ff45097437ff99d8fcfaaa"
+  ],
+  "payout_stake": 33,
+  "per_session_locked_stake": 17,
+  "per_session_burn_stake": 6,
+  "terminal_sessions": [
+    {
+      "session_id": "0gx5398ms0DOXsrjAXMJEgCV1+aXEEIFR96tLQdR4HI=",
+      "deal_id": "0",
+      "owner": "nil10489zrpfztul0avxgd0va5f0ru5wae2cjmhdtp",
+      "provider": "nil1tc900375qe5w5p79qrea7rqy5m2389xmjkzgtj",
+      "manifest_root": "QRZEWVzk8tnKTzK+boOz4GvoXWx8OVg8T1408xXaYug=",
+      "start_mdu_index": "2",
+      "start_blob_index": 0,
+      "blob_count": "1",
+      "total_bytes": "131072",
+      "nonce": "1",
+      "expires_at": "500",
+      "opened_height": "19",
+      "updated_height": "25",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "locked_fee": "0",
+      "purpose": "RETRIEVAL_SESSION_PURPOSE_USER",
+      "funding": "RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW",
+      "payer": "",
+      "challenge_version": 2,
+      "authorized_proof_provider": "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w",
+      "challenge_snapshot": {
+        "chain_id": "polystore_257-1",
+        "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+        "generation": "1",
+        "layout": 2,
+        "k": 8,
+        "m": 4,
+        "slot": 0,
+        "metadata_mdus": "2",
+        "user_mdus": "1",
+        "deal_end": "100015"
+      }
+    },
+    {
+      "session_id": "yj2NXqj+fRo8L+e4tU5nn2tRDwwTzPhrpc1vyj7m8gY=",
+      "deal_id": "1",
+      "owner": "nil1ft8w3vkhkkvxw57gz43vdqxrkje7u8dg7rwumh",
+      "provider": "nil14rkp25fyym2dz957wtdg2a83dx6zjazsu0mm3c",
+      "manifest_root": "QRZEWVzk8tnKTzK+boOz4GvoXWx8OVg8T1408xXaYug=",
+      "start_mdu_index": "2",
+      "start_blob_index": 0,
+      "blob_count": "1",
+      "total_bytes": "131072",
+      "nonce": "2",
+      "expires_at": "500",
+      "opened_height": "21",
+      "updated_height": "25",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "locked_fee": "0",
+      "purpose": "RETRIEVAL_SESSION_PURPOSE_USER",
+      "funding": "RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW",
+      "payer": "",
+      "challenge_version": 2,
+      "authorized_proof_provider": "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w",
+      "challenge_snapshot": {
+        "chain_id": "polystore_257-1",
+        "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+        "generation": "1",
+        "layout": 2,
+        "k": 8,
+        "m": 4,
+        "slot": 0,
+        "metadata_mdus": "2",
+        "user_mdus": "1",
+        "deal_end": "100017"
+      }
+    },
+    {
+      "session_id": "1y/Na306Z7LcC3Xmwr0HDcdbJyq1lUQGD5qDvP6hCo4=",
+      "deal_id": "0",
+      "owner": "nil10489zrpfztul0avxgd0va5f0ru5wae2cjmhdtp",
+      "provider": "nil1tc900375qe5w5p79qrea7rqy5m2389xmjkzgtj",
+      "manifest_root": "QRZEWVzk8tnKTzK+boOz4GvoXWx8OVg8T1408xXaYug=",
+      "start_mdu_index": "2",
+      "start_blob_index": 0,
+      "blob_count": "1",
+      "total_bytes": "131072",
+      "nonce": "3",
+      "expires_at": "500",
+      "opened_height": "23",
+      "updated_height": "26",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "locked_fee": "0",
+      "purpose": "RETRIEVAL_SESSION_PURPOSE_USER",
+      "funding": "RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW",
+      "payer": "",
+      "challenge_version": 2,
+      "authorized_proof_provider": "nil1f23rkz4kk7rfsuyhruyhh92k04crdr6jwznl5w",
+      "challenge_snapshot": {
+        "chain_id": "polystore_257-1",
+        "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+        "generation": "1",
+        "layout": 2,
+        "k": 8,
+        "m": 4,
+        "slot": 0,
+        "metadata_mdus": "2",
+        "user_mdus": "1",
+        "deal_end": "100015"
+      }
+    }
+  ]
+}

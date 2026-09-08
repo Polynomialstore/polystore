@@ -309,13 +309,8 @@ func startSystemLivenessProver() {
 		defer t.Stop()
 
 		for {
-			epochID := currentEpochID(context.Background())
-			if epochID == 0 {
-				epochID = 1
-			}
-
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			if err := runSystemLivenessOnce(ctx, epochID); err != nil {
+			if err := runSystemLivenessOnce(ctx, 0); err != nil {
 				log.Printf("system liveness tick failed: %v", err)
 			}
 			cancel()
@@ -335,6 +330,17 @@ func runSystemLivenessOnce(ctx context.Context, epochID uint64) (retErr error) {
 		systemProverState.setSnapshot(snapshot)
 	}()
 
+	active, committedHeight, err := systemAuditActivation(ctx)
+	if err != nil {
+		return err
+	}
+	if active {
+		return runFrozenSystemLiveness(ctx, committedHeight, &snapshot)
+	}
+
+	if epochID == 0 {
+		epochID = currentEpochID(ctx)
+	}
 	providerAddr := strings.TrimSpace(cachedProviderAddress(ctx))
 	if providerAddr == "" {
 		return fmt.Errorf("provider address unavailable")
@@ -951,6 +957,12 @@ func mustParseBigIntHex(raw string) *big.Int {
 }
 
 func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID uint64, dealDir string, mdu0Path string, stripe stripeParams, mduIndex uint64, blobIndex uint32) (*types.ChainedProof, error) {
+	releaseGeneration, leaseErr := leaseGenerationPaths(dealDir)
+	if leaseErr != nil {
+		return nil, leaseErr
+	}
+	defer releaseGeneration()
+
 	mdu0Bytes, err := os.ReadFile(mdu0Path)
 	if err != nil {
 		return nil, err

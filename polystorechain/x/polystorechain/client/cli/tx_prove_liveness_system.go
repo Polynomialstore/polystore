@@ -18,7 +18,9 @@ func CmdProveLivenessSystem() *cobra.Command {
 		Use:   "prove-liveness-system [deal-id] [epoch-id] [proof-json-path]",
 		Short: "Submit a synthetic system liveness proof (MsgProveLiveness)",
 		Args:  cobra.ExactArgs(3),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			phase := beginSubmissionPhase(cmd)
+			defer phase.finish(&err)
 			clientCtx, err := client.GetClientTxContext(cmd)
 			if err != nil {
 				return err
@@ -52,11 +54,15 @@ func CmdProveLivenessSystem() *cobra.Command {
 				},
 			}
 
+			clientCtx, err = phase.track(clientCtx)
+			if err != nil {
+				return err
+			}
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(submissionPhaseFlag, "", "Write a final pre-broadcast failure marker for the invoking gateway")
 	return cmd
 }
-

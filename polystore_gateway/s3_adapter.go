@@ -249,7 +249,8 @@ func S3ListObjects(w http.ResponseWriter, r *http.Request) {
 		writeS3Error(w, http.StatusInternalServerError, "InternalError", "invalid manifest_root on chain")
 		return
 	}
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, cid)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, cid)
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeS3Error(w, http.StatusNotFound, "NoSuchBucket", "bucket has no slab on disk")
@@ -351,7 +352,8 @@ func S3GetObject(w http.ResponseWriter, r *http.Request) {
 		writeS3Error(w, http.StatusInternalServerError, "InternalError", "invalid manifest_root on chain")
 		return
 	}
-	dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, cid)
+	dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, cid)
+	defer releaseGeneration()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			writeS3Error(w, http.StatusNotFound, "NoSuchKey", "slab not found on disk")
