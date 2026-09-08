@@ -285,7 +285,393 @@ const polystoreABIJSON = `[
   {"type":"event","name":"DealSetupSlotBumped","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"slot","type":"uint32","indexed":true},{"name":"oldProvider","type":"string","indexed":false},{"name":"newProvider","type":"string","indexed":false}]},
   {"type":"event","name":"RetrievalProved","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"filePath","type":"string","indexed":false},{"name":"bytesServed","type":"uint64","indexed":false},{"name":"nonce","type":"uint64","indexed":false}]},
   {"type":"event","name":"RetrievalSessionOpened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"sessionId","type":"bytes32","indexed":false}]},
-  {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]}
+  {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]},
+{
+  "type": "function",
+  "name": "openRetrievalSession",
+  "stateMutability": "nonpayable",
+  "inputs": [
+    {
+      "name": "dealId",
+      "type": "uint64"
+    },
+    {
+      "name": "provider",
+      "type": "string"
+    },
+    {
+      "name": "manifestRoot",
+      "type": "bytes"
+    },
+    {
+      "name": "startMduIndex",
+      "type": "uint64"
+    },
+    {
+      "name": "startBlobIndex",
+      "type": "uint32"
+    },
+    {
+      "name": "blobCount",
+      "type": "uint64"
+    },
+    {
+      "name": "nonce",
+      "type": "uint64"
+    },
+    {
+      "name": "expiresAt",
+      "type": "uint64"
+    },
+    {
+      "name": "authorizedProofProvider",
+      "type": "string"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "sessionId",
+      "type": "bytes32"
+    }
+  ]
+},
+{
+  "type": "function",
+  "name": "openRetrievalSessions",
+  "stateMutability": "nonpayable",
+  "inputs": [
+    {
+      "name": "sessions",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "dealId",
+          "type": "uint64"
+        },
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "manifestRoot",
+          "type": "bytes"
+        },
+        {
+          "name": "startMduIndex",
+          "type": "uint64"
+        },
+        {
+          "name": "startBlobIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "blobCount",
+          "type": "uint64"
+        },
+        {
+          "name": "nonce",
+          "type": "uint64"
+        },
+        {
+          "name": "expiresAt",
+          "type": "uint64"
+        },
+        {
+          "name": "authorizedProofProvider",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "sessionIds",
+      "type": "bytes32[]"
+    }
+  ]
+},
+{
+  "type": "function",
+  "name": "openRetrievalSessionsSponsored",
+  "stateMutability": "nonpayable",
+  "inputs": [
+    {
+      "name": "sessions",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "dealId",
+          "type": "uint64"
+        },
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "manifestRoot",
+          "type": "bytes"
+        },
+        {
+          "name": "startMduIndex",
+          "type": "uint64"
+        },
+        {
+          "name": "startBlobIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "blobCount",
+          "type": "uint64"
+        },
+        {
+          "name": "nonce",
+          "type": "uint64"
+        },
+        {
+          "name": "expiresAt",
+          "type": "uint64"
+        },
+        {
+          "name": "maxTotalFee",
+          "type": "uint256"
+        },
+        {
+          "name": "authType",
+          "type": "uint8"
+        },
+        {
+          "name": "allowlistLeafIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "allowlistMerklePath",
+          "type": "bytes32[]"
+        },
+        {
+          "name": "voucherRedeemer",
+          "type": "string"
+        },
+        {
+          "name": "voucherProvider",
+          "type": "string"
+        },
+        {
+          "name": "voucherExpiresAt",
+          "type": "uint64"
+        },
+        {
+          "name": "voucherNonce",
+          "type": "uint64"
+        },
+        {
+          "name": "voucherSignature",
+          "type": "bytes"
+        },
+        {
+          "name": "authorizedProofProvider",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "sessionIds",
+      "type": "bytes32[]"
+    }
+  ]
+},
+{
+  "type": "function",
+  "name": "computeRetrievalSessions",
+  "stateMutability": "view",
+  "inputs": [
+    {
+      "name": "sessions",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "dealId",
+          "type": "uint64"
+        },
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "manifestRoot",
+          "type": "bytes"
+        },
+        {
+          "name": "startMduIndex",
+          "type": "uint64"
+        },
+        {
+          "name": "startBlobIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "blobCount",
+          "type": "uint64"
+        },
+        {
+          "name": "nonce",
+          "type": "uint64"
+        },
+        {
+          "name": "expiresAt",
+          "type": "uint64"
+        },
+        {
+          "name": "authorizedProofProvider",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "sessions",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "sessionId",
+          "type": "bytes32"
+        }
+      ]
+    }
+  ]
+},
+{
+  "type": "function",
+  "name": "computeRetrievalSessionIds",
+  "stateMutability": "view",
+  "inputs": [
+    {
+      "name": "sessions",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "dealId",
+          "type": "uint64"
+        },
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "manifestRoot",
+          "type": "bytes"
+        },
+        {
+          "name": "startMduIndex",
+          "type": "uint64"
+        },
+        {
+          "name": "startBlobIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "blobCount",
+          "type": "uint64"
+        },
+        {
+          "name": "nonce",
+          "type": "uint64"
+        },
+        {
+          "name": "expiresAt",
+          "type": "uint64"
+        },
+        {
+          "name": "authorizedProofProvider",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "providers",
+      "type": "string[]"
+    },
+    {
+      "name": "sessionIds",
+      "type": "bytes32[]"
+    }
+  ]
+},
+{
+  "type": "function",
+  "name": "submitRetrievalSessionProof",
+  "stateMutability": "nonpayable",
+  "inputs": [
+    {
+      "name": "sessionId",
+      "type": "bytes32"
+    },
+    {
+      "name": "proofs",
+      "type": "tuple[]",
+      "components": [
+        {
+          "name": "mduIndex",
+          "type": "uint64"
+        },
+        {
+          "name": "mduRootFr",
+          "type": "bytes"
+        },
+        {
+          "name": "manifestOpening",
+          "type": "bytes"
+        },
+        {
+          "name": "rootTableDuCommitment",
+          "type": "bytes"
+        },
+        {
+          "name": "rootTableDuMerklePath",
+          "type": "bytes[]"
+        },
+        {
+          "name": "blobCommitment",
+          "type": "bytes"
+        },
+        {
+          "name": "merklePath",
+          "type": "bytes[]"
+        },
+        {
+          "name": "blobIndex",
+          "type": "uint32"
+        },
+        {
+          "name": "zValue",
+          "type": "bytes"
+        },
+        {
+          "name": "yValue",
+          "type": "bytes"
+        },
+        {
+          "name": "kzgOpeningProof",
+          "type": "bytes"
+        }
+      ]
+    }
+  ],
+  "outputs": [
+    {
+      "name": "ok",
+      "type": "bool"
+    }
+  ]
+}
 ]`
 
 type Precompile struct {
@@ -360,7 +746,7 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 		return nil, fmt.Errorf("polystore precompile: invalid ABI envelope: %w", err)
 	}
 
-	switch method.Name {
+	switch method.RawName {
 	case "createDeal":
 		return p.runCreateDeal(ctx, evm, contract, method, input[4:])
 	case "updateDealContent":
@@ -391,6 +777,8 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 		return p.runComputeRetrievalSessions(ctx, evm, contract, method, input[4:])
 	case "computeRetrievalSessionIds":
 		return p.runComputeRetrievalSessionIds(ctx, evm, contract, method, input[4:])
+	case "submitRetrievalSessionProof":
+		return p.runSubmitRetrievalSessionProof(ctx, contract, method, input[4:])
 	case "confirmRetrievalSession":
 		return p.runConfirmRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "cancelRetrievalSession":
@@ -403,14 +791,15 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 }
 
 type openSessionInput struct {
-	DealId         uint64 `abi:"dealId"`
-	Provider       string `abi:"provider"`
-	ManifestRoot   []byte `abi:"manifestRoot"`
-	StartMduIndex  uint64 `abi:"startMduIndex"`
-	StartBlobIndex uint32 `abi:"startBlobIndex"`
-	BlobCount      uint64 `abi:"blobCount"`
-	Nonce          uint64 `abi:"nonce"`
-	ExpiresAt      uint64 `abi:"expiresAt"`
+	DealId                  uint64 `abi:"dealId"`
+	Provider                string `abi:"provider"`
+	ManifestRoot            []byte `abi:"manifestRoot"`
+	StartMduIndex           uint64 `abi:"startMduIndex"`
+	StartBlobIndex          uint32 `abi:"startBlobIndex"`
+	BlobCount               uint64 `abi:"blobCount"`
+	Nonce                   uint64 `abi:"nonce"`
+	ExpiresAt               uint64 `abi:"expiresAt"`
+	AuthorizedProofProvider string
 }
 
 type openSessionOutput struct {
@@ -419,23 +808,24 @@ type openSessionOutput struct {
 }
 
 type openSponsoredSessionInput struct {
-	DealId              uint64        `abi:"dealId"`
-	Provider            string        `abi:"provider"`
-	ManifestRoot        []byte        `abi:"manifestRoot"`
-	StartMduIndex       uint64        `abi:"startMduIndex"`
-	StartBlobIndex      uint32        `abi:"startBlobIndex"`
-	BlobCount           uint64        `abi:"blobCount"`
-	Nonce               uint64        `abi:"nonce"`
-	ExpiresAt           uint64        `abi:"expiresAt"`
-	MaxTotalFee         *big.Int      `abi:"maxTotalFee"`
-	AuthType            uint8         `abi:"authType"`
-	AllowlistLeafIndex  uint32        `abi:"allowlistLeafIndex"`
-	AllowlistMerklePath []common.Hash `abi:"allowlistMerklePath"`
-	VoucherRedeemer     string        `abi:"voucherRedeemer"`
-	VoucherProvider     string        `abi:"voucherProvider"`
-	VoucherExpiresAt    uint64        `abi:"voucherExpiresAt"`
-	VoucherNonce        uint64        `abi:"voucherNonce"`
-	VoucherSignature    []byte        `abi:"voucherSignature"`
+	DealId                  uint64        `abi:"dealId"`
+	Provider                string        `abi:"provider"`
+	ManifestRoot            []byte        `abi:"manifestRoot"`
+	StartMduIndex           uint64        `abi:"startMduIndex"`
+	StartBlobIndex          uint32        `abi:"startBlobIndex"`
+	BlobCount               uint64        `abi:"blobCount"`
+	Nonce                   uint64        `abi:"nonce"`
+	ExpiresAt               uint64        `abi:"expiresAt"`
+	MaxTotalFee             *big.Int      `abi:"maxTotalFee"`
+	AuthType                uint8         `abi:"authType"`
+	AllowlistLeafIndex      uint32        `abi:"allowlistLeafIndex"`
+	AllowlistMerklePath     []common.Hash `abi:"allowlistMerklePath"`
+	VoucherRedeemer         string        `abi:"voucherRedeemer"`
+	VoucherProvider         string        `abi:"voucherProvider"`
+	VoucherExpiresAt        uint64        `abi:"voucherExpiresAt"`
+	VoucherNonce            uint64        `abi:"voucherNonce"`
+	VoucherSignature        []byte        `abi:"voucherSignature"`
+	AuthorizedProofProvider string
 }
 
 func (p *Precompile) effectiveSessionExpiresAt(ctx sdk.Context, dealID uint64, expiresAt uint64) (uint64, error) {
@@ -496,20 +886,29 @@ func (p *Precompile) runOpenRetrievalSession(ctx sdk.Context, evm *vm.EVM, contr
 		return nil, fmt.Errorf("openRetrievalSession: %w", err)
 	}
 
+	version := sessionVersionForMethod(method)
+	authorized := ""
+	if version == 2 {
+		authorized, err = asString(args["authorizedProofProvider"])
+		if err != nil {
+			return nil, err
+		}
+	}
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
 
 	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
 	res, err := msgServer.OpenRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSession{
-		Creator:        creator,
-		DealId:         dealID,
-		Provider:       strings.TrimSpace(provider),
-		ManifestRoot:   manifestRoot,
-		StartMduIndex:  startMduIndex,
-		StartBlobIndex: startBlobIndex,
-		BlobCount:      blobCount,
-		Nonce:          nonce,
-		ExpiresAt:      effectiveExpiresAt,
+		Creator:          creator,
+		DealId:           dealID,
+		Provider:         strings.TrimSpace(provider),
+		ManifestRoot:     manifestRoot,
+		StartMduIndex:    startMduIndex,
+		StartBlobIndex:   startBlobIndex,
+		BlobCount:        blobCount,
+		Nonce:            nonce,
+		ExpiresAt:        effectiveExpiresAt,
+		ChallengeVersion: version, AuthorizedProofProvider: authorized,
 	})
 	if err != nil {
 		return nil, err
@@ -567,15 +966,16 @@ func (p *Precompile) runOpenRetrievalSessions(ctx sdk.Context, evm *vm.EVM, cont
 		}
 
 		res, err := msgServer.OpenRetrievalSession(sdk.WrapSDKContext(ctx), &types.MsgOpenRetrievalSession{
-			Creator:        creator,
-			DealId:         input.DealId,
-			Provider:       provider,
-			ManifestRoot:   input.ManifestRoot,
-			StartMduIndex:  input.StartMduIndex,
-			StartBlobIndex: input.StartBlobIndex,
-			BlobCount:      input.BlobCount,
-			Nonce:          input.Nonce,
-			ExpiresAt:      effectiveExpiresAt,
+			Creator:          creator,
+			DealId:           input.DealId,
+			Provider:         provider,
+			ManifestRoot:     input.ManifestRoot,
+			StartMduIndex:    input.StartMduIndex,
+			StartBlobIndex:   input.StartBlobIndex,
+			BlobCount:        input.BlobCount,
+			Nonce:            input.Nonce,
+			ExpiresAt:        effectiveExpiresAt,
+			ChallengeVersion: sessionVersionForMethod(method), AuthorizedProofProvider: input.AuthorizedProofProvider,
 		})
 		if err != nil {
 			return nil, err
@@ -611,7 +1011,6 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
-	ownerBytes := caller.Bytes()
 
 	sessionIDs := make([][32]byte, len(sessions))
 	msgServer := nilkeeper.NewMsgServerImpl(*p.keeper)
@@ -621,7 +1020,7 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 		if provider == "" {
 			return nil, errors.New("openRetrievalSessionsSponsored: invalid provider")
 		}
-		providerAddr, err := sdk.AccAddressFromBech32(provider)
+		_, err := sdk.AccAddressFromBech32(provider)
 		if err != nil {
 			return nil, errors.New("openRetrievalSessionsSponsored: invalid provider")
 		}
@@ -643,16 +1042,17 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 		}
 
 		msg := &types.MsgOpenRetrievalSessionSponsored{
-			Creator:        creator,
-			DealId:         input.DealId,
-			Provider:       provider,
-			ManifestRoot:   input.ManifestRoot,
-			StartMduIndex:  input.StartMduIndex,
-			StartBlobIndex: input.StartBlobIndex,
-			BlobCount:      input.BlobCount,
-			Nonce:          input.Nonce,
-			ExpiresAt:      effectiveExpiresAt,
-			MaxTotalFee:    maxFee,
+			Creator:          creator,
+			DealId:           input.DealId,
+			Provider:         provider,
+			ManifestRoot:     input.ManifestRoot,
+			StartMduIndex:    input.StartMduIndex,
+			StartBlobIndex:   input.StartBlobIndex,
+			BlobCount:        input.BlobCount,
+			Nonce:            input.Nonce,
+			ExpiresAt:        effectiveExpiresAt,
+			ChallengeVersion: sessionVersionForMethod(method), AuthorizedProofProvider: input.AuthorizedProofProvider,
+			MaxTotalFee: maxFee,
 		}
 		switch input.AuthType {
 		case 0:
@@ -692,29 +1092,14 @@ func (p *Precompile) runOpenRetrievalSessionsSponsored(ctx sdk.Context, evm *vm.
 			return nil, errors.New("openRetrievalSessionsSponsored: invalid authType")
 		}
 
-		_, err = msgServer.OpenRetrievalSessionSponsored(sdk.WrapSDKContext(ctx), msg)
+		res, err := msgServer.OpenRetrievalSessionSponsored(sdk.WrapSDKContext(ctx), msg)
 		if err != nil {
 			return nil, err
 		}
-
-		expectedID, err := types.HashRetrievalSessionID(
-			ownerBytes,
-			input.DealId,
-			providerAddr.Bytes(),
-			input.ManifestRoot,
-			input.StartMduIndex,
-			input.StartBlobIndex,
-			input.BlobCount,
-			input.Nonce,
-			effectiveExpiresAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("openRetrievalSessionsSponsored: failed to compute session id: %w", err)
+		if len(res.SessionId) != 32 {
+			return nil, errors.New("invalid native session id")
 		}
-		if len(expectedID) != 32 {
-			return nil, errors.New("openRetrievalSessionsSponsored: invalid session id")
-		}
-		copy(sessionIDs[i][:], expectedID)
+		copy(sessionIDs[i][:], res.SessionId)
 
 		p.emitEventRetrievalSessionOpened(evm, input.DealId, caller, provider, sessionIDs[i])
 	}
@@ -778,6 +1163,21 @@ func (p *Precompile) runComputeRetrievalSessions(ctx sdk.Context, evm *vm.EVM, c
 		)
 		if err != nil {
 			return nil, fmt.Errorf("computeRetrievalSessions: failed to compute session id: %w", err)
+		}
+
+		if sessionVersionForMethod(method) == 2 {
+			payee := input.AuthorizedProofProvider
+			if strings.TrimSpace(payee) == "" {
+				payee = provider
+			}
+			payeeAddr, err := sdk.AccAddressFromBech32(strings.TrimSpace(payee))
+			if err != nil {
+				return nil, err
+			}
+			sessionID, err = types.HashRetrievalSessionIDV2(sessionID, ctx.ChainID(), payeeAddr.Bytes())
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		var sid [32]byte
@@ -845,6 +1245,21 @@ func (p *Precompile) runComputeRetrievalSessionIds(ctx sdk.Context, evm *vm.EVM,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("computeRetrievalSessionIds: failed to compute session id: %w", err)
+		}
+
+		if sessionVersionForMethod(method) == 2 {
+			payee := input.AuthorizedProofProvider
+			if strings.TrimSpace(payee) == "" {
+				payee = provider
+			}
+			payeeAddr, err := sdk.AccAddressFromBech32(strings.TrimSpace(payee))
+			if err != nil {
+				return nil, err
+			}
+			sessionID, err = types.HashRetrievalSessionIDV2(sessionID, ctx.ChainID(), payeeAddr.Bytes())
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		providers[i] = provider

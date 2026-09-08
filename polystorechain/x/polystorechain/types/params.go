@@ -12,28 +12,29 @@ import (
 var _ paramtypes.ParamSet = (*Params)(nil)
 
 var (
-	KeyBaseStripeCost        = []byte("BaseStripeCost")
-	KeyHalvingInterval       = []byte("HalvingInterval")
-	KeyEip712ChainID         = []byte("Eip712ChainId")
-	KeyStoragePrice          = []byte("StoragePrice")
-	KeyDealCreationFee       = []byte("DealCreationFee")
-	KeyMinDurationBlocks     = []byte("MinDurationBlocks")
-	KeyBaseRetrievalFee      = []byte("BaseRetrievalFee")
-	KeyRetrievalPricePerBlob = []byte("RetrievalPricePerBlob")
-	KeyRetrievalBurnBps      = []byte("RetrievalBurnBps")
-	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
-	KeyDealExtensionGrace    = []byte("DealExtensionGraceBlocks")
-	KeyVoucherMaxTTLBlocks   = []byte("VoucherMaxTTLBlocks")
-	KeyAuditBudgetBps        = []byte("AuditBudgetBps")
-	KeyAuditBudgetCapBps     = []byte("AuditBudgetCapBps")
-	KeyAuditBudgetCarryEpoch = []byte("AuditBudgetCarryoverEpochs")
-	KeyEmissionStartHeight   = []byte("EmissionStartHeight")
-	KeyBaseRewardHalvingInt  = []byte("BaseRewardHalvingIntervalBlocks")
-	KeyBaseRewardBpsStart    = []byte("BaseRewardBpsStart")
-	KeyBaseRewardBpsTail     = []byte("BaseRewardBpsTail")
-	KeyMaxDrainBytesPerEpoch = []byte("MaxDrainBytesPerEpoch")
-	KeyMaxRepairingRatioBps  = []byte("MaxRepairingBytesRatioBps")
-	KeyRotationBytesPerEpoch = []byte("RotationBytesPerEpoch")
+	KeyRetrievalV2ActivationHeight = []byte("RetrievalV2ActivationHeight")
+	KeyBaseStripeCost              = []byte("BaseStripeCost")
+	KeyHalvingInterval             = []byte("HalvingInterval")
+	KeyEip712ChainID               = []byte("Eip712ChainId")
+	KeyStoragePrice                = []byte("StoragePrice")
+	KeyDealCreationFee             = []byte("DealCreationFee")
+	KeyMinDurationBlocks           = []byte("MinDurationBlocks")
+	KeyBaseRetrievalFee            = []byte("BaseRetrievalFee")
+	KeyRetrievalPricePerBlob       = []byte("RetrievalPricePerBlob")
+	KeyRetrievalBurnBps            = []byte("RetrievalBurnBps")
+	KeyMonthLenBlocks              = []byte("MonthLenBlocks")
+	KeyDealExtensionGrace          = []byte("DealExtensionGraceBlocks")
+	KeyVoucherMaxTTLBlocks         = []byte("VoucherMaxTTLBlocks")
+	KeyAuditBudgetBps              = []byte("AuditBudgetBps")
+	KeyAuditBudgetCapBps           = []byte("AuditBudgetCapBps")
+	KeyAuditBudgetCarryEpoch       = []byte("AuditBudgetCarryoverEpochs")
+	KeyEmissionStartHeight         = []byte("EmissionStartHeight")
+	KeyBaseRewardHalvingInt        = []byte("BaseRewardHalvingIntervalBlocks")
+	KeyBaseRewardBpsStart          = []byte("BaseRewardBpsStart")
+	KeyBaseRewardBpsTail           = []byte("BaseRewardBpsTail")
+	KeyMaxDrainBytesPerEpoch       = []byte("MaxDrainBytesPerEpoch")
+	KeyMaxRepairingRatioBps        = []byte("MaxRepairingBytesRatioBps")
+	KeyRotationBytesPerEpoch       = []byte("RotationBytesPerEpoch")
 
 	KeyDynamicPricingEnabled        = []byte("DynamicPricingEnabled")
 	KeyStoragePriceMin              = []byte("StoragePriceMin")
@@ -276,6 +277,7 @@ func DevnetPolicingParams() Params {
 // ParamSetPairs get the params.ParamSet
 func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 	return paramtypes.ParamSetPairs{
+		paramtypes.NewParamSetPair(KeyRetrievalV2ActivationHeight, &p.RetrievalV2ActivationHeight, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyBaseStripeCost, &p.BaseStripeCost, validateBaseStripeCost),
 		paramtypes.NewParamSetPair(KeyHalvingInterval, &p.HalvingInterval, validateHalvingInterval),
 		paramtypes.NewParamSetPair(KeyEip712ChainID, &p.Eip712ChainId, validateEip712ChainID),
@@ -331,6 +333,11 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 
 // Validate validates the set of params.
 func (p Params) Validate() error {
+	if p.RetrievalV2ActivationHeight != 0 {
+		if p.EpochLenBlocks < 2 || p.RetrievalV2ActivationHeight > uint64(1<<63-3) || (p.RetrievalV2ActivationHeight-1)%p.EpochLenBlocks != 0 {
+			return fmt.Errorf("retrieval_v2_activation_height must be a one-indexed epoch boundary with epoch_len_blocks >= 2")
+		}
+	}
 	if err := validateBaseStripeCost(p.BaseStripeCost); err != nil {
 		return err
 	}

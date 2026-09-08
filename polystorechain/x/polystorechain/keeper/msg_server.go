@@ -2421,11 +2421,6 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		}
 	}
 
-	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
-	}
-
 	expiresAt := msg.ExpiresAt
 	if expiresAt == 0 {
 		// Legacy clients omit expires_at. Cap sessions at the deal term so they
@@ -2439,13 +2434,9 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be >= current height")
 	}
 
-	ownerAddr, err := sdk.AccAddressFromBech32(msg.Creator)
+	session, err := k.prepareRetrievalSession(ctx, deal, msg.Creator, msg.Provider, msg.AuthorizedProofProvider, msg.ChallengeVersion, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount, msg.Nonce, expiresAt)
 	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
-	}
-	providerAddr, err := sdk.AccAddressFromBech32(msg.Provider)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+		return nil, err
 	}
 
 	params := k.GetParams(ctx)
@@ -2473,48 +2464,13 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	nonceKey := collections.Join(collections.Join(msg.Creator, msg.DealId), msg.Provider)
-	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+	sessionID := session.SessionId
+	session.LockedFee = variableFee
+	session.Purpose = types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER
+	session.Funding = types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW
+	session.Payer = ""
+	if err := k.retainSessionChallenge(ctx, session); err != nil {
 		return nil, err
-	}
-	if msg.Nonce <= lastNonce {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
-	}
-
-	sessionID, err := types.HashRetrievalSessionID(
-		ownerAddr.Bytes(),
-		msg.DealId,
-		providerAddr.Bytes(),
-		msg.ManifestRoot,
-		msg.StartMduIndex,
-		msg.StartBlobIndex,
-		msg.BlobCount,
-		msg.Nonce,
-		expiresAt,
-	)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
-	}
-
-	session := types.RetrievalSession{
-		SessionId:      sessionID,
-		DealId:         msg.DealId,
-		Owner:          msg.Creator,
-		Provider:       msg.Provider,
-		ManifestRoot:   msg.ManifestRoot,
-		StartMduIndex:  msg.StartMduIndex,
-		StartBlobIndex: msg.StartBlobIndex,
-		BlobCount:      msg.BlobCount,
-		TotalBytes:     totalBytes,
-		Nonce:          msg.Nonce,
-		ExpiresAt:      expiresAt,
-		OpenedHeight:   ctx.BlockHeight(),
-		UpdatedHeight:  ctx.BlockHeight(),
-		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
-		LockedFee:      variableFee,
-		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER,
-		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW,
-		Payer:          "",
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -2688,11 +2644,6 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 		}
 	}
 
-	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
-	}
-
 	expiresAt := msg.ExpiresAt
 	if expiresAt == 0 {
 		expiresAt = deal.EndBlock
@@ -2708,9 +2659,9 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	if err != nil {
 		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
 	}
-	providerAddr, err := sdk.AccAddressFromBech32(msg.Provider)
+	session, err := k.prepareRetrievalSession(ctx, deal, msg.Creator, msg.Provider, msg.AuthorizedProofProvider, msg.ChallengeVersion, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount, msg.Nonce, expiresAt)
 	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
+		return nil, err
 	}
 
 	// --- Sponsored authorization ---
@@ -2801,48 +2752,13 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 	}
 
 	nonceKey := collections.Join(collections.Join(msg.Creator, msg.DealId), msg.Provider)
-	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+	sessionID := session.SessionId
+	session.LockedFee = variableFee
+	session.Purpose = types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER
+	session.Funding = types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER
+	session.Payer = msg.Creator
+	if err := k.retainSessionChallenge(ctx, session); err != nil {
 		return nil, err
-	}
-	if msg.Nonce <= lastNonce {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
-	}
-
-	sessionID, err := types.HashRetrievalSessionID(
-		creatorAddr.Bytes(),
-		msg.DealId,
-		providerAddr.Bytes(),
-		msg.ManifestRoot,
-		msg.StartMduIndex,
-		msg.StartBlobIndex,
-		msg.BlobCount,
-		msg.Nonce,
-		expiresAt,
-	)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
-	}
-
-	session := types.RetrievalSession{
-		SessionId:      sessionID,
-		DealId:         msg.DealId,
-		Owner:          msg.Creator,
-		Provider:       msg.Provider,
-		ManifestRoot:   msg.ManifestRoot,
-		StartMduIndex:  msg.StartMduIndex,
-		StartBlobIndex: msg.StartBlobIndex,
-		BlobCount:      msg.BlobCount,
-		TotalBytes:     totalBytes,
-		Nonce:          msg.Nonce,
-		ExpiresAt:      expiresAt,
-		OpenedHeight:   ctx.BlockHeight(),
-		UpdatedHeight:  ctx.BlockHeight(),
-		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
-		LockedFee:      variableFee,
-		Purpose:        types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_USER,
-		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
-		Payer:          msg.Creator,
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -2971,11 +2887,6 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		}
 	}
 
-	totalBytes, overflow := mulUint64(msg.BlobCount, types.BlobSizeBytes)
-	if overflow {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("total_bytes overflow")
-	}
-
 	expiresAt := msg.ExpiresAt
 	if expiresAt == 0 {
 		expiresAt = deal.EndBlock
@@ -2985,6 +2896,14 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	}
 	if expiresAt < height {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("expires_at must be >= current height")
+	}
+
+	session, err := k.prepareRetrievalSession(ctx, deal, creator, strings.TrimSpace(msg.Provider), msg.AuthorizedProofProvider, msg.ChallengeVersion, msg.StartMduIndex, msg.StartBlobIndex, msg.BlobCount, msg.Nonce, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	if session.ChallengeVersion == 2 && session.AuthorizedProofProvider != session.Provider {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("protocol task does not authorize a deputy payee")
 	}
 
 	// --- Protocol auth rules ---
@@ -3064,15 +2983,6 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("unsupported protocol session purpose")
 	}
 
-	ownerAddr, err := sdk.AccAddressFromBech32(creator)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid creator address")
-	}
-	providerAddr, err := sdk.AccAddressFromBech32(strings.TrimSpace(msg.Provider))
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
-	}
-
 	// --- Fee computation + funding from protocol budget module account ---
 	params := k.GetParams(ctx)
 	baseFee := params.BaseRetrievalFee
@@ -3098,49 +3008,13 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	}
 
 	nonceKey := collections.Join(collections.Join(creator, msg.DealId), strings.TrimSpace(msg.Provider))
-	lastNonce, err := k.RetrievalSessionNonces.Get(ctx, nonceKey)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+	sessionID := session.SessionId
+	session.LockedFee = variableFee
+	session.Purpose = msg.Purpose
+	session.Funding = types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL
+	session.Payer = authtypes.NewModuleAddress(types.ProtocolBudgetModuleName).String()
+	if err := k.retainSessionChallenge(ctx, session); err != nil {
 		return nil, err
-	}
-	if msg.Nonce <= lastNonce {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonce replay rejected")
-	}
-
-	sessionID, err := types.HashRetrievalSessionID(
-		ownerAddr.Bytes(),
-		msg.DealId,
-		providerAddr.Bytes(),
-		msg.ManifestRoot,
-		msg.StartMduIndex,
-		msg.StartBlobIndex,
-		msg.BlobCount,
-		msg.Nonce,
-		expiresAt,
-	)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to compute session_id: %s", err)
-	}
-
-	payerAddr := authtypes.NewModuleAddress(types.ProtocolBudgetModuleName)
-	session := types.RetrievalSession{
-		SessionId:      sessionID,
-		DealId:         msg.DealId,
-		Owner:          creator,
-		Provider:       strings.TrimSpace(msg.Provider),
-		ManifestRoot:   msg.ManifestRoot,
-		StartMduIndex:  msg.StartMduIndex,
-		StartBlobIndex: msg.StartBlobIndex,
-		BlobCount:      msg.BlobCount,
-		TotalBytes:     totalBytes,
-		Nonce:          msg.Nonce,
-		ExpiresAt:      expiresAt,
-		OpenedHeight:   ctx.BlockHeight(),
-		UpdatedHeight:  ctx.BlockHeight(),
-		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
-		LockedFee:      variableFee,
-		Purpose:        msg.Purpose,
-		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL,
-		Payer:          payerAddr.String(),
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -3157,7 +3031,9 @@ func (k msgServer) OpenProtocolRetrievalSession(goCtx context.Context, msg *type
 	}
 	if consumeAuditTask {
 		// Consume tasks on successful open so they cannot be reused with a new nonce.
-		_ = k.AuditTasks.Remove(ctx, consumeAuditTaskKey)
+		if err := k.AuditTasks.Remove(ctx, consumeAuditTaskKey); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := k.recordRetrievalDemand(ctx, msg.BlobCount); err != nil {
@@ -3180,6 +3056,24 @@ func (k msgServer) verifyAndConsumeVoucher(ctx sdk.Context, deal *types.Deal, op
 	if strings.TrimSpace(v.Provider) != "" && strings.TrimSpace(v.Provider) != strings.TrimSpace(open.Provider) {
 		return sdkerrors.ErrUnauthorized.Wrap("voucher provider mismatch")
 	}
+	if open.ChallengeVersion == 2 {
+		payee := open.AuthorizedProofProvider
+		if payee == "" {
+			payee = open.Provider
+		}
+		payee, err := canonicalAddress(payee, "authorized_proof_provider")
+		if err != nil {
+			return err
+		}
+		if v.Provider != "" {
+			if payee != v.Provider {
+				return sdkerrors.ErrUnauthorized.Wrap("voucher does not authorize the effective payee")
+			}
+		} else if _, assigned := providerSlotIndex(*deal, payee); !assigned {
+			return sdkerrors.ErrUnauthorized.Wrap("existing vouchers cannot authorize an unassigned deputy")
+		}
+	}
+
 	if v.StartMduIndex != open.StartMduIndex ||
 		v.StartBlobIndex != open.StartBlobIndex ||
 		v.BlobCount != open.BlobCount {
@@ -3258,91 +3152,89 @@ func (k msgServer) verifyAndConsumeVoucher(ctx sdk.Context, deal *types.Deal, op
 
 func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.MsgConfirmRetrievalSession) (*types.MsgConfirmRetrievalSessionResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if msg == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
-	}
-	if len(msg.SessionId) != 32 {
+	if msg == nil || len(msg.SessionId) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
-
 	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
 	if err != nil {
-		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+		return nil, err
 	}
 	if msg.Creator != session.Owner {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only session owner may confirm completion")
 	}
-
 	if isSessionExpired(ctx, &session) {
-		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
-		session.UpdatedHeight = ctx.BlockHeight()
-		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
+	}
+	if err := k.admitSessionVersion(ctx, session); err != nil {
+		return nil, err
 	}
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 		return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
 	}
-
 	switch session.Status {
 	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
 		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
 	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED:
-		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
-	default:
-		// Allow idempotent confirmations.
-	}
-	session.UpdatedHeight = ctx.BlockHeight()
-
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
 		if err := k.settleRetrievalSession(ctx, &session); err != nil {
 			return nil, err
 		}
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
+		if err := k.RecordDealActivity(ctx, session.DealId, session.TotalBytes, false); err != nil {
+			return nil, err
+		}
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED:
+		return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session is not confirmable")
 	}
-
+	session.UpdatedHeight = ctx.BlockHeight()
 	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
 		return nil, err
 	}
-
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
-		if err := k.RecordDealActivity(ctx, session.DealId, session.TotalBytes, false); err != nil {
-			ctx.Logger().Error("failed to record deal activity on session completion", "error", err)
-		}
-	}
-
 	return &types.MsgConfirmRetrievalSessionResponse{Success: true}, nil
 }
 
 func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgCancelRetrievalSession) (*types.MsgCancelRetrievalSessionResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if msg == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
-	}
-	if len(msg.SessionId) != 32 {
+	if msg == nil || len(msg.SessionId) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
-
 	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
 	if err != nil {
-		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+		return nil, err
 	}
 	if msg.Creator != session.Owner {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only session owner may cancel")
 	}
-
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED ||
-		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED {
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED || session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED {
 		return &types.MsgCancelRetrievalSessionResponse{Success: true}, nil
 	}
-
+	switch session.Status {
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED,
+		types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED,
+		types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED:
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session is not cancelable")
+	}
 	if !isSessionExpired(ctx, &session) {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session not expired")
 	}
-
+	if session.ChallengeVersion != 0 && session.ChallengeVersion != 2 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("unsupported session challenge version")
+	}
+	active, err := k.RetrievalV2Active(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := k.refundRetrievalSession(ctx, &session); err != nil {
+		return nil, err
+	}
 	// Non-response evidence: if the session expired without a provider-submitted proof,
 	// record a lightweight evidence marker and degrade provider health.
 	// This is intentionally conservative: sessions that reached PROOF_SUBMITTED are not
 	// treated as non-response (even if the user never confirmed).
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
+	if !active && session.ChallengeVersion == 0 && session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN {
 		if err := k.recordEvidenceSummary(ctx, session.DealId, session.Provider, "retrieval_non_response", session.SessionId, msg.Creator, false); err != nil {
 			ctx.Logger().Error("failed to record non-response evidence", "error", err, "deal", session.DealId, "provider", session.Provider)
 		}
@@ -3368,132 +3260,155 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 		k.trackProviderHealth(ctx, session.DealId, session.Provider, false)
 	}
 
-	if session.LockedFee.IsPositive() {
-		funding := session.Funding
-		if funding == types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_UNSPECIFIED {
-			// Backwards-compatible default: older sessions were deal-escrow funded.
-			funding = types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW
-		}
-
-		switch funding {
-		case types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_DEAL_ESCROW:
-			// Owner-paid sessions refund back into deal escrow accounting (coins already live in module account).
-			deal, err := k.Deals.Get(ctx, session.DealId)
-			if err != nil {
-				return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
-			}
-			deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
-			if err := k.setDealWithAssignmentCollateralLocks(ctx, session.DealId, deal); err != nil {
-				return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
-			}
-			session.LockedFee = math.ZeroInt()
-
-		case types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
-			types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_PROTOCOL:
-			// Sponsored/protocol sessions refund back to the recorded payer.
-			payer := strings.TrimSpace(session.Payer)
-			if payer == "" {
-				payer = strings.TrimSpace(session.Owner)
-			}
-			payerAddr, err := sdk.AccAddressFromBech32(payer)
-			if err != nil {
-				return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid payer address")
-			}
-			refund := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, session.LockedFee))
-			if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, payerAddr, refund); err != nil {
-				return nil, fmt.Errorf("failed to refund locked retrieval fees to payer: %w", err)
-			}
-			session.LockedFee = math.ZeroInt()
-
-		default:
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid retrieval session funding")
-		}
+	if err := k.RetrievalSessionProofProvider.Remove(ctx, msg.SessionId); err != nil {
+		return nil, err
 	}
-
 	session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED
 	session.UpdatedHeight = ctx.BlockHeight()
 	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
 		return nil, err
 	}
-
 	return &types.MsgCancelRetrievalSessionResponse{Success: true}, nil
 }
 
 func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProof) (*types.MsgSubmitRetrievalSessionProofResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	if msg == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
-	}
-	if len(msg.SessionId) != 32 {
+	if msg == nil || len(msg.SessionId) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
 	if err := ValidateProofCount(uint64(len(msg.Proofs))); err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
-
 	session, err := k.RetrievalSessions.Get(ctx, msg.SessionId)
 	if err != nil {
-		return nil, sdkerrors.ErrNotFound.Wrap("retrieval session not found")
+		return nil, err
 	}
 	creator, err := requireCanonicalProviderCreator(msg.Creator)
 	if err != nil {
 		return nil, err
 	}
-	// Deputy/P2P flows: allow any registered provider to submit a valid session proof.
-	if _, err := k.Providers.Get(ctx, creator); err != nil {
-		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not registered", creator)
-		}
-		return nil, err
+	if session.ChallengeVersion == 2 && creator != session.AuthorizedProofProvider {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("only the authorized proof provider may submit")
 	}
-
+	// V2 authority was authenticated at open and cannot be revoked by a later
+	// registry change. Legacy admission retains its current-registration check.
+	if session.ChallengeVersion == 0 {
+		if _, err := k.Providers.Get(ctx, creator); err != nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("proof provider is not registered")
+		}
+	}
 	if isSessionExpired(ctx, &session) {
-		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
-		session.UpdatedHeight = ctx.BlockHeight()
-		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
-	}
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
-		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
-	}
-
-	// Pin the first provider to submit the session proofs. This is the provider that
-	// will be paid when the session is completed/confirmed.
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN ||
-		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED {
-		existing, err := k.RetrievalSessionProofProvider.Get(ctx, msg.SessionId)
-		if err != nil && !errors.Is(err, collections.ErrNotFound) {
-			return nil, err
-		}
-		if errors.Is(err, collections.ErrNotFound) || strings.TrimSpace(existing) == "" {
-			if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
-				return nil, err
-			}
-		} else if strings.TrimSpace(existing) != creator {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("session proofs already submitted by a different provider")
-		}
-	}
-
-	deal, err := k.Deals.Get(ctx, session.DealId)
-	if err != nil {
-		return nil, sdkerrors.ErrNotFound.Wrapf("deal with ID %d not found", session.DealId)
-	}
-	if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytesEqual(deal.ManifestRoot, session.ManifestRoot) {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("deal manifest_root changed since session open")
 	}
 	if uint64(len(msg.Proofs)) != session.BlobCount {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof count mismatch for session blob_count")
 	}
-
-	stripe, err := stripeParamsForDeal(deal)
-	if err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid service hint: %s", err.Error())
-	}
-	startGlobal, _, err := validatePolyFSRetrievalRange(deal, stripe, session.StartMduIndex, session.StartBlobIndex, session.BlobCount)
-	if err != nil {
+	if err := k.admitSessionVersion(ctx, session); err != nil {
 		return nil, err
 	}
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
+	}
+	switch session.Status {
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED:
+	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED:
+		pin, err := k.sessionProofPayee(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+		if pin.String() != creator {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("session proofs already submitted by a different provider")
+		}
+		return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
+	default:
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session does not accept proofs")
+	}
 
+	var deal types.Deal
+	var stripe stripeParams
+	if session.ChallengeVersion == 2 {
+		challenge, err := types.RetrievalChallengeContext(session)
+		if err != nil {
+			return nil, err
+		}
+		if ctx.ChainID() != challenge.ChainID || ctx.BlockHeight() < 0 || !challenge.Window.Contains(uint64(ctx.BlockHeight())) {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("outside session challenge response window")
+		}
+		anchor, err := k.ChallengeAnchors.Get(ctx, challenge.Window.Anchor)
+		if err != nil {
+			return nil, fmt.Errorf("session challenge seed unavailable: %w", err)
+		}
+		expected, err := challenge.Challenges(anchor.Seed)
+		if err != nil {
+			return nil, fmt.Errorf("session challenge seed unavailable: %w", err)
+		}
+		for i, p := range msg.Proofs {
+			if p.MduIndex != expected[i].MDUIndex || p.BlobIndex != expected[i].LeafIndex || !bytes.Equal(p.ZValue, expected[i].Z[:]) {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("proof does not match exact session challenge tuple and z")
+			}
+		}
+		// Only the frozen generation determines proof membership. Current deal content
+		// and assignments may advance while this funded response window remains live.
+		deal = types.Deal{Id: session.DealId, ManifestRoot: session.ManifestRoot,
+			WitnessMdus: challenge.MetadataMDUs - 1, TotalMdus: challenge.MetadataMDUs + challenge.UserMDUs}
+		stripe.leafCount = 64
+		if challenge.Layout == 2 {
+			stripe.leafCount = (uint64(challenge.K) + uint64(challenge.M)) * (64 / uint64(challenge.K))
+		}
+	} else {
+		deal, err = k.Deals.Get(ctx, session.DealId)
+		if err != nil {
+			return nil, err
+		}
+		if len(deal.ManifestRoot) != types.POLYFS_ROOT_SIZE || !bytes.Equal(deal.ManifestRoot, session.ManifestRoot) {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("deal manifest_root changed since session open")
+		}
+		stripe, err = stripeParamsForDeal(deal)
+		if err != nil {
+			return nil, err
+		}
+		startGlobal, _, err := validatePolyFSRetrievalRange(deal, stripe, session.StartMduIndex, session.StartBlobIndex, session.BlobCount)
+		if err != nil {
+			return nil, err
+		}
+		for i, p := range msg.Proofs {
+			position, overflow := addUint64(startGlobal, uint64(i))
+			if overflow || p.MduIndex != position/stripe.leafCount || uint64(p.BlobIndex) != position%stripe.leafCount {
+				return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
+			}
+		}
+	}
+	// Validate the whole batch before the first FFI call or payee mutation.
+	for _, p := range msg.Proofs {
+		if err := ValidateProofTarget(deal, &p); err != nil {
+			return nil, err
+		}
+		if err := ValidateChainedProofShape(deal.ManifestRoot, &p, stripe.leafCount); err != nil {
+			return nil, err
+		}
+	}
+	existing, err := k.RetrievalSessionProofProvider.Get(ctx, msg.SessionId)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+	if err == nil && existing != creator {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("session proofs already submitted by a different provider")
+	}
+	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
+		return nil, err
+	}
+	for i := range msg.Proofs {
+		ok, err := verifyPolyFSChainedProof(deal.ManifestRoot, &msg.Proofs[i], stripe.leafCount)
+		if err != nil {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+		}
+		if !ok {
+			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval proof")
+		}
+	}
+	if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
+		return nil, err
+	}
 	activeProviderForMode2Slot := func(slot uint32) (string, bool) {
 		if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
 			entry := deal.Mode2Slots[slot]
@@ -3516,44 +3431,9 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		return "", false
 	}
 
-	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
-		if chainedProof == nil || !isPolyFSUserDataMduTarget(deal, chainedProof.MduIndex) {
-			return false, nil
-		}
-		return verifyPolyFSChainedProof(deal.ManifestRoot, chainedProof, stripe.leafCount)
-	}
-
-	// Admit the whole legacy session list before any cryptographic work. V2's
-	// frozen challenge handler uses the same shape and prepayment functions.
-	for i := range msg.Proofs {
-		p := &msg.Proofs[i]
-		expectedGlobal := startGlobal + uint64(i)
-		if p.MduIndex != expectedGlobal/stripe.leafCount || uint64(p.BlobIndex) != expectedGlobal%stripe.leafCount {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
-		}
-		if err := ValidateProofTarget(deal, p); err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
-		}
-		if err := ValidateChainedProofShape(deal.ManifestRoot, p, stripe.leafCount); err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
-		}
-	}
-	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
-		return nil, err
-	}
-	for _, p := range msg.Proofs {
-		ok, err := verifyChainedProof(&p)
-		if err != nil {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
-		}
-		if !ok {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
-		}
-	}
-
 	// Count retrieval proofs as liveness credits for unified quota accounting.
 	epochID := k.currentEpoch(ctx)
-	if epochID != 0 {
+	if session.ChallengeVersion == 0 && epochID != 0 {
 		for _, p := range msg.Proofs {
 			if stripe.mode == 2 {
 				slotU64, serr := leafSlotIndex(uint64(p.BlobIndex), stripe.rows)
@@ -3570,7 +3450,11 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 					if err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return nil, err
 					}
-					if err := k.Mode2EpochSlotServed.Set(ctx, keyEpoch, prev+1); err != nil {
+					next, overflow := addUint64(prev, 1)
+					if overflow {
+						return nil, sdkerrors.ErrInvalidRequest.Wrap("served counter overflow")
+					}
+					if err := k.Mode2EpochSlotServed.Set(ctx, keyEpoch, next); err != nil {
 						return nil, err
 					}
 				}
@@ -3581,32 +3465,21 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		}
 	}
 
-	switch session.Status {
-	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN:
-		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
-	case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED:
-		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
-	default:
-		// Allow idempotent proofs.
-	}
-	session.UpdatedHeight = ctx.BlockHeight()
-
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED {
 		if err := k.settleRetrievalSession(ctx, &session); err != nil {
 			return nil, err
 		}
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED
+		if err := k.RecordDealActivity(ctx, session.DealId, session.TotalBytes, false); err != nil {
+			return nil, err
+		}
+	} else {
+		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
 	}
-
+	session.UpdatedHeight = ctx.BlockHeight()
 	if err := k.RetrievalSessions.Set(ctx, msg.SessionId, session); err != nil {
 		return nil, err
 	}
-
-	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED {
-		if err := k.RecordDealActivity(ctx, session.DealId, session.TotalBytes, false); err != nil {
-			ctx.Logger().Error("failed to record deal activity on session completion", "error", err)
-		}
-	}
-
 	return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
 }
 
@@ -3642,59 +3515,41 @@ func isSessionExpired(ctx sdk.Context, session *types.RetrievalSession) bool {
 }
 
 func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.RetrievalSession) error {
-	if session == nil || !session.LockedFee.IsPositive() {
-		return nil
+	if session == nil {
+		return sdkerrors.ErrInvalidRequest.Wrap("missing retrieval session")
 	}
-
-	params := k.GetParams(ctx)
-	burnBps := params.RetrievalBurnBps
+	// A zero fee is still a completion and must authenticate its accepted proof.
+	providerAddr, err := k.sessionProofPayee(ctx, *session)
+	if err != nil {
+		return err
+	}
+	if session.LockedFee.IsNil() || session.LockedFee.IsNegative() {
+		return sdkerrors.ErrInvalidRequest.Wrap("invalid locked retrieval fee")
+	}
+	params, err := k.Params.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if params.RetrievalBurnBps > 10000 {
+		return sdkerrors.ErrInvalidRequest.Wrap("invalid retrieval burn fraction")
+	}
 	variable := session.LockedFee
-
-	burn := math.ZeroInt()
-	if burnBps > 0 {
-		bps := math.NewIntFromUint64(burnBps)
-		bpsDiv := math.NewInt(10000)
-		bpsCeil := math.NewInt(9999)
-		burn = variable.Mul(bps).Add(bpsCeil).Quo(bpsDiv)
-		if burn.GT(variable) {
-			burn = variable
-		}
-	}
-
+	burn := variable.Mul(math.NewIntFromUint64(params.RetrievalBurnBps)).Add(math.NewInt(9999)).Quo(math.NewInt(10000))
 	providerCut := variable.Sub(burn)
-	if providerCut.IsNegative() {
-		return fmt.Errorf("retrieval payout underflow")
-	}
-
 	if burn.IsPositive() {
-		burnCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, burn))
-		if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, burnCoins); err != nil {
+		if err := k.BankKeeper.BurnCoins(ctx, types.ModuleName, sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, burn))); err != nil {
 			return fmt.Errorf("failed to burn retrieval fees: %w", err)
 		}
 	}
-
 	if providerCut.IsPositive() {
-		payTo := strings.TrimSpace(session.Provider)
-		if sessionID := session.SessionId; len(sessionID) == 32 {
-			if proofProvider, err := k.RetrievalSessionProofProvider.Get(ctx, sessionID); err == nil && strings.TrimSpace(proofProvider) != "" {
-				payTo = strings.TrimSpace(proofProvider)
-			}
-		}
-
-		providerAddr, err := sdk.AccAddressFromBech32(payTo)
-		if err != nil {
-			return sdkerrors.ErrInvalidAddress.Wrap("invalid provider address")
-		}
-		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, providerCut))
-		if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, coins); err != nil {
+		if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, providerAddr, sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, providerCut))); err != nil {
 			return fmt.Errorf("failed to pay retrieval fees: %w", err)
 		}
 	}
-
-	session.LockedFee = math.ZeroInt()
-	if sessionID := session.SessionId; len(sessionID) == 32 {
-		_ = k.RetrievalSessionProofProvider.Remove(ctx, sessionID)
+	if err := k.RetrievalSessionProofProvider.Remove(ctx, session.SessionId); err != nil {
+		return err
 	}
+	session.LockedFee = math.ZeroInt()
 	return nil
 }
 

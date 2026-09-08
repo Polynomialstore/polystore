@@ -36,11 +36,17 @@ Run the existing benchmark with `POLYSTORE_BENCH_FIXTURE_NONCONSTANT=1`,
 `-run '^$' -bench 'BenchmarkSubmitRetrievalSessionProof/ffi-verify-only-(1|2|8)$'`
 (or `(1|8|32)`), `-benchtime=3x -benchmem -count=1`.
 The 500,000 gas/proof component is fixed by the binary, not derived at runtime
-from these timings. #260 still owns sustained capacity and native memory work.
+from these timings. The [native allocation probe](../../../../../polystore_core/examples/verifier_allocations.md)
+records sequential Rust heap scratch separately: 2456-byte measured peak,
+54264 cumulative bytes per proof, zero retained bytes for these K8/K2 fixtures.
+#260 still owns whole-process memory and sustained capacity.
 
 Real EVM route tests use this same nonconstant fixture. Three proofs consume
 677,440 static gas plus 1,500,000 prepaid crypto gas. Invalid-first/middle/last
-all charge 2,180,094 total including native reads; success charges 2,204,742
+all charge 2,180,094 total including native reads; success at `7f6b7904` charges 2,213,535
 including native writes. The success budget boundary and one-below boundary
 are checked through `evm.Call`, native store commit, nonce/reward/balance state
-and EVM/SDK events. This is not a receipt/block throughput measurement.
+and EVM/SDK events. These direct-call totals exclude transaction intrinsic gas; the signed app
+regression records 2,291,408 gas for the same three proofs and checks agreement
+between receipt, ABCI result, block meter and account fee. Neither is a
+throughput measurement.

@@ -175,4 +175,8 @@ message Params {
   // Number of blocks provider-bond withdrawals remain pending before claim.
   // 0 preserves immediate withdrawal behavior for local/devnet compatibility.
   uint64 provider_bond_unbonding_blocks = 48;
+  // 0 disables v2. Nonzero schedules a coordinated, irreversible activation.
+  // Do not schedule until #255-#257 integration and #260 qualification pass.
+  uint64 retrieval_v2_activation_height = 49;
+
 }

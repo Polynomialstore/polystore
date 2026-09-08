@@ -92,7 +92,30 @@ func (q queryServer) GetRetrievalSession(goCtx context.Context, req *types.Query
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &types.QueryGetRetrievalSessionResponse{Session: session}, nil
+	response := &types.QueryGetRetrievalSessionResponse{Session: session}
+	if session.ChallengeVersion == 2 {
+		c, err := types.RetrievalChallengeContext(session)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		response.ChallengeContext, err = c.Bytes()
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		hash, err := c.Hash()
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		response.ChallengeContextHash = hash[:]
+		anchor, err := q.k.ChallengeAnchors.Get(ctx, c.Window.Anchor)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if err == nil && len(anchor.Seed) == 32 {
+			response.ChallengeSeed = anchor.Seed
+		}
+	}
+	return response, nil
 }
 
 func (q queryServer) ListRetrievalSessionsByOwner(goCtx context.Context, req *types.QueryListRetrievalSessionsByOwnerRequest) (*types.QueryListRetrievalSessionsByOwnerResponse, error) {
