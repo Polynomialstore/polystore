@@ -177,6 +177,12 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err != nil {
 		return nil, "", err
 	}
+	releaseStage, err := leaseGenerationPaths(stagingDir)
+	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return nil, "", err
+	}
+	defer releaseStage()
 	rollback := true
 	defer func() {
 		if rollback {
@@ -425,10 +431,16 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
+	releaseFinal, err := leasePublishedGeneration(ctx, finalDir)
+	if err != nil {
+		return nil, "", err
+	}
+	defer releaseFinal()
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
 	finalizeStarted := time.Now()
+	releaseStage() // Hand staging ownership to the exclusive publisher.
 	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
 	}
@@ -634,157 +646,7 @@ type limitedReadCloser struct {
 }
 
 func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
-	lockPath := filepath.Join(filepath.Dir(finalDir), "."+filepath.Base(finalDir)+".lock")
-	lockHeld := false
-
-	acquireLock := func() error {
-		// Fast-path: if the slab is already complete, there's nothing to finalize.
-		if mode2DirLooksComplete(finalDir) {
-			mode2EnsureCompleteMarker(finalDir)
-			_ = os.RemoveAll(stagingDir)
-			return nil
-		}
-
-		const attempts = 80
-		for i := 0; i < attempts; i++ {
-			f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-			if err == nil {
-				lockHeld = true
-				_, _ = f.WriteString("pid=" + strconv.Itoa(os.Getpid()) + "\n")
-				_ = f.Close()
-				return nil
-			}
-			if !os.IsExist(err) && !errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("failed to acquire slab lock: %w", err)
-			}
-
-			// Another process is finalizing. If it completes, treat as idempotent.
-			if mode2DirLooksComplete(finalDir) {
-				mode2EnsureCompleteMarker(finalDir)
-				_ = os.RemoveAll(stagingDir)
-				return nil
-			}
-
-			// Best-effort stale lock cleanup: if the lock is old and the directory isn't complete,
-			// remove the lock so progress can continue after crashes.
-			if info, statErr := os.Stat(lockPath); statErr == nil {
-				if age := time.Since(info.ModTime()); age > 2*time.Minute {
-					_ = os.Remove(lockPath)
-				}
-			}
-
-			time.Sleep(25 * time.Millisecond)
-		}
-		return fmt.Errorf("timeout waiting for slab lock %s", lockPath)
-	}
-
-	if err := acquireLock(); err != nil {
-		return err
-	}
-	if lockHeld {
-		defer func() { _ = os.Remove(lockPath) }()
-	}
-
-	if err := os.Rename(stagingDir, finalDir); err != nil {
-		// If another attempt already created/finalized the destination, treat this as
-		// idempotent success and clean up our staging directory.
-		info, statErr := os.Stat(finalDir)
-		if statErr != nil {
-			// Race: destination disappeared after rename error. Retry once.
-			if os.IsNotExist(statErr) {
-				if retryErr := os.Rename(stagingDir, finalDir); retryErr == nil {
-					return nil
-				}
-			}
-			return err
-		}
-
-		if info.IsDir() {
-			if mode2DirLooksComplete(finalDir) {
-				mode2EnsureCompleteMarker(finalDir)
-				_ = os.RemoveAll(stagingDir)
-				return nil
-			}
-
-			// Best-effort: move staged artifacts into the existing directory (overwriting).
-			if mergeErr := mode2MergeStagingIntoFinal(stagingDir, finalDir); mergeErr == nil {
-				mode2EnsureCompleteMarker(finalDir)
-				return nil
-			}
-
-			// Under lock, we can safely replace the incomplete directory with our staged copy.
-			if rmErr := os.RemoveAll(finalDir); rmErr != nil && !os.IsNotExist(rmErr) {
-				return fmt.Errorf("failed to remove incomplete existing slab dir %s: %w", finalDir, rmErr)
-			}
-			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
-				return retryErr
-			}
-			mode2EnsureCompleteMarker(finalDir)
-			return nil
-		}
-
-		// Unexpected: finalDir exists as a file. Best-effort remove and retry.
-		if removeErr := os.Remove(finalDir); removeErr == nil {
-			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
-				return retryErr
-			}
-			return nil
-		}
-
-		return err
-	}
-	return nil
-}
-
-func mode2MergeStagingIntoFinal(stagingDir string, finalDir string) error {
-	entries, err := os.ReadDir(stagingDir)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		src := filepath.Join(stagingDir, name)
-		dst := filepath.Join(finalDir, name)
-
-		if entry.IsDir() {
-			if err := os.MkdirAll(dst, 0o755); err != nil {
-				return err
-			}
-			if err := mode2MergeStagingIntoFinal(src, dst); err != nil {
-				return err
-			}
-			if err := os.RemoveAll(src); err != nil && !os.IsNotExist(err) {
-				return err
-			}
-			continue
-		}
-
-		if err := os.Rename(src, dst); err == nil {
-			continue
-		}
-
-		// Overwrite existing file/dir if present.
-		if rmErr := os.RemoveAll(dst); rmErr != nil && !os.IsNotExist(rmErr) {
-			return rmErr
-		}
-		if err := os.Rename(src, dst); err == nil {
-			continue
-		}
-
-		// Cross-device rename or other edge-case: copy + unlink.
-		if err := copyFile(src, dst); err != nil {
-			return err
-		}
-		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-
-	if err := os.RemoveAll(stagingDir); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
+	return publishImmutableGeneration(stagingDir, finalDir)
 }
 
 func mode2BuildArtifactsAppend(
@@ -812,7 +674,8 @@ func mode2BuildArtifactsAppend(
 	if err != nil {
 		return nil, "", err
 	}
-	oldDir, err := resolveDealDirForDeal(dealID, parsedExisting, existingManifestRoot)
+	oldDir, releaseGeneration, err := openDealGeneration(dealID, parsedExisting, existingManifestRoot)
+	defer releaseGeneration()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to resolve existing slab dir: %w", err)
 	}
@@ -882,6 +745,12 @@ func mode2BuildArtifactsAppend(
 	if err != nil {
 		return nil, "", err
 	}
+	releaseStage, err := leaseGenerationPaths(stagingDir)
+	if err != nil {
+		_ = os.RemoveAll(stagingDir)
+		return nil, "", err
+	}
+	defer releaseStage()
 	rollback := true
 	defer func() {
 		if rollback {
@@ -1225,10 +1094,16 @@ func mode2BuildArtifactsAppend(
 	}
 
 	finalDir := dealScopedDir(dealID, parsedRoot)
+	releaseFinal, err := leasePublishedGeneration(ctx, finalDir)
+	if err != nil {
+		return nil, "", err
+	}
+	defer releaseFinal()
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
 		return nil, "", err
 	}
 	finalizeStarted := time.Now()
+	releaseStage() // Hand staging ownership to the exclusive publisher.
 	if err := mode2FinalizeStagingDir(stagingDir, finalDir); err != nil {
 		return nil, "", err
 	}
@@ -1261,6 +1136,12 @@ func mode2UploadArtifactsToProviders(
 	witnessCount uint64,
 	userMdus uint64,
 ) error {
+	releaseGeneration, leaseErr := leaseGenerationPaths(finalDir)
+	if leaseErr != nil {
+		return leaseErr
+	}
+	defer releaseGeneration()
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -2206,6 +2087,17 @@ func mode2UploadArtifactsToProviders(
 }
 
 func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var releasePublished func()
+	ctx = context.WithValue(ctx, generationPublicationLeaseKey{}, &releasePublished)
+	defer func() {
+		if releasePublished != nil {
+			releasePublished()
+		}
+	}()
+
 	res, finalDir, err := mode2BuildArtifacts(ctx, filePath, dealID, hint, fileRecordPath, fileFlags)
 	if err != nil {
 		return nil, fmt.Errorf("mode2 new-deal build failed: %w", err)
@@ -2217,6 +2109,17 @@ func mode2IngestAndUploadNewDeal(ctx context.Context, filePath string, dealID ui
 }
 
 func mode2IngestAndUploadAppendToDeal(ctx context.Context, filePath string, dealID uint64, hint string, existingManifestRoot string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var releasePublished func()
+	ctx = context.WithValue(ctx, generationPublicationLeaseKey{}, &releasePublished)
+	defer func() {
+		if releasePublished != nil {
+			releasePublished()
+		}
+	}()
+
 	res, finalDir, err := mode2BuildArtifactsAppend(ctx, filePath, dealID, hint, existingManifestRoot, fileRecordPath, fileFlags)
 	if err != nil {
 		return nil, fmt.Errorf("mode2 append build failed: %w", err)

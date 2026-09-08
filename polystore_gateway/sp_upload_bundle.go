@@ -191,18 +191,6 @@ func readSpUploadBundleV2Request(r io.Reader) (spUploadBundleRequest, error) {
 
 func storeBundleArtifact(rootDir string, resolved spUploadBundleResolvedArtifact, src io.Reader, profile *mode2UploadProfile) error {
 	path := filepath.Join(rootDir, resolved.filename)
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
-		n, discardErr := io.Copy(io.Discard, io.LimitReader(src, resolved.sendSize+1))
-		if discardErr != nil {
-			return fmt.Errorf("failed to discard existing artifact body: %w", discardErr)
-		}
-		if n != resolved.sendSize {
-			return newSpUploadBundleBodyError("bundle artifact size mismatch")
-		}
-		profile.addCount("received_body_bytes", uint64(n))
-		profile.addCount("stored_size_bytes", uint64(info.Size()))
-		return nil
-	}
 
 	tmp, err := createTempInUploadRoot(rootDir, filepath.Base(path)+".tmp-*")
 	if err != nil {
@@ -243,12 +231,8 @@ func storeBundleArtifact(rootDir string, resolved spUploadBundleResolvedArtifact
 	profile.addDuration("close_temp_ms", time.Since(closeStarted))
 
 	renameStarted := time.Now()
-	if renameErr := os.Rename(tmpPath, path); renameErr != nil {
+	if renameErr := publishImmutableArtifact(tmpPath, path); renameErr != nil {
 		profile.addDuration("rename_ms", time.Since(renameStarted))
-		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == resolved.fullSize {
-			committed = true
-			return nil
-		}
 		return renameErr
 	}
 	profile.addDuration("rename_ms", time.Since(renameStarted))
@@ -402,6 +386,12 @@ func SpUploadBundle(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("validate_previous_root_ms", time.Since(validatePrevStarted))
 
 	rootDir := dealScopedDir(dealID, parsed)
+	releaseGeneration, err := leaseGenerationPaths(rootDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	defer releaseGeneration()
 	mkdirStarted := time.Now()
 	if err := ensureUploadRootDir(rootDir); err != nil {
 		profile.addDuration("mkdir_all_ms", time.Since(mkdirStarted))

@@ -144,9 +144,9 @@ func serveFrozenRetrievalWindow(w http.ResponseWriter, r *http.Request, root Man
 	defer release()
 	r = r.WithContext(ctx)
 
-	// This resolver will become a lease held through the final write when the
-	// shared generation-retention guard is integrated in this same change.
-	dir, err := resolveDealDirForDeal(c.DealID, root, root.Canonical)
+	// Hold this frozen generation through the final response write.
+	dir, releaseGeneration, err := openFrozenGeneration(c.DealID, root)
+	defer releaseGeneration()
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "retained generation unavailable", err.Error())
 		return

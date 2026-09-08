@@ -87,7 +87,7 @@ func TestSlabMetadataReadWriteRoundTrip(t *testing.T) {
 	}
 }
 
-func TestLoadSlabIndex_FallbackSynthesizesSlabMetadata(t *testing.T) {
+func TestLoadSlabIndex_FallbackPreservesHistoricalMetadata(t *testing.T) {
 	useTempUploadDir(t)
 
 	manifestRoot := mustTestManifestRoot(t, "slab-metadata-fallback")
@@ -132,7 +132,11 @@ func TestLoadSlabIndex_FallbackSynthesizesSlabMetadata(t *testing.T) {
 		t.Fatalf("unexpected file info: %+v", info)
 	}
 
-	meta, err := readSlabMetadataFile(dealDir)
+	raw, err := os.ReadFile(slabMetadataPathForDealDir(dealDir))
+	if err != nil || string(raw) != "{corrupt" {
+		t.Fatal("read rewrote historical metadata", err)
+	}
+	meta, err := loadSlabMetadataWithFallback(dealDir)
 	if err != nil {
 		t.Fatalf("expected synthesized slab metadata file, got error: %v", err)
 	}

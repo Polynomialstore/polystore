@@ -111,7 +111,8 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "provider retrieval requires session-scoped deal context")
 				return
 			}
-			dealDir, err := resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+			dealDir, releaseGeneration, err := openDealGeneration(dealID, manifestRoot, rawManifestRoot)
+			defer releaseGeneration()
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
 					writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
@@ -217,10 +218,16 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -287,7 +294,8 @@ func metaOrNil(dealID uint64, manifestRoot ManifestRoot, rawManifestRoot string)
 }
 
 func readMduSessionWindow(locator dealDirLocator, mduIndex uint64, stripe stripeParams, startBlobIndex uint32, blobCount uint64) ([]byte, error) {
-	dealDir, err := resolveDealDirForDeal(locator.dealID, locator.manifestRoot, locator.rawManifestRoot)
+	dealDir, releaseGeneration, err := openDealGeneration(locator.dealID, locator.manifestRoot, locator.rawManifestRoot)
+	defer releaseGeneration()
 	if err != nil {
 		return nil, err
 	}
@@ -483,10 +491,16 @@ func GatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -621,10 +635,16 @@ func GatewayMduKzg(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var dealDir string
+	var releaseGeneration func()
+	defer func() {
+		if releaseGeneration != nil {
+			releaseGeneration()
+		}
+	}()
 	if hasDealQuery {
-		dealDir, err = resolveDealDirForDeal(dealID, manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
 	} else {
-		dealDir, err = resolveDealDir(manifestRoot, rawManifestRoot)
+		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

@@ -120,17 +120,6 @@ func loadSlabIndex(dealDir string) (*slabIndexEntry, error) {
 		return nil, err
 	}
 
-	if fallbackMeta, err := newSlabMetadataDocument(slabMetadataBuildOptions{
-		GenerationID: inferGenerationIDForDealDir(dealDir),
-		DealID:       inferDealIDFromDealDir(dealDir),
-		ManifestRoot: inferManifestRootForDealDir(dealDir),
-		Source:       "gateway_fallback_mdu0",
-		WitnessMdus:  &witnessCount,
-		FileRecords:  records,
-	}); err == nil {
-		_ = writeSlabMetadataFile(dealDir, fallbackMeta)
-	}
-
 	entry := &slabIndexEntry{
 		indexModTime: mdu0Mod,
 		indexSource:  "mdu0",

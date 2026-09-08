@@ -134,7 +134,7 @@ func TestResolveDealDirForDealRejectsIncompleteGeneration(t *testing.T) {
 	}
 }
 
-func TestCleanupInterruptedDealGenerationsRemovesStagingAndStaleLocks(t *testing.T) {
+func TestCleanupInterruptedDealGenerationsPreservesUnownedStagingAndLocks(t *testing.T) {
 	useTempUploadDir(t)
 	dealID := uint64(77)
 	baseDir := dealScopedBaseDir(dealID)
@@ -162,11 +162,11 @@ func TestCleanupInterruptedDealGenerationsRemovesStagingAndStaleLocks(t *testing
 
 	cleanupInterruptedDealGenerations(dealID)
 
-	if _, err := os.Stat(stagingDir); !os.IsNotExist(err) {
-		t.Fatalf("expected staging dir removed, stat err=%v", err)
+	if _, err := os.Stat(stagingDir); err != nil {
+		t.Fatalf("unowned staging must survive startup, stat err=%v", err)
 	}
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
-		t.Fatalf("expected stale lock removed, stat err=%v", err)
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("age cannot prove a lock abandoned, stat err=%v", err)
 	}
 }
 
@@ -209,6 +209,8 @@ func TestCleanupInterruptedDealGenerations_RemovesExpiredProvisionalGeneration(t
 		t.Fatalf("rewrite metadata: %v", err)
 	}
 
+	useRetentionAuthority(t, dealID, mustTestManifestRoot(t, "current-other-root"))
+
 	cleanupInterruptedDealGenerations(dealID)
 
 	if _, err := os.Stat(dealDir); !os.IsNotExist(err) {
@@ -241,7 +243,7 @@ func TestCleanupInterruptedDealGenerations_DisabledRetentionKeepsExpiredProvisio
 	}
 }
 
-func TestResolveDealDirForDealReconcilesPointerToRequestedGeneration(t *testing.T) {
+func TestResolveDealDirForDealPreservesPointerDuringHistoricalLookup(t *testing.T) {
 	useTempUploadDir(t)
 	dealID := uint64(91)
 	oldRoot := mustTestManifestRoot(t, "old-generation")
@@ -264,8 +266,8 @@ func TestResolveDealDirForDealReconcilesPointerToRequestedGeneration(t *testing.
 	if err != nil {
 		t.Fatalf("read pointer after reconcile: %v", err)
 	}
-	if active.Key != newRoot.Key {
-		t.Fatalf("active pointer mismatch after reconcile: got=%s want=%s", active.Key, newRoot.Key)
+	if active.Key != oldRoot.Key {
+		t.Fatalf("active pointer mismatch after reconcile: got=%s want=%s", active.Key, oldRoot.Key)
 	}
 }
 
@@ -282,6 +284,8 @@ func TestCleanupStaleDealGenerations_PromotesCommittedGenerationAndRemovesOld(t 
 		t.Fatalf("write old pointer: %v", err)
 	}
 
+	useRetentionAuthority(t, dealID, newRoot)
+
 	cleanupStaleDealGenerations(dealID, newRoot)
 
 	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
@@ -289,13 +293,6 @@ func TestCleanupStaleDealGenerations_PromotesCommittedGenerationAndRemovesOld(t 
 	}
 	if info, err := os.Stat(newDir); err != nil || !info.IsDir() {
 		t.Fatalf("expected new generation to remain, stat err=%v", err)
-	}
-	meta, err := readSlabMetadataFile(newDir)
-	if err != nil {
-		t.Fatalf("read promoted slab metadata: %v", err)
-	}
-	if meta.GenerationState != slabGenerationStateActive {
-		t.Fatalf("expected promoted generation state active, got=%q", meta.GenerationState)
 	}
 	active, err := readActiveDealGeneration(dealID)
 	if err != nil {

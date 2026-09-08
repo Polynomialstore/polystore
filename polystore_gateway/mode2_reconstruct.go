@@ -68,6 +68,12 @@ func resetMode2ReconstructStatsForTest() {
 }
 
 func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot ManifestRoot, mduIndex uint64, dealDir string, stripe stripeParams, sessionID string) (string, error) {
+	releaseGeneration, leaseErr := leaseGenerationPaths(dealDir)
+	if leaseErr != nil {
+		return "", leaseErr
+	}
+	defer releaseGeneration()
+
 	path := filepath.Join(dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
@@ -287,6 +293,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	if err != nil {
 		return "", err
 	}
+	defer os.Remove(tmp.Name())
 	if _, err := tmp.Write(mduBytes); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
@@ -296,7 +303,7 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		os.Remove(tmp.Name())
 		return "", err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := publishImmutableArtifact(tmp.Name(), path); err != nil {
 		return "", err
 	}
 	return path, nil

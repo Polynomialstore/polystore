@@ -951,6 +951,12 @@ func mustParseBigIntHex(raw string) *big.Int {
 }
 
 func generateSystemChainedProof(ctx context.Context, epochSeed [32]byte, dealID uint64, dealDir string, mdu0Path string, stripe stripeParams, mduIndex uint64, blobIndex uint32) (*types.ChainedProof, error) {
+	releaseGeneration, leaseErr := leaseGenerationPaths(dealDir)
+	if leaseErr != nil {
+		return nil, leaseErr
+	}
+	defer releaseGeneration()
+
 	mdu0Bytes, err := os.ReadFile(mdu0Path)
 	if err != nil {
 		return nil, err
