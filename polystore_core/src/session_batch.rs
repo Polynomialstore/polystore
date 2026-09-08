@@ -161,7 +161,13 @@ fn checked_msm(points: &[G1Affine], scalars: &[Scalar]) -> Result<G1Projective, 
     if points.len() != scalars.len() || points.len() > 4 * SESSION_BATCH_MAX_PROOFS {
         return Err(invalid());
     }
-    Ok(msm_pippenger_g1(points, scalars))
+    // Consensus verification uses a bounded deterministic window. The legacy
+    // producer's mutable performance override must not influence this call.
+    Ok(msm_pippenger_g1_with_window(
+        points,
+        scalars,
+        default_pippenger_window_size(points.len()),
+    ))
 }
 
 impl KzgContext {
@@ -349,78 +355,136 @@ mod tests {
             .unwrap()
         })
     }
-    fn fixture(count: usize) -> Vec<u8> {
-        static RECORDS: OnceLock<([u8; 32], Vec<Vec<u8>>)> = OnceLock::new();
-        let (root, records) = RECORDS.get_or_init(|| {
-            let ctx = context();
-            let blobs: Vec<_> = (0..64u8)
-                .map(|i| {
-                    let mut b = vec![0; BLOB_SIZE];
-                    b[31] = i + 1;
-                    b[63] = i + 2;
-                    b
-                })
-                .collect();
-            let mut commitments: Vec<_> = blobs
-                .iter()
-                .map(|b| ctx.commit_received_blob(b).unwrap())
-                .collect();
-            commitments.resize(96, G1Affine::identity().to_compressed());
-            let hashes: Vec<_> = commitments
-                .iter()
-                .map(|c| Blake2s256Hasher::hash(c))
-                .collect();
-            let tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&hashes);
-            let mdu_root = tree.root().unwrap();
-            let mut root_blob = vec![0; BLOB_SIZE];
-            root_blob[..32].copy_from_slice(&encode_mdu_root_for_root_table(&mdu_root).unwrap());
-            let root_commitment = ctx.commit_received_blob(&root_blob).unwrap();
-            let (root_proof, _) = ctx
-                .compute_proof(&root_blob, &crate::utils::z_for_cell(0))
-                .unwrap();
-            let mut root_commitments = vec![G1Affine::identity().to_compressed(); 64];
-            root_commitments[1] = root_commitment;
-            let root_hashes: Vec<_> = root_commitments
-                .iter()
-                .map(|c| Blake2s256Hasher::hash(c))
-                .collect();
-            let root_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&root_hashes);
-            let root_path = root_tree.proof(&[1]).to_bytes();
-            let mut records = Vec::new();
-            for i in 0..64 {
-                let z = derive_z(&[17; 32], &[29; 32], i as u64, 4097, i as u32).unwrap();
-                let (proof, y) = ctx.compute_proof(&blobs[i], &z).unwrap();
-                assert!(ctx.verify_proof(&commitments[i], &z, &y, &proof).unwrap());
-                let blob_path = tree.proof(&[i]).to_bytes();
-                let mut record = Vec::new();
-                record.extend(4097u64.to_be_bytes());
-                record.extend((i as u32).to_be_bytes());
-                record.extend(mdu_root);
-                record.extend(root_commitment);
-                record.extend(root_proof);
-                record.extend(commitments[i]);
-                record.extend(z);
-                record.extend(y);
-                record.extend(proof);
-                record.extend(6u16.to_be_bytes());
-                record.extend((blob_path.len() as u16 / 32).to_be_bytes());
-                record.extend(&root_path);
-                record.extend(blob_path);
-                records.push(record);
-            }
-            (root_tree.root().unwrap(), records)
-        });
+    fn fixture_records(
+        leaves: usize,
+        mdu: u64,
+        first: usize,
+        count: usize,
+    ) -> ([u8; 32], Vec<Vec<u8>>) {
+        assert!(first + count <= leaves && count <= 64);
+        let ctx = context();
+        let position = root_table_position_for_mdu_index(mdu).unwrap();
+        let blobs: Vec<_> = (0..count)
+            .map(|i| {
+                let mut b = vec![0; BLOB_SIZE];
+                b[31] = i as u8 + 1;
+                b[63] = i as u8 + 2;
+                b
+            })
+            .collect();
+        let mut commitments = vec![G1Affine::identity().to_compressed(); leaves];
+        for (i, blob) in blobs.iter().enumerate() {
+            commitments[first + i] = ctx.commit_received_blob(blob).unwrap();
+        }
+        let hashes: Vec<_> = commitments
+            .iter()
+            .map(|c| Blake2s256Hasher::hash(c))
+            .collect();
+        let tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&hashes);
+        let mdu_root = tree.root().unwrap();
+        let mut root_blob = vec![0; BLOB_SIZE];
+        let offset = position.root_table_cell * 32;
+        root_blob[offset..offset + 32]
+            .copy_from_slice(&encode_mdu_root_for_root_table(&mdu_root).unwrap());
+        let root_commitment = ctx.commit_received_blob(&root_blob).unwrap();
+        let (root_proof, _) = ctx
+            .compute_proof(
+                &root_blob,
+                &crate::utils::z_for_cell(position.root_table_cell),
+            )
+            .unwrap();
+        let mut root_commitments = vec![G1Affine::identity().to_compressed(); 64];
+        root_commitments[position.root_table_du] = root_commitment;
+        let root_hashes: Vec<_> = root_commitments
+            .iter()
+            .map(|c| Blake2s256Hasher::hash(c))
+            .collect();
+        let root_tree = MerkleTree::<Blake2s256Hasher>::from_leaves(&root_hashes);
+        let root_path = root_tree.proof(&[position.root_table_du]).to_bytes();
+        let mut records = Vec::new();
+        for (i, blob) in blobs.iter().enumerate() {
+            let leaf = first + i;
+            let z = derive_z(&[17; 32], &[29; 32], i as u64, mdu, leaf as u32).unwrap();
+            let (proof, y) = ctx.compute_proof(blob, &z).unwrap();
+            assert!(
+                ctx.verify_proof(&commitments[leaf], &z, &y, &proof)
+                    .unwrap()
+            );
+            let blob_path = tree.proof(&[leaf]).to_bytes();
+            let mut record = Vec::new();
+            record.extend(mdu.to_be_bytes());
+            record.extend((leaf as u32).to_be_bytes());
+            record.extend(mdu_root);
+            record.extend(root_commitment);
+            record.extend(root_proof);
+            record.extend(commitments[leaf]);
+            record.extend(z);
+            record.extend(y);
+            record.extend(proof);
+            record.extend(6u16.to_be_bytes());
+            record.extend((blob_path.len() as u16 / 32).to_be_bytes());
+            record.extend(&root_path);
+            record.extend(blob_path);
+            records.push(record);
+        }
+        (root_tree.root().unwrap(), records)
+    }
+
+    fn encode_fixture(leaves: usize, root: &[u8; 32], records: &[Vec<u8>]) -> Vec<u8> {
         let mut input = Vec::new();
         input.extend(b"PSB1");
-        input.extend((count as u16).to_be_bytes());
-        input.extend(96u32.to_be_bytes());
+        input.extend((records.len() as u16).to_be_bytes());
+        input.extend((leaves as u32).to_be_bytes());
         input.extend(root);
         input.extend([17; 32]);
         input.extend([29; 32]);
-        for record in &records[..count] {
+        for record in records {
             input.extend(record);
         }
         input
+    }
+
+    fn fixture(count: usize) -> Vec<u8> {
+        static RECORDS: OnceLock<([u8; 32], Vec<Vec<u8>>)> = OnceLock::new();
+        let (root, records) = RECORDS.get_or_init(|| fixture_records(96, 4097, 0, 64));
+        encode_fixture(96, root, &records[..count])
+    }
+
+    #[test]
+    fn nonconstant_merkle_geometry_and_variable_depth_boundaries() {
+        for (leaves, first, count, mdu) in [
+            (64, 63, 1, 1),
+            (96, 63, 2, 4096),
+            (96, 95, 1, 4097),
+            (128, 127, 1, 65536),
+            (16384, 16382, 2, 65536),
+        ] {
+            let (root, records) = fixture_records(leaves, mdu, first, count);
+            let input = encode_fixture(leaves, &root, &records);
+            assert!(context().verify_polyfs_session_batch(&input).unwrap());
+            let batch = Batch::parse(&input).unwrap();
+            for record in batch.records {
+                // Distinct real nonconstant commitments detect a changed leaf even
+                // independently of the C2 z check in the complete batch API.
+                let wrong = (record.leaf as usize + 1) % leaves;
+                assert!(
+                    !KzgContext::verify_mdu_merkle_proof(
+                        &record.root,
+                        &record.commitment,
+                        wrong,
+                        record.blob_path,
+                        leaves
+                    )
+                    .unwrap_or(false)
+                );
+            }
+        }
+        // The maximum transport is accepted structurally before cryptography;
+        // point/commitment validity is separately tested above and by the 64 list.
+        let (root, records) = fixture_records(16384, 1, 0, 1);
+        let input = encode_fixture(16384, &root, &vec![records[0].clone(); 64]);
+        assert_eq!(input.len(), SESSION_BATCH_MAX_BYTES);
+        assert_eq!(Batch::parse(&input).unwrap().records.len(), 64);
     }
 
     #[test]
@@ -428,6 +492,16 @@ mod tests {
         let ctx = context();
         for count in [1, 2, 8, 32, 64] {
             assert!(ctx.verify_polyfs_session_batch(&fixture(count)).unwrap());
+        }
+        let eight = fixture(8);
+        let width = (eight.len() - HEADER_BYTES) / 8;
+        for index in [0, 4, 7] {
+            let mut invalid = eight.clone();
+            invalid[HEADER_BYTES + index * width + 220 + 31] ^= 1;
+            assert!(
+                !ctx.verify_polyfs_session_batch(&invalid).unwrap(),
+                "invalid proof {index}"
+            );
         }
         let input = fixture(2);
         // Every wire field/path and a suffix is covered by parsing or verification.
@@ -586,6 +660,13 @@ mod tests {
             })
             .collect();
         std::fs::write(std::path::Path::new(&dir).join("batch-input.bin"), input).unwrap();
+        for count in [1, 2, 8, 32, 64] {
+            std::fs::write(
+                std::path::Path::new(&dir).join(format!("batch-input-{count}.bin")),
+                fixture(count),
+            )
+            .unwrap();
+        }
         std::fs::write(std::path::Path::new(&dir).join("rust-batch-observed.json"), serde_json::to_vec_pretty(&serde_json::json!({"transcript_hex":hex::encode(transcript),"hash":hex::encode(hash),"coefficients":coefficients})).unwrap()).unwrap();
     }
 }

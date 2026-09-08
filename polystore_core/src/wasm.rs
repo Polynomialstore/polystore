@@ -77,7 +77,17 @@ impl PolyStoreWasm {
         Ok(Uint8Array::from(commitment.as_slice()))
     }
 
-    pub fn validate_packed_payload(encoded: &[u8], raw_len: u32) -> Result<(), JsValue> {
+    pub fn validate_packed_payload(encoded: &[u8], raw_len: f64) -> Result<(), JsValue> {
+        // wasm-bindgen's integer argument coercion would wrap/truncate JS numbers.
+        if !raw_len.is_finite()
+            || raw_len < 0.0
+            || raw_len.fract() != 0.0
+            || raw_len > crate::coding::MDU_PAYLOAD_BYTES as f64
+        {
+            return Err(JsValue::from_str(
+                "Raw length must be a bounded nonnegative integer",
+            ));
+        }
         crate::coding::validate_packed_payload(encoded, raw_len as usize)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }

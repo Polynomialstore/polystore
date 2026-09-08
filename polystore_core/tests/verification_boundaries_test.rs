@@ -151,3 +151,36 @@ fn independent_root_table_coordinate_and_scalar_vectors() {
         );
     }
 }
+
+#[test]
+fn session_verification_ignores_producer_msm_override() {
+    // Global producer tuning is intentionally tested in a separate process so
+    // this regression cannot perturb unrelated parallel prover tests.
+    if std::env::var_os("POLYSTORE_MSM_OVERRIDE_CHILD").is_none() {
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "session_verification_ignores_producer_msm_override",
+                "--nocapture",
+            ])
+            .env("POLYSTORE_MSM_OVERRIDE_CHILD", "1")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        return;
+    }
+    let ctx = KzgContext::load_from_reader(setup().as_slice()).unwrap();
+    let input = include_bytes!("testdata/session-batch-input.bin");
+    let mut invalid = input.to_vec();
+    invalid[106 + 220 + 31] ^= 1;
+    for bits in [0, 1, 12, usize::MAX] {
+        polystore_core::kzg::set_pippenger_window_override(Some(bits));
+        assert!(ctx.verify_polyfs_session_batch(input).unwrap());
+        assert!(!ctx.verify_polyfs_session_batch(&invalid).unwrap());
+    }
+}

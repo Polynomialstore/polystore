@@ -1063,6 +1063,10 @@ fn pippenger_window_size(n: usize) -> usize {
     if override_bits > 0 {
         return override_bits;
     }
+    default_pippenger_window_size(n)
+}
+
+fn default_pippenger_window_size(n: usize) -> usize {
     match n {
         0..=32 => 3,
         33..=64 => 4,
@@ -1262,6 +1266,14 @@ fn msm_pippenger_g1_projective_profiled_wasm(
 }
 
 fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
+    msm_pippenger_g1_with_window(points, scalars, pippenger_window_size(points.len()))
+}
+
+fn msm_pippenger_g1_with_window(
+    points: &[G1Affine],
+    scalars: &[Scalar],
+    window_bits: usize,
+) -> G1Projective {
     debug_assert_eq!(points.len(), scalars.len());
 
     let n = points.len().min(scalars.len());
@@ -1271,7 +1283,6 @@ fn msm_pippenger_g1(points: &[G1Affine], scalars: &[Scalar]) -> G1Projective {
     let points = &points[..n];
     let scalars = &scalars[..n];
 
-    let window_bits = pippenger_window_size(points.len());
     let buckets_len = 1usize << window_bits;
     let windows = (256 + window_bits - 1) / window_bits;
 

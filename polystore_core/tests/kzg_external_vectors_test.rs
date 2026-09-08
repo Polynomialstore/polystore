@@ -79,6 +79,13 @@ fn ethereum_nonconstant_commitment_and_prover_vectors() {
     assert_ne!(blob, ethereum_blob.as_slice());
     let commitment = ctx.blob_to_commitment(&blob).unwrap();
     assert_eq!(hex::encode(commitment), vectors.commitment[2..]);
+    assert_eq!(ctx.commit_received_blob(&blob).unwrap(), commitment);
+    let mut wrong_received = blob.clone();
+    wrong_received[31] ^= 1; // Different canonical bytes, while the old public proof remains valid.
+    assert_ne!(
+        ctx.commit_received_blob(&wrong_received).unwrap(),
+        commitment
+    );
     assert_eq!(vectors.cases.len(), 6);
     for case in vectors.cases {
         let z = hex::decode(&case.z[2..]).unwrap();
