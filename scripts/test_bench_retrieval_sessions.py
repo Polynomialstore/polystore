@@ -807,6 +807,8 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
         report = self.run_operations([self.operation("bad", scenario="bad-open")])
         self.assertEqual(self.built, [])
         self.assertEqual(len(self.rows("transactions")), 1)
+        empty = next(row for row in self.rows("operations") if row["inventory_depleted"])
+        self.assertEqual((empty["outcome"], empty["error"]), ("not_submitted", "inventory_depleted"))
         self.assertEqual(self.rows("transactions")[0]["outcome"], "committed_success")
         self.assertIn("stage_response_invalid", self.rows("operations")[0]["error"])
         self.assertEqual(report["quarantined_signers"], [])
@@ -964,6 +966,212 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
              patch.object(ledger, "prepare_session_proof") as build:
             self.assertEqual(artifact.execute_scheduled_transaction(proof)["outcome"], "not_submitted")
         build.assert_not_called()
+
+
+class PreparedRetrievalProofTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.index = 0
+        self.submitted, self.reads = [], []
+
+    def operation(self, identity="one", *, prepared=True):
+        # Reuse the producer's maintained golden-backed context fixture.
+        from test_retrieval_fresh_proof import fixture_view
+        import retrieval_fresh_proof as producer
+        view, expected, old_sid = fixture_view()
+        context, _ = producer.frozen_context(view, expected, old_sid, 102)
+        sid = hashlib.sha256(identity.encode()).hexdigest()
+        context["context_id"] = sid
+        view["session"]["session_id"] = base64.b64encode(bytes.fromhex(sid)).decode()
+        raw = producer.context_bytes(context)
+        view.update(challenge_context=base64.b64encode(raw).decode(),
+                    challenge_context_hash=base64.b64encode(hashlib.sha256(raw).digest()).decode())
+        seed = base64.b64decode(view["challenge_seed"])
+        evidence = dict(height=102, view=view, anchor=dict(block_id=dict(hash=seed.hex()),
+            block=dict(header=dict(height="101", chain_id=expected["snapshot"]["chain_id"]))))
+        payload = dict(session_id=view["session"]["session_id"], proofs=[dict(mdu_index="2", blob_index=i,
+            z_value=base64.b64encode(producer.fresh_z(hashlib.sha256(raw).digest(), seed, i, 2, i)).decode()) for i in range(3)])
+        path = self.root / (identity + ".json")
+        path.write_text(json.dumps(payload))
+        job = dict(signer=expected["session"]["authorized_proof_provider"], timeout_seconds=1,
+                   query=["/chain", "query", "tx"], submit=["/chain", "tx", "nilchain", "submit-retrieval-proof", str(path),
+                   "--from", expected["session"]["authorized_proof_provider"]])
+        return dict(operation_id=identity, phase="measurement", offered_offset_ns=0,
+                    **{"submit-proof": job}, proof_expectation=expected,
+                    prepared=dict(session_id=sid, proof_path=str(path), proof_sha256=artifact.sha256(path), evidence=evidence) if prepared else None)
+
+    def read(self, operation, sid, height, deadline):
+        self.assertGreater(deadline, artifact.monotonic_ns())
+        self.reads.append((sid, height, deadline))
+        value = copy.deepcopy(operation["prepared"]["evidence"])
+        value["height"] = height if height is not None else 103
+        if height is not None:
+            value["view"]["session"].update(status="RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED", updated_height=str(height))
+        return value
+
+    def submit(self, job):
+        self.submitted.append(job)
+        return dict(outcome="committed_success", code=0, height=104,
+                    txhash=hashlib.sha256(job["id"].encode()).hexdigest())
+
+    def run_operations(self, operations, reader=None, **options):
+        self.index += 1
+        self.journal = self.root / f"run{self.index}.sqlite"
+        return artifact.schedule_retrieval_lifecycles(iter(operations), journal_path=self.journal,
+            signers=["nil1qgpqyqszqgpqyqszqgpqyqszqgpqyqszuyxhqs"],
+            mode="prepared-proof-only", read_session_evidence=reader or self.read,
+            **dict(max_in_flight=2, max_queued=4, max_queued_per_signer=4, **options))
+
+    def rows(self, table):
+        with sqlite3.connect(self.journal) as db:
+            return [json.loads(row[0]) for row in db.execute(f"SELECT result FROM {table}")]
+
+    def test_proof_state_is_separate_from_completion_and_depletion_is_not_a_transaction(self):
+        with patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
+            report = self.run_operations([self.operation(), self.operation("empty", prepared=False)])
+        self.assertEqual(report["proof_submitted"], 1)
+        self.assertEqual(report["completed_sessions"], 0)
+        self.assertEqual(report["inventory_depleted"], 1)
+        self.assertTrue(report["source_exhausted"])
+        self.assertFalse(report["qualification"])
+        self.assertEqual(report["phases"]["measurement"]["offered_operations"], 2)
+        self.assertEqual(report["phases"]["measurement"]["offered"], 1)
+        self.assertEqual(len(self.rows("transactions")), 1)
+        self.assertEqual([job["kind"] for job in self.submitted], ["submit-proof"])
+        row = self.rows("transactions")[0]
+        self.assertTrue(row["proof_state_verified"])
+        self.assertEqual(row["post_submission_evidence"]["height"], 104)
+        self.assertIn("native proof generation", report["preparation_excluded"])
+        self.assertEqual([height for _, height, _ in self.reads], [None, 104])
+
+    def test_invalid_preparation_never_reaches_submission(self):
+        for fault in ("status", "anchor", "context", "seed", "expiry", "digest", "path", "signer", "confirm"):
+            op = self.operation(fault)
+            prepared = op["prepared"]
+            view = prepared["evidence"]["view"]
+            if fault == "status": view["session"]["status"] = 3
+            elif fault == "anchor": prepared["evidence"]["anchor"]["block"]["header"]["height"] = "100"
+            elif fault == "context": view["challenge_context_hash"] = base64.b64encode(bytes(32)).decode()
+            elif fault == "seed": view["challenge_seed"] = base64.b64encode(bytes(32)).decode()
+            elif fault == "expiry": prepared["evidence"]["height"] = 151
+            elif fault == "digest": prepared["proof_sha256"] = "00" * 32
+            elif fault == "path": op["submit-proof"]["submit"][4] = "/other.json"
+            elif fault == "signer": view["session"]["authorized_proof_provider"] = view["session"]["owner"]
+            elif fault == "confirm": op["confirm"] = {}
+            with self.subTest(fault=fault), patch.object(artifact, "scheduled_transaction") as submit:
+                with self.assertRaises(ValueError):
+                    self.run_operations([op])
+                submit.assert_not_called()
+
+    def test_expired_changed_or_corrupted_prepared_inventory_never_broadcasts(self):
+        for fault in ("expired", "changed", "corrupted", "deadline"):
+            op = self.operation(fault)
+            def reader(operation, sid, height, deadline):
+                value = self.read(operation, sid, height, deadline)
+                if fault == "expired": value["height"] = 151
+                elif fault == "changed": value["view"]["session"]["locked_fee"] = "52"
+                elif fault == "corrupted": Path(operation["prepared"]["proof_path"]).write_text("{}")
+                elif fault == "deadline": raise TimeoutError("owned read deadline")
+                return value
+            with self.subTest(fault=fault), patch.object(artifact, "scheduled_transaction") as submit:
+                report = self.run_operations([op], reader)
+                submit.assert_not_called()
+                self.assertEqual(report["proof_submitted"], 0)
+                self.assertEqual(self.rows("transactions")[0]["outcome"], "not_submitted")
+
+    def test_committed_hash_does_not_substitute_for_pinned_proof_state(self):
+        for fault in ("missing", "height", "status", "completed", "payee", "fee", "context", "anchor"):
+            op = self.operation(fault)
+            def reader(operation, sid, height, deadline):
+                value = self.read(operation, sid, height, deadline)
+                if height is not None:
+                    s = value["view"]["session"]
+                    if fault == "missing": raise ValueError("unavailable pinned state")
+                    elif fault == "height": value["height"] += 1
+                    elif fault == "status": s["status"] = 1
+                    elif fault == "completed": s["status"] = 4
+                    elif fault == "payee": s["authorized_proof_provider"] = s["owner"]
+                    elif fault == "fee": s["locked_fee"] = "0"
+                    elif fault == "context": value["view"]["challenge_context_hash"] = "bad"
+                    elif fault == "anchor": value["anchor"]["block_id"]["hash"] = "00" * 32
+                return value
+            with self.subTest(fault=fault), patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
+                report = self.run_operations([op], reader)
+                self.assertEqual(report["proof_submitted"], 0)
+                row = self.rows("transactions")[0]
+                self.assertEqual(row["outcome"], "committed_success")
+                self.assertFalse(row["proof_state_verified"])
+                self.assertTrue(row["state_evidence_error"])
+
+    def test_rejection_unknown_and_duplicate_session_are_not_proof_success(self):
+        for outcome in ("checktx_rejected", "unknown", "committed_failure"):
+            with patch.object(artifact, "scheduled_transaction", return_value=dict(outcome=outcome, txhash="AB" * 32)):
+                report = self.run_operations([self.operation(outcome)])
+                self.assertEqual(report["proof_submitted"], 0)
+                self.assertEqual(len(self.reads), 1)
+                self.reads.clear()
+        op = self.operation("duplicate")
+        other = copy.deepcopy(op)
+        other["operation_id"] = "duplicate-new-operation"
+        with patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
+            with self.assertRaises(sqlite3.IntegrityError):
+                self.run_operations([op, other])
+        self.assertEqual(len(self.rows("transactions")), 1)
+
+    def test_one_signer_lane_and_inventory_states_remain_bounded(self):
+        lock = threading.Lock()
+        active, peak = 0, 0
+        def submit(job):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(.005)
+            result = self.submit(job)
+            with lock: active -= 1
+            return result
+        with patch.object(artifact, "scheduled_transaction", side_effect=submit):
+            report = self.run_operations((self.operation(str(i)) for i in range(30)))
+        self.assertEqual(peak, 1)
+        self.assertLessEqual(report["peak_retained_operation_states"], 7)
+        self.assertIsNone(report["transactions"])
+        self.assertIsNone(report["operations"])
+
+    def test_prepared_state_reads_and_submission_share_run_deadline(self):
+        op = self.operation()
+        op["submit-proof"]["_deadline_ns"] = 500_000_000
+        now, deadlines = [0], []
+        def reader(operation, sid, height, deadline):
+            deadlines.append(deadline)
+            value = copy.deepcopy(operation["prepared"]["evidence"])
+            value["height"] = 104 if height is not None else 103
+            if height is not None:
+                value["view"]["session"].update(status=2, updated_height="104")
+            now[0] += 100_000_000
+            return value
+        ledger = artifact.RetrievalLifecycleJournal(self.root / "direct.sqlite",
+            [op["submit-proof"]["signer"]], None, mode="prepared-proof-only", read_session_evidence=reader)
+        self.addCleanup(ledger.db.close)
+        job = ledger.initial(op)
+        def submit(command):
+            deadlines.append(command["_deadline_ns"])
+            now[0] += 100_000_000
+            return self.submit(command)
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+             patch.object(artifact, "scheduled_transaction", side_effect=submit):
+            result = artifact.execute_scheduled_transaction(job)
+        self.assertTrue(result["proof_state_verified"])
+        self.assertEqual(deadlines, [500_000_000] * 3)
+        self.assertEqual(result["prepared_validation_latency_ns"], 100_000_000)
+        now[0] = 600_000_000
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+             patch.object(ledger, "read_session_evidence") as read, \
+             patch.object(artifact, "scheduled_transaction") as broadcast:
+            self.assertEqual(artifact.execute_scheduled_transaction(job)["outcome"], "not_submitted")
+        read.assert_not_called()
+        broadcast.assert_not_called()
 
 
 class FourValidatorLifecycleTest(unittest.TestCase):
