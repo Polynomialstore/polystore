@@ -8,7 +8,7 @@ import {
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
-import { providerFetchRetrievalWindow, providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
+import { gatewayFetchRetrievalWindow, providerFetchRetrievalWindow, providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
 import { appConfig } from '../config'
 import { useTransportContext } from '../context/TransportContext'
 import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
@@ -647,7 +647,7 @@ export function useTransportRouter() {
       return bytes
     }
     if (!appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()) {
-      candidates.push({ backend: 'gateway', endpoint: appConfig.gatewayBase, execute: (signal) => verify((s) => providerFetchRetrievalWindow(appConfig.gatewayBase, req.session, s), signal) })
+      candidates.push({ backend: 'gateway', endpoint: appConfig.gatewayBase, execute: (signal) => verify((s) => gatewayFetchRetrievalWindow(appConfig.gatewayBase, req.session, s), signal) })
     }
     if (req.directBase && allowNonGatewayBackends(effectivePreference)) candidates.push({ backend: 'direct_sp', endpoint: req.directBase, execute: (signal) => verify((s) => providerFetchRetrievalWindow(req.directBase!, req.session, s), signal) })
     if (req.p2pTarget && appConfig.p2pEnabled && allowNonGatewayBackends(effectivePreference)) candidates.push({ backend: 'libp2p', endpoint: req.p2pTarget.multiaddr, execute: (signal) => verify((s) => libp2pFetchRetrievalWindow(req.p2pTarget!.multiaddr, req.session, s), signal) })

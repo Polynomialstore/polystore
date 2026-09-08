@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
-import { providerFetchRetrievalMetadata } from '../api/providerClient'
+import { gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
@@ -20,11 +20,9 @@ export interface FetchInput {
   owner: string
   filePath: string
   /**
-   * Base URL for the service hosting `/gateway/*` retrieval endpoints.
-   * Defaults to `appConfig.gatewayBase`.
-   *
-   * In thick-client flows, this often needs to point at the Storage Provider (`appConfig.spBase`)
-   * because the local gateway may not have the slab on disk.
+   * Optional provider HTTP base for metadata and direct retries.
+   * The configured `appConfig.gatewayBase` uses `/gateway/*` relay routes;
+   * other bases use provider routes. Every response is verified locally.
    */
   serviceBase?: string
   rangeStart?: number
@@ -136,12 +134,16 @@ export function useFetch() {
         if (!endpoints.has(provider)) endpoints.set(provider, await resolveProviderEndpointByAddress(appConfig.lcdBase, provider))
         return endpoints.get(provider)
       }
-      const bases = new Set([input.serviceBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
+      const bases = new Set([input.serviceBase, appConfig.gatewayDisabled ? undefined : appConfig.gatewayBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
       for (const assignment of pin.assignments) { const e = await endpoint(assignment.provider); if (e?.baseUrl) bases.add(e.baseUrl); if (bases.size >= 4) break }
+      const fetchMetadata = (base: string, index: bigint) => {
+        const get = base.replace(/\/$/, '') === appConfig.gatewayBase.replace(/\/$/, '') ? gatewayFetchRetrievalMetadata : providerFetchRetrievalMetadata
+        return get(base, pin, index, signal)
+      }
       let mdu0: Uint8Array | undefined
       let records: Awaited<ReturnType<typeof workerClient.verifyRetrievalMetadata>> | undefined, lastError: unknown
       for (const base of bases) {
-        try { const bytes = await providerFetchRetrievalMetadata(base, pin, 0n, signal); records = await workerClient.verifyRetrievalMetadata(bytes, pin); mdu0 = bytes; break } catch (error) { signal.throwIfAborted(); lastError = error }
+        try { const bytes = await fetchMetadata(base, 0n); records = await workerClient.verifyRetrievalMetadata(bytes, pin); mdu0 = bytes; break } catch (error) { signal.throwIfAborted(); lastError = error }
       }
       if (!records || !mdu0) throw lastError ?? new Error('authenticated metadata unavailable')
       validateRetrievalAllocation(pin, records)
@@ -184,7 +186,7 @@ export function useFetch() {
         fetch: async (index) => {
           let last: unknown
           for (const base of bases) {
-            try { return await providerFetchRetrievalMetadata(base, pin, index, signal) }
+            try { return await fetchMetadata(base, index) }
             catch (error) { signal.throwIfAborted(); last = error }
           }
           throw last ?? new Error('witness unavailable')

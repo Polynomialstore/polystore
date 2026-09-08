@@ -45,6 +45,12 @@ type mduKzgResponse struct {
 }
 
 func GatewayMdu(w http.ResponseWriter, r *http.Request) {
+	// Both user-gateway modes relay frozen authority; local files and the
+	// gateway key cannot substitute for the session's authorized payee.
+	if strings.HasPrefix(r.URL.Path, "/gateway/mdu/") {
+		RouterGatewayMdu(w, r)
+		return
+	}
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -198,70 +204,7 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var dealDir string
-	var releaseGeneration func()
-	defer func() {
-		if releaseGeneration != nil {
-			releaseGeneration()
-		}
-	}()
-	if hasDealQuery {
-		dealDir, releaseGeneration, err = openDealGeneration(dealID, manifestRoot, rawManifestRoot)
-	} else {
-		dealDir, releaseGeneration, err = openLegacyGeneration(manifestRoot, rawManifestRoot)
-	}
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found on disk", "")
-			return
-		}
-		if errors.Is(err, ErrDealDirConflict) {
-			writeJSONError(w, http.StatusConflict, "deal directory conflict", err.Error())
-			return
-		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to resolve slab directory", err.Error())
-		return
-	}
-
-	meta, err := loadSlabMeta(dealDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "slab not found", "")
-			return
-		}
-		log.Printf("GatewayMdu: load slab meta error: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to load slab", "")
-		return
-	}
-	defer meta.Close()
-
-	if mduIndex >= meta.totalMdus {
-		writeJSONError(w, http.StatusNotFound, "mdu index out of range", "")
-		return
-	}
-
-	serveMduFromMeta(w, manifestRoot, meta, mduIndex)
-}
-
-func serveMduFromMeta(w http.ResponseWriter, manifestRoot ManifestRoot, meta *slabMeta, mduIndex uint64) {
-	mduPath := filepath.Join(meta.dealDir, fmt.Sprintf("mdu_%d.bin", mduIndex))
-	data, err := os.ReadFile(mduPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			writeJSONError(w, http.StatusNotFound, "mdu not found", "")
-			return
-		}
-		log.Printf("GatewayMdu: read mdu error: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to read mdu", "")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	w.Header().Set("X-PolyStore-Manifest-Root", manifestRoot.Canonical)
-	w.Header().Set("X-PolyStore-Mdu-Index", strconv.FormatUint(mduIndex, 10))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	writeJSONError(w, http.StatusBadRequest, "unsupported retrieval MDU route", "")
 }
 
 type dealDirLocator struct {

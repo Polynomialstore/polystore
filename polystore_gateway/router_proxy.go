@@ -3,16 +3,22 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/gorilla/mux"
+	"polystorechain/x/polystorechain/types"
 )
 
 var routerHTTPClient = &http.Client{
@@ -452,8 +458,158 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 	RouterGatewayFetch(w, r)
 }
 func RouterGatewayDownload(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
-func RouterGatewayMdu(w http.ResponseWriter, r *http.Request)      { RouterGatewayFetch(w, r) }
-func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request)   { RouterGatewayFetch(w, r) }
+
+// RouterGatewayMdu resolves retrieval authority before any mutable deal cache.
+// A funded window has one payee; only metadata can retry another assigned replica.
+func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	vars, q := mux.Vars(r), r.URL.Query()
+	root, err := parseManifestRoot(vars["cid"])
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid manifest_root", "")
+		return
+	}
+	index, err := strconv.ParseUint(vars["index"], 10, 64)
+	if err != nil || strconv.FormatUint(index, 10) != vars["index"] {
+		writeJSONError(w, http.StatusBadRequest, "invalid index", "")
+		return
+	}
+	id, err := strconv.ParseUint(q.Get("deal_id"), 10, 64)
+	if err != nil || strconv.FormatUint(id, 10) != q.Get("deal_id") || len(q["deal_id"]) != 1 || len(q["owner"]) != 1 || q.Get("owner") == "" {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner are required", "")
+		return
+	}
+	var providers []string
+	if sessionID := r.Header.Get("X-PolyStore-Session-Id"); sessionID != "" {
+		if len(r.Header.Values("X-PolyStore-Session-Id")) != 1 {
+			writeJSONError(w, http.StatusBadRequest, "ambiguous session_id", "")
+			return
+		}
+		if _, _, err := parseSessionIDHex(sessionID); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid session_id", "")
+			return
+		}
+		response, height, err := queryRetrievalSession(ctx, sessionID)
+		if err != nil {
+			writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
+			return
+		}
+		if response.Session.ChallengeVersion == 0 {
+			RouterGatewayFetch(w, r)
+			return
+		}
+		f, err := freezeRetrievalSessionResponse(response, height)
+		if err != nil {
+			writeJSONError(w, http.StatusConflict, "retrieval challenge unavailable", err.Error())
+			return
+		}
+		c, s := f.Context, f.Session
+		if id != c.DealID || q.Get("owner") != s.Owner || root.Bytes != c.Root || index != c.StartMDU {
+			writeJSONError(w, http.StatusBadRequest, "request does not match frozen session", "")
+			return
+		}
+		media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
+		if err != nil || media != "multipart/form-data" || params["version"] != "2" {
+			writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
+			return
+		}
+		for name, expected := range map[string]string{"X-PolyStore-Start-Blob-Index": strconv.FormatUint(uint64(c.StartLeaf), 10), "X-PolyStore-Blob-Count": strconv.FormatUint(c.BlobCount, 10)} {
+			if values := r.Header.Values(name); len(values) > 1 || (len(values) == 1 && values[0] != expected) {
+				writeJSONError(w, http.StatusBadRequest, "window hint does not match frozen session", "")
+				return
+			}
+		}
+		if err := validateSessionFunding(s); err != nil {
+			writeJSONError(w, http.StatusBadGateway, "invalid session funding", err.Error())
+			return
+		}
+		if !c.Window.Contains(height) || (s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED) {
+			writeJSONError(w, http.StatusConflict, "session is no longer eligible for delivery", "")
+			return
+		}
+		providers = []string{s.AuthorizedProofProvider}
+		r.Header = r.Header.Clone()
+		r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(s.SessionId))
+	} else {
+		var height uint64
+		if raw, exists := q["committed_height"]; exists {
+			if len(raw) != 1 {
+				writeJSONError(w, http.StatusBadRequest, "invalid committed_height", "")
+				return
+			}
+			height, err = strconv.ParseUint(raw[0], 10, 64)
+			if err != nil || height == 0 || strconv.FormatUint(height, 10) != raw[0] {
+				writeJSONError(w, http.StatusBadRequest, "invalid committed_height", "")
+				return
+			}
+		}
+		deal, committed, err := queryRetrievalDeal(ctx, id, height)
+		if err != nil || committed == 0 {
+			writeJSONError(w, http.StatusBadGateway, "committed metadata authority unavailable", "")
+			return
+		}
+		if deal.Owner != q.Get("owner") || !bytes.Equal(deal.ManifestRoot, root.Bytes[:]) {
+			writeJSONError(w, http.StatusConflict, "metadata does not match committed deal", "")
+			return
+		}
+		if index >= deal.TotalMdus || index > deal.WitnessMdus {
+			writeJSONError(w, http.StatusBadRequest, "metadata index out of range", "open a retrieval session for user data")
+			return
+		}
+		// Fix even an omitted height before forwarding so all replica attempts read
+		// the same committed generation. Never consult resolveDealProviders' TTL cache.
+		q.Set("committed_height", strconv.FormatUint(committed, 10))
+		seen := make(map[string]bool)
+		add := func(provider string) {
+			addr, err := sdk.AccAddressFromBech32(provider)
+			if err == nil && len(addr) == 20 && addr.String() == provider && !seen[provider] && len(providers) < 4 {
+				providers = append(providers, provider)
+				seen[provider] = true
+			}
+		}
+		if len(deal.Mode2Slots) > 0 {
+			for _, slot := range deal.Mode2Slots {
+				if slot != nil && slot.Status == types.SlotStatus_SLOT_STATUS_ACTIVE {
+					add(slot.Provider)
+				}
+			}
+		} else {
+			for _, provider := range deal.Providers {
+				add(provider)
+			}
+		}
+	}
+	// Routing hints do not authorize a deputy, replacement payee or latest root.
+	q.Del("provider")
+	q.Del("deputy")
+	r.URL.RawQuery = q.Encode()
+	var lastErr error
+	for _, provider := range providers {
+		base, err := resolveProviderHTTPBaseURL(ctx, provider)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		handled, err := tryProxyToProviderBaseURL(w, r, base)
+		if handled {
+			return
+		}
+		lastErr = err
+	}
+	detail := "no eligible metadata replicas"
+	if lastErr != nil {
+		detail = lastErr.Error()
+	}
+	writeJSONError(w, http.StatusBadGateway, "authorized retrieval provider unavailable", detail)
+}
+func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	if requireOnchainSession {
 		if strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id")) == "" {

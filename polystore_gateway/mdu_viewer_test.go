@@ -196,53 +196,21 @@ func TestGatewayMduKzg_Basic(t *testing.T) {
 	}
 }
 
-func TestGatewayMdu_Basic(t *testing.T) {
+func TestGatewayMdu_RejectsUnscopedLocalBytes(t *testing.T) {
 	useTempUploadDir(t)
-
-	cid := mustTestManifestRoot(t, "mdu-raw-basic")
-	dealDir := filepath.Join(uploadDir, cid.Key)
-	if err := os.MkdirAll(dealDir, 0o755); err != nil {
-		t.Fatalf("mkdir deal dir: %v", err)
+	root := mustTestManifestRoot(t, "mdu-raw-basic")
+	dir := filepath.Join(uploadDir, root.Key)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
 	}
-
-	if err := os.WriteFile(filepath.Join(dealDir, "manifest.bin"), []byte{0x01}, 0o644); err != nil {
-		t.Fatalf("write manifest.bin: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "mdu_0.bin"), []byte("local metadata is not authority"), 0600); err != nil {
+		t.Fatal(err)
 	}
-
-	b := crypto_ffi.NewMdu0Builder(256)
-	defer b.Free()
-	if err := b.AppendFile("file.txt", 100, 0); err != nil {
-		t.Fatalf("AppendFileRecord: %v", err)
-	}
-	mdu0Bytes, _ := b.Bytes()
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_0.bin"), mdu0Bytes, 0o644); err != nil {
-		t.Fatalf("write mdu_0.bin: %v", err)
-	}
-
-	zeros := make([]byte, types.MDU_SIZE)
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_1.bin"), zeros, 0o644); err != nil {
-		t.Fatalf("write mdu_1.bin: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dealDir, "mdu_2.bin"), zeros, 0o644); err != nil {
-		t.Fatalf("write mdu_2.bin: %v", err)
-	}
-
-	r := testRouter()
-	req := httptest.NewRequest("GET", "/gateway/mdu/"+cid.Canonical+"/0", nil)
+	req := httptest.NewRequest("GET", "/gateway/mdu/"+root.Canonical+"/0", nil)
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-	if got := w.Header().Get("Content-Type"); got != "application/octet-stream" {
-		t.Fatalf("expected octet-stream content-type, got %q", got)
-	}
-	if got := w.Header().Get("X-PolyStore-Mdu-Index"); got != "0" {
-		t.Fatalf("expected X-PolyStore-Mdu-Index=0, got %q", got)
-	}
-	if got := w.Body.Bytes(); len(got) != len(mdu0Bytes) {
-		t.Fatalf("expected %d bytes, got %d", len(mdu0Bytes), len(got))
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "deal_id and owner") {
+		t.Fatalf("unscoped MDU served: %d %s", w.Code, w.Body.String())
 	}
 }
 

@@ -154,3 +154,57 @@ test('secured metadata requests preserve the committed generation height exactly
   assert.equal(requested?.searchParams.get('deal_id'), '9007199254740993')
   assert.equal(requested?.pathname, `/sp/retrieval/mdu/${pin.root}/2`)
 })
+
+test('gateway and provider windows share strict parsing while preserving their registered routes', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { gatewayFetchRetrievalWindow, providerFetchRetrievalWindow } = await import('./providerClient')
+  const { parseFrozenSession } = await import('../lib/retrieval')
+  const fixture = new URL('../../../testdata/retrieval-window-v2/', import.meta.url)
+  const query = JSON.parse(await readFile(new URL('session.json', fixture), 'utf8'))
+  const metadata = JSON.parse(await readFile(new URL('metadata.json', fixture), 'utf8'))
+  const bytes = await readFile(new URL('window.bin', fixture))
+  const pin = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n, root: metadata.manifest_root,
+    owner: query.session.owner, endHeight: 100n, layout: 2 as const, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: 2n, userMdus: 1n, totalMdus: 3n, assignments: [] }
+  const window = { mduIndex: 2n, slot: 1, provider: query.session.provider, startBlobIndex: 8, blobCount: 2, slices: [] }
+  const session = parseFrozenSession(query, 12n, { sessionId: metadata.session_id, pin, window, owner: query.session.owner, payee: query.session.authorized_proof_provider, funding: 1 as const })
+  for (const [get, prefix] of [[gatewayFetchRetrievalWindow, '/gateway/mdu'], [providerFetchRetrievalWindow, '/sp/retrieval/mdu']] as const) {
+    let wrongIdentity = false
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input)), headers = new Headers(init?.headers)
+      assert.equal(url.pathname, `${prefix}/${pin.root}/2`)
+      assert.equal(url.searchParams.get('deal_id'), '9007199254740993')
+      assert.equal(url.searchParams.get('owner'), session.owner)
+      assert.equal(headers.get('accept'), 'multipart/form-data; version=2')
+      assert.equal(headers.get('x-polystore-session-id'), session.sessionId)
+      assert.equal(headers.get('x-polystore-blob-count'), '2')
+      const m = wrongIdentity ? { ...metadata, session_id: `0x${'ff'.repeat(32)}` } : metadata
+      return new Response(Buffer.concat([
+        Buffer.from(`--route\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(m)}\r\n--route\r\nContent-Disposition: form-data; name="bytes"; filename="window.bin"\r\nContent-Type: application/octet-stream\r\n\r\n`),
+        bytes, Buffer.from('\r\n--route--\r\n'),
+      ]), { headers: { 'content-type': 'multipart/form-data; boundary=route; version=2' } })
+    }) as typeof fetch
+    const envelope = await get('https://route.test/', session, undefined, fetcher)
+    assert.deepEqual(Buffer.from(envelope.bytes), bytes)
+    assert.equal(envelope.proofs.length, 2)
+    wrongIdentity = true
+    await assert.rejects(get('https://route.test', session, undefined, fetcher), /frozen session/)
+  }
+})
+
+test('gateway metadata preserves exact pin and bounded body before local verification', async () => {
+  const { gatewayFetchRetrievalMetadata } = await import('./providerClient')
+  const pin = { root: `0x${'ab'.repeat(32)}`, dealId: 9007199254740993n, owner: 'nil1owner', height: 9007199254740995n, metadataMdus: 3n } as unknown as import('../lib/retrieval').PinnedGeneration
+  let size = 8388608
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input))
+    assert.equal(url.pathname, `/gateway/mdu/${pin.root}/2`)
+    assert.equal(url.searchParams.get('committed_height'), '9007199254740995')
+    assert.equal(url.searchParams.get('deal_id'), '9007199254740993')
+    return new Response(new Uint8Array(size))
+  }) as typeof fetch
+  assert.equal((await gatewayFetchRetrievalMetadata('https://gateway.test/', pin, 2n, undefined, fetcher)).length, size)
+  size++
+  await assert.rejects(gatewayFetchRetrievalMetadata('https://gateway.test', pin, 2n, undefined, fetcher), /limit|bound/)
+  size = 2
+  await assert.rejects(gatewayFetchRetrievalMetadata('https://gateway.test', pin, 2n, undefined, fetcher), /truncated/)
+})
