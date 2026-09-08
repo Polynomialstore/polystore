@@ -26,7 +26,6 @@ func TestRetrievalV2DeputyConfirmFirstConservesFees(t *testing.T) {
 			params, err := f.keeper.Params.Get(ctx)
 			require.NoError(t, err)
 			params.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, tc.price)
-			params.RetrievalBurnBps = tc.bps
 			require.NoError(t, f.keeper.SetParams(ctx, params))
 			_, proof := commitValidMode2ContentAndProof(t, f, ctx, server, owner, created.DealId)
 			deal, err := f.keeper.Deals.Get(ctx, created.DealId)
@@ -34,6 +33,9 @@ func TestRetrievalV2DeputyConfirmFirstConservesFees(t *testing.T) {
 			deputy := created.AssignedProviders[1]
 			opened, err := server.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{Creator: owner, DealId: deal.Id, Provider: created.AssignedProviders[0], AuthorizedProofProvider: deputy, ManifestRoot: deal.ManifestRoot, StartMduIndex: 2, BlobCount: 1, Nonce: 1, ExpiresAt: 10, ChallengeVersion: 2})
 			require.NoError(t, err)
+			// The existing economics contract uses the configured completion-time rate.
+			params.RetrievalBurnBps = tc.bps
+			require.NoError(t, f.keeper.SetParams(ctx, params))
 			_, err = server.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: opened.SessionId})
 			require.NoError(t, err)
 			seed := bytes.Repeat([]byte{0x52}, 32)
@@ -51,6 +53,8 @@ func TestRetrievalV2DeputyConfirmFirstConservesFees(t *testing.T) {
 			require.NoError(t, err)
 			// Frozen deputy remains authorized even after registry and assignment changes.
 			require.NoError(t, f.keeper.Providers.Remove(ctx, deputy))
+			deal, err = f.keeper.Deals.Get(ctx, deal.Id)
+			require.NoError(t, err)
 			deal.Providers = nil
 			deal.Mode2Slots = nil
 			require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
@@ -197,4 +201,116 @@ func TestRetrievalV2FullExpiryBucketReleasesSessionRefsAndPreservesAuditAnchor(t
 		return false, nil
 	}))
 	require.Equal(t, types.MaxRetrievalSessionOpensPerBlock, liabilities, "cleanup preserves terminal/refundable records")
+}
+
+func TestRetrievalV2TerminalAdmissionAndMissingPinFailClosed(t *testing.T) {
+	for _, state := range []types.RetrievalSessionStatus{types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_UNSPECIFIED} {
+		t.Run(state.String(), func(t *testing.T) {
+			f, bank, server, owner, created, deal := setupRetrievalExpiryDeal(t)
+			ctx := activateSessionFixture(t, f)
+			opened, err := server.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{Creator: owner, DealId: deal.Id, Provider: created.AssignedProviders[0], ManifestRoot: deal.ManifestRoot, StartMduIndex: 2, BlobCount: 1, Nonce: 1, ExpiresAt: 10, ChallengeVersion: 2})
+			require.NoError(t, err)
+			s, err := f.keeper.RetrievalSessions.Get(ctx, opened.SessionId)
+			require.NoError(t, err)
+			s.Status = state
+			require.NoError(t, f.keeper.RetrievalSessions.Set(ctx, s.SessionId, s))
+			bounded := ctx.WithBlockHeight(4).WithGasMeter(storetypes.NewGasMeter(499999))
+			transfers := len(bank.transfers)
+			_, err = server.SubmitRetrievalSessionProof(bounded, &types.MsgSubmitRetrievalSessionProof{Creator: created.AssignedProviders[0], SessionId: s.SessionId, Proofs: []types.ChainedProof{{}}})
+			require.Error(t, err)
+			_, err = server.ConfirmRetrievalSession(bounded, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: s.SessionId})
+			require.Error(t, err)
+			after, err := f.keeper.RetrievalSessions.Get(ctx, s.SessionId)
+			require.NoError(t, err)
+			require.Equal(t, s, after)
+			require.Len(t, bank.transfers, transfers)
+		})
+	}
+	for _, pin := range []string{"", "malformed", sdk.AccAddress(bytes.Repeat([]byte{0x91}, 20)).String()} {
+		t.Run("pin_"+pin, func(t *testing.T) {
+			f, bank, server, owner, created, deal := setupRetrievalExpiryDeal(t)
+			ctx := activateSessionFixture(t, f)
+			opened, err := server.OpenRetrievalSession(ctx, &types.MsgOpenRetrievalSession{Creator: owner, DealId: deal.Id, Provider: created.AssignedProviders[0], ManifestRoot: deal.ManifestRoot, StartMduIndex: 2, BlobCount: 1, Nonce: 1, ExpiresAt: 10, ChallengeVersion: 2})
+			require.NoError(t, err)
+			s, err := f.keeper.RetrievalSessions.Get(ctx, opened.SessionId)
+			require.NoError(t, err)
+			s.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
+			require.NoError(t, f.keeper.RetrievalSessions.Set(ctx, s.SessionId, s))
+			if pin != "" {
+				require.NoError(t, f.keeper.RetrievalSessionProofProvider.Set(ctx, s.SessionId, pin))
+			}
+			balance := bank.moduleBalances[types.ModuleName].String()
+			transfers := len(bank.transfers)
+			_, err = server.ConfirmRetrievalSession(ctx.WithBlockHeight(4), &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: s.SessionId})
+			require.Error(t, err)
+			after, err := f.keeper.RetrievalSessions.Get(ctx, s.SessionId)
+			require.NoError(t, err)
+			require.Equal(t, s, after)
+			require.Len(t, bank.transfers, transfers)
+			require.Equal(t, balance, bank.moduleBalances[types.ModuleName].String())
+		})
+	}
+}
+
+func TestRetrievalV2ExternalFundingCompletionConservesOriginalSource(t *testing.T) {
+	for _, funding := range []string{"requester", "protocol"} {
+		t.Run(funding, func(t *testing.T) {
+			f, bank, server, owner, created, _ := setupRetrievalExpiryDeal(t)
+			ctx := activateSessionFixture(t, f)
+			_, proof := commitValidMode2ContentAndProof(t, f, ctx, server, owner, created.DealId)
+			deal, err := f.keeper.Deals.Get(ctx, created.DealId)
+			require.NoError(t, err)
+			var id []byte
+			var confirmer string
+			if funding == "requester" {
+				confirmer = sdk.AccAddress(bytes.Repeat([]byte{0xb2}, 20)).String()
+				bank.setAccountBalance(sdk.MustAccAddressFromBech32(confirmer), sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000)))
+				deal.RetrievalPolicy.Mode = types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC
+				require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+				opened, err := server.OpenRetrievalSessionSponsored(ctx, &types.MsgOpenRetrievalSessionSponsored{Creator: confirmer, DealId: deal.Id, Provider: created.AssignedProviders[0], ManifestRoot: deal.ManifestRoot, StartMduIndex: 2, BlobCount: 1, Nonce: 1, ExpiresAt: 10, MaxTotalFee: math.ZeroInt(), ChallengeVersion: 2})
+				require.NoError(t, err)
+				id = opened.SessionId
+			} else {
+				confirmer = created.AssignedProviders[1]
+				deal.Mode2Slots[0].Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+				deal.Mode2Slots[0].PendingProvider = confirmer
+				require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
+				require.NoError(t, bank.MintCoins(ctx, types.ProtocolBudgetModuleName, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000))))
+				opened, err := server.OpenProtocolRetrievalSession(ctx, &types.MsgOpenProtocolRetrievalSession{Creator: confirmer, DealId: deal.Id, Provider: created.AssignedProviders[0], ManifestRoot: deal.ManifestRoot, StartMduIndex: 2, BlobCount: 1, Nonce: 1, ExpiresAt: 10, MaxTotalFee: math.ZeroInt(), ChallengeVersion: 2, Purpose: types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR, Auth: &types.MsgOpenProtocolRetrievalSession_Repair{Repair: &types.RepairAuth{Slot: 0}}})
+				require.NoError(t, err)
+				id = opened.SessionId
+			}
+			seed := bytes.Repeat([]byte{0xb3}, 32)
+			ctx = ctx.WithBlockHeight(3).WithHeaderHash(seed)
+			require.NoError(t, f.keeper.BeginBlock(ctx))
+			ctx = ctx.WithBlockHeight(4)
+			s, err := f.keeper.RetrievalSessions.Get(ctx, id)
+			require.NoError(t, err)
+			c, err := types.RetrievalChallengeContext(s)
+			require.NoError(t, err)
+			points, err := c.Challenges(seed)
+			require.NoError(t, err)
+			proof.ZValue = points[0].Z[:]
+			proof.KzgOpeningProof, proof.YValue, err = crypto_ffi.ComputeBlobProof(make([]byte, types.BlobSizeBytes), proof.ZValue)
+			require.NoError(t, err)
+			_, err = server.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{Creator: created.AssignedProviders[0], SessionId: id, Proofs: []types.ChainedProof{proof}})
+			require.NoError(t, err)
+			_, err = server.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{Creator: confirmer, SessionId: id})
+			require.NoError(t, err)
+			source := bank.accountBalances[confirmer].AmountOf(sdk.DefaultBondDenom)
+			if funding == "protocol" {
+				source = bank.moduleBalances[types.ProtocolBudgetModuleName].AmountOf(sdk.DefaultBondDenom)
+			}
+			paid := bank.accountBalances[created.AssignedProviders[0]].AmountOf(sdk.DefaultBondDenom)
+			require.Equal(t, math.NewInt(995), source)
+			require.Equal(t, math.NewInt(2), paid)
+			require.Equal(t, math.NewInt(100), bank.moduleBalances[types.ModuleName].AmountOf(sdk.DefaultBondDenom), "unrelated owner escrow remains funded")
+			require.Equal(t, math.NewInt(1000), source.Add(paid).Add(math.NewInt(3)), "payer balance + provider payout + base/variable burns conserve external funding")
+			done, err := f.keeper.RetrievalSessions.Get(ctx, id)
+			require.NoError(t, err)
+			require.True(t, done.LockedFee.IsZero())
+			_, err = f.keeper.RetrievalSessionProofProvider.Get(ctx, id)
+			require.ErrorIs(t, err, collections.ErrNotFound)
+		})
+	}
 }

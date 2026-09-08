@@ -71,6 +71,8 @@ func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
 	_, err = server.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{Creator: created.AssignedProviders[0], SessionId: opened.SessionId, Proofs: []types.ChainedProof{wrongZ}})
 	require.ErrorContains(t, err, "exact session challenge")
 	// A later content generation cannot invalidate the already funded statement.
+	deal, err = f.keeper.Deals.Get(ctx, deal.Id)
+	require.NoError(t, err)
 	deal.ManifestRoot = bytes.Repeat([]byte{0x99}, 32)
 	deal.CurrentGen++
 	require.NoError(t, f.keeper.Deals.Set(ctx, deal.Id, deal))
