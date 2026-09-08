@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"cosmossdk.io/client/v2/autocli"
@@ -57,14 +58,17 @@ func NewRootCmd() *cobra.Command {
 		Short:         "polystorechain node",
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			// Initialize KZG Trusted Setup
-			tsPath := os.Getenv("POLYSTORE_TRUSTED_SETUP")
-			if tsPath == "" {
-				tsPath = "polystorechain/trusted_setup.txt"
-			}
-			if err := crypto_ffi.Init(tsPath); err != nil {
-				// Don't fail hard to allow simple CLI usage without setup
-				cmd.Println("WARNING: Failed to init KZG:", err)
+			// Both commands run a validator. Reject an unusable setup before
+			// opening stores or listeners. Other CLI commands do not need KZG;
+			// local proof-generating commands initialize their explicit setup.
+			if cmd.Name() == "start" || cmd.Name() == "in-place-testnet" {
+				tsPath := os.Getenv("POLYSTORE_TRUSTED_SETUP")
+				if tsPath == "" {
+					tsPath = "polystorechain/trusted_setup.txt"
+				}
+				if err := crypto_ffi.Init(tsPath); err != nil {
+					return fmt.Errorf("initialize validator KZG trusted setup %q: %w", tsPath, err)
+				}
 			}
 
 			// set the default command outputs
@@ -102,10 +106,10 @@ func NewRootCmd() *cobra.Command {
 		autoCliOpts.Modules[name] = mod
 	}
 
-	        // Manually register EVM basics so default genesis includes EVM/feemarket state.
-	        moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
-	        moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
-	        moduleBasicManager[genutiltypes.ModuleName] = genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator)
+	// Manually register EVM basics so default genesis includes EVM/feemarket state.
+	moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
+	moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
+	moduleBasicManager[genutiltypes.ModuleName] = genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator)
 	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {
