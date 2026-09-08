@@ -111,12 +111,16 @@ fn validate(data: &[u8], format: FatFormat) -> Result<FileTableHeader, String> {
         return Err("FAT record count exceeds capacity".into());
     }
     if format == FatFormat::V2 {
-        for cell in data[..ROOT_TABLE_END].chunks_exact(32) {
-            let mut little_endian: [u8; 32] = cell.try_into().unwrap();
-            little_endian.reverse();
-            if !bool::from(Scalar::from_bytes(&little_endian).is_some()) {
-                return Err("noncanonical root-table scalar".into());
-            }
+        // Fr - 1 comes from the pinned field implementation, avoiding another
+        // modulus constant. These public BE metadata cells need only a range
+        // check, not 65,536 field decodes or constant-time secret arithmetic.
+        let mut max_scalar = (-Scalar::one()).to_bytes();
+        max_scalar.reverse();
+        if data[..ROOT_TABLE_END]
+            .chunks_exact(32)
+            .any(|cell| cell > max_scalar.as_slice())
+        {
+            return Err("noncanonical root-table scalar".into());
         }
         if data[FILE_TABLE_START..]
             .chunks_exact(32)
@@ -128,13 +132,12 @@ fn validate(data: &[u8], format: FatFormat) -> Result<FileTableHeader, String> {
     for index in 0..header.record_count {
         read_record(data, format, index)?.validate(format == FatFormat::LegacyRecovery)?;
     }
-    let mut logical = FILE_TABLE_HEADER_SIZE + header.record_count as usize * FILE_RECORD_SIZE;
-    while logical < format.capacity() {
-        let (physical, count) = format.physical_range(logical, format.capacity() - logical);
-        if data[physical..physical + count].iter().any(|b| *b != 0) {
-            return Err("nonzero unused FAT bytes".into());
-        }
-        logical += count;
+    let logical = FILE_TABLE_HEADER_SIZE + header.record_count as usize * FILE_RECORD_SIZE;
+    // All inserted FAT prefixes were checked above. After the last record,
+    // logical tail zeros and physical tail zeros are therefore equivalent.
+    let (physical, _) = format.physical_range(logical, 0);
+    if data[physical..].iter().any(|b| *b != 0) {
+        return Err("nonzero unused FAT bytes".into());
     }
     Ok(header)
 }
@@ -432,6 +435,43 @@ mod tests {
 
         let codex_boundary = Mdu0Builder::new(2700);
         assert_eq!(codex_boundary.witness_mdu_count, 2);
+    }
+
+    #[test]
+    fn public_root_range_and_tail_boundaries_remain_strict() {
+        let mut builder = Mdu0Builder::new(1);
+        let modulus: [u8; 32] = hex::decode(crate::utils::FR_MODULUS_HEX)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let mut max_scalar = modulus;
+        max_scalar[31] -= 1;
+        for index in [0, 32768, 65535] {
+            let start = index * ROOT_SIZE;
+            builder.buffer[start..start + ROOT_SIZE].copy_from_slice(&max_scalar);
+            validate_mdu0_v2(builder.bytes()).unwrap();
+            for invalid in [modulus, [0xff; 32]] {
+                builder.buffer[start..start + ROOT_SIZE].copy_from_slice(&invalid);
+                assert!(validate_mdu0_v2(builder.bytes()).is_err());
+            }
+            builder.buffer[start..start + ROOT_SIZE].fill(0);
+        }
+        // 256 and 31 are coprime: these record counts exercise every tail
+        // alignment, including the transition to the next physical scalar.
+        for _ in 0..31 {
+            let logical =
+                FILE_TABLE_HEADER_SIZE + builder.record_count() as usize * FILE_RECORD_SIZE;
+            let (physical, _) = FatFormat::V2.physical_range(logical, 0);
+            for offset in [physical, physical / 32 * 32, MDU_SIZE - 1] {
+                builder.buffer[offset] = 1;
+                assert!(validate_mdu0_v2(builder.bytes()).is_err());
+                builder.buffer[offset] = 0;
+            }
+            validate_mdu0_v2(builder.bytes()).unwrap();
+            builder
+                .append_file_record(FileRecordV1::from_path("a", 1, 0, 0).unwrap())
+                .unwrap();
+        }
     }
 
     #[test]
