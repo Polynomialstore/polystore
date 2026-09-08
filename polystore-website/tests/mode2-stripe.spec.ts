@@ -560,7 +560,9 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     // activation before offering a paid download; only this isolated chain is active.
     const paramsRoute = '**/polystorechain/polystorechain/v1/params'
     await page.route(paramsRoute, (route) => route.fulfill({
-      status: 200, contentType: 'application/json', headers: { 'x-cosmos-block-height': '1' },
+      status: 200, contentType: 'application/json', headers: {
+        'x-cosmos-block-height': '1', 'access-control-expose-headers': 'x-cosmos-block-height',
+      },
       body: JSON.stringify({ params: { retrieval_v2_activation_height: '0' } }),
     }))
 
