@@ -13,8 +13,69 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+
+	"polystorechain/x/crypto_ffi"
 )
+
+// A successful upload precedes its wallet/chain content commit. Exercise the
+// retention tick in that gap with real artifacts and no live publication lease.
+func TestNewMode2GenerationSurvivesPrecommitRetentionAndRestart(t *testing.T) {
+	useTempUploadDir(t)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatal(err)
+	}
+	const dealID = uint64(0)
+	const owner = "nil1owner"
+	payload := filepath.Join(t.TempDir(), "README.md")
+	if err := os.WriteFile(payload, bytes.Repeat([]byte("x"), 3260), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, dir, err := mode2BuildArtifacts(t.Context(), payload, dealID, "General:rs=2+1", "README.md", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var committed atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(committedHeightHeader, "20")
+		switch r.URL.Path {
+		case "/polystorechain/polystorechain/v1/retained-generations":
+			_, _ = w.Write([]byte(`{"committed_height":"20","generations":[]}`))
+		case "/polystorechain/polystorechain/v1/deals/0":
+			deal := map[string]any{"id": "0", "owner": owner, "total_mdus": "0", "witness_mdus": "0"}
+			if committed.Load() {
+				deal["manifest_root"] = res.manifestRoot.Bytes[:]
+				deal["current_gen"] = "1"
+				deal["total_mdus"] = "3"
+				deal["witness_mdus"] = "1"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"deal": deal})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { srv.Close(); lcdBase = oldLCD })
+	if err := reconcileDealGenerations(t.Context(), []uint64{dealID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "mdu_0.bin")); err != nil {
+		t.Fatalf("retention removed uploaded content before the first chain commit: %v", err)
+	}
+	committed.Store(true)
+	// Startup discovers the immutable generation from disk, with no index or
+	// active pointer left by the upload. The chain root now keeps it regardless
+	// of the provisional grace period.
+	recoverDealGenerationStateOnStartup()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/list-files/"+res.manifestRoot.Canonical+"?deal_id=0&owner="+owner, nil)
+	w := httptest.NewRecorder()
+	testRouter().ServeHTTP(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"README.md"`) || !strings.Contains(w.Body.String(), `3260`) {
+		t.Fatalf("committed file unavailable after restart: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
 
 type retentionTestAuthority struct {
 	sync.Mutex

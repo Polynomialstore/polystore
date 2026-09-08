@@ -405,8 +405,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	dealIDForMeta := dealID
 	meta, err := buildSlabMetadataFromBuilder(builder, slabMetadataBuildOptions{
-		GenerationID:    parsedRoot.Key,
-		GenerationState: slabGenerationStateActive,
+		GenerationID: parsedRoot.Key,
+		// Publication precedes the first chain content commit. Retention must
+		// allow that commit the same grace period as an append generation.
+		GenerationState: slabGenerationStateProvisional,
 		DealID:          &dealIDForMeta,
 		ManifestRoot:    parsedRoot.Canonical,
 		Source:          "gateway_mode2_new",
