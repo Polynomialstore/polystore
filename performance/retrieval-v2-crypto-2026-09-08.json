@@ -1,0 +1,1501 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-09-08",
+  "host": "Apple M3, macOS 26.2, darwin/arm64",
+  "build": "Go1.25.5 GOMAXPROCS2 Rustrelease defaultfeatures",
+  "boundary": "fresh canonical v2, isolated first acceptance; generation excluded and separately measured",
+  "baseline": {
+    "source": "34e7c2db182eb08957f56f8dc9f29b0acdc0c0d5",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "binary_sha256": "7d5e67a587d88d870583f5684e04d564265c1e1a712f0c742b7c7815ba19d32e",
+    "fixture_sha256": "8ddc14f85db9b26710242b0b2b7e5e4053a0c70da6dd05475fdebcee2555ac9f",
+    "setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "candidate": {
+    "source": "7144c8d8b55aa13275c96c9d47a5a566616b58c7",
+    "library_sha256": "039f5dc551ce04bd58304f2b1311ac6aa7a0edc75751ffc75ca2220ecbaa5571",
+    "binary_sha256": "b477eb4d9bcb14302ea2e538ad4da526993e1f2fc7c867432608591dc358bd64",
+    "fixture_sha256": "8ddc14f85db9b26710242b0b2b7e5e4053a0c70da6dd05475fdebcee2555ac9f",
+    "setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "repetitions": 5,
+  "iterations_per_count": 3,
+  "profiles": {
+    "K8": "General:rs=8+4",
+    "K2": "General:rs=2+1"
+  },
+  "notes": [
+    "Five interleaved baseline/candidate subprocesses per profile; each runs every legal listed count three times.",
+    "Baseline source34e7c2db matches mergedbdd59f38 content plus the identical copied benchmark file.",
+    "No agent builds, tests or nodes ran concurrently with timings; shared user workstation, no universal throughput or capacity claim.",
+    "Initial Hot runs resolved toK8 and were excluded fromK2 evidence; final explicitrs2+1 output labels were asserted.",
+    "Generation measured separately includes fresh blob opening evaluation, prover MSM and proof construction; excludes setup, structural root opening, challenge derivation and session open."
+  ],
+  "rows": [
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5026861.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 112711444.0,
+        "B/op": 15005.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   5026861 ns/op\t    525644 gas/op\t 112711444 generation-ns/op\t   15005 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10090778.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 227558653.0,
+        "B/op": 16490.0,
+        "allocs/op": 141.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t  10090778 ns/op\t   1025644 gas/op\t 227558653 generation-ns/op\t   16490 B/op\t     141 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40222194.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 924327861.0,
+        "B/op": 23645.0,
+        "allocs/op": 199.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t  40222194 ns/op\t   4025644 gas/op\t 924327861 generation-ns/op\t   23645 B/op\t     199 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3064542.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 118081666.0,
+        "B/op": 15997.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   3064542 ns/op\t    525644 gas/op\t 118081666 generation-ns/op\t   15997 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3691319.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 234646431.0,
+        "B/op": 17757.0,
+        "allocs/op": 136.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t   3691319 ns/op\t   1025644 gas/op\t 234646431 generation-ns/op\t   17757 B/op\t     136 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 6715361.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 946510750.0,
+        "B/op": 26989.0,
+        "allocs/op": 185.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t   6715361 ns/op\t   4025644 gas/op\t 946510750 generation-ns/op\t   26989 B/op\t     185 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5115667.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 118405583.0,
+        "B/op": 15005.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   5115667 ns/op\t    525644 gas/op\t 118405583 generation-ns/op\t   15005 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10144250.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 237114791.0,
+        "B/op": 16285.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t  10144250 ns/op\t   1025644 gas/op\t 237114791 generation-ns/op\t   16285 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40679361.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 956102361.0,
+        "B/op": 23645.0,
+        "allocs/op": 199.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t  40679361 ns/op\t   4025644 gas/op\t 956102361 generation-ns/op\t   23645 B/op\t     199 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3099083.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119271847.0,
+        "B/op": 15997.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   3099083 ns/op\t    525644 gas/op\t 119271847 generation-ns/op\t   15997 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3753486.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239902069.0,
+        "B/op": 17962.0,
+        "allocs/op": 139.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t   3753486 ns/op\t   1025644 gas/op\t 239902069 generation-ns/op\t   17962 B/op\t     139 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7066208.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 974241319.0,
+        "B/op": 27178.0,
+        "allocs/op": 188.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t   7066208 ns/op\t   4025644 gas/op\t 974241319 generation-ns/op\t   27178 B/op\t     188 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5262319.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 121377514.0,
+        "B/op": 15005.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   5262319 ns/op\t    525644 gas/op\t 121377514 generation-ns/op\t   15005 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10241181.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 240084778.0,
+        "B/op": 16285.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t  10241181 ns/op\t   1025644 gas/op\t 240084778 generation-ns/op\t   16285 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40880598.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 961287430.0,
+        "B/op": 23645.0,
+        "allocs/op": 199.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t  40880598 ns/op\t   4025644 gas/op\t 961287430 generation-ns/op\t   23645 B/op\t     199 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3195389.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119819417.0,
+        "B/op": 15997.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   3195389 ns/op\t    525644 gas/op\t 119819417 generation-ns/op\t   15997 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3712639.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239471000.0,
+        "B/op": 17757.0,
+        "allocs/op": 136.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t   3712639 ns/op\t   1025644 gas/op\t 239471000 generation-ns/op\t   17757 B/op\t     136 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7056695.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 960455722.0,
+        "B/op": 26973.0,
+        "allocs/op": 185.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t   7056695 ns/op\t   4025644 gas/op\t 960455722 generation-ns/op\t   26973 B/op\t     185 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5186458.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 120073445.0,
+        "B/op": 15005.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   5186458 ns/op\t    525644 gas/op\t 120073445 generation-ns/op\t   15005 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10246208.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239861056.0,
+        "B/op": 16285.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t  10246208 ns/op\t   1025644 gas/op\t 239861056 generation-ns/op\t   16285 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 41013958.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 960381111.0,
+        "B/op": 23653.0,
+        "allocs/op": 199.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t  41013958 ns/op\t   4025644 gas/op\t 960381111 generation-ns/op\t   23653 B/op\t     199 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3192569.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119920139.0,
+        "B/op": 15997.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   3192569 ns/op\t    525644 gas/op\t 119920139 generation-ns/op\t   15997 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3776931.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 240361750.0,
+        "B/op": 17962.0,
+        "allocs/op": 139.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t   3776931 ns/op\t   1025644 gas/op\t 240361750 generation-ns/op\t   17962 B/op\t     139 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7140000.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 964362986.0,
+        "B/op": 27178.0,
+        "allocs/op": 188.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t   7140000 ns/op\t   4025644 gas/op\t 964362986 generation-ns/op\t   27178 B/op\t     188 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5122375.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 120004389.0,
+        "B/op": 15005.0,
+        "allocs/op": 127.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   5122375 ns/op\t    525644 gas/op\t 120004389 generation-ns/op\t   15005 B/op\t     127 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10463222.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 241297639.0,
+        "B/op": 16285.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t  10463222 ns/op\t   1025644 gas/op\t 241297639 generation-ns/op\t   16285 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40822597.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 965723500.0,
+        "B/op": 23850.0,
+        "allocs/op": 202.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t  40822597 ns/op\t   4025644 gas/op\t 965723500 generation-ns/op\t   23850 B/op\t     202 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 1,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3206291.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 120057889.0,
+        "B/op": 16202.0,
+        "allocs/op": 130.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs1-2         \t       3\t   3206291 ns/op\t    525644 gas/op\t 120057889 generation-ns/op\t   16202 B/op\t     130 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 2,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3758138.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239614333.0,
+        "B/op": 17757.0,
+        "allocs/op": 136.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs2-2         \t       3\t   3758138 ns/op\t   1025644 gas/op\t 239614333 generation-ns/op\t   17757 B/op\t     136 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K8",
+      "proofs": 8,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7094861.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 967677903.0,
+        "B/op": 27178.0,
+        "allocs/op": 188.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K8/proofs8-2         \t       3\t   7094861 ns/op\t   4025644 gas/op\t 967677903 generation-ns/op\t   27178 B/op\t     188 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4933153.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 112585500.0,
+        "B/op": 15048.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   4933153 ns/op\t    525644 gas/op\t 112585500 generation-ns/op\t   15048 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10090778.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 224655403.0,
+        "B/op": 16618.0,
+        "allocs/op": 143.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t  10090778 ns/op\t   1025644 gas/op\t 224655403 generation-ns/op\t   16618 B/op\t     143 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40867305.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 906883277.0,
+        "B/op": 23717.0,
+        "allocs/op": 200.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t  40867305 ns/op\t   4025644 gas/op\t 906883277 generation-ns/op\t   23717 B/op\t     200 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 163134250.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3727096695.0,
+        "B/op": 53277.0,
+        "allocs/op": 443.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t 163134250 ns/op\t  16025710 gas/op\t3727096695 generation-ns/op\t   53277 B/op\t     443 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3056264.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 117726708.0,
+        "B/op": 16040.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   3056264 ns/op\t    525644 gas/op\t 117726708 generation-ns/op\t   16040 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3531472.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 234526000.0,
+        "B/op": 17885.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t   3531472 ns/op\t   1025644 gas/op\t 234526000 generation-ns/op\t   17885 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 6796014.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 939969556.0,
+        "B/op": 27037.0,
+        "allocs/op": 186.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t   6796014 ns/op\t   4025644 gas/op\t 939969556 generation-ns/op\t   27037 B/op\t     186 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 1,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 19245361.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3773055500.0,
+        "B/op": 65258.0,
+        "allocs/op": 384.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t  19245361 ns/op\t  16025710 gas/op\t3773055500 generation-ns/op\t   65258 B/op\t     384 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5083791.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 118336653.0,
+        "B/op": 15048.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   5083791 ns/op\t    525644 gas/op\t 118336653 generation-ns/op\t   15048 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10027125.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 237708944.0,
+        "B/op": 16618.0,
+        "allocs/op": 143.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t  10027125 ns/op\t   1025644 gas/op\t 237708944 generation-ns/op\t   16618 B/op\t     143 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40955889.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 950332930.0,
+        "B/op": 23717.0,
+        "allocs/op": 200.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t  40955889 ns/op\t   4025644 gas/op\t 950332930 generation-ns/op\t   23717 B/op\t     200 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 166607653.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3834161778.0,
+        "B/op": 53400.0,
+        "allocs/op": 444.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t 166607653 ns/op\t  16025710 gas/op\t3834161778 generation-ns/op\t   53400 B/op\t     444 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3159292.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119497861.0,
+        "B/op": 16040.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   3159292 ns/op\t    525644 gas/op\t 119497861 generation-ns/op\t   16040 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3678570.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 237601445.0,
+        "B/op": 17885.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t   3678570 ns/op\t   1025644 gas/op\t 237601445 generation-ns/op\t   17885 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7049056.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 957620569.0,
+        "B/op": 27037.0,
+        "allocs/op": 186.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t   7049056 ns/op\t   4025644 gas/op\t 957620569 generation-ns/op\t   27037 B/op\t     186 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 2,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 19372986.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3831166819.0,
+        "B/op": 65258.0,
+        "allocs/op": 384.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t  19372986 ns/op\t  16025710 gas/op\t3831166819 generation-ns/op\t   65258 B/op\t     384 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5245639.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 120209486.0,
+        "B/op": 15048.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   5245639 ns/op\t    525644 gas/op\t 120209486 generation-ns/op\t   15048 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10219431.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239560958.0,
+        "B/op": 16413.0,
+        "allocs/op": 140.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t  10219431 ns/op\t   1025644 gas/op\t 239560958 generation-ns/op\t   16413 B/op\t     140 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40711986.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 955487069.0,
+        "B/op": 23914.0,
+        "allocs/op": 203.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t  40711986 ns/op\t   4025644 gas/op\t 955487069 generation-ns/op\t   23914 B/op\t     203 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 163980083.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3823183736.0,
+        "B/op": 53482.0,
+        "allocs/op": 446.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t 163980083 ns/op\t  16025710 gas/op\t3823183736 generation-ns/op\t   53482 B/op\t     446 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3188472.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119895903.0,
+        "B/op": 16040.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   3188472 ns/op\t    525644 gas/op\t 119895903 generation-ns/op\t   16040 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3628958.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239346167.0,
+        "B/op": 17885.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t   3628958 ns/op\t   1025644 gas/op\t 239346167 generation-ns/op\t   17885 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 6791541.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 955315834.0,
+        "B/op": 27037.0,
+        "allocs/op": 186.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t   6791541 ns/op\t   4025644 gas/op\t 955315834 generation-ns/op\t   27037 B/op\t     186 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 3,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 19392028.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3831558931.0,
+        "B/op": 65258.0,
+        "allocs/op": 384.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t  19392028 ns/op\t  16025710 gas/op\t3831558931 generation-ns/op\t   65258 B/op\t     384 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5111528.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 119348083.0,
+        "B/op": 15048.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   5111528 ns/op\t    525644 gas/op\t 119348083 generation-ns/op\t   15048 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 10172653.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 239354903.0,
+        "B/op": 16413.0,
+        "allocs/op": 140.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t  10172653 ns/op\t   1025644 gas/op\t 239354903 generation-ns/op\t   16413 B/op\t     140 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 40869014.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 957132695.0,
+        "B/op": 23914.0,
+        "allocs/op": 203.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t  40869014 ns/op\t   4025644 gas/op\t 957132695 generation-ns/op\t   23914 B/op\t     203 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 185235916.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 4012729694.0,
+        "B/op": 53482.0,
+        "allocs/op": 446.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t 185235916 ns/op\t  16025710 gas/op\t4012729694 generation-ns/op\t   53482 B/op\t     446 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3345889.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 121629014.0,
+        "B/op": 16245.0,
+        "allocs/op": 131.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   3345889 ns/op\t    525644 gas/op\t 121629014 generation-ns/op\t   16245 B/op\t     131 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 4185069.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 253822945.0,
+        "B/op": 17885.0,
+        "allocs/op": 138.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t   4185069 ns/op\t   1025644 gas/op\t 253822945 generation-ns/op\t   17885 B/op\t     138 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7191125.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 988167431.0,
+        "B/op": 27037.0,
+        "allocs/op": 186.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t   7191125 ns/op\t   4025644 gas/op\t 988167431 generation-ns/op\t   27037 B/op\t     186 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 4,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 21335389.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 4194356819.0,
+        "B/op": 65058.0,
+        "allocs/op": 381.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t  21335389 ns/op\t  16025710 gas/op\t4194356819 generation-ns/op\t   65058 B/op\t     381 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 5309181.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 122266180.0,
+        "B/op": 15048.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   5309181 ns/op\t    525644 gas/op\t 122266180 generation-ns/op\t   15048 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 12975292.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 322882125.0,
+        "B/op": 16618.0,
+        "allocs/op": 143.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t  12975292 ns/op\t   1025644 gas/op\t 322882125 generation-ns/op\t   16618 B/op\t     143 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 46299903.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 1019501208.0,
+        "B/op": 23709.0,
+        "allocs/op": 200.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t  46299903 ns/op\t   4025644 gas/op\t1019501208 generation-ns/op\t   23709 B/op\t     200 allocs/op"
+    },
+    {
+      "kind": "baseline",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 169272750.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3940348167.0,
+        "B/op": 53277.0,
+        "allocs/op": 443.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t 169272750 ns/op\t  16025710 gas/op\t3940348167 generation-ns/op\t   53277 B/op\t     443 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 1,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3284389.0,
+        "gas/op": 525644.0,
+        "generation-ns/op": 121631694.0,
+        "B/op": 16040.0,
+        "allocs/op": 128.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs1-2         \t       3\t   3284389 ns/op\t    525644 gas/op\t 121631694 generation-ns/op\t   16040 B/op\t     128 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 2,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 3807194.0,
+        "gas/op": 1025644.0,
+        "generation-ns/op": 242255902.0,
+        "B/op": 18090.0,
+        "allocs/op": 141.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs2-2         \t       3\t   3807194 ns/op\t   1025644 gas/op\t 242255902 generation-ns/op\t   18090 B/op\t     141 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 8,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 7066014.0,
+        "gas/op": 4025644.0,
+        "generation-ns/op": 980096055.0,
+        "B/op": 27242.0,
+        "allocs/op": 189.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs8-2         \t       3\t   7066014 ns/op\t   4025644 gas/op\t 980096055 generation-ns/op\t   27242 B/op\t     189 allocs/op"
+    },
+    {
+      "kind": "candidate",
+      "profile": "K2",
+      "proofs": 32,
+      "repeat": 5,
+      "iterations": 3,
+      "metrics": {
+        "ns/op": 19543347.0,
+        "gas/op": 16025710.0,
+        "generation-ns/op": 3892703542.0,
+        "B/op": 65258.0,
+        "allocs/op": 384.0
+      },
+      "raw": "BenchmarkSubmitRetrievalSessionProofV2/K2/proofs32-2        \t       3\t  19543347 ns/op\t  16025710 gas/op\t3892703542 generation-ns/op\t   65258 B/op\t     384 allocs/op"
+    }
+  ],
+  "summary": [
+    {
+      "profile": "K8",
+      "proofs": 1,
+      "baseline": {
+        "ns/op": {
+          "median": 5122375.0,
+          "minimum": 5026861.0,
+          "maximum": 5262319.0
+        },
+        "gas/op": {
+          "median": 525644.0,
+          "minimum": 525644.0,
+          "maximum": 525644.0
+        },
+        "generation-ns/op": {
+          "median": 120004389.0,
+          "minimum": 112711444.0,
+          "maximum": 121377514.0
+        },
+        "B/op": {
+          "median": 15005.0,
+          "minimum": 15005.0,
+          "maximum": 15005.0
+        },
+        "allocs/op": {
+          "median": 127.0,
+          "minimum": 127.0,
+          "maximum": 127.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 3192569.0,
+          "minimum": 3064542.0,
+          "maximum": 3206291.0
+        },
+        "gas/op": {
+          "median": 525644.0,
+          "minimum": 525644.0,
+          "maximum": 525644.0
+        },
+        "generation-ns/op": {
+          "median": 119819417.0,
+          "minimum": 118081666.0,
+          "maximum": 120057889.0
+        },
+        "B/op": {
+          "median": 15997.0,
+          "minimum": 15997.0,
+          "maximum": 16202.0
+        },
+        "allocs/op": {
+          "median": 127.0,
+          "minimum": 127.0,
+          "maximum": 130.0
+        }
+      },
+      "speedup": 1.6044680631804669
+    },
+    {
+      "profile": "K8",
+      "proofs": 2,
+      "baseline": {
+        "ns/op": {
+          "median": 10241181.0,
+          "minimum": 10090778.0,
+          "maximum": 10463222.0
+        },
+        "gas/op": {
+          "median": 1025644.0,
+          "minimum": 1025644.0,
+          "maximum": 1025644.0
+        },
+        "generation-ns/op": {
+          "median": 239861056.0,
+          "minimum": 227558653.0,
+          "maximum": 241297639.0
+        },
+        "B/op": {
+          "median": 16285.0,
+          "minimum": 16285.0,
+          "maximum": 16490.0
+        },
+        "allocs/op": {
+          "median": 138.0,
+          "minimum": 138.0,
+          "maximum": 141.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 3753486.0,
+          "minimum": 3691319.0,
+          "maximum": 3776931.0
+        },
+        "gas/op": {
+          "median": 1025644.0,
+          "minimum": 1025644.0,
+          "maximum": 1025644.0
+        },
+        "generation-ns/op": {
+          "median": 239614333.0,
+          "minimum": 234646431.0,
+          "maximum": 240361750.0
+        },
+        "B/op": {
+          "median": 17757.0,
+          "minimum": 17757.0,
+          "maximum": 17962.0
+        },
+        "allocs/op": {
+          "median": 136.0,
+          "minimum": 136.0,
+          "maximum": 139.0
+        }
+      },
+      "speedup": 2.728445237307399
+    },
+    {
+      "profile": "K8",
+      "proofs": 8,
+      "baseline": {
+        "ns/op": {
+          "median": 40822597.0,
+          "minimum": 40222194.0,
+          "maximum": 41013958.0
+        },
+        "gas/op": {
+          "median": 4025644.0,
+          "minimum": 4025644.0,
+          "maximum": 4025644.0
+        },
+        "generation-ns/op": {
+          "median": 960381111.0,
+          "minimum": 924327861.0,
+          "maximum": 965723500.0
+        },
+        "B/op": {
+          "median": 23645.0,
+          "minimum": 23645.0,
+          "maximum": 23850.0
+        },
+        "allocs/op": {
+          "median": 199.0,
+          "minimum": 199.0,
+          "maximum": 202.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 7066208.0,
+          "minimum": 6715361.0,
+          "maximum": 7140000.0
+        },
+        "gas/op": {
+          "median": 4025644.0,
+          "minimum": 4025644.0,
+          "maximum": 4025644.0
+        },
+        "generation-ns/op": {
+          "median": 964362986.0,
+          "minimum": 946510750.0,
+          "maximum": 974241319.0
+        },
+        "B/op": {
+          "median": 27178.0,
+          "minimum": 26973.0,
+          "maximum": 27178.0
+        },
+        "allocs/op": {
+          "median": 188.0,
+          "minimum": 185.0,
+          "maximum": 188.0
+        }
+      },
+      "speedup": 5.777157564566455
+    },
+    {
+      "profile": "K2",
+      "proofs": 1,
+      "baseline": {
+        "ns/op": {
+          "median": 5111528.0,
+          "minimum": 4933153.0,
+          "maximum": 5309181.0
+        },
+        "gas/op": {
+          "median": 525644.0,
+          "minimum": 525644.0,
+          "maximum": 525644.0
+        },
+        "generation-ns/op": {
+          "median": 119348083.0,
+          "minimum": 112585500.0,
+          "maximum": 122266180.0
+        },
+        "B/op": {
+          "median": 15048.0,
+          "minimum": 15048.0,
+          "maximum": 15048.0
+        },
+        "allocs/op": {
+          "median": 128.0,
+          "minimum": 128.0,
+          "maximum": 128.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 3188472.0,
+          "minimum": 3056264.0,
+          "maximum": 3345889.0
+        },
+        "gas/op": {
+          "median": 525644.0,
+          "minimum": 525644.0,
+          "maximum": 525644.0
+        },
+        "generation-ns/op": {
+          "median": 119895903.0,
+          "minimum": 117726708.0,
+          "maximum": 121631694.0
+        },
+        "B/op": {
+          "median": 16040.0,
+          "minimum": 16040.0,
+          "maximum": 16245.0
+        },
+        "allocs/op": {
+          "median": 128.0,
+          "minimum": 128.0,
+          "maximum": 131.0
+        }
+      },
+      "speedup": 1.60312776778344
+    },
+    {
+      "profile": "K2",
+      "proofs": 2,
+      "baseline": {
+        "ns/op": {
+          "median": 10172653.0,
+          "minimum": 10027125.0,
+          "maximum": 12975292.0
+        },
+        "gas/op": {
+          "median": 1025644.0,
+          "minimum": 1025644.0,
+          "maximum": 1025644.0
+        },
+        "generation-ns/op": {
+          "median": 239354903.0,
+          "minimum": 224655403.0,
+          "maximum": 322882125.0
+        },
+        "B/op": {
+          "median": 16618.0,
+          "minimum": 16413.0,
+          "maximum": 16618.0
+        },
+        "allocs/op": {
+          "median": 143.0,
+          "minimum": 140.0,
+          "maximum": 143.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 3678570.0,
+          "minimum": 3531472.0,
+          "maximum": 4185069.0
+        },
+        "gas/op": {
+          "median": 1025644.0,
+          "minimum": 1025644.0,
+          "maximum": 1025644.0
+        },
+        "generation-ns/op": {
+          "median": 239346167.0,
+          "minimum": 234526000.0,
+          "maximum": 253822945.0
+        },
+        "B/op": {
+          "median": 17885.0,
+          "minimum": 17885.0,
+          "maximum": 18090.0
+        },
+        "allocs/op": {
+          "median": 138.0,
+          "minimum": 138.0,
+          "maximum": 141.0
+        }
+      },
+      "speedup": 2.765382471993193
+    },
+    {
+      "profile": "K2",
+      "proofs": 8,
+      "baseline": {
+        "ns/op": {
+          "median": 40869014.0,
+          "minimum": 40711986.0,
+          "maximum": 46299903.0
+        },
+        "gas/op": {
+          "median": 4025644.0,
+          "minimum": 4025644.0,
+          "maximum": 4025644.0
+        },
+        "generation-ns/op": {
+          "median": 955487069.0,
+          "minimum": 906883277.0,
+          "maximum": 1019501208.0
+        },
+        "B/op": {
+          "median": 23717.0,
+          "minimum": 23709.0,
+          "maximum": 23914.0
+        },
+        "allocs/op": {
+          "median": 200.0,
+          "minimum": 200.0,
+          "maximum": 203.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 7049056.0,
+          "minimum": 6791541.0,
+          "maximum": 7191125.0
+        },
+        "gas/op": {
+          "median": 4025644.0,
+          "minimum": 4025644.0,
+          "maximum": 4025644.0
+        },
+        "generation-ns/op": {
+          "median": 957620569.0,
+          "minimum": 939969556.0,
+          "maximum": 988167431.0
+        },
+        "B/op": {
+          "median": 27037.0,
+          "minimum": 27037.0,
+          "maximum": 27242.0
+        },
+        "allocs/op": {
+          "median": 186.0,
+          "minimum": 186.0,
+          "maximum": 189.0
+        }
+      },
+      "speedup": 5.797799591888616
+    },
+    {
+      "profile": "K2",
+      "proofs": 32,
+      "baseline": {
+        "ns/op": {
+          "median": 166607653.0,
+          "minimum": 163134250.0,
+          "maximum": 185235916.0
+        },
+        "gas/op": {
+          "median": 16025710.0,
+          "minimum": 16025710.0,
+          "maximum": 16025710.0
+        },
+        "generation-ns/op": {
+          "median": 3834161778.0,
+          "minimum": 3727096695.0,
+          "maximum": 4012729694.0
+        },
+        "B/op": {
+          "median": 53400.0,
+          "minimum": 53277.0,
+          "maximum": 53482.0
+        },
+        "allocs/op": {
+          "median": 444.0,
+          "minimum": 443.0,
+          "maximum": 446.0
+        }
+      },
+      "candidate": {
+        "ns/op": {
+          "median": 19392028.0,
+          "minimum": 19245361.0,
+          "maximum": 21335389.0
+        },
+        "gas/op": {
+          "median": 16025710.0,
+          "minimum": 16025710.0,
+          "maximum": 16025710.0
+        },
+        "generation-ns/op": {
+          "median": 3831558931.0,
+          "minimum": 3773055500.0,
+          "maximum": 4194356819.0
+        },
+        "B/op": {
+          "median": 65258.0,
+          "minimum": 65058.0,
+          "maximum": 65258.0
+        },
+        "allocs/op": {
+          "median": 384.0,
+          "minimum": 381.0,
+          "maximum": 384.0
+        }
+      },
+      "speedup": 8.59155385914253
+    }
+  ]
+}

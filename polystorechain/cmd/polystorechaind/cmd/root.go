@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 
 	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/depinject"
@@ -57,14 +59,14 @@ func NewRootCmd() *cobra.Command {
 		Short:         "polystorechain node",
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			// Initialize KZG Trusted Setup
-			tsPath := os.Getenv("POLYSTORE_TRUSTED_SETUP")
-			if tsPath == "" {
-				tsPath = "polystorechain/trusted_setup.txt"
-			}
-			if err := crypto_ffi.Init(tsPath); err != nil {
-				// Don't fail hard to allow simple CLI usage without setup
-				cmd.Println("WARNING: Failed to init KZG:", err)
+			// Both commands run a validator. Reject an unusable setup before
+			// opening stores or listeners. Other CLI commands do not need KZG;
+			// local proof-generating commands initialize their explicit setup.
+			if cmd.Name() == "start" || cmd.Name() == "in-place-testnet" {
+				tsPath := validatorTrustedSetupPath()
+				if err := crypto_ffi.Init(tsPath); err != nil {
+					return fmt.Errorf("initialize validator KZG trusted setup %q: %w", tsPath, err)
+				}
 			}
 
 			// set the default command outputs
@@ -102,10 +104,10 @@ func NewRootCmd() *cobra.Command {
 		autoCliOpts.Modules[name] = mod
 	}
 
-	        // Manually register EVM basics so default genesis includes EVM/feemarket state.
-	        moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
-	        moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
-	        moduleBasicManager[genutiltypes.ModuleName] = genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator)
+	// Manually register EVM basics so default genesis includes EVM/feemarket state.
+	moduleBasicManager[evmtypes.ModuleName] = evm.AppModuleBasic{}
+	moduleBasicManager[feemarkettypes.ModuleName] = feemarket.AppModuleBasic{}
+	moduleBasicManager[genutiltypes.ModuleName] = genutil.NewAppModuleBasic(genutiltypes.DefaultMessageValidator)
 	initRootCmd(rootCmd, clientCtx.TxConfig, moduleBasicManager)
 
 	if err := autoCliOpts.EnhanceRootCommand(rootCmd); err != nil {
@@ -113,6 +115,24 @@ func NewRootCmd() *cobra.Command {
 	}
 
 	return rootCmd
+}
+
+func validatorTrustedSetupPath() string {
+	if path := os.Getenv("POLYSTORE_TRUSTED_SETUP"); path != "" {
+		return path
+	}
+	path := "polystorechain/trusted_setup.txt"
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return path
+	}
+	// release.sh packages bin/polystorechaind beside config/trusted_setup.txt.
+	// Resolve a symlinked executable so launching outside the archive also works.
+	if executable, err := os.Executable(); err == nil {
+		if executable, err = filepath.EvalSymlinks(executable); err == nil {
+			return filepath.Join(filepath.Dir(executable), "..", "config", "trusted_setup.txt")
+		}
+	}
+	return path
 }
 
 // ProvideClientContext creates and provides a fully initialized client.Context,

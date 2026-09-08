@@ -41,6 +41,57 @@ pub struct PolyStoreWasm {
 
 #[wasm_bindgen]
 impl PolyStoreWasm {
+    pub fn verify_polyfs_session_batch(&self, input: &[u8]) -> Result<bool, JsValue> {
+        self.kzg_ctx
+            .verify_polyfs_session_batch(input)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn challenge_context_hash(bytes: &[u8]) -> Result<Uint8Array, JsValue> {
+        let c = crate::retrieval_challenge::Context::parse(bytes)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(c.hash().as_slice()))
+    }
+
+    pub fn derive_challenges(bytes: &[u8], seed: &[u8]) -> Result<Uint8Array, JsValue> {
+        let c = crate::retrieval_challenge::Context::parse(bytes)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let seed = seed
+            .try_into()
+            .map_err(|_| JsValue::from_str("Seed must be 32 bytes"))?;
+        let flat = c
+            .challenges_flat(seed)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(flat.as_slice()))
+    }
+
+    pub fn validate_trusted_setup(bytes: &[u8]) -> Result<(), JsValue> {
+        crate::kzg::validate_trusted_setup(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn commit_received_blob(&self, blob: &[u8]) -> Result<Uint8Array, JsValue> {
+        let commitment = self
+            .kzg_ctx
+            .commit_received_blob(blob)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(commitment.as_slice()))
+    }
+
+    pub fn validate_packed_payload(encoded: &[u8], raw_len: f64) -> Result<(), JsValue> {
+        // wasm-bindgen's integer argument coercion would wrap/truncate JS numbers.
+        if !raw_len.is_finite()
+            || raw_len < 0.0
+            || raw_len.fract() != 0.0
+            || raw_len > crate::coding::MDU_PAYLOAD_BYTES as f64
+        {
+            return Err(JsValue::from_str(
+                "Raw length must be a bounded nonnegative integer",
+            ));
+        }
+        crate::coding::validate_packed_payload(encoded, raw_len as usize)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     #[wasm_bindgen(constructor)]
     pub fn new(trusted_setup_bytes: &[u8]) -> Result<PolyStoreWasm, JsValue> {
         console_error_panic_hook::set_once();

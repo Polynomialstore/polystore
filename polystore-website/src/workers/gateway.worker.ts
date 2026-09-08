@@ -256,11 +256,12 @@ self.onmessage = async (event) => {
         switch (type) {
             case 'initPolyStoreWasm': {
                 const { trustedSetupBytes } = payload;
+                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
+                PolyStoreWasm.validate_trusted_setup(trustedSetupBytes);
                 if (polyStoreWasmInstance) {
                     result = 'PolyStoreWasm already initialized';
                     break;
                 }
-                if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
                 polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
                 kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, USER_UPLOAD_KZG_OPTIONS);
                 // Initialize the blob-commit compute pool (best-effort).
