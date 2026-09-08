@@ -79,6 +79,9 @@ if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then
   export CGO_ENABLED=1 POLYSTORE_CORE_LIB_DIR="$ROOT_DIR/polystore_core/target/release"
   export POLYSTORE_POLYCE=0 POLYSTORE_FAKE_INGEST=0 POLYSTORE_FAST_INGEST=0
   export POLYSTORE_MODE2_ENCODE_PARALLELISM=1 POLYSTORE_MODE2_UPLOAD_PARALLELISM=2
+  # Large retrievals span audit epochs; providers must retain their assignments
+  # by answering normal storage challenges throughout the download.
+  export POLYSTORE_DISABLE_SYSTEM_LIVENESS=0
   export E2E_MODE2_GREP='mode2 streamed authenticated retrieval'
 fi
 
