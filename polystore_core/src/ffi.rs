@@ -17,20 +17,24 @@ pub extern "C" fn polystore_init(trusted_setup_path: *const c_char) -> c_int {
         return -1; // Null path
     }
 
-    // Check if already initialized
-    if KZG_CTX.get().is_some() {
-        return 0; // Already initialized, consider it success
-    }
-
     let c_str = unsafe { CStr::from_ptr(trusted_setup_path) };
     let path_str = match c_str.to_str() {
         Ok(s) => s,
         Err(_) => return -2, // Invalid UTF-8 in path
     };
 
-    // println!("DEBUG: polystore_init called with path: {}", path_str);
-
-    match KzgContext::load_from_file(path_str) {
+    // Every invocation authenticates its requested artifact, even after initialization.
+    let bytes = match std::fs::File::open(path_str)
+        .map_err(crate::kzg::KzgError::from)
+        .and_then(crate::kzg::read_trusted_setup)
+    {
+        Ok(bytes) => bytes,
+        Err(_) => return -3,
+    };
+    if KZG_CTX.get().is_some() {
+        return 0;
+    }
+    match KzgContext::load_from_reader(bytes.as_slice()) {
         Ok(ctx) => {
             // println!("DEBUG: KzgContext loaded successfully");
             let _ = KZG_CTX.set(ctx); // Ignore error if set concurrently
@@ -41,6 +45,31 @@ pub extern "C" fn polystore_init(trusted_setup_path: *const c_char) -> c_int {
             eprintln!("ERROR: Failed to load KzgContext");
             -3 // Failed to load
         }
+    }
+}
+
+/// Exact canonical received blob; caller owns a writable 48-byte output.
+#[unsafe(no_mangle)]
+pub extern "C" fn polystore_commit_received_blob(
+    input: *const u8,
+    len: usize,
+    out: *mut u8,
+) -> c_int {
+    if input.is_null() || out.is_null() || len != BLOB_SIZE {
+        return -1;
+    }
+    let Some(ctx) = KZG_CTX.get() else {
+        return -1;
+    };
+    let bytes = unsafe { std::slice::from_raw_parts(input, len) };
+    match ctx.commit_received_blob(bytes) {
+        Ok(commitment) => {
+            unsafe {
+                std::ptr::copy_nonoverlapping(commitment.as_ptr(), out, 48);
+            }
+            0
+        }
+        Err(_) => -1,
     }
 }
 

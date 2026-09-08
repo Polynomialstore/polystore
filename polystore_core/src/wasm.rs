@@ -41,6 +41,23 @@ pub struct PolyStoreWasm {
 
 #[wasm_bindgen]
 impl PolyStoreWasm {
+    pub fn validate_trusted_setup(bytes: &[u8]) -> Result<(), JsValue> {
+        crate::kzg::validate_trusted_setup(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn commit_received_blob(&self, blob: &[u8]) -> Result<Uint8Array, JsValue> {
+        let commitment = self
+            .kzg_ctx
+            .commit_received_blob(blob)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(commitment.as_slice()))
+    }
+
+    pub fn validate_packed_payload(encoded: &[u8], raw_len: u32) -> Result<(), JsValue> {
+        crate::coding::validate_packed_payload(encoded, raw_len as usize)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     #[wasm_bindgen(constructor)]
     pub fn new(trusted_setup_bytes: &[u8]) -> Result<PolyStoreWasm, JsValue> {
         console_error_panic_hook::set_once();
