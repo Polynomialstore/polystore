@@ -255,6 +255,18 @@ func storeFrozenSessionProof(f *frozenRetrievalSession, proofs []types.ChainedPr
 			}
 			return nil
 		}
+		// Cleanup may lag abandoned-session traffic or an unavailable chain. Cap
+		// retained records at the chain's live-session bound (<=1 GiB payload),
+		// including unresolved broadcasts. Existing records remain retryable.
+		cursor := bucket.Cursor()
+		prefix := []byte("v2:")
+		var count uint64
+		for k, _ := cursor.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cursor.Next() {
+			count++
+			if count >= types.MaxLiveRetrievalSessionContexts {
+				return fmt.Errorf("retained session proof capacity reached; retry after cleanup")
+			}
+		}
 		return bucket.Put(key, encoded)
 	})
 }

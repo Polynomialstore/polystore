@@ -219,7 +219,15 @@ func startGenerationRetention() {
 		// Retain the directory cursor across bounded ticks so an unavailable early
 		// batch cannot starve later deals. One descriptor; no growing inventory.
 		var dir *os.File
+		var proofCursor []byte
 		for {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			var err error
+			proofCursor, err = cleanupFrozenSessionProofs(ctx, proofCursor)
+			cancel()
+			if err != nil {
+				log.Printf("Session proof retention: preserving uncertain records: %v", err)
+			}
 			if dir == nil {
 				dir, _ = os.Open(filepath.Join(uploadDir, "deals"))
 			}
