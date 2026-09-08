@@ -192,6 +192,42 @@ def committed_tx(value, expected_hash):
     return value
 
 
+def committed_block_summary(block, results, height, chain):
+    """Reconcile every ordered transaction with committed ABCI results.
+
+    Transaction payload bytes exclude block headers, evidence and framing; they
+    are not a claim about full protobuf block size or delivered user bytes.
+    """
+    integer(height, "block height", 1)
+    header = block["block"]["header"]
+    if integer(header["height"], "header height", 1) != height or integer(results["height"], "result height", 1) != height or header["chain_id"] != chain:
+        raise ValueError("committed block identity mismatch")
+    for digest in (block["block_id"]["hash"], header["app_hash"]):
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            raise ValueError("invalid committed block or application hash")
+    encoded, responses = block["block"]["data"]["txs"], results["txs_results"]
+    encoded = [] if encoded is None else encoded
+    responses = [] if responses is None else responses
+    if not isinstance(encoded, list) or not isinstance(responses, list) or len(encoded) != len(responses) or len(encoded) > 65536:
+        raise ValueError("committed transaction/result count mismatch")
+    rows, total = [], 0
+    for tx, response in zip(encoded, responses):
+        if not isinstance(tx, str) or len(tx) > 4 * 1024 * 1024:
+            raise ValueError("oversized or malformed block transaction")
+        raw = base64.b64decode(tx, validate=True)
+        total += len(raw)
+        if not raw or total > 2 * 1024 * 1024:
+            raise ValueError("transaction payload exceeds finite block byte profile")
+        rows.append(dict(txhash=hashlib.sha256(raw).hexdigest().upper(), bytes=len(raw),
+            code=integer(response["code"], "transaction code"),
+            gas_wanted=integer(response["gas_wanted"], "gas wanted"),
+            gas_used=integer(response["gas_used"], "gas used")))
+    return dict(height=height, time=header["time"], block_hash=block["block_id"]["hash"].upper(),
+                preceding_app_hash=header["app_hash"].upper(), transactions=rows,
+                tx_payload_bytes=total, gas_wanted=sum(row["gas_wanted"] for row in rows),
+                gas_used=sum(row["gas_used"] for row in rows))
+
+
 def signal_owned_process_group(pid, sig):
     """Signal a start_new_session group whose leader has not been reaped."""
     try:
