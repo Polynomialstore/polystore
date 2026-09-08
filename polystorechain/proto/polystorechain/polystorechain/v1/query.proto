@@ -13,6 +13,12 @@ option go_package = "polystorechain/x/polystorechain/types";
 
 // Query defines the gRPC querier service.
 service Query {
+  // Complete bounded union of live session and retained audit generations.
+  // No provider filter: both assigned providers and authorized deputies retain it.
+  rpc RetainedGenerations(QueryRetainedGenerationsRequest) returns (QueryRetainedGenerationsResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/retained-generations";
+  }
+
   // Current/previous bounded provider obligations, including distinct repair
   // readiness. Roots and generations describe retention, not current Deal state.
   rpc ListStorageAuditsByProvider(QueryListStorageAuditsByProviderRequest) returns (QueryListStorageAuditsByProviderResponse) {
@@ -549,4 +555,15 @@ message StorageAuditChallenge {
 message QueryGetStorageAuditChallengeResponse {
   StorageAuditView audit = 1;
   repeated StorageAuditChallenge challenges = 2 [(gogoproto.nullable) = false];
+}
+
+message QueryRetainedGenerationsRequest {}
+message RetainedGeneration {
+  uint64 deal_id = 1;
+  uint64 generation = 2;
+  bytes manifest_root = 3;
+}
+message QueryRetainedGenerationsResponse {
+  uint64 committed_height = 1;
+  repeated RetainedGeneration generations = 2 [(gogoproto.nullable) = false];
 }

@@ -1,6 +1,6 @@
 # RFC: Challenge Derivation & Proof Quota Policy
 
-**Status:** Legacy v1 default; v2 primitives and SESSION runtime implemented, coordinated activation unqualified
+**Status:** Legacy v1 default; v2 primitives, SESSION runtime and frozen storage obligations implemented, coordinated activation unqualified
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
@@ -14,10 +14,11 @@ serialization, response windows, distinct sampling and off-domain evaluation poi
 The SESSION keeper now authenticates its actors and immutable snapshots, captures
 fixed committed anchors, enforces exact proof targets and settles once. See the
 [session wire/profile/recovery contract](../docs/retrieval-v2-session-profile.md).
-Its scheduled activation defaults to disabled and remains unqualified until C4,
-#256/#257 and #260 pass. The pure package itself does not authenticate a setup,
-perform KZG verification or establish byte delivery. This SESSION slice does not
-complete the independent audit or deployment obligations of #255.
+The [frozen storage obligation implementation](../docs/retrieval-v2-storage-audits.md)
+adds independent ACTIVE audits, pending repair readiness and the complete retained
+generation query. Scheduled activation defaults to disabled and remains unqualified
+until coordinated #256/#257 integration and #260 qualification pass. The pure package itself does not authenticate a setup,
+perform KZG verification or establish byte delivery. Deployment and qualification obligations of #255 remain open.
 
 This section supersedes the historical v1 assumptions below **for future v2
 activation**. In particular, ordinary retrieval cannot reduce independent storage
