@@ -90,7 +90,7 @@ if [ -z "${E2E_STACK_PROFILE:-}" ]; then
     export E2E_STACK_PROFILE=fast
   fi
 fi
-if [ "$E2E_STACK_PROFILE" = "fast" ]; then
+if [ "${E2E_MODE2_STREAMED:-0}" != "1" ]; then
   # One-blob sessions must pay after ceil(5% burn); 1stake would all burn.
   export POLYSTORE_RETRIEVAL_PRICE_PER_BLOB=17stake
 fi
