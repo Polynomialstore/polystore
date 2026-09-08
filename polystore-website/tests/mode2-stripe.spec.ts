@@ -965,6 +965,7 @@ test.describe('mode2 streamed retrieval', () => {
     expect(windows.length).toBeGreaterThan(0)
     expect(windows.every((window) => window.gateway)).toBe(true)
     const primarySessions = await assertSettled()
+    if (fixtureKiB === 1) expect(windows).toHaveLength(1)
     expect(primarySessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
     await expect(routeEl).toContainText(/gateway/i)
     await expect(fileRow).toBeVisible()
@@ -982,34 +983,41 @@ test.describe('mode2 streamed retrieval', () => {
       filePath, authorizedProofProvider: deputy, routePreference: 'prefer_gateway' as const })
     expect(deputyResult).toEqual({ bytes: fileBytes.length, sha256: expectedHash })
     const deputySessions = await assertSettled()
+    if (fixtureKiB === 1) expect(windows).toHaveLength(1)
     expect(deputySessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
     expect(deputySessions.every((session) => session.payee === deputy && session.assigned !== deputy)).toBe(true)
     expect(rejectedWindow).toBeDefined()
+    let directProvider: { bytes: number; sha256: string; sessions: string[] } | undefined
+    if (!isMode2Fast || fixtureKiB === 1) {
+      const gatewaySessions = new Set(windows.map((window) => window.session))
+      windows.length = 0
+      const providerButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
+      const providerBytes = await readDownloadBytes(page, providerButton)
+      console.log('[secured retrieval] provider bytes downloaded')
+      expect(providerBytes.equals(fileBytes)).toBe(true)
+      expect(windows.length).toBeGreaterThan(0)
+      expect(windows.every((window) => !window.gateway && !gatewaySessions.has(window.session))).toBe(true)
+      const directSessions = await assertSettled()
+      if (fixtureKiB === 1) expect(windows).toHaveLength(1)
+      expect(directSessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
+      directProvider = { bytes: providerBytes.length, sha256: crypto.createHash('sha256').update(providerBytes).digest('hex'),
+        sessions: directSessions.map((session) => session.id) }
+      await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i)
+    }
     const accountingPath = testInfo.outputPath('retrieval-delivery-accounting.json')
     await fs.writeFile(accountingPath, JSON.stringify({
-      scope: `${fixtureKiB} KiB live browser retrieval and explicit deputy; no capacity claim`,
+      scope: `${fixtureKiB} KiB live browser retrieval and explicit deputy${directProvider ? ' and direct provider' : ''}; no capacity claim`,
       provenanceScope: 'checkout source and harness files only; running executable, native library and WASM identities are not recorded',
       sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
       sourceTrees: Object.fromEntries(['polystorechain', 'polystore_core', 'polystore_gateway', 'polystore-website/src', 'scripts'].map((directory) => [directory, execFileSync('git', ['rev-parse', `HEAD:${directory}`], { encoding: 'utf8' }).trim()])),
       sourceDiffSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', 'HEAD', '--', ...sourcePaths])).digest('hex'),
       harnessSha256: await Promise.all(['tests/mode2-stripe.spec.ts', 'tests/utils/deputyRetrieval.tsx'].map(async (file) => ({ file, sha256: crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex') }))),
       fixtureBytes: fileBytes.length, fixtureSha256: expectedHash,
-      gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult,
+      gatewaySha256: crypto.createHash('sha256').update(gatewayBytes).digest('hex'), deputy: deputyResult, directProvider,
       rejectedWindow, sessions: settlements,
     }, null, 2))
     await testInfo.attach('retrieval-delivery-accounting.json', { contentType: 'application/json', path: accountingPath })
     if (isMode2Fast || fixtureKiB === 1) return
-
-    const gatewaySessions = new Set(windows.map((window) => window.session))
-    windows.length = 0
-    const providerButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
-    const providerBytes = await readDownloadBytes(page, providerButton)
-    console.log('[secured retrieval] provider bytes downloaded')
-    expect(providerBytes.equals(fileBytes)).toBe(true)
-    expect(windows.length).toBeGreaterThan(0)
-    expect(windows.every((window) => !window.gateway && !gatewaySessions.has(window.session))).toBe(true)
-    await assertSettled()
-    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i)
 
     // Losing the user-gateway must still permit verified direct delivery.
     for (const origin of gatewayOrigins) await page.route(`${origin}/**`, (route) => route.abort('failed'))
