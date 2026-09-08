@@ -4,10 +4,8 @@ use bls12_381::{G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Scal
 mod session_batch;
 #[cfg(not(target_arch = "wasm32"))]
 use blst::MultiPoint;
-#[cfg(target_arch = "wasm32")]
 use blst::blst_p1;
 use blst::{BLST_ERROR, blst_p1_affine, blst_p1_compress, blst_p1_uncompress};
-#[cfg(target_arch = "wasm32")]
 use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb_t};
 use ff::{BatchInverter, Field, PrimeField};
 use group::Curve;
@@ -724,9 +722,39 @@ impl KzgContext {
             }
         }
 
+        #[cfg(target_arch = "wasm32")]
         let proof = msm_pippenger_g1(&self.g1_points, &q_evals)
             .to_affine()
             .to_compressed();
+        #[cfg(not(target_arch = "wasm32"))]
+        let proof = {
+            // Call the serial primitive directly: MultiPoint::mult uses the
+            // dependency's thread pool for this size. All scratch is local.
+            let n = q_evals.len();
+            let scalar_bytes: Vec<_> = q_evals.iter().map(Scalar::to_bytes).collect();
+            let points = [self.g1_points_blst.as_ptr(), std::ptr::null()];
+            let scalars = [scalar_bytes.as_ptr().cast::<u8>(), std::ptr::null()];
+            let mut out = blst_p1::default();
+            let mut proof = [0u8; 48];
+            // The approved setup and domain both contain exactly 4096 points;
+            // Vec<[u8;32]> is contiguous canonical LE scalars. The null second
+            // pointer selects blst's contiguous-array convention. Sized limb
+            // scratch provides its required alignment and remains live here.
+            unsafe {
+                let size = blst_p1s_mult_pippenger_scratch_sizeof(n);
+                let mut scratch = vec![0 as limb_t; size.div_ceil(std::mem::size_of::<limb_t>())];
+                blst_p1s_mult_pippenger(
+                    &mut out,
+                    points.as_ptr(),
+                    n,
+                    scalars.as_ptr(),
+                    256,
+                    scratch.as_mut_ptr(),
+                );
+                blst_p1_compress(proof.as_mut_ptr(), &out);
+            }
+            proof
+        };
 
         let mut y_le = y.to_repr();
         let mut y_be = [0u8; 32];
