@@ -4,6 +4,8 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+import sqlite3
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -77,6 +79,65 @@ class SustainedTest(unittest.TestCase):
                     self.assertEqual((len(ids), height), (2, 12))
                     self.assertEqual(submit.call_count, 1)
                     self.assertEqual(life.doc['preparation_transactions'], [response])
+
+
+    def test_block_reconciliation_rejects_missing_transaction_gas_and_header_drift(self):
+        for corrupt in (None, "missing", "gas", "header"):
+            with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as home:
+                journal = Path(home) / "journal.sqlite"
+                tx = dict(txhash="AB" * 32, code=0, gas_used=12, gas_wanted=20)
+                result = dict(tx, outcome="committed_success", height=11, operation_id="proof-1")
+                with sqlite3.connect(journal) as db:
+                    db.execute("CREATE TABLE transactions(result TEXT)")
+                    db.execute("INSERT INTO transactions VALUES (?)", (json.dumps(result),))
+                summary = dict(height=11, time="time", block_hash="CD" * 32,
+                    preceding_app_hash="EF" * 32, transactions=[] if corrupt == "missing" else [dict(tx)])
+                if corrupt == "gas":
+                    summary["transactions"][0]["gas_used"] += 1
+                phases = {name: dict(complete=True, nodes=[dict(node_id=str(i), sample=dict(committed_height=h))
+                    for i in range(4)]) for name, h in (("sustained_before", 10), ("sustained_after", 11))}
+                def query(node, path):
+                    if path.startswith("/commit"):
+                        return dict(canonical=True, signed_header=dict(header=dict(height="11", chain_id="chain",
+                            time="drift" if corrupt == "header" and node == 3 else "time", app_hash="EF" * 32),
+                            commit=dict(height="11", block_id=dict(hash="CD" * 32))))
+                    return {}
+                life = SimpleNamespace(home=Path(home), chain="chain", nodes=list(range(4)), remaining=Mock(),
+                    query=query, doc=dict(commit_step_metrics=dict(phases=phases)))
+                with patch.object(artifact, "committed_block_summary", return_value=summary):
+                    if corrupt:
+                        with self.assertRaises(ValueError):
+                            workload.reconcile_sustained_blocks(life, journal)
+                    else:
+                        workload.reconcile_sustained_blocks(life, journal)
+                        self.assertEqual(life.doc["committed_block_reconciliation"]["committed_workload_transactions"], 1)
+                        self.assertEqual(json.loads((Path(home) / "sustained-blocks.jsonl").read_text())["transactions"][0]["operation_id"], "proof-1")
+
+    def test_stream_filter_requires_four_collectors_and_uses_only_fenced_samples(self):
+        with tempfile.TemporaryDirectory() as home:
+            start = dict(chain_id="chain", monotonic_start_ns=10, monotonic_end_ns=20, committed_height=1)
+            end = dict(chain_id="chain", monotonic_start_ns=50, monotonic_end_ns=60, committed_height=2)
+            inside = dict(chain_id="chain", monotonic_start_ns=21, monotonic_end_ns=49)
+            outside = dict(chain_id="chain", monotonic_start_ns=1, monotonic_end_ns=9)
+            phases = {name: dict(nodes=[dict(node_id=str(i), sample=sample) for i in range(4)])
+                for name, sample in (("sustained_before", start), ("sustained_after", end))}
+            streams = []
+            for i in range(4):
+                path = Path(home) / f"{i}.jsonl"
+                path.write_text(json.dumps(outside) + "\n" + json.dumps(inside) + "\n")
+                streams.append(dict(node_id=str(i), path=str(path)))
+            life = SimpleNamespace(chain="chain", doc=dict(commit_step_metrics=dict(phases=phases), commit_streams=streams))
+            processes = [SimpleNamespace(returncode=0) for _ in range(4)]
+            with patch.object(workload.commit_metrics, "summarize_commit_metrics", return_value=dict(qualified=True)) as summarize:
+                workload.summarize_commit_streams(life, processes)
+                self.assertEqual(summarize.call_count, 4)
+                self.assertEqual(summarize.call_args.args[0], [start, inside, end])
+                self.assertEqual(streams[0]["raw_samples"], 2)
+                with self.assertRaises(ValueError):
+                    workload.summarize_commit_streams(life, processes[:3])
+                processes[0].returncode = 1
+                with self.assertRaises(ValueError):
+                    workload.summarize_commit_streams(life, processes)
 
 
 if __name__ == '__main__':
