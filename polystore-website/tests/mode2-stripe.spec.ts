@@ -555,6 +555,61 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   expect(await isConnected()).toBe(true)
 }
 
+async function hashCheckedDownload(download: Pick<Download, 'createReadStream' | 'cancel'>, checkDisk: () => Promise<void>) {
+  let failure: unknown, checking: Promise<void> | undefined
+  let stream: Readable | null = null
+  const check = () => {
+    if (!checking && !failure) checking = checkDisk().catch(async (error) => {
+      failure = error
+      stream?.destroy()
+      await download.cancel().catch(() => {})
+    }).finally(() => { checking = undefined })
+    return checking
+  }
+  // The event announces the start of a download. Keep the guard alive while
+  // createReadStream waits and while Chromium/Node finish consuming its bytes.
+  const timer = setInterval(() => { void check() }, 5000)
+  try {
+    await check()
+    if (failure) throw failure
+    stream = await download.createReadStream()
+    if (failure) throw failure
+    if (!stream) throw new Error('download stream unavailable')
+    const hash = crypto.createHash('sha256')
+    let bytes = 0
+    for await (const chunk of stream) { bytes += chunk.length; hash.update(chunk) }
+    await check()
+    if (failure) throw failure
+    return { bytes, digest: hash.digest('hex') }
+  } catch (error) { throw failure ?? error }
+  finally { clearInterval(timer); stream?.destroy(); await checking }
+}
+
+test('streamed download disk guard cancels after the download event', async () => {
+  for (const waitingForStream of [true, false]) {
+    let checks = 0, cancelled = false
+    let endDownload!: () => void
+    const pending = new Promise<void>((resolve) => { endDownload = resolve })
+    const stream = new Readable({ read() {} })
+    stream.push(Buffer.from('first'))
+    const download = {
+      createReadStream: async () => {
+        if (waitingForStream) { await pending; throw new Error('download cancelled') }
+        return stream
+      },
+      // Once Playwright returns a stream, its download is already complete.
+      cancel: async () => { cancelled = true; if (waitingForStream) endDownload() },
+    }
+    await expect(hashCheckedDownload(download, async () => {
+      if (++checks === 2) throw new Error('scratch space below 2 GiB')
+    })).rejects.toThrow('scratch space below 2 GiB')
+    expect(cancelled).toBe(true)
+    expect(checks).toBe(2)
+    if (!waitingForStream) expect(stream.destroyed).toBe(true)
+    stream.destroy()
+  }
+})
+
 test.describe('mode2 streamed retrieval', () => {
   test.skip(!hasLocalStack || process.env.E2E_MODE2_STREAMED !== '1', 'opt-in real streamed retrieval')
   test.use({ acceptDownloads: true })
@@ -659,12 +714,7 @@ test.describe('mode2 streamed retrieval', () => {
       ])
       if (!download) throw new Error(`streamed download event missing: ${await captureDownloadDiagnostics(page)}`)
       try {
-        const stream = await download.createReadStream()
-        if (!stream) throw new Error('download stream unavailable')
-        const actualHash = crypto.createHash('sha256')
-        let bytes = 0
-        for await (const chunk of stream) { bytes += chunk.length; actualHash.update(chunk) }
-        const digest = actualHash.digest('hex')
+        const { bytes, digest } = await hashCheckedDownload(download, () => checkDisk(2))
         summary.retrievalMs = Date.now() - retrievalStarted
         summary.actualBytes = bytes; summary.actualHash = digest
         expect(bytes).toBe(size); expect(digest).toBe(expectedHash)
