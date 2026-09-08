@@ -1,4 +1,5 @@
 import { test, expect, type Download, type Locator, type Page } from '@playwright/test'
+import { persistentTest } from './utils/persistentBrowser'
 import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
@@ -617,7 +618,7 @@ test.describe('mode2 streamed retrieval', () => {
   test.use({ acceptDownloads: true })
   test.describe.configure({ retries: 0 })
 
-  test('mode2 streamed authenticated retrieval', async ({ page }, testInfo) => {
+  persistentTest('mode2 streamed authenticated retrieval', async ({ page }, testInfo) => {
     const size = Number(process.env.E2E_MODE2_STREAMED_BYTES || 16_252_928)
     expect([16_252_928, 1_073_741_824]).toContain(size)
     const large = size === 1_073_741_824
@@ -645,7 +646,7 @@ test.describe('mode2 streamed retrieval', () => {
       }
       const last = cipher.final(); hash.update(last); yield last
     }
-    const summary: Record<string, unknown> = { size, route, expectedMdus, expectedSessions, expectedBlobs }
+    const summary: Record<string, unknown> = { size, route, expectedMdus, expectedSessions, expectedBlobs, browserStorage: 'fresh persistent profile' }
     try {
       await pipeline(Readable.from(source()), createWriteStream(fixture, { flags: 'wx' }))
       const expectedHash = hash.digest('hex')
