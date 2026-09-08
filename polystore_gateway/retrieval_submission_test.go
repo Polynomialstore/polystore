@@ -206,19 +206,19 @@ func TestFrozenSubmissionRestartAndCleanup(t *testing.T) {
 			if err != nil {
 				t.Fatal("proofs not durable", err)
 			}
-			if mode == "checktx-rejection" {
+			if mode == "checktx-rejection" || mode == "committed-failure" {
 				if stored.record.Submitting || stored.record.TxHash != "" {
-					t.Fatal("explicit rejection left an unknown intent")
+					t.Fatal("resolved failed submission left an unknown intent")
 				}
 				return
 			}
 			if !stored.record.Submitting {
 				t.Fatal("lost persisted submission intent")
 			}
-			if mode == "lost-hash" || mode == "committed-failure" {
+			if mode == "lost-hash" {
 				repeated := invokeSubmission(body)
 				if repeated.Code != want || commands != 1 {
-					t.Fatal("unknown or committed failure rebroadcast", repeated.Code, commands)
+					t.Fatal("unknown submission rebroadcast", repeated.Code, commands)
 				}
 			}
 			if mode == "hash-restart" {

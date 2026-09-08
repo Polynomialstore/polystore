@@ -396,6 +396,37 @@ func changeFrozenSubmissions(entries []*frozenSubmission, update func(*storedFro
 	return err
 }
 
+// Only a matching, committed nonzero result authorizes this reset. Keep the
+// frozen proofs unchanged for a later caller's freshly validated retry or GC.
+func resetFailedFrozenSubmissions(entries []*frozenSubmission, signer string, ids []string, hash string) error {
+	canonical, err := normalizeTxHash(hash)
+	if err != nil || canonical != hash || len(entries) == 0 || len(entries) != len(ids) {
+		return fmt.Errorf("invalid failed submission identity")
+	}
+	for i, entry := range entries {
+		if !entry.record.Submitting || entry.record.TxHash != hash || fmt.Sprintf("0x%x", entry.frozen.Context.ID) != ids[i] {
+			return fmt.Errorf("stored submission does not match failed transaction")
+		}
+	}
+	return changeFrozenSubmissions(entries, func(r *storedFrozenProof) {
+		r.Submitting, r.TxHash = false, ""
+	}, false, func(tx *bolt.Tx) error {
+		b := tx.Bucket(onChainSessionProofsBucket)
+		if raw := b.Get(pendingSignerKey(signer)); raw != nil {
+			var marker pendingSignerOperation
+			if err := decodePendingSigner(raw, &marker); err != nil {
+				return err
+			}
+			if marker.TxHash != hash {
+				return fmt.Errorf("signer hash changed during failed submission recovery")
+			}
+		}
+		// Earlier versions cleared only the marker on committed failure. Permit
+		// repairing those records, but never clear a different/newer operation.
+		return clearPendingSigner(tx, signer, "retrieval", ids)
+	})
+}
+
 func writeSubmissionOutcome(w http.ResponseWriter, request sessionProofRequest, ids []string, count int, hash, status, cleanup string, err error) {
 	result := map[string]any{"status": status, "tx_hash": hash, "proof_count": count}
 	if request.SessionIDs != nil {
@@ -547,8 +578,8 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		status := "pending"
 		if errors.Is(err, errTxFailed) {
 			status = "failed"
-			if clearErr := sessionDB.Update(func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
-				err = fmt.Errorf("%w; signer recovery: %v", err, clearErr)
+			if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
+				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 			}
 		}
 		writeSubmissionOutcome(w, request, ids, proofCount, hash, status, "retained", err)
@@ -632,8 +663,8 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if errors.Is(err, errTxFailed) {
 		status = "failed"
-		if clearErr := sessionDB.Update(func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
-			err = fmt.Errorf("%w; signer recovery: %v", err, clearErr)
+		if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
+			err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 		}
 	}
 	writeSubmissionOutcome(w, request, ids, proofCount, hash, status, "retained", err)
