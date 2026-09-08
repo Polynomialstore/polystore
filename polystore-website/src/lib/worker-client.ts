@@ -3,9 +3,12 @@
 // This file provides a simple client API to interact with the gateway.worker.ts
 // It abstracts the message passing and Promise-based communication.
 import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
+import type { FrozenSession, PinnedGeneration } from './retrieval'
+import { readBoundedResponse } from './retrieval'
+import type { RetrievalEnvelope, verifyRetrievalMetadata } from './retrievalWire'
+import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 import { recommendedUserMduKzgBatchCapForWebGpuAdapter } from './upload/userMduKzgBatch'
 import { UserMduKzgScheduler } from './upload/userMduKzgScheduler'
-import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 
 // Instantiate the worker
 const worker = new Worker(new URL('../workers/gateway.worker.ts', import.meta.url), {
@@ -409,6 +412,20 @@ async function expandStripeWithScheduledKzg(
 // --- Public API for interacting with the Worker ---
 
 export const workerClient = {
+  async initRetrievalWasm(): Promise<void> {
+    const signal = AbortSignal.timeout(30_000)
+    const response = await fetch('/trusted_setup.txt', { signal })
+    if (!response.ok) { await response.body?.cancel(); throw new Error('trusted setup unavailable') }
+    const trustedSetupBytes = await readBoundedResponse(response, 807177, signal)
+    await sendMessageToWorker('initRetrievalWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer])
+  },
+  async verifyRetrievalMetadata(bytes: Uint8Array, pin: PinnedGeneration): Promise<ReturnType<typeof verifyRetrievalMetadata>> {
+    // Metadata remains available to the caller for generation-specific storage.
+    return sendMessageToWorker('verifyRetrievalMetadata', { bytes, pin }) as Promise<ReturnType<typeof verifyRetrievalMetadata>>
+  },
+  async verifyRetrievalWindow(session: FrozenSession, envelope: RetrievalEnvelope): Promise<Uint8Array> {
+    return sendMessageToWorker('verifyRetrievalWindow', { session, envelope }, [envelope.bytes.buffer]) as Promise<Uint8Array>
+  },
   // Initialize the WASM module inside the worker, including KzgContext
   async initPolyStoreWasm(trustedSetupBytes: Uint8Array): Promise<string> {
     const setupCopy = trustedSetupBytes.slice()

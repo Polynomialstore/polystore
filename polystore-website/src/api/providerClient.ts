@@ -1,5 +1,7 @@
-import { fetchWithTimeout } from '../lib/http'
 import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
+import { fetchWithTimeout } from '../lib/http'
+import { readBoundedResponse, type FrozenSession, type PinnedGeneration } from '../lib/retrieval'
+import { parseRetrievalEnvelope, RETRIEVAL_ACCEPT } from '../lib/retrievalWire'
 import type { GatewayPlanResponse, UploadResult } from './gatewayClient'
 
 type UnknownRecord = Record<string, unknown>
@@ -404,6 +406,29 @@ export async function providerFetchMduKzg(
   const json = (await res.json().catch(() => null)) as MduKzgData | null
   if (!json) throw new Error('Invalid mdu-kzg JSON')
   return json
+}
+
+export async function providerFetchRetrievalMetadata(providerBase: string, pin: PinnedGeneration, mduIndex = 0n, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<Uint8Array> {
+  if (mduIndex < 0n || mduIndex >= pin.metadataMdus) throw new Error('invalid metadata MDU')
+  const q = new URLSearchParams({ deal_id: pin.dealId.toString(), owner: pin.owner })
+  const deadline = AbortSignal.timeout(60_000)
+  const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+  const res = await fetchFn(`${providerBase.replace(/\/$/, '')}/sp/retrieval/mdu/${pin.root}/${mduIndex}?${q}`, { signal: activeSignal })
+  if (!res.ok) { await res.body?.cancel(); throw new Error(`metadata fetch failed (${res.status})`) }
+  const bytes = await readBoundedResponse(res, 8 * 1024 * 1024, activeSignal)
+  if (bytes.length !== 8 * 1024 * 1024) throw new Error('truncated metadata MDU')
+  return bytes
+}
+
+export async function providerFetchRetrievalWindow(providerBase: string, session: FrozenSession, signal?: AbortSignal, fetchFn: typeof fetch = fetch) {
+  const q = new URLSearchParams({ deal_id: session.pin.dealId.toString(), owner: session.owner, start_blob_index: String(session.window.startBlobIndex), blob_count: String(session.window.blobCount) })
+  const deadline = AbortSignal.timeout(60_000)
+  const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+  const res = await fetchFn(`${providerBase.replace(/\/$/, '')}/sp/retrieval/mdu/${session.pin.root}/${session.window.mduIndex}?${q}`, {
+    signal: activeSignal, headers: { Accept: RETRIEVAL_ACCEPT, 'X-PolyStore-Session-Id': session.sessionId,
+      'X-PolyStore-Start-Blob-Index': String(session.window.startBlobIndex), 'X-PolyStore-Blob-Count': String(session.window.blobCount) },
+  })
+  return parseRetrievalEnvelope(res, session, activeSignal)
 }
 
 export async function providerFetchMdu(

@@ -1,65 +1,50 @@
+import {
+  Activity,
+  FileJson,
+  MoreVertical,
+  Trash2,
+  XCircle,
+  Zap
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
-import { appConfig } from '../config'
-import { 
-  FileJson, 
-  Server, 
-  Activity, 
-  MoreVertical, 
-  Zap, 
-  Database, 
-  Trash2,
-  XCircle
-} from 'lucide-react'
-import { useProofs } from '../hooks/useProofs'
-import { useFetch, type FetchInput, type FetchResult, type SponsoredRetrievalAuth } from '../hooks/useFetch'
-import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
 import type { Hex } from 'viem'
-import { DealLivenessHeatmap } from './DealLivenessHeatmap'
-import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
-import { buildBlake2sMerkleLayers } from '../lib/merkle'
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { lcdFetchDeal } from '../api/lcdClient'
+import { providerFetchRetrievalMetadata } from '../api/providerClient'
+import { appConfig } from '../config'
 import type { LcdDeal } from '../domain/lcd'
-import { committedPolyfsLayout } from '../domain/polyfsLayout'
+import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
+import { useFetch, type FetchInput, type FetchResult, type SponsoredRetrievalAuth } from '../hooks/useFetch'
+import { useProofs } from '../hooks/useProofs'
+import { useTransportRouter } from '../hooks/useTransportRouter'
+import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
+import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
+import { buildBlake2sMerkleLayers } from '../lib/merkle'
+import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
+import {
+  parsePolyfsFilesFromMdu0,
+  parsePolyfsRootTableFromMdu0
+} from '../lib/polyfsLocal'
+import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch'
+import { fetchPinnedGeneration } from '../lib/retrieval'
+import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
+import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
   deleteDealDirectory,
   hasCachedFile,
-  readCachedFile,
-  readMdu,
-  writeMdu,
   readManifestRoot,
+  readMdu,
   readSlabMetadata,
-  writeCachedFile,
   writeManifestRoot,
-  writeSlabMetadata,
+  writeSlabMetadata
 } from '../lib/storage/OpfsAdapter'
-import {
-  mode2RowsForK,
-  parsePolyfsFilesFromMdu0,
-  parsePolyfsRootTableFromMdu0,
-  reconstructMduFromMode2SlotSlices,
-} from '../lib/polyfsLocal'
-import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY, readPolyfsFileFromOpfs } from '../lib/polyfsOpfsFetch'
-import { workerClient } from '../lib/worker-client'
-import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
-import { useTransportRouter } from '../hooks/useTransportRouter'
-import { parseServiceHint } from '../lib/serviceHint'
-import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
-import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel, readLocalGatewayConnectedHint } from '../lib/retrievalMode'
-import { planPolyfsFileRangeChunks } from '../lib/rangeChunker'
-import { decodePolyceV1, POLYCE_FLAG_COMPRESSION_ZSTD } from '../lib/polyce'
-import { providerFetchMdu, providerFetchMduWindowWithSession } from '../api/providerClient'
-import { lcdFetchDeal } from '../api/lcdClient'
-import { waitForTransactionReceipt } from '../lib/evmRpc'
-import {
-  decodeComputeRetrievalSessionIdsResult,
-  encodeComputeRetrievalSessionIdsData,
-  encodeConfirmRetrievalSessionsData,
-  encodeOpenRetrievalSessionsData,
-} from '../lib/polystorePrecompile'
+import type { RoutePreference } from '../lib/transport/types'
 import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot'
+import { workerClient } from '../lib/worker-client'
+import { DealLivenessHeatmap } from './DealLivenessHeatmap'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -108,14 +93,6 @@ function decodeGatewayHttpError(status: number, bodyText: string): string {
   return trimmed
 }
 
-function isGatewayOutdatedDownloadError(message: string): boolean {
-  const text = String(message || '')
-  if (/Range header is required/i.test(text) && /unsigned fetches must be chunked/i.test(text)) return true
-  if (/Gateway download failed\s*\((404|405)\)/i.test(text)) return true
-  if (/not found/i.test(text) && /gateway/i.test(text)) return true
-  return false
-}
-
 function localGatewayBaseCandidates(rawBase: string): string[] {
   const trimmed = String(rawBase || '').trim().replace(/\/$/, '')
   const out: string[] = []
@@ -144,20 +121,8 @@ function localGatewayBaseCandidates(rawBase: string): string[] {
 }
 
 async function ensureWasmReady(): Promise<void> {
-  if (wasmReadyPromise) return wasmReadyPromise
-  wasmReadyPromise = (async () => {
-    const res = await fetch('/trusted_setup.txt')
-    if (!res.ok) throw new Error(`Failed to load trusted setup (${res.status})`)
-    const buf = await res.arrayBuffer()
-    const trustedSetupBytes = new Uint8Array(buf)
-    try {
-      await workerClient.initPolyStoreWasm(trustedSetupBytes)
-    } catch (e) {
-      // If the worker was already initialized, ignore and proceed.
-      void e
-    }
-  })()
-  return wasmReadyPromise
+  if (!wasmReadyPromise) wasmReadyPromise = workerClient.initRetrievalWasm().catch((error) => { wasmReadyPromise = null; throw error })
+  await wasmReadyPromise
 }
 
 interface DealDetailProps {
@@ -240,21 +205,8 @@ interface FileRowProps {
   onToggleMenu: () => void
   onFileActivity?: (activity: FileActivity) => void
   reconcileLocalMduCache: (dealId: string, chainManifestRoot: string) => Promise<LocalCacheFreshnessResult>
-  downloadBytesAsFile: (bytes: Uint8Array, filePath: string) => void
   downloadBlobAsFile: (blob: Blob, filePath: string) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
-  downloadViaGatewayCache: (params: {
-    manifestRoot: string
-    dealId: string
-    owner: string
-    filePath: string
-    rangeStart?: number
-    rangeLen?: number
-    fileSizeBytes?: number
-    fileStartOffset?: number
-    mduSizeBytes?: number
-    blobSizeBytes?: number
-  }) => Promise<Blob>
   fetchFile: (params: FetchInput) => Promise<FetchResult | null>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
@@ -264,46 +216,10 @@ interface FileRowProps {
   setBusyFilePath: (path: string | null) => void
   downloadRangeStart: number
   downloadRangeLen: number
-  allFiles: PolyfsFileEntry[]
-  transportPreference?: string
+  transportPreference?: RoutePreference
   gatewayModePreferred: boolean
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'activity') => void
-}
-
-async function persistCachedDownloadState(dealId: string, manifestRoot: string, filePath: string, bytes: Uint8Array): Promise<void> {
-  await writeCachedFile(dealId, filePath, bytes)
-  const normalizedManifestRoot = normalizeManifestRoot(manifestRoot)
-  if (normalizedManifestRoot) {
-    await writeManifestRoot(dealId, normalizedManifestRoot)
-  }
-}
-
-function queueCachedDownloadPersist(
-  dealId: string,
-  manifestRoot: string,
-  filePath: string,
-  bytes: Uint8Array,
-  onCached: () => void,
-): void {
-  const safeBytes = new Uint8Array(bytes.byteLength)
-  safeBytes.set(bytes)
-  onCached()
-  void persistCachedDownloadState(dealId, manifestRoot, filePath, safeBytes).catch((error) => {
-    console.warn('Failed to persist browser download cache', {
-      dealId,
-      filePath,
-      error,
-    })
-  })
-}
-
-function sliceRange(bytes: Uint8Array, rangeStart: number, rangeLen: number): Uint8Array {
-  const start = Math.max(0, Math.floor(Number(rangeStart) || 0))
-  if (start >= bytes.byteLength) return new Uint8Array()
-  const maxLen = bytes.byteLength - start
-  const len = rangeLen > 0 ? Math.min(maxLen, Math.floor(Number(rangeLen) || 0)) : maxLen
-  return bytes.slice(start, start + len)
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -334,10 +250,8 @@ function FileRow({
   onToggleMenu,
   onFileActivity,
   reconcileLocalMduCache,
-  downloadBytesAsFile,
   downloadBlobAsFile,
   markDownloadPath,
-  downloadViaGatewayCache,
   fetchFile,
   resolveProviderHttpBase,
   sponsoredAuth,
@@ -347,7 +261,6 @@ function FileRow({
   setBusyFilePath,
   downloadRangeStart,
   downloadRangeLen,
-  allFiles,
   transportPreference,
   gatewayModePreferred,
 }: FileRowProps) {
@@ -397,418 +310,27 @@ function FileRow({
     }
   }, [isOpen])
 
-  const readFromLocalMduCache = async (dealId: string, chainCid: string): Promise<Uint8Array> => {
-    const cacheFreshness = await withTimeout(
-      reconcileLocalMduCache(dealId, chainCid),
-      15_000,
-      'local slab reconciliation',
-    )
-    if (!cacheFreshness.usable) {
-      throw new Error(`local slab not available (${cacheFreshness.reason})`)
-    }
-
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    const compressed = (Number(file.flags || 0) & POLYCE_FLAG_COMPRESSION_ZSTD) !== 0
-    const readRangeStart = compressed ? 0 : safeStart
-    const readRangeLen = compressed ? 0 : safeLen
-    return withTimeout(
-      readPolyfsFileFromOpfs({
-        dealId,
-        file,
-        allFiles,
-        rangeStart: readRangeStart,
-        rangeLen: readRangeLen,
-      }),
-      20_000,
-      'local slab read',
-    )
-      .then(async (bytes) => {
-        if (!compressed) return bytes
-        const decoded = await decodePolyceV1(bytes)
-        const payload = decoded.payload
-        return safeStart > 0 || safeLen > 0 ? sliceRange(payload, safeStart, safeLen) : payload
-      })
-      .catch((error: unknown) => {
-        const msg = error instanceof Error ? error.message : String(error)
-        throw new Error(`local slab not available (${msg})`)
-      })
-  }
-
-  const handleAutoDownload = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
+  const downloadVerified = async (preference?: RoutePreference) => {
+    setFileActionError(null); setBusyFilePath(file.path)
     const dealId = String(deal.id)
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    const preferGatewayRoute = gatewayModePreferred && readLocalGatewayConnectedHint()
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
-      const manifestHex = manifestRoot
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'pending',
-      })
-
-      if (!preferGatewayRoute) {
-        try {
-          const bytes = await readFromLocalMduCache(dealId, manifestHex)
-          downloadBytesAsFile(bytes, file.path)
-          queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-            setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-          })
-          markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
-          onFileActivity?.({
-            dealId,
-            filePath: file.path,
-            sizeBytes: file.size_bytes,
-            manifestRoot: manifestHex,
-            action: 'download',
-            status: 'success',
-          })
-          return
-        } catch {
-          const cacheFreshness = await withTimeout(
-            reconcileLocalMduCache(dealId, manifestHex),
-            15_000,
-            'browser cache reconciliation',
-          ).catch(() => null)
-          if (cacheFreshness?.usable) {
-            const cachedBytes = await readCachedFile(dealId, file.path)
-            if (cachedBytes) {
-              downloadBytesAsFile(cachedBytes, file.path)
-              markDownloadPath('browser cache', 'browser_cache', 'browser_cached_file', 'fresh')
-              onFileActivity?.({
-                dealId,
-                filePath: file.path,
-                sizeBytes: file.size_bytes,
-                manifestRoot: manifestHex,
-                action: 'download',
-                status: 'success',
-              })
-              return
-            }
-          }
-        }
-      }
-      const autoRoutePreference =
-        preferGatewayRoute
-          ? 'prefer_gateway'
-          : transportPreference === 'prefer_p2p'
-          ? 'prefer_p2p'
-          : transportPreference === 'prefer_direct_sp'
-            ? 'prefer_direct_sp'
-            : undefined
-      try {
-        const result = await fetchFile({
-          dealId,
-          manifestRoot: manifestHex,
-          owner: requestOwner,
-          filePath: file.path,
-          routePreference: autoRoutePreference,
-          rangeStart: safeStart,
-          rangeLen: safeLen,
-          fileStartOffset: file.start_offset,
-          fileSizeBytes: file.size_bytes,
-          mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-          blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-          sponsoredAuth,
-        })
-        if (!result) throw new Error('download failed')
-        const bytes = new Uint8Array(await result.blob.arrayBuffer())
-        downloadBlobAsFile(result.blob, file.path)
-        queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-        })
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'success',
-        })
-        return
-      } catch (fetchErr) {
-        if (!gatewayCached || !readLocalGatewayConnectedHint()) throw fetchErr
-
-        const fallbackReason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
-        console.warn('Auto download transport path failed, falling back to gateway cache download', {
-          dealId,
-          filePath: file.path,
-          error: fallbackReason,
-        })
-      }
-
-      const gatewayBlob = await downloadViaGatewayCache({
-        manifestRoot: manifestHex,
-        dealId,
-        owner: requestOwner,
-        filePath: file.path,
-        rangeStart: safeStart,
-        rangeLen: safeLen,
-        fileSizeBytes: file.size_bytes,
-        fileStartOffset: file.start_offset,
-        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-      })
-      const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      downloadBlobAsFile(gatewayBlob, file.path)
-      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      })
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'success',
-      })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (manifestRoot) {
-        const manifestHex = manifestRoot
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'failed',
-          error: msg,
-        })
-      }
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-    }
-  }
-
-  const handleOnchainRetrieval = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
-    const dealId = String(deal.id)
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    try {
-      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
-      const manifestHex = manifestRoot
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'pending',
-      })
-      const result = await fetchFile({
-        dealId,
-        manifestRoot: manifestHex,
-        owner: requestOwner,
-        filePath: file.path,
-        serviceBase: resolveProviderHttpBase(),
-        routePreference: 'prefer_direct_sp',
-        rangeStart: safeStart,
-        rangeLen: safeLen,
-        fileStartOffset: file.start_offset,
-        fileSizeBytes: file.size_bytes,
-        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-        sponsoredAuth,
-      })
-      if (!result) throw new Error('download failed')
-      const bytes = new Uint8Array(await result.blob.arrayBuffer())
+      onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
+      const result = await fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
+        rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth })
+      if (!result) throw new Error('verified retrieval failed')
       downloadBlobAsFile(result.blob, file.path)
-      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      })
-      markDownloadPath('Browser -> Provider', 'direct_sp', 'network_fetch', 'fresh')
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'success',
-      })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (manifestRoot) {
-        const manifestHex = manifestRoot
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'failed',
-          error: msg,
-        })
-      }
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-      onToggleMenu()
-    }
+      markDownloadPath('Verified retrieval', result.route || 'network_fetch', 'verified_file', 'pinned_generation')
+      onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'success' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setFileActionError(message)
+      if (manifestRoot) onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'failed', error: message })
+    } finally { setBusyFilePath(null); onToggleMenu() }
   }
-
-  const handleGatewayProviderRetrieval = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
-    const dealId = String(deal.id)
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    try {
-      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
-      const manifestHex = manifestRoot
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'pending',
-      })
-      const result = await fetchFile({
-        dealId,
-        manifestRoot: manifestHex,
-        owner: requestOwner,
-        filePath: file.path,
-        routePreference: 'gateway_only',
-        rangeStart: safeStart,
-        rangeLen: safeLen,
-        fileStartOffset: file.start_offset,
-        fileSizeBytes: file.size_bytes,
-        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-        sponsoredAuth,
-      })
-      if (!result) throw new Error('gateway-provider retrieval failed')
-      if (result.route && result.route !== 'gateway') {
-        throw new Error(`gateway-provider retrieval used ${result.route}; gateway route required`)
-      }
-      const bytes = new Uint8Array(await result.blob.arrayBuffer())
-      downloadBlobAsFile(result.blob, file.path)
-      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      })
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'success',
-      })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (manifestRoot) {
-        const manifestHex = manifestRoot
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'failed',
-          error: msg,
-        })
-      }
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-      onToggleMenu()
-    }
-  }
-
-  const handleGatewayCacheDownload = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
-    const dealId = String(deal.id)
-    const safeStart = Math.max(0, Number(downloadRangeStart || 0) || 0)
-    const safeLen = Math.max(0, Number(downloadRangeLen || 0) || 0)
-    try {
-      if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
-      const manifestHex = manifestRoot
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'pending',
-      })
-      const gatewayBlob = await downloadViaGatewayCache({
-        manifestRoot: manifestHex,
-        dealId,
-        owner: requestOwner,
-        filePath: file.path,
-        rangeStart: safeStart,
-        rangeLen: safeLen,
-        fileSizeBytes: file.size_bytes,
-        fileStartOffset: file.start_offset,
-        mduSizeBytes: slab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-        blobSizeBytes: slab?.blob_size_bytes ?? 128 * 1024,
-      })
-      const bytes = new Uint8Array(await gatewayBlob.arrayBuffer())
-      downloadBlobAsFile(gatewayBlob, file.path)
-      queueCachedDownloadPersist(dealId, manifestHex, file.path, bytes, () => {
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      })
-      onFileActivity?.({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes,
-        manifestRoot: manifestHex,
-        action: 'download',
-        status: 'success',
-      })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (manifestRoot) {
-        const manifestHex = manifestRoot
-        onFileActivity?.({
-          dealId,
-          filePath: file.path,
-          sizeBytes: file.size_bytes,
-          manifestRoot: manifestHex,
-          action: 'download',
-          status: 'failed',
-          error: msg,
-        })
-      }
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-      onToggleMenu()
-    }
-  }
-
-  const handleAssembleMdus = async () => {
-    setFileActionError(null)
-    setBusyFilePath(file.path)
-    const dealId = String(deal.id)
-    try {
-      const chainCid = String(manifestRoot || '').trim()
-      const bytes = await readFromLocalMduCache(dealId, chainCid)
-      downloadBytesAsFile(bytes, file.path)
-      queueCachedDownloadPersist(dealId, chainCid, file.path, bytes, () => {
-        setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
-      })
-      markDownloadPath('browser mdu cache', 'browser_mdu_cache', 'browser_mdu_cache', 'fresh')
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setFileActionError(msg)
-    } finally {
-      setBusyFilePath(null)
-      onToggleMenu()
-    }
-  }
+  const handleAutoDownload = () => downloadVerified(transportPreference)
+  const handleOnchainRetrieval = () => downloadVerified('prefer_direct_sp')
+  const handleGatewayProviderRetrieval = () => downloadVerified('gateway_only')
 
   const handlePurgeCache = async () => {
     setFileActionError(null)
@@ -903,26 +425,8 @@ function FileRow({
                         <Activity className="w-3.5 h-3.5" />
                         Gateway -&gt; Provider
                       </button>
-                      <button
-                        onClick={handleGatewayCacheDownload}
-                        disabled={isAnyDownloading || isBusy || !manifestRoot}
-                        data-testid="deal-detail-download-gateway"
-                        data-file-path={file.path}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-                      >
-                        <Server className="w-3.5 h-3.5" />
-                        Gateway Cache
-                      </button>
-                      <button
-                        onClick={handleAssembleMdus}
-                        disabled={isAnyDownloading || isBusy || !manifestRoot}
-                        data-testid="deal-detail-download-browser-slab"
-                        data-file-path={file.path}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left disabled:opacity-50"
-                      >
-                        <Database className="w-3.5 h-3.5" />
-                        Browser MDU
-                      </button>
+
+
                       <div className="h-px bg-border/40 my-1" />
                       <div className="px-3 py-1.5 text-[9px] uppercase tracking-widest font-bold text-muted-foreground border-y border-border/40">
                         Cache Status
@@ -1027,7 +531,7 @@ export function DealDetail({
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
   const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
-  const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs'>('none')
+  const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs' | 'authenticated'>('none')
   const [, setGatewaySlabStatus] = useState<'unknown' | 'present' | 'missing' | 'error'>('unknown')
   const [activity, setActivity] = useState<DealActivityState | null>(null)
   const [providersByAddr, setProvidersByAddr] = useState<Record<string, ProviderInfo>>({})
@@ -1274,81 +778,6 @@ export function DealDetail({
   }, [providersByAddr])
 
   const resolveProviderHttpBase = useCallback((): string => resolveProviderHttpBaseFor(primaryProvider), [primaryProvider, resolveProviderHttpBaseFor])
-
-  const openRetrievalWindows = useCallback(
-    async (
-      params: {
-        manifestRoot: string
-        requests: Array<{
-          key: string
-          provider: string
-          startMduIndex: number
-          startBlobIndex: number
-          blobCount: number
-        }>
-      },
-    ): Promise<Map<string, Hex>> => {
-      if (!publicClient) throw new Error('EVM RPC client unavailable')
-      if (!walletClient) throw new Error('Wallet not connected')
-      const signer = (walletClient.account?.address || address) as Hex | undefined
-      if (!signer || !String(signer).startsWith('0x')) {
-        throw new Error('Connect wallet to open retrieval sessions')
-      }
-      if (params.requests.length === 0) return new Map<string, Hex>()
-      const requests = params.requests.map((request, idx) => ({
-        dealId: BigInt(deal.id),
-        provider: request.provider,
-        manifestRoot: params.manifestRoot as Hex,
-        startMduIndex: BigInt(request.startMduIndex),
-        startBlobIndex: request.startBlobIndex,
-        blobCount: BigInt(request.blobCount),
-        nonce: BigInt(Date.now() + idx),
-        expiresAt: 0n,
-      }))
-      const computeCall = await publicClient.call({
-        account: signer,
-        to: appConfig.polystorePrecompile as Hex,
-        data: encodeComputeRetrievalSessionIdsData(requests),
-      })
-      const computeData = computeCall.data as Hex
-      if (!computeData || computeData === '0x') throw new Error('computeRetrievalSessionIds returned empty data')
-      const { sessionIds } = decodeComputeRetrievalSessionIdsResult(computeData)
-      if (sessionIds.length !== requests.length) {
-        throw new Error('computeRetrievalSessionIds returned unexpected session count')
-      }
-      const openTxHash = await walletClient.sendTransaction({
-        account: signer,
-        to: appConfig.polystorePrecompile as Hex,
-        data: encodeOpenRetrievalSessionsData(requests),
-        value: 0n,
-        chain: walletClient.chain ?? undefined,
-      })
-      await waitForTransactionReceipt(openTxHash)
-      return new Map(params.requests.map((request, idx) => [request.key, sessionIds[idx] as Hex]))
-    },
-    [address, deal.id, publicClient, walletClient],
-  )
-
-  const confirmMduRetrievalSessions = useCallback(
-    async (sessionIds: readonly Hex[]) => {
-      if (sessionIds.length === 0) return
-      if (!publicClient) throw new Error('EVM RPC client unavailable')
-      if (!walletClient) throw new Error('Wallet not connected')
-      const signer = (walletClient.account?.address || address) as Hex | undefined
-      if (!signer || !String(signer).startsWith('0x')) {
-        throw new Error('Connect wallet to confirm retrieval sessions')
-      }
-      const txHash = await walletClient.sendTransaction({
-        account: signer,
-        to: appConfig.polystorePrecompile as Hex,
-        data: encodeConfirmRetrievalSessionsData(sessionIds),
-        value: 0n,
-        chain: walletClient.chain ?? undefined,
-      })
-      await waitForTransactionReceipt(txHash)
-    },
-    [address, publicClient, walletClient],
-  )
 
   const handlePolicyUpdate = useCallback(async () => {
     setPolicyError(null)
@@ -1605,158 +1034,11 @@ export function DealDetail({
     a.remove()
   }
 
-  function downloadBytesAsFile(bytes: Uint8Array, filePath: string) {
-    const safe = new Uint8Array(bytes.byteLength)
-    safe.set(bytes)
-    const blob = new Blob([safe], { type: 'application/octet-stream' })
-    const url = window.URL.createObjectURL(blob)
-    triggerBrowserDownload(url, filePath)
-    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
-  }
-
   function downloadBlobAsFile(blob: Blob, filePath: string) {
     const url = window.URL.createObjectURL(blob)
     triggerBrowserDownload(url, filePath)
     setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
-
-  const downloadViaGatewayCache = useCallback(async ({
-    manifestRoot,
-    dealId,
-    owner,
-    filePath,
-    rangeStart,
-    rangeLen,
-    fileSizeBytes,
-    fileStartOffset,
-    mduSizeBytes,
-    blobSizeBytes,
-  }: {
-    manifestRoot: string
-    dealId: string
-    owner: string
-    filePath: string
-    rangeStart?: number
-    rangeLen?: number
-    fileSizeBytes?: number
-    fileStartOffset?: number
-    mduSizeBytes?: number
-    blobSizeBytes?: number
-  }): Promise<Blob> => {
-    const normalizedManifest = String(manifestRoot || '').trim()
-    if (!normalizedManifest) throw new Error('manifestRoot is required')
-    const normalizedDealId = String(dealId || '').trim()
-    if (!normalizedDealId) throw new Error('dealId is required')
-    const normalizedOwner = String(owner || '').trim()
-    if (!normalizedOwner) throw new Error('owner is required')
-    const normalizedFilePath = String(filePath || '').trim()
-    if (!normalizedFilePath) throw new Error('filePath is required')
-
-    const safeStart = Math.max(0, Number(rangeStart || 0) || 0)
-    let safeLen = Math.max(0, Number(rangeLen || 0) || 0)
-    const sizeBytes = Math.max(0, Number(fileSizeBytes || 0) || 0)
-    if (safeLen === 0) {
-      if (sizeBytes <= 0) throw new Error('file size is required for full gateway cache download')
-      if (safeStart >= sizeBytes) throw new Error('rangeStart beyond EOF')
-      safeLen = sizeBytes - safeStart
-    }
-    if (safeLen <= 0) throw new Error('rangeLen must be positive')
-
-    const effectiveBlobSizeBytes = Math.max(1, Number(blobSizeBytes ?? slab?.blob_size_bytes ?? 128 * 1024))
-    const effectiveMduSizeBytes = Math.max(1, Number(mduSizeBytes ?? slab?.mdu_size_bytes ?? 8 * 1024 * 1024))
-    const hasChunkMeta = Number.isFinite(Number(fileStartOffset)) && sizeBytes > 0
-    const legacyChunks = hasChunkMeta
-      ? planPolyfsFileRangeChunks({
-          fileStartOffset: Number(fileStartOffset),
-          fileSizeBytes: sizeBytes,
-          rangeStart: safeStart,
-          rangeLen: safeLen,
-          mduSizeBytes: effectiveMduSizeBytes,
-          blobSizeBytes: effectiveBlobSizeBytes,
-        })
-      : safeLen <= effectiveBlobSizeBytes
-        ? [{ rangeStart: safeStart, rangeLen: safeLen }]
-        : []
-
-    const search = new URLSearchParams({
-      deal_id: normalizedDealId,
-      owner: normalizedOwner,
-      file_path: normalizedFilePath,
-    })
-    search.set('range_start', String(safeStart))
-    search.set('range_len', String(safeLen))
-    const query = search.toString()
-
-    const downloadViaLegacyChunkedFetch = async (gatewayBase: string): Promise<Blob> => {
-      if (legacyChunks.length === 0) {
-        throw new Error('Gateway compatibility mode requires POLYFS metadata for multi-blob ranges')
-      }
-      const legacySearch = new URLSearchParams({
-        deal_id: normalizedDealId,
-        owner: normalizedOwner,
-        file_path: normalizedFilePath,
-        deputy: '1',
-      })
-      const legacyQuery = legacySearch.toString()
-      const parts: ArrayBuffer[] = []
-      for (const chunk of legacyChunks) {
-        const chunkStart = Number(chunk.rangeStart)
-        const chunkLen = Number(chunk.rangeLen)
-        if (!Number.isFinite(chunkStart) || !Number.isFinite(chunkLen) || chunkLen <= 0) {
-          throw new Error('invalid gateway cache chunk')
-        }
-        const chunkEnd = chunkStart + chunkLen - 1
-        const legacyUrl = `${gatewayBase}/gateway/fetch/${encodeURIComponent(normalizedManifest)}?${legacyQuery}`
-        const legacyRes = await fetch(legacyUrl, {
-          method: 'GET',
-          headers: { Range: `bytes=${chunkStart}-${chunkEnd}` },
-        })
-        if (!legacyRes.ok) {
-          const txt = await legacyRes.text().catch(() => '')
-          throw new Error(decodeGatewayHttpError(legacyRes.status, txt))
-        }
-        const buf = await legacyRes.arrayBuffer()
-        if (buf.byteLength === 0) {
-          throw new Error('gateway returned empty chunk')
-        }
-        const clampedLen = Math.min(buf.byteLength, chunkLen)
-        parts.push(buf.byteLength === clampedLen ? buf : buf.slice(0, clampedLen))
-        if (clampedLen < chunkLen) {
-          throw new Error('gateway returned short chunk')
-        }
-      }
-      return new Blob(parts, { type: 'application/octet-stream' })
-    }
-
-    let lastError: Error | null = null
-    for (const gatewayBase of gatewayDownloadBases) {
-      try {
-        const url = `${gatewayBase}/gateway/download/${encodeURIComponent(normalizedManifest)}?${query}`
-        const res = await fetch(url, {
-          method: 'GET',
-        })
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '')
-          const decoded = decodeGatewayHttpError(res.status, txt)
-          if (isGatewayOutdatedDownloadError(decoded)) {
-            const legacyBlob = await downloadViaLegacyChunkedFetch(gatewayBase)
-            markDownloadPath('gateway', 'gateway_cache', 'gateway_mdu_cache', 'fresh')
-            return legacyBlob
-          }
-          throw new Error(decoded)
-        }
-        const blob = await res.blob()
-        if (!blob || blob.size === 0) throw new Error('gateway returned empty payload')
-
-        markDownloadPath('gateway', 'gateway_cache', 'gateway_mdu_cache', 'fresh')
-        return blob
-      } catch (e: unknown) {
-        lastError = e instanceof Error ? e : new Error(String(e))
-      }
-    }
-
-    throw lastError ?? new Error('gateway cache download failed')
-  }, [gatewayDownloadBases, markDownloadPath, slab?.blob_size_bytes, slab?.mdu_size_bytes])
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
     const normalizedDealId = String(dealId)
@@ -2106,43 +1388,9 @@ export function DealDetail({
 
   const syncDealIndexFromProviders = useCallback(async () => {
     const dealId = String(deal.id)
-    const head = await lcdFetchDeal(appConfig.lcdBase, dealId)
-    if (!head || head.id !== dealId) throw new Error('committed deal query unavailable or mismatched')
-    const manifestRoot = normalizeManifestRoot(head.cid)
-    const owner = head.owner
-    const { totalMdus, witnessMdus, userMdus } = committedPolyfsLayout(head)
-    const providerBase = resolveProviderHttpBase()
-    const provider = String(primaryProvider || '').trim()
-    const rsK = serviceHint.rsK ?? 8
-    const rsM = serviceHint.rsM ?? 4
-
-    if (!manifestRoot) {
-      setDealIndexRequirement({
-        status: 'sync_failed',
-        reason: 'deal has no committed manifest root',
-        localManifestRoot: '',
-        chainManifestRoot: '',
-      })
-      return
-    }
-    if (!owner) {
-      setDealIndexRequirement({
-        status: 'sync_failed',
-        reason: 'deal owner is required for provider sync',
-        localManifestRoot: '',
-        chainManifestRoot: manifestRoot,
-      })
-      return
-    }
-    if (!provider) {
-      setDealIndexRequirement({
-        status: 'sync_failed',
-        reason: 'provider address is required for retrieval session sync',
-        localManifestRoot: '',
-        chainManifestRoot: manifestRoot,
-      })
-      return
-    }
+    const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, AbortSignal.timeout(60_000))
+    const manifestRoot = pin.root
+    const totalMdus = Number(pin.totalMdus), witnessMdus = Number(pin.metadataMdus - 1n), userMdus = Number(pin.userMdus)
 
     setDealIndexRequirement((prev) => ({
       ...prev,
@@ -2154,125 +1402,20 @@ export function DealDetail({
     setFileActionError(null)
 
     try {
-      const fetchCommittedMetadataMdu = async (mduIndex: number, kindLabel: string): Promise<Uint8Array> => {
-        setDealIndexSyncMessage(`Fetching committed ${kindLabel} metadata from providers...`)
-        const providerBases =
-          serviceHint.mode === 'mode2'
-            ? dealProviders
-                .map((addr) => String(addr || '').trim())
-                .filter((addr) => addr)
-                .map((addr) => resolveProviderHttpBaseFor(addr))
-                .filter((base): base is string => Boolean(base))
-            : [providerBase].filter((base): base is string => Boolean(base))
-        if (!providerBases.length) {
-          throw new Error(`no provider base available for ${kindLabel} metadata`)
-        }
-        let lastError: unknown = null
-        for (const base of providerBases) {
-          try {
-            return await providerFetchMdu(base, manifestRoot, mduIndex, { dealId, owner })
-          } catch (err) {
-            lastError = err
-          }
-        }
-        const msg = lastError instanceof Error ? lastError.message : String(lastError || 'metadata provider fetch failed')
-        throw new Error(`failed to fetch committed ${kindLabel} metadata: ${msg}`)
-      }
-
-      const fetchCommittedMdu = async (
-        mduIndex: number,
-        kindLabel: string,
-        options: { metadata?: boolean } = {},
-      ): Promise<Uint8Array> => {
-        if (options.metadata) {
-          return fetchCommittedMetadataMdu(mduIndex, kindLabel)
-        }
-        if (serviceHint.mode === 'mode2') {
-          const dataSlotProviders = dealProviders
-            .map((addr) => String(addr || '').trim())
-            .filter((addr) => addr)
-            .slice(0, Math.max(1, rsK))
-          if (dataSlotProviders.length < Math.max(1, rsK)) {
-            throw new Error(`insufficient Mode 2 slot providers for ${kindLabel}`)
-          }
-          const rows = mode2RowsForK(rsK)
-          const requests = dataSlotProviders.map((providerAddr, slot) => ({
-            key: `${mduIndex}:${slot}`,
-            provider: providerAddr,
-            startMduIndex: mduIndex,
-            startBlobIndex: slot * rows,
-            blobCount: rows,
-          }))
-          setDealIndexSyncMessage(`Opening retrieval sessions for committed ${kindLabel} slices…`)
-          const sessions = await openRetrievalWindows({ manifestRoot, requests })
-          try {
-            setDealIndexSyncMessage(`Fetching committed ${kindLabel} slices from providers…`)
-            const slotSlices = await Promise.all(
-              requests.map(async (request, slot) => {
-                const sessionId = sessions.get(request.key)
-                if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel} slot ${slot}`)
-                return {
-                  slot,
-                  data: await providerFetchMduWindowWithSession(
-                    resolveProviderHttpBaseFor(request.provider),
-                    manifestRoot,
-                    mduIndex,
-                    { dealId, owner, sessionId, startBlobIndex: request.startBlobIndex, blobCount: request.blobCount },
-                  ),
-                }
-              }),
-            )
-            return reconstructMduFromMode2SlotSlices(slotSlices, rsK)
-          } finally {
-            await confirmMduRetrievalSessions(Array.from(sessions.values()))
-          }
-        }
-
-        setDealIndexSyncMessage(`Opening retrieval session for committed ${kindLabel}…`)
-        const sessions = await openRetrievalWindows({
-          manifestRoot,
-          requests: [
-            {
-              key: `${mduIndex}:full`,
-              provider,
-              startMduIndex: mduIndex,
-              startBlobIndex: 0,
-              blobCount: 64,
-            },
-          ],
-        })
-        const sessionId = sessions.get(`${mduIndex}:full`)
-        if (!sessionId) throw new Error(`missing retrieval session for ${kindLabel}`)
+      await workerClient.initRetrievalWasm()
+      let mdu0Bytes: Uint8Array | undefined, lastError: unknown
+      for (const assignment of pin.assignments) {
         try {
-          setDealIndexSyncMessage(`Fetching committed ${kindLabel} from provider…`)
-          return await providerFetchMduWindowWithSession(providerBase, manifestRoot, mduIndex, {
-            dealId,
-            owner,
-            sessionId,
-            startBlobIndex: 0,
-            blobCount: 64,
-          })
-        } finally {
-          await confirmMduRetrievalSessions(Array.from(sessions.values()))
-        }
+          const bytes = await providerFetchRetrievalMetadata(resolveProviderHttpBaseFor(assignment.provider), pin, 0n, AbortSignal.timeout(60_000))
+          await workerClient.verifyRetrievalMetadata(bytes, pin)
+          mdu0Bytes = bytes
+          break
+        } catch (error) { lastError = error }
       }
-
-      const mdu0Bytes = await fetchCommittedMdu(0, 'mdu_0', { metadata: true })
+      if (!mdu0Bytes) throw lastError ?? new Error('authenticated metadata unavailable')
       const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
-      if (parsedFiles.some((file) => file.start_offset + file.size_bytes > userMdus * RAW_MDU_CAPACITY)) throw new Error('file map exceeds committed user capacity')
       const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
-      if (rootTable.length !== totalMdus - 1) {
-        throw new Error('invalid root table length for committed mdu_0')
-      }
-
-      await ensureWasmReady()
-      const committed = await workerClient.shardFile(new Uint8Array(mdu0Bytes))
-      const mdu0Root = toU8((committed as { mdu_root?: Uint8Array | number[] }).mdu_root)
-      if (mdu0Root.byteLength !== 32) throw new Error('invalid mdu_0 root length')
-      const mdu0RootHex = bytesTo0xHex(mdu0Root)
-      if (normalizeManifestRoot(mdu0RootHex) !== normalizeManifestRoot(manifestRoot)) {
-        throw new Error(`committed mdu_0 produced mismatched PolyFS root: ${mdu0RootHex}`)
-      }
+      const mdu0RootHex = manifestRoot
       const rootRecords = [
         { mdu_index: 0, kind: 'mdu0' as const, root_hex: mdu0RootHex },
         ...rootTable.map((rootBytes, idx) => ({
@@ -2283,50 +1426,16 @@ export function DealDetail({
         })),
       ]
 
-      const witnessMduIndexes = Array.from({ length: witnessMdus }, (_, idx) => idx + 1)
-      const witnessMduArtifacts = await Promise.all(
-        witnessMduIndexes.map(async (index) => ({
-          index,
-          data: await fetchCommittedMdu(index, `witness mdu_${index}`, { metadata: true }),
-        })),
-      )
-
-      setDealIndexSyncMessage('Writing browser deal index cache…')
-      await deleteDealDirectory(dealId)
-      await writeManifestRoot(dealId, manifestRoot)
-      await writeMdu(dealId, 0, mdu0Bytes, mdu0Bytes.byteLength)
-      for (const witnessMdu of witnessMduArtifacts) {
-        await writeMdu(dealId, witnessMdu.index, witnessMdu.data, witnessMdu.data.byteLength)
-      }
-      await writeSlabMetadata(dealId, {
-        schema_version: 1,
-        generation_id: `deal-index-sync-${manifestRoot.replace(/^0x/i, '').slice(0, 16)}`,
-        deal_id: dealId,
-        manifest_root: manifestRoot,
-        owner,
-        redundancy: { k: rsK, m: rsM, n: rsK + rsM },
-        source: 'browser_deal_index_sync',
-        created_at: new Date().toISOString(),
-        last_validated_at: new Date().toISOString(),
-        witness_mdus: witnessMdus,
-        user_mdus: userMdus,
-        total_mdus: totalMdus,
-        file_records: parsedFiles.map((file) => ({
-          path: file.path,
-          start_offset: Number(file.start_offset || 0),
-          size_bytes: Number(file.size_bytes || 0),
-          flags: Number(file.flags || 0),
-        })),
-      })
-
+      // This view belongs to the queried immutable generation. It must never
+      // overwrite the upload staging pointer or promote a historical root.
       setDealIndexRequirement({
         status: 'ready',
-        reason: 'synced_from_providers',
+        reason: 'authenticated_provider_metadata',
         localManifestRoot: manifestRoot,
         chainManifestRoot: manifestRoot,
       })
       setFiles(parsedFiles)
-      setSlabSource('opfs')
+      setSlabSource('authenticated')
       setSlab({
         manifest_root: manifestRoot,
         mdu_size_bytes: 8 * 1024 * 1024,
@@ -2351,7 +1460,7 @@ export function DealDetail({
         user_mdus: userMdus,
         roots: rootRecords,
       })
-      setDealIndexSyncMessage('Committed deal index synced locally.')
+      setDealIndexSyncMessage('Committed deal index authenticated.')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setDealIndexRequirement({
@@ -2364,7 +1473,7 @@ export function DealDetail({
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [confirmMduRetrievalSessions, deal.id, openRetrievalWindows, primaryProvider, resolveProviderHttpBase, resolveProviderHttpBaseFor, serviceHint.mode, serviceHint.rsK, serviceHint.rsM, dealProviders])
+  }, [deal.id, resolveProviderHttpBaseFor])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -2926,7 +2035,6 @@ export function DealDetail({
                             <FileRow
                               key={`${f.path}:${f.start_offset}`}
                               file={f}
-                              allFiles={files}
                               deal={deal}
                               manifestRoot={committedManifestRoot}
                               owner={requestOwner}
@@ -2939,10 +2047,8 @@ export function DealDetail({
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
                               onFileActivity={onFileActivity}
                               reconcileLocalMduCache={reconcileLocalMduCache}
-                              downloadBytesAsFile={downloadBytesAsFile}
                               downloadBlobAsFile={downloadBlobAsFile}
                               markDownloadPath={markDownloadPath}
-                              downloadViaGatewayCache={downloadViaGatewayCache}
                               fetchFile={fetchFile}
                               resolveProviderHttpBase={resolveProviderHttpBase}
                               sponsoredAuth={sponsoredAuth}
@@ -3017,7 +2123,7 @@ export function DealDetail({
                       <div className="nil-tab-inset px-3 py-2">
                         <div className="text-muted-foreground uppercase tracking-[0.16em]">Source</div>
                         <div className="mt-1 text-foreground">
-                          {slabSource === 'gateway' ? 'Gateway' : slabSource === 'opfs' ? 'Browser (OPFS)' : 'Unknown'}
+                          {slabSource === 'gateway' ? 'Gateway' : slabSource === 'opfs' ? 'Browser (OPFS)' : slabSource === 'authenticated' ? 'Verified provider metadata' : 'Unknown'}
                         </div>
                         <div className="text-muted-foreground">{Math.round(slab.mdu_size_bytes / 1024 / 1024)} MiB / MDU</div>
                       </div>

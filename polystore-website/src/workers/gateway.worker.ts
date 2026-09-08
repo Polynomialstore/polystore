@@ -5,24 +5,25 @@
 // Import the WASM module
 // The `init` function loads the WASM binary.
 // The `Mdu0Builder` and `PolyStoreWasm` classes are exposed by wasm-bindgen.
-import { asNonNegativeInteger, POLYFS_ROOT_TABLE_CAPACITY } from '../domain/polyfsLayout';
-import init, { WasmMdu0Builder, PolyStoreWasm } from '../lib/polystoreCoreRuntime.js';
+import { asNonNegativeInteger, POLYFS_ROOT_TABLE_CAPACITY } from '../domain/polyfsLayout'
 import {
-    createBrowserKzgCommitBackend,
-    isWebGpuKzgCommitTimeoutError,
-    type KzgCommitBackend,
-} from '../lib/kzgCommitBackend';
+  createBrowserKzgCommitBackend,
+  isWebGpuKzgCommitTimeoutError,
+  type KzgCommitBackend,
+} from '../lib/kzgCommitBackend'
+import init, { PolyStoreWasm, WasmMdu0Builder } from '../lib/polystoreCoreRuntime.js'
+import { verifyRetrievalMetadata, verifyRetrievalWindow } from '../lib/retrievalWire'
 import {
-    committedExpansionToUserMduBrowserKzgResult,
-    commitUserMduBatchUncommittedWithBrowserKzg,
-    commitUserMduUncommittedWithBrowserKzg,
-    expandUserMduRsWithBrowserKzg,
-    kzgCommitDiagnosticsForBackend,
-    parseCommittedExpansion,
-    parseUserMduUncommittedExpansion,
-    type UserMduBrowserKzgResult,
-    type UserMduUncommittedExpansion,
-} from '../lib/upload/userMduBrowserKzg';
+  committedExpansionToUserMduBrowserKzgResult,
+  commitUserMduBatchUncommittedWithBrowserKzg,
+  commitUserMduUncommittedWithBrowserKzg,
+  expandUserMduRsWithBrowserKzg,
+  kzgCommitDiagnosticsForBackend,
+  parseCommittedExpansion,
+  parseUserMduUncommittedExpansion,
+  type UserMduBrowserKzgResult,
+  type UserMduUncommittedExpansion,
+} from '../lib/upload/userMduBrowserKzg'
 
 let wasmInitialized = false;
 let wasmInitPromise: Promise<void> | null = null;
@@ -274,15 +275,21 @@ self.onmessage = async (event) => {
         };
 
         switch (type) {
+            case 'initRetrievalWasm': {
+                PolyStoreWasm.validate_trusted_setup(payload.trustedSetupBytes);
+                if (!polyStoreWasmInstance) polyStoreWasmInstance = new PolyStoreWasm(payload.trustedSetupBytes);
+                result = 'Retrieval WASM initialized';
+                break;
+            }
             case 'initPolyStoreWasm': {
                 const { trustedSetupBytes } = payload;
                 if (!trustedSetupBytes) throw new Error('Trusted setup bytes required for PolyStoreWasm initialization');
                 PolyStoreWasm.validate_trusted_setup(trustedSetupBytes);
-                if (polyStoreWasmInstance) {
+                if (polyStoreWasmInstance && kzgCommitBackend) {
                     result = 'PolyStoreWasm already initialized';
                     break;
                 }
-                polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
+                if (!polyStoreWasmInstance) polyStoreWasmInstance = new PolyStoreWasm(trustedSetupBytes);
                 kzgCommitBackend = await createBrowserKzgCommitBackend(polyStoreWasmInstance, trustedSetupBytes, USER_UPLOAD_KZG_OPTIONS);
                 // Initialize the blob-commit compute pool (best-effort).
                 try {
@@ -335,6 +342,16 @@ self.onmessage = async (event) => {
                 };
                 mdu0BuilderInstance.append_file_with_flags(path, BigInt(asNonNegativeInteger(size, 'size')), BigInt(asNonNegativeInteger(startOffset, 'startOffset')), flags ?? 0);
                 result = 'File appended to Mdu0';
+                break;
+            }
+            case 'verifyRetrievalMetadata': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalMetadata(payload.bytes, payload.pin, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalWindow': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalWindow(payload.session, payload.envelope, polyStoreWasmInstance, PolyStoreWasm);
                 break;
             }
             case 'getMdu0Bytes': {
