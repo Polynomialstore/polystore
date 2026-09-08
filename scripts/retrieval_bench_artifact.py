@@ -636,37 +636,51 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 peak_signer_pending = max(peak_signer_pending, signer_queued + 1)
                 dispatch()
 
-        while offered is not None or pending or running or followups:
+        def collect(future):
+            job, began = running.pop(future)
+            active.remove(job["signer"])
+            try:
+                result = future.result()
+            except Exception as error:
+                # Once work was launched, an unexpected adapter error
+                # cannot establish that no broadcast occurred.
+                result = {"outcome": "unknown", "error": str(error)[-8192:]}
+            record(job, result, began)
+
+        try:
+            while offered is not None or pending or running or followups:
+                for future in list(running):
+                    if future.done():
+                        collect(future)
+                dispatch()
+                while followups:
+                    enqueue(followups.pop(0))
+                while offered is not None and start + offered["offered_offset_ns"] <= monotonic_ns():
+                    job = offered
+                    if _lifecycle is not None:
+                        _lifecycle.admit(job)
+                    enqueue(job)
+                    offered = next_offered()
+                    # Yield to completed workers even under an indefinitely due
+                    # offered stream. The schedule never resets to completion time.
+                    if _lifecycle is not None:
+                        break
+                if _lifecycle is not None:
+                    retained = pending + followups + [item for item, _ in running.values()] + ([offered] if offered else [])
+                    peak_operation_states = max(peak_operation_states, len({id(item["_state"]) for item in retained}))
+                if offered is not None or pending or running or followups:
+                    delay = max(0, (start + offered["offered_offset_ns"] - monotonic_ns()) / 1e9) if offered is not None else 0.001
+                    time.sleep(min(0.001 if running else 0.05, delay))
+        except BaseException:
+            # Stopping admission does not undo a broadcast. Drain the bounded
+            # launched attempts before closing the journal, without dispatching
+            # their followups or any other queued stage.
             for future in list(running):
-                if future.done():
-                    job, began = running.pop(future)
-                    active.remove(job["signer"])
-                    try:
-                        result = future.result()
-                    except Exception as error:
-                        # Once work was launched, an unexpected adapter error
-                        # cannot establish that no broadcast occurred.
-                        result = {"outcome": "unknown", "error": str(error)[-8192:]}
-                    record(job, result, began)
-            dispatch()
-            while followups:
-                enqueue(followups.pop(0))
-            while offered is not None and start + offered["offered_offset_ns"] <= monotonic_ns():
-                job = offered
-                if _lifecycle is not None:
-                    _lifecycle.admit(job)
-                enqueue(job)
-                offered = next_offered()
-                # Yield to completed workers even under an indefinitely due
-                # offered stream. The schedule never resets to completion time.
-                if _lifecycle is not None:
-                    break
-            if _lifecycle is not None:
-                retained = pending + followups + [item for item, _ in running.values()] + ([offered] if offered else [])
-                peak_operation_states = max(peak_operation_states, len({id(item["_state"]) for item in retained}))
-            if offered is not None or pending or running or followups:
-                delay = max(0, (start + offered["offered_offset_ns"] - monotonic_ns()) / 1e9) if offered is not None else 0.001
-                time.sleep(min(0.001 if running else 0.05, delay))
+                collect(future)
+            for job in pending + followups:
+                job.setdefault("_enqueued_ns", monotonic_ns())
+                record(job, {"outcome": "not_submitted", "error": "run_aborted"})
+            raise
 
     phases = {}
     for phase in ("warmup", "measurement"):

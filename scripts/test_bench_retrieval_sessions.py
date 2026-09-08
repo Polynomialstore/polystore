@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -870,9 +871,32 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
         self.assertFalse(next(row for row in self.rows("operations") if row["operation_id"] == "repeat")["all_transactions_committed"])
 
     def test_invalid_late_operation_aborts_ledger_without_restarting_the_stream(self):
-        with patch.object(artifact, "scheduled_transaction", return_value={"outcome": "checktx_rejected"}):
+        release = threading.Event()
+        committed = {"outcome": "committed_success", "txhash": "AB" * 32,
+                     "data": OPEN_RESPONSE_DATA, "height": 12}
+        def submit(job):
+            self.assertTrue(release.wait(1))
+            return committed
+        def source():
+            yield self.operation("first")
+            yield self.operation("queued")
+            release.set()
+            yield None
+        with patch.object(artifact, "scheduled_transaction", side_effect=submit) as broadcast:
             with self.assertRaisesRegex(ValueError, "JSON object"):
-                self.run_operations([self.operation("first"), None])
+                self.run_operations(source())
+        self.assertEqual(broadcast.call_count, 1)
+        self.assertEqual(self.built, [])
+        transactions = self.rows("transactions")
+        self.assertEqual(len(transactions), 3)
+        actual = next(row for row in transactions if row["outcome"] == "committed_success")
+        for name, value in committed.items():
+            self.assertEqual(actual[name], value)
+        self.assertEqual({(row["operation_id"], row["kind"], row["error"]) for row in transactions
+                          if row["outcome"] == "not_submitted"},
+                         {("queued", "open-session", "run_aborted"), ("first", "submit-proof", "run_aborted")})
+        self.assertTrue(all(not row["all_transactions_committed"] and row["error"] == "run_aborted"
+                            for row in self.rows("operations")))
         with sqlite3.connect(self.root / "run.sqlite") as db:
             self.assertEqual(db.execute("SELECT status FROM run").fetchone()[0], "aborted")
         with self.assertRaises(FileExistsError):
