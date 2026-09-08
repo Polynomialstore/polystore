@@ -121,7 +121,7 @@ func TestLegacySessionWholeListGas(t *testing.T) {
 				require.Zero(t, meter.GasConsumed())
 				return
 			}
-			require.ErrorContains(t, err, "invalid liveness proof")
+			require.ErrorContains(t, err, "invalid retrieval proof")
 			require.Equal(t, 3*keeper.ProofCryptoGas, meter.GasConsumed())
 		})
 	}

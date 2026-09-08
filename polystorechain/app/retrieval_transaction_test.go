@@ -20,6 +20,7 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/stretchr/testify/require"
 	"polystorechain/x/polystorechain/types"
 )
@@ -28,7 +29,7 @@ import (
 // keeper and FinalizeBlock commit. A later message fails after the v2 open has
 // burned its base fee and written its session, nonce and retention indexes.
 func TestRetrievalSessionSignedTransactionRollback(t *testing.T) {
-	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir()}, baseapp.SetChainID(SimAppChainID))
+	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir(), "evm.evm-chain-id": evmtypes.DefaultEVMChainID}, baseapp.SetChainID(SimAppChainID))
 	key := secp256k1.GenPrivKeyFromSecret([]byte("retrieval transaction rollback owner"))
 	owner := sdk.AccAddress(key.PubKey().Address())
 	provider := sdk.AccAddress(bytes.Repeat([]byte{0x23}, 20))
