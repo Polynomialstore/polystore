@@ -830,15 +830,19 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
     pending, running, active, quarantined, records, finished, seen_hashes = [], {}, set(), {}, [], {}, set()
     peak_pending = peak_running = peak_signer_pending = peak_operation_states = 0
     warmup_overlap = False
+    latest_warmup_finished_ns = start
     followups = []
 
     def record(job, result, started=None):
+        nonlocal latest_warmup_finished_ns
         # Only this coordinator mutates accounting. Duplicate hashes remain
         # visible but never produce another successful transaction/operation.
         item = {"id": job["id"], "operation_id": job["operation_id"], "phase": job["phase"],
                 "signer": job["signer"], "kind": job.get("kind", "transaction"), "attempt": 1,
                 "offered_ns": start + job["offered_offset_ns"], "started_ns": started,
                 "finished_ns": monotonic_ns(), **result}
+        if job["phase"] == "warmup":
+            latest_warmup_finished_ns = max(latest_warmup_finished_ns, item["finished_ns"])
         if item["outcome"] == "unknown":
             quarantined[job["signer"]] = job["phase"]
         if _lifecycle is None and item.get("txhash"):
@@ -897,9 +901,12 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         def enqueue(job):
             nonlocal warmup_overlap, peak_pending, peak_signer_pending
             job["_enqueued_ns"] = monotonic_ns()
-            # A finished worker can leave an unresolved warmup broadcast.
-            warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
-                item["phase"] == "warmup" for item in pending + followups + [item for item, _ in running.values()]))
+            # Completion collected before admission can still overlap the
+            # absolute offer time. Unknown broadcasts remain unresolved.
+            warmup_overlap |= job["phase"] == "measurement" and (
+                latest_warmup_finished_ns > start + job["offered_offset_ns"] or
+                "warmup" in quarantined.values() or any(item["phase"] == "warmup"
+                    for item in pending + followups + [item for item, _ in running.values()]))
             if _lifecycle is not None and _lifecycle.mode == "prepared-proof-only" and job["_state"]["operation"]["prepared"] is None:
                 record(job, {"outcome": "not_submitted", "error": "inventory_depleted"})
                 return
