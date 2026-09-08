@@ -3,7 +3,7 @@ import type { Hex } from 'viem'
 import { appConfig } from '../config'
 import { ethToPolystoreAddress } from '../lib/address'
 import { decodeComputeRetrievalSessionIdsResult, encodeConfirmRetrievalSessionsData, encodeRetrievalV2Data, type RetrievalSessionV2Input } from '../lib/polystorePrecompile'
-import { fetchPinnedGeneration, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
+import { account, fetchPinnedGeneration, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
 import { waitForRetrievalChallenge } from '../lib/retrievalFlow'
 import type { SponsoredRetrievalAuth } from './useFetch'
 
@@ -29,9 +29,10 @@ export function useRetrievalSessions() {
   }
   return {
     requireWallet,
-    async open(pin: PinnedGeneration, windows: readonly RetrievalWindow[], auth: SponsoredRetrievalAuth = { type: 'none' }, signal?: AbortSignal): Promise<FrozenSession[]> {
+    async open(pin: PinnedGeneration, windows: readonly RetrievalWindow[], auth: SponsoredRetrievalAuth = { type: 'none' }, signal?: AbortSignal, authorizedProofProvider?: string): Promise<FrozenSession[]> {
       const { address, client, owner } = requireWallet()
       if (!owner || !windows.length || windows.length > 64) throw new Error('invalid retrieval wave')
+      const deputy = authorizedProofProvider === undefined ? undefined : account(authorizedProofProvider)
       const deadline = AbortSignal.any([AbortSignal.timeout(120_000), ...(signal ? [signal] : [])])
       // Refresh before funding, preserving the original generation pin. A later
       // content update can never silently replace the authenticated FAT/root.
@@ -43,7 +44,7 @@ export function useRetrievalSessions() {
       const nonce = clockNonce > lastBrowserNonce ? clockNonce : lastBrowserNonce + 1n
       lastBrowserNonce = nonce + BigInt(windows.length)
       const requests: RetrievalSessionV2Input[] = windows.map((w, i) => ({ dealId: pin.dealId, provider: w.provider, manifestRoot: pin.root, startMduIndex: w.mduIndex,
-        startBlobIndex: w.startBlobIndex, blobCount: BigInt(w.blobCount), nonce: nonce + BigInt(i), expiresAt: expiry, authorizedProofProvider: w.provider }))
+        startBlobIndex: w.startBlobIndex, blobCount: BigInt(w.blobCount), nonce: nonce + BigInt(i), expiresAt: expiry, authorizedProofProvider: deputy ?? w.provider }))
       const computed = await client.call({ account: address, to: appConfig.polystorePrecompile as Hex, data: encodeRetrievalV2Data('computeRetrievalSessionIds', requests) })
       if (!computed.data) throw new Error('missing retrieval session IDs')
       const ids = decodeComputeRetrievalSessionIdsResult(computed.data)
@@ -59,7 +60,7 @@ export function useRetrievalSessions() {
         voucherRedeemer: voucher?.redeemer ?? '', voucherProvider: voucher?.provider ?? '', voucherExpiresAt: numberU64(voucher?.expiresAt), voucherNonce: numberU64(voucher?.nonce), voucherSignature: voucher?.signature ?? '0x' as Hex }))
       await transact(encodeRetrievalV2Data(isOwner ? 'openRetrievalSessions' : 'openRetrievalSessionsSponsored', isOwner ? requests : sponsored), deadline)
       const result: FrozenSession[] = []
-      for (let i = 0; i < windows.length; i++) result.push(await waitForRetrievalChallenge(appConfig.lcdBase, { sessionId: ids.sessionIds[i], pin, window: windows[i], owner, payee: windows[i].provider, funding: isOwner ? 1 : 2 }, deadline))
+      for (let i = 0; i < windows.length; i++) result.push(await waitForRetrievalChallenge(appConfig.lcdBase, { sessionId: ids.sessionIds[i], pin, window: windows[i], owner, payee: deputy ?? windows[i].provider, funding: isOwner ? 1 : 2 }, deadline))
       return result
     },
     async confirm(sessions: readonly FrozenSession[], signal?: AbortSignal) {

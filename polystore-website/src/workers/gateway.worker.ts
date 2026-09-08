@@ -12,6 +12,7 @@ import {
   type KzgCommitBackend,
 } from '../lib/kzgCommitBackend'
 import init, { PolyStoreWasm, WasmMdu0Builder } from '../lib/polystoreCoreRuntime.js'
+import { readUserCommitments, verifyWitnessMdu, verifyRecoveredMdu } from '../lib/retrievalRecovery'
 import { verifyRetrievalMetadata, verifyRetrievalWindow } from '../lib/retrievalWire'
 import {
   committedExpansionToUserMduBrowserKzgResult,
@@ -347,6 +348,23 @@ self.onmessage = async (event) => {
             case 'verifyRetrievalMetadata': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 result = verifyRetrievalMetadata(payload.bytes, payload.pin, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalWitness': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                verifyWitnessMdu(payload.bytes, payload.cell, polyStoreWasmInstance);
+                result = payload.bytes;
+                break;
+            }
+            case 'readRetrievalCommitments': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = readUserCommitments(payload.pin, payload.ordinal, payload.witness, payload.cell, polyStoreWasmInstance);
+                break;
+            }
+            case 'reconstructRetrievalMdu': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = PolyStoreWasm.reconstruct_mdu_from_shards(payload.shards, payload.pin.k, payload.pin.m);
+                verifyRecoveredMdu(payload.pin, result, payload.commitments, polyStoreWasmInstance);
                 break;
             }
             case 'verifyRetrievalWindow': {

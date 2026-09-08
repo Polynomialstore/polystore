@@ -410,7 +410,7 @@ export async function providerFetchMduKzg(
 
 export async function providerFetchRetrievalMetadata(providerBase: string, pin: PinnedGeneration, mduIndex = 0n, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<Uint8Array> {
   if (mduIndex < 0n || mduIndex >= pin.metadataMdus) throw new Error('invalid metadata MDU')
-  const q = new URLSearchParams({ deal_id: pin.dealId.toString(), owner: pin.owner })
+  const q = new URLSearchParams({ deal_id: pin.dealId.toString(), owner: pin.owner, committed_height: pin.height.toString() })
   const deadline = AbortSignal.timeout(60_000)
   const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
   const res = await fetchFn(`${providerBase.replace(/\/$/, '')}/sp/retrieval/mdu/${pin.root}/${mduIndex}?${q}`, { signal: activeSignal })

@@ -1,4 +1,4 @@
-use crate::kzg::{BLOB_SIZE, BLOBS_PER_MDU, KzgContext, KzgError, MDU_SIZE};
+use crate::kzg::{KzgContext, KzgError, BLOBS_PER_MDU, BLOB_SIZE, MDU_SIZE};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use thiserror::Error;
 
@@ -583,7 +583,10 @@ pub fn reconstruct_mdu_from_shards(
     if BLOBS_PER_MDU % data_shards != 0 {
         return Err(CodingError::InvalidRsParams);
     }
-    let shards_total = data_shards + parity_shards;
+    let shards_total = data_shards
+        .checked_add(parity_shards)
+        .filter(|total| *total <= 256)
+        .ok_or(CodingError::InvalidRsParams)?;
     if shards.len() != shards_total {
         return Err(CodingError::InvalidRsParams);
     }
@@ -607,7 +610,10 @@ pub fn reconstruct_mdu_from_shards(
 
     let r = ReedSolomon::new(data_shards, parity_shards)
         .map_err(|e| CodingError::Rs(format!("{}", e)))?;
-    r.reconstruct(shards)
+    // This helper returns only the interleaved data MDU. Leave missing parity
+    // absent: reconstructing it adds no authenticated data and can allocate
+    // hundreds of unnecessary shard buffers at the protocol geometry ceiling.
+    r.reconstruct_data(shards)
         .map_err(|e| CodingError::Rs(format!("{}", e)))?;
 
     let mut mdu = vec![0u8; MDU_SIZE];
@@ -717,11 +723,16 @@ mod tests {
         let reconstructed =
             reconstruct_mdu_from_shards(&mut shards, DATA_SHARDS_NUM, PARITY_SHARDS_NUM).unwrap();
         assert_eq!(reconstructed, mdu);
+        assert!(shards[1].is_some(), "missing data is recovered");
+        assert!(shards[10].is_none(), "unused parity must not be allocated");
     }
 
     #[test]
     fn reconstruct_mdu_rejects_invalid_params() {
         let mut shards = vec![None; 10];
+        for (k, m) in [(1, usize::MAX), (1, 256), (64, 193)] {
+            assert!(reconstruct_mdu_from_shards(&mut shards, k, m).is_err());
+        }
         let err = reconstruct_mdu_from_shards(&mut shards, 7, 3).unwrap_err();
         match err {
             CodingError::InvalidRsParams => {}

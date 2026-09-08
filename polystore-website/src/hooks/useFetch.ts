@@ -4,8 +4,9 @@ import { providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
-import { fetchPinnedGeneration, planRetrievalWindows, u64 } from '../lib/retrieval'
-import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation } from '../lib/retrievalFlow'
+import { account, fetchPinnedGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
+import { createRetrievalOutput, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { fetchRecoveryCommitments, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
@@ -33,6 +34,7 @@ export interface FetchInput {
   mduSizeBytes?: number
   blobSizeBytes?: number
   decodePolyce?: boolean
+  authorizedProofProvider?: string
   sponsoredAuth?: SponsoredRetrievalAuth
   routePreference?: RoutePreference
 }
@@ -125,6 +127,7 @@ export function useFetch() {
     let output: Awaited<ReturnType<typeof createRetrievalOutput>> | null = null
     try {
       payment.requireWallet()
+      const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
       const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
       if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
       await workerClient.initRetrievalWasm()
@@ -135,11 +138,12 @@ export function useFetch() {
       }
       const bases = new Set([input.serviceBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
       for (const assignment of pin.assignments) { const e = await endpoint(assignment.provider); if (e?.baseUrl) bases.add(e.baseUrl); if (bases.size >= 4) break }
+      let mdu0: Uint8Array | undefined
       let records: Awaited<ReturnType<typeof workerClient.verifyRetrievalMetadata>> | undefined, lastError: unknown
       for (const base of bases) {
-        try { records = await workerClient.verifyRetrievalMetadata(await providerFetchRetrievalMetadata(base, pin, 0n, signal), pin); break } catch (error) { signal.throwIfAborted(); lastError = error }
+        try { const bytes = await providerFetchRetrievalMetadata(base, pin, 0n, signal); records = await workerClient.verifyRetrievalMetadata(bytes, pin); mdu0 = bytes; break } catch (error) { signal.throwIfAborted(); lastError = error }
       }
-      if (!records) throw lastError ?? new Error('authenticated metadata unavailable')
+      if (!records || !mdu0) throw lastError ?? new Error('authenticated metadata unavailable')
       validateRetrievalAllocation(pin, records)
       const file = records.find((r) => r.path === input.filePath && r.path !== '')
       if (!file) throw new Error('file absent from authenticated generation')
@@ -147,7 +151,13 @@ export function useFetch() {
       const start = exactNumber(input.rangeStart, 0n), length = exactNumber(input.rangeLen === 0 ? undefined : input.rangeLen, file.size_bytes - start)
       if (start < 0n || length < 0n || start + length > file.size_bytes) throw new Error('file range outside authenticated extent')
       let count = 0
-      if (length) for (const window of planRetrievalWindows(pin, file, start, length)) { void window; count++ }
+      if (length) for (const window of planRetrievalWindows(pin, file, start, length, true)) {
+        if (!pin.assignments[window.slot].active) {
+          if (input.sponsoredAuth?.type === 'voucher') throw new Error('unavailable slot requires a fresh recovery authorization before payment')
+          recoveryWindows(pin, window.mduIndex - pin.metadataMdus)
+        }
+        count++
+      }
       if (input.sponsoredAuth?.type === 'voucher' && count !== 1) throw new Error('voucher must authorize exactly one legal window before payment')
       // Storage availability and all allocation/layout checks precede funding.
       output = await createRetrievalOutput(length)
@@ -156,19 +166,81 @@ export function useFetch() {
         mduSizeBytes: RAW_MDU_CAPACITY_BYTES, blobSizeBytes: BLOB_SIZE_BYTES, leafCount: BigInt(pin.leafCount), globalStart: (pin.metadataMdus + (file.start_offset + start) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), globalEnd: (pin.metadataMdus + (file.start_offset + start + (length || 1n) - 1n) / BigInt(RAW_MDU_CAPACITY_BYTES)) * BigInt(pin.leafCount), providers: [] })
       let logicalBytes = 0, confirmed = 0, route: string | undefined
       const sink = output
-      if (length) await executeRetrievalWindows(planRetrievalWindows(pin, file, start, length), {
-        open: async (windows) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, windows, input.sponsoredAuth, signal) },
-        fetchAndVerify: async (session) => {
-          setProgress((p) => ({ ...p, phase: 'fetching' }))
-          const e = await endpoint(session.window.provider)
-          const result = await transport.fetchWindow({ session, directBase: e?.baseUrl || input.serviceBase, p2pTarget: e?.p2pTarget, preference: input.routePreference, signal })
-          route = result.backend; return result.data
-        },
-        consume: async (window, bytes) => { for (const part of decodeRetrievalOutput(pin, file, window, bytes)) { await sink.write(part.offset, part.bytes); logicalBytes += part.bytes.length }; setProgress((p) => ({ ...p, bytesFetched: logicalBytes })) },
-        flush: () => sink.flush(),
-        confirm: async (sessions) => { setProgress((p) => ({ ...p, phase: 'confirming_session_tx' })); await payment.confirm(sessions, signal); confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed })) },
-        progress: (windows) => setProgress((p) => ({ ...p, chunksFetched: windows })),
-      }, signal)
+      const fetchSession = async (session: FrozenSession) => {
+        setProgress((p) => ({ ...p, phase: 'fetching' }))
+        const e = await endpoint(session.payee)
+        const result = await transport.fetchWindow({ session, directBase: e?.baseUrl || input.serviceBase, p2pTarget: e?.p2pTarget, preference: input.routePreference, signal })
+        route = result.backend; return result.data
+      }
+      const confirm = async (sessions: readonly FrozenSession[]) => {
+        setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
+        await payment.confirm(sessions, signal); confirmed += sessions.length
+        setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
+      }
+      const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
+        for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
+      }
+      // Process one MDU at a time. Recovery retains at most K shards and one
+      // output MDU; file length never increases the in-memory working set.
+      const processMdu = async (windows: RetrievalWindow[]) => {
+        const ordinal = windows[0].mduIndex - pin.metadataMdus
+        let fetchFailed = false
+        if (windows.every((w) => pin.assignments[w.slot].active)) {
+          try {
+            await executeRetrievalWindows(windows, {
+              open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy) },
+              fetchAndVerify: async (session) => { try { return await fetchSession(session) } catch (error) { fetchFailed = true; throw error } },
+              consume, flush: () => sink.flush(), confirm,
+            }, signal)
+            return
+          } catch (error) { signal.throwIfAborted(); if (!fetchFailed) throw error }
+        }
+        if (input.sponsoredAuth?.type === 'voucher') throw new Error('failed retrieval needs a fresh voucher for separately funded recovery')
+        recoveryWindows(pin, ordinal)
+        const commitments = await fetchRecoveryCommitments(pin, ordinal, mdu0!, {
+          fetch: async (index) => {
+            let last: unknown
+            for (const base of bases) {
+              try { return await providerFetchRetrievalMetadata(base, pin, index, signal) }
+              catch (error) { signal.throwIfAborted(); last = error }
+            }
+            throw last ?? new Error('witness unavailable')
+          },
+          verifyWitness: workerClient.verifyRetrievalWitness,
+          readCommitments: workerClient.readRetrievalCommitments,
+        }, signal)
+        await recoverRetrievalMdu(pin, ordinal, {
+          open: (wave) => payment.open(pin, wave, input.sponsoredAuth, signal, deputy),
+          fetchAndVerify: fetchSession,
+          reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
+          consumeAndFlush: async (encoded) => {
+            validateRetrievalMduPacking(pin, records, ordinal, encoded)
+            for (const window of windows) {
+              const selected = new Uint8Array(window.blobCount * BLOB_SIZE_BYTES)
+              window.slices.forEach((slice, i) => selected.set(encoded.subarray(slice.encodedBlobIndex * BLOB_SIZE_BYTES, (slice.encodedBlobIndex + 1) * BLOB_SIZE_BYTES), i * BLOB_SIZE_BYTES))
+              await consume(window, selected)
+            }
+            await sink.flush()
+          }, confirm,
+        }, signal)
+      }
+      if (length) {
+        let windows: RetrievalWindow[] = []
+        let completed = 0
+        const flush = async () => {
+          if (!windows.length) return
+          await processMdu(windows)
+          logicalBytes += windows.reduce((sum, w) => sum + w.slices.reduce((n, slice) => n + slice.length, 0), 0)
+          completed += windows.length
+          setProgress((p) => ({ ...p, bytesFetched: logicalBytes, chunksFetched: completed }))
+          windows = []
+        }
+        for (const window of planRetrievalWindows(pin, file, start, length, true)) {
+          if (windows.length && windows[0].mduIndex !== window.mduIndex) await flush()
+          windows.push(window)
+        }
+        await flush()
+      }
       const blob = await sink.file(); signal.throwIfAborted()
       const url = URL.createObjectURL(blob)
       if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }

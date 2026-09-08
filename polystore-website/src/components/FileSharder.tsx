@@ -24,8 +24,9 @@ import {
 import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch'
 import { POLYFS_RECORD_PATH_MAX_BYTES, sanitizePolyfsRecordPath } from '../lib/polyfsPath'
 import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../lib/providerDiscovery'
-import { fetchPinnedGeneration, planRetrievalWindows } from '../lib/retrieval'
-import { createRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { fetchPinnedGeneration } from '../lib/retrieval'
+import { fetchRecoveryCommitments, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
+import { createRetrievalOutput, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteDealDirectory,
@@ -2054,23 +2055,32 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     validateRetrievalAllocation(pin, records)
     // Complete user MDUs are needed for append; each session remains one slot
     // in one MDU. Preflight all required assignment states before any funding.
-    for (let slot = 0; slot < pin.k; slot++) if (!pin.assignments[slot]?.active) throw new Error('append requires available assigned data slots before payment')
+    if (pin.userMdus) recoveryWindows(pin, 0n)
     const output = await createRetrievalOutput(pin.userMdus * 8388608n)
     try {
       for (let ordinal = 0n; ordinal < pin.userMdus; ordinal++) {
-        const encoded = new Uint8Array(8388608)
-        const whole = { path: '', flags: 0, start_offset: ordinal * BigInt(RAW_MDU_CAPACITY), size_bytes: BigInt(RAW_MDU_CAPACITY) }
-        const admittedRecords = records
-        await executeRetrievalWindows(planRetrievalWindows(pin, whole, 0n, whole.size_bytes), {
+        const commitments = await fetchRecoveryCommitments(pin, ordinal, mdu0Bytes, {
+          fetch: async (index) => {
+            let last: unknown
+            for (const e of endpoints.values()) {
+              try { return await providerFetchRetrievalMetadata(e?.baseUrl || appConfig.spBase, pin, index, signal) }
+              catch (error) { signal.throwIfAborted(); last = error }
+            }
+            throw last ?? new Error('witness unavailable')
+          },
+          verifyWitness: workerClient.verifyRetrievalWitness,
+          readCommitments: workerClient.readRetrievalCommitments,
+        }, signal)
+        await recoverRetrievalMdu(pin, ordinal, {
           open: (windows) => retrievalPayment.open(pin, windows, undefined, signal),
           fetchAndVerify: async (session) => {
-            const e = endpoints.get(session.window.provider)
+            const e = endpoints.get(session.payee)
             return (await retrievalTransport.fetchWindow({ session, directBase: e?.baseUrl || appConfig.spBase, p2pTarget: e?.p2pTarget, signal })).data
           },
-          consume: async (window, bytes) => { window.slices.forEach((slice, i) => encoded.set(bytes.subarray(i * 131072, (i + 1) * 131072), slice.encodedBlobIndex * 131072)) },
-          flush: async () => { validateRetrievalMduPacking(pin, admittedRecords, ordinal, encoded); await output.write(ordinal * 8388608n, encoded); await output.flush() },
+          reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
+          consumeAndFlush: async (encoded) => { validateRetrievalMduPacking(pin, records, ordinal, encoded); await output.write(ordinal * 8388608n, encoded); await output.flush() },
           confirm: (sessions) => retrievalPayment.confirm(sessions, signal),
-        }, signal, 64)
+        }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
       const file = await output.file()

@@ -423,6 +423,15 @@ export const workerClient = {
     // Metadata remains available to the caller for generation-specific storage.
     return sendMessageToWorker('verifyRetrievalMetadata', { bytes, pin }) as Promise<ReturnType<typeof verifyRetrievalMetadata>>
   },
+  async verifyRetrievalWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('verifyRetrievalWitness', { bytes, cell }, [bytes.buffer]) as Promise<Uint8Array>
+  },
+  async readRetrievalCommitments(pin: PinnedGeneration, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('readRetrievalCommitments', { pin, ordinal, witness, cell }, witness.map((w) => w.bytes.buffer)) as Promise<Uint8Array>
+  },
+  async reconstructRetrievalMdu(pin: PinnedGeneration, shards: (Uint8Array | null)[], commitments: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('reconstructRetrievalMdu', { pin, shards, commitments }, shards.flatMap((s) => s ? [s.buffer] : [])) as Promise<Uint8Array>
+  },
   async verifyRetrievalWindow(session: FrozenSession, envelope: RetrievalEnvelope): Promise<Uint8Array> {
     return sendMessageToWorker('verifyRetrievalWindow', { session, envelope }, [envelope.bytes.buffer]) as Promise<Uint8Array>
   },

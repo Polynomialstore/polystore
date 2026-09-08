@@ -143,3 +143,14 @@ test('providerFetchPublicStatus reads public provider-daemon status without sign
   assert.equal(response.provider?.public_base, 'https://sp.polynomialstore.com')
   assert.equal(response.provider?.public_health_ok, true)
 })
+
+test('secured metadata requests preserve the committed generation height exactly', async () => {
+  const { providerFetchRetrievalMetadata } = await import('./providerClient')
+  let requested: URL | undefined
+  const pin = { root: `0x${'ab'.repeat(32)}`, dealId: 9007199254740993n, owner: 'nil1owner', height: 9007199254740995n, metadataMdus: 3n } as unknown as import('../lib/retrieval').PinnedGeneration
+  const fetcher = (async (url: RequestInfo | URL) => { requested = new URL(String(url)); return new Response(new Uint8Array(8388608)) }) as typeof fetch
+  assert.equal((await providerFetchRetrievalMetadata('https://provider.test', pin, 2n, undefined, fetcher)).length, 8388608)
+  assert.equal(requested?.searchParams.get('committed_height'), '9007199254740995')
+  assert.equal(requested?.searchParams.get('deal_id'), '9007199254740993')
+  assert.equal(requested?.pathname, `/sp/retrieval/mdu/${pin.root}/2`)
+})

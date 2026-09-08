@@ -8,6 +8,7 @@ export const polystorewasm_derive_challenges: (a: number, b: number, c: number, 
 export const polystorewasm_validate_trusted_setup: (a: number, b: number) => [number, number];
 export const polystorewasm_commit_received_blob: (a: number, b: number, c: number) => [number, number, number];
 export const polystorewasm_validate_packed_payload: (a: number, b: number, c: number) => [number, number];
+export const polystorewasm_reconstruct_mdu_from_shards: (a: any, b: number, c: number) => [number, number, number];
 export const polystorewasm_new: (a: number, b: number) => [number, number, number];
 export const polystorewasm_expand_file: (a: number, b: number, c: number) => [number, number, number];
 export const polystorewasm_expand_mdu_rs: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -45,7 +46,9 @@ export const wasmmdu0builder_get_root: (a: number, b: any) => [number, number, n
 export const wasmmdu0builder_get_witness_count: (a: number) => bigint;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
-export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
 export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
 export const __wbindgen_start: () => void;

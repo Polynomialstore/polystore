@@ -131,7 +131,7 @@ export interface RetrievalWindow {
   slices: { encodedBlobIndex: number; rawOffset: number; length: number; outputOffset: bigint }[]
 }
 // The iterator retains one MDU's <=64 slices, independent of the file size.
-export function* planRetrievalWindows(pin: PinnedGeneration, file: RetrievalFile, rangeStart: bigint, rangeLength: bigint): Generator<RetrievalWindow> {
+export function* planRetrievalWindows(pin: PinnedGeneration, file: RetrievalFile, rangeStart: bigint, rangeLength: bigint, allowInactive = false): Generator<RetrievalWindow> {
   if (file.flags !== 0) throw new Error('transformed/encrypted retrieval requires a supported bounded decoder before payment')
   if (file.start_offset < 0n || file.size_bytes < 0n || file.start_offset + file.size_bytes > pin.userMdus * RAW_MDU ||
     rangeStart < 0n || rangeLength <= 0n || rangeStart + rangeLength > file.size_bytes) throw new Error('invalid file range')
@@ -146,7 +146,7 @@ export function* planRetrievalWindows(pin: PinnedGeneration, file: RetrievalFile
       const slot = pin.layout === 2 ? blob % pin.k : 0
       const row = pin.layout === 2 ? Math.floor(blob / pin.k) : blob
       const assignment = pin.assignments[slot]
-      if (!assignment?.active) throw new Error('required assignment unavailable; deputy or parity must be explicitly authorized before payment')
+      if (!assignment || (!assignment.active && !allowInactive)) throw new Error('required assignment unavailable; deputy or parity must be explicitly authorized before payment')
       const leaf = slot * pin.rows + row
       const next = cursor + BigInt(RAW_BLOB_BYTES - inMdu % RAW_BLOB_BYTES)
       const stop = next < end ? next : end
