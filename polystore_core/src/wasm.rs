@@ -8,7 +8,7 @@ use crate::kzg::{
     BLOB_SIZE, BLOBS_PER_MDU, set_pippenger_window_override, set_wasm_msm_basis_mode,
 };
 use crate::layout::FileRecordV1;
-use js_sys::{Date, Uint8Array};
+use js_sys::{BigInt, Date, JsString, Uint8Array};
 use wasm_bindgen::prelude::*;
 
 fn compute_mdu_root_from_witness_flat_bytes(
@@ -853,64 +853,92 @@ pub struct WasmMdu0Builder {
 #[wasm_bindgen]
 impl WasmMdu0Builder {
     #[wasm_bindgen(constructor)]
-    pub fn new(max_user_mdus: u64) -> WasmMdu0Builder {
-        WasmMdu0Builder {
-            inner: Mdu0Builder::new(max_user_mdus),
-        }
+    pub fn new(max_user_mdus: BigInt) -> Result<WasmMdu0Builder, JsValue> {
+        Ok(WasmMdu0Builder {
+            inner: Mdu0Builder::new(checked_metadata_u64(max_user_mdus)?),
+        })
     }
 
     #[wasm_bindgen]
-    pub fn new_with_commitments(max_user_mdus: u64, commitments_per_mdu: u64) -> WasmMdu0Builder {
-        WasmMdu0Builder {
-            inner: Mdu0Builder::new_with_commitments(max_user_mdus, commitments_per_mdu),
-        }
+    pub fn new_with_commitments(
+        max_user_mdus: BigInt,
+        commitments_per_mdu: BigInt,
+    ) -> Result<WasmMdu0Builder, JsValue> {
+        Ok(WasmMdu0Builder {
+            inner: Mdu0Builder::new_with_commitments(
+                checked_metadata_u64(max_user_mdus)?,
+                checked_metadata_u64(commitments_per_mdu)?,
+            ),
+        })
     }
 
     #[wasm_bindgen]
     pub fn load(
         data: &[u8],
-        max_user_mdus: u64,
-        commitments_per_mdu: u64,
+        max_user_mdus: BigInt,
+        commitments_per_mdu: BigInt,
     ) -> Result<WasmMdu0Builder, JsValue> {
-        let builder = Mdu0Builder::load_with_commitments(data, max_user_mdus, commitments_per_mdu)
-            .map_err(|e| JsValue::from_str(&e))?;
+        let builder = Mdu0Builder::load_with_commitments(
+            data,
+            checked_metadata_u64(max_user_mdus)?,
+            checked_metadata_u64(commitments_per_mdu)?,
+        )
+        .map_err(|e| JsValue::from_str(&e))?;
         Ok(WasmMdu0Builder { inner: builder })
     }
 
     pub fn load_legacy_recovery(
         data: &[u8],
-        max_user_mdus: u64,
-        commitments_per_mdu: u64,
+        max_user_mdus: BigInt,
+        commitments_per_mdu: BigInt,
     ) -> Result<WasmMdu0Builder, JsValue> {
-        let inner = Mdu0Builder::load_legacy_recovery(data, max_user_mdus, commitments_per_mdu)
-            .map_err(|e| JsValue::from_str(&e))?;
+        let inner = Mdu0Builder::load_legacy_recovery(
+            data,
+            checked_metadata_u64(max_user_mdus)?,
+            checked_metadata_u64(commitments_per_mdu)?,
+        )
+        .map_err(|e| JsValue::from_str(&e))?;
         Ok(Self { inner })
     }
 
     pub fn stage_v2_from_trusted_legacy(
         data: &[u8],
-        max_user_mdus: u64,
-        commitments_per_mdu: u64,
+        max_user_mdus: BigInt,
+        commitments_per_mdu: BigInt,
     ) -> Result<WasmMdu0Builder, JsValue> {
-        let inner =
-            Mdu0Builder::stage_v2_from_trusted_legacy(data, max_user_mdus, commitments_per_mdu)
-                .map_err(|e| JsValue::from_str(&e))?;
+        let inner = Mdu0Builder::stage_v2_from_trusted_legacy(
+            data,
+            checked_metadata_u64(max_user_mdus)?,
+            checked_metadata_u64(commitments_per_mdu)?,
+        )
+        .map_err(|e| JsValue::from_str(&e))?;
         Ok(Self { inner })
     }
 
-    pub fn append_file(&mut self, path: &str, size: u64, start_offset: u64) -> Result<(), JsValue> {
-        self.append_file_with_flags(path, size, start_offset, 0)
+    pub fn append_file(
+        &mut self,
+        path: JsString,
+        size: BigInt,
+        start_offset: BigInt,
+    ) -> Result<(), JsValue> {
+        self.append_file_with_flags(path, size, start_offset, 0.0)
     }
 
     pub fn append_file_with_flags(
         &mut self,
-        path: &str,
-        size: u64,
-        start_offset: u64,
-        flags: u8,
+        path: JsString,
+        size: BigInt,
+        start_offset: BigInt,
+        flags: f64,
     ) -> Result<(), JsValue> {
-        let rec = FileRecordV1::from_path(path, size, start_offset, flags)
-            .map_err(|e| JsValue::from_str(&e))?;
+        let path = checked_metadata_path(path)?;
+        let rec = FileRecordV1::from_path(
+            &path,
+            checked_metadata_u64(size)?,
+            checked_metadata_u64(start_offset)?,
+            checked_metadata_number(flags, 255)? as u8,
+        )
+        .map_err(|e| JsValue::from_str(&e))?;
         self.inner
             .append_file_record(rec)
             .map_err(|e| JsValue::from_str(&e))
@@ -920,7 +948,7 @@ impl WasmMdu0Builder {
         self.inner.bytes().to_vec()
     }
 
-    pub fn set_root(&mut self, index: u64, root: &[u8]) -> Result<(), JsValue> {
+    pub fn set_root(&mut self, index: BigInt, root: &[u8]) -> Result<(), JsValue> {
         if root.len() != 32 {
             return Err(JsValue::from_str("root must be 32 bytes"));
         }
@@ -930,7 +958,7 @@ impl WasmMdu0Builder {
         r.copy_from_slice(root);
 
         self.inner
-            .set_root(index, r)
+            .set_root(checked_metadata_u64(index)?, r)
             .map_err(|e| JsValue::from_str(&e))
     }
 
@@ -962,9 +990,9 @@ impl WasmMdu0Builder {
     }
 
     /// Returns the stored cell, not the original digest supplied to set_root.
-    pub fn get_root(&self, index: u64) -> Result<Vec<u8>, JsValue> {
+    pub fn get_root(&self, index: BigInt) -> Result<Vec<u8>, JsValue> {
         self.inner
-            .get_root(index)
+            .get_root(checked_metadata_u64(index)?)
             .map(|root| root.to_vec())
             .map_err(|e| JsValue::from_str(&e))
     }
@@ -980,4 +1008,33 @@ fn checked_metadata_number(value: f64, max: usize) -> Result<usize, JsValue> {
         return Err(JsValue::from_str("metadata index or range out of bounds"));
     }
     Ok(value as usize)
+}
+
+// Unlike wasm-bindgen's u64 argument ABI, its checked conversion compares the
+// original BigInt with the converted value and rejects negative/overflow values.
+// It performs no decimal conversion or input-dependent allocation.
+fn checked_metadata_u64(value: BigInt) -> Result<u64, JsValue> {
+    let raw: &JsValue = value.as_ref();
+    if !raw.is_bigint() {
+        return Err(JsValue::from_str("metadata u64 input must be a BigInt"));
+    }
+    u64::try_from(value).map_err(|_| JsValue::from_str("metadata BigInt exceeds u64 range"))
+}
+
+// Receive the original JavaScript code units rather than wasm-bindgen's lossy
+// &str conversion. A valid U+FFFD remains allowed; an unpaired surrogate does not.
+fn checked_metadata_path(value: JsString) -> Result<String, JsValue> {
+    let raw: &JsValue = value.as_ref();
+    if !raw.is_string() {
+        return Err(JsValue::from_str("metadata path must be a string"));
+    }
+    // UTF-8 bytes are never fewer than UTF-16 code units, so this bounds the
+    // installed validity check and conversion before allocation.
+    if value.length() == 0 || value.length() > crate::layout::FILE_RECORD_PATH_BYTES as u32 {
+        return Err(JsValue::from_str("metadata path exceeds byte capacity"));
+    }
+    if !value.is_valid_utf16() {
+        return Err(JsValue::from_str("metadata path contains invalid UTF-16"));
+    }
+    Ok(String::from(value))
 }
