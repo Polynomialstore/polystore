@@ -16,6 +16,8 @@ are checked. A later initialization request rechecks its supplied file/bytes;
 an existing singleton cannot make a missing or substituted setup succeed.
 Validator `start` and `in-place-testnet` fail on initialization errors. Read-only
 CLI commands do not require setup. Chain, browser and demos use this same digest.
+The repository marks `trusted_setup.txt` as `-text` so Git preserves the approved
+bytes even with `core.autocrlf=true`; verification never normalizes received bytes.
 
 Received blobs use `commit_received_blob`: exactly 131072 bytes, with all 4096
 big-endian scalar encodings strictly below Fr. Only then does the existing

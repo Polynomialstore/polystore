@@ -93,9 +93,11 @@ jobs:
         working-directory: ${{ matrix.crate }}
         run: cargo test --verbose
 
-      - name: Check independent PSB1 transcript vectors
+      - name: Check independent crypto vectors and setup checkout bytes
         if: matrix.crate == 'polystore_core'
-        run: python3 polystore_core/tests/testdata/check_session_batch_vectors.py
+        run: |
+          python3 polystore_core/tests/testdata/check_session_batch_vectors.py
+          python3 scripts/test_trusted_setup_checkout.py
 
   # ------------------------------------------------------------------
   # FRONTEND (PolyStore Website)
