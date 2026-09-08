@@ -11,7 +11,8 @@ const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Arra
 const session = (n = 1): FrozenSession => ({ sessionId: `0x${n.toString(16).padStart(64, '0')}`, payee: address(n + 1), owner: address(99),
   pin: { dealId: 9007199254740993n + BigInt(n) }, window: { mduIndex: 2n, startBlobIndex: 0, blobCount: 1, provider: address(90), slices: [] } }) as unknown as FrozenSession
 const txHash = 'A1'.repeat(32)
-const payload = (s: FrozenSession, status = 'success', hash = txHash) => ({ status, session_id: s.sessionId.slice(2), proof_count: 1, tx_hash: hash, cleanup_status: 'complete' })
+// Go writeSubmissionOutcome returns the canonical 0x-prefixed session ID.
+const payload = (s: FrozenSession, status = 'success', hash = txHash) => ({ status, session_id: s.sessionId, proof_count: 1, tx_hash: hash, cleanup_status: 'complete' })
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
 const confirm = async () => {}
 
@@ -113,7 +114,8 @@ test('malformed or mismatched final responses are unknown, never settled or retr
   const s = session()
   const bad = [
     () => json(payload(s), 202), () => json(payload(s, 'pending'), 200), () => json(payload(s, 'success', ''), 200),
-    () => json({ ...payload(s), session_id: session(2).sessionId.slice(2) }),
+    () => json({ ...payload(s), session_id: session(2).sessionId }),
+    () => json({ ...payload(s), session_id: s.sessionId.slice(2) }),
     () => json({ ...payload(s), session_ids: [s.sessionId] }), () => json({ ...payload(s), proof_count: '1' }),
     () => json({ ...payload(s), proof_count: 2 }), () => json({ ...payload(s), tx_hash: 'not-a-hash' }),
     () => json({ ...payload(s), cleanup_status: ['complete'] }), () => json({ ...payload(s), error: [] }),

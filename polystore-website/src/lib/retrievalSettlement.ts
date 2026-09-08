@@ -48,7 +48,7 @@ async function requestProof(session: FrozenSession, base: string, options: Settl
         message: `Provider settlement request rejected for session ${session.sessionId} (HTTP ${response.status}): ${value.error.slice(0, 256)}` }
     }
     if (Object.keys(value).some((k) => !['status', 'session_id', 'proof_count', 'tx_hash', 'cleanup_status', 'error'].includes(k)) ||
-        value.session_id !== session.sessionId.slice(2) || uint(value.proof_count, 64) !== session.window.blobCount ||
+        value.session_id !== session.sessionId || uint(value.proof_count, 64) !== session.window.blobCount ||
         typeof value.tx_hash !== 'string' || (value.tx_hash !== '' && !/^[0-9a-fA-F]{64}$/.test(value.tx_hash)) ||
         (value.cleanup_status !== undefined && (typeof value.cleanup_status !== 'string' || !['complete', 'pending', 'retained'].includes(value.cleanup_status))) ||
         (value.error !== undefined && typeof value.error !== 'string')) throw new Error('mismatched or malformed outcome')
