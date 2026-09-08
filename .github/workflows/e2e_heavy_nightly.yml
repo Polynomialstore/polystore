@@ -111,6 +111,7 @@ jobs:
           path: |
             _artifacts/devnet_alpha_multi_sp/*.log
             polystore-website/test-results/**/retrieval-summary.json
+            polystore-website/test-results/**/retrieval-delivery-accounting.json
             polystore-website/test-results/**/error-context.md
             ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.png' || '' }}
             ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.zip' || '' }}

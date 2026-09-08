@@ -93,6 +93,10 @@ if [ -z "${E2E_STACK_PROFILE:-}" ]; then
     export E2E_STACK_PROFILE=fast
   fi
 fi
+if [ "${E2E_MODE2_STREAMED:-0}" != "1" ]; then
+  # One-blob sessions must pay after ceil(5% burn); 1stake would all burn.
+  export POLYSTORE_RETRIEVAL_PRICE_PER_BLOB=17stake
+fi
 "$STACK_UP_SCRIPT"
 
 wait_for_http "lcd" "http://localhost:${LCD_PORT}/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
