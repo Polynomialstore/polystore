@@ -9,6 +9,7 @@ export function validatePolyfsRecordPath(value: string): string {
   if (encoded.length > POLYFS_RECORD_PATH_MAX_BYTES || new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(encoded) !== value) {
     throw new Error('PolyFS path must be valid UTF-8 of at most 232 bytes')
   }
+  // eslint-disable-next-line no-control-regex -- The wire path policy explicitly rejects ASCII control bytes.
   if (value.startsWith('/') || /[\\\x00-\x1f\x7f]/u.test(value) || value.split('/').includes('..')) {
     throw new Error('invalid PolyFS path')
   }

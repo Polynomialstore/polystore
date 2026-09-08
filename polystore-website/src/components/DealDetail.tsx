@@ -28,7 +28,6 @@ import {
   readCachedFile,
   readMdu,
   writeMdu,
-  writeManifestBlob,
   readManifestRoot,
   readSlabMetadata,
   writeCachedFile,
@@ -2365,7 +2364,7 @@ export function DealDetail({
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [confirmMduRetrievalSessions, deal.id, openRetrievalWindows, primaryProvider, refreshAuthoritativeDealHead, resolveProviderHttpBase, resolveProviderHttpBaseFor, serviceHint.mode, serviceHint.rsK, serviceHint.rsM, dealProviders])
+  }, [confirmMduRetrievalSessions, deal.id, openRetrievalWindows, primaryProvider, resolveProviderHttpBase, resolveProviderHttpBaseFor, serviceHint.mode, serviceHint.rsK, serviceHint.rsM, dealProviders])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
