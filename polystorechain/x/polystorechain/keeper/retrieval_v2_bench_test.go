@@ -301,7 +301,7 @@ func BenchmarkSubmitRetrievalSessionProofV2Mixed(b *testing.B) {
 	ctx, cases := setupMixedRetrievalV2(b)
 	b.ReportAllocs()
 	b.StopTimer()
-	warm, warmMsgs, _ := prepareMixedRetrievalV2(b, ctx, cases, 0)
+	warm, warmMsgs, _ := prepareMixedRetrievalV2(b, ctx, cases, 1)
 	for i, msg := range warmMsgs {
 		_, err := cases[i].env.msgServer.SubmitRetrievalSessionProof(warm, msg)
 		require.NoError(b, err)
@@ -311,7 +311,7 @@ func BenchmarkSubmitRetrievalSessionProofV2Mixed(b *testing.B) {
 	var gas uint64
 	var generation time.Duration
 	for iteration := 0; iteration < b.N; iteration++ {
-		branch, msgs, elapsed := prepareMixedRetrievalV2(b, ctx, cases, uint64(iteration)+1)
+		branch, msgs, elapsed := prepareMixedRetrievalV2(b, ctx, cases, uint64(iteration)+2)
 		generation += elapsed
 		var errors [mixedRetrievalSessions]error
 		b.StartTimer()
