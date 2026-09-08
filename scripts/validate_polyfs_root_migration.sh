@@ -133,8 +133,8 @@ export DYLD_LIBRARY_PATH="$CORE_DIR/target/release${DYLD_LIBRARY_PATH:+:$DYLD_LI
 
 run cargo test --manifest-path "$CORE_DIR/Cargo.toml" --test mdu0_root_table_test -- --nocapture
 
-run_in "$CHAIN_DIR" go test ./x/crypto_ffi -run 'TestVerifyMdu0RootTableProofRejectsWrongTargetRoot'
-run_in "$CHAIN_DIR" go test ./x/polystorechain/keeper -run 'TestProveLiveness_HappyPath|TestRetrievalSession_Lifecycle_ConfirmThenProof'
+run_in "$CHAIN_DIR" ../scripts/chain_go.sh test ./x/crypto_ffi -run 'TestVerifyMdu0RootTableProofRejectsWrongTargetRoot'
+run_in "$CHAIN_DIR" ../scripts/chain_go.sh test ./x/polystorechain/keeper -run 'TestProveLiveness_HappyPath|TestRetrievalSession_Lifecycle_ConfirmThenProof'
 
 run_in "$GATEWAY_DIR" go test . -run 'TestProofHeaderJSONHighIndexNoManifestBinVerifies|TestProofHeaderJSONRejectsStaleMdu0RootTable'
 

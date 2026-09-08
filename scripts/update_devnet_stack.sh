@@ -1027,7 +1027,7 @@ build_artifacts() {
 
   echo "==> Building coupled devnet artifacts"
   run_build_in_dir "$SOURCE_ROOT/polystore_core" cargo build --release
-  run_build_in_dir "$SOURCE_ROOT/polystorechain" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
+  run_build_in_dir "$SOURCE_ROOT/polystorechain" ../scripts/chain_go.sh build -o "$SOURCE_ROOT/polystorechain/polystorechaind" ./cmd/polystorechaind
   run_build_in_dir "$SOURCE_ROOT/polystore_gateway" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_gateway/polystore_gateway" .
   run_build_in_dir "$SOURCE_ROOT/polystore_faucet" env GOFLAGS="$(goflags_with_mod)" go build -o "$SOURCE_ROOT/polystore_faucet/polystore_faucet" .
   run_build_in_dir "$SOURCE_ROOT/polystore_cli" cargo build --release

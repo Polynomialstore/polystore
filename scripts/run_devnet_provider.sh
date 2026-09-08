@@ -393,10 +393,8 @@ ensure_polystorechaind() {
     return 0
   fi
   ensure_polystore_core_runtime
-  local build_goflags="${GOFLAGS:-}"
-  build_goflags="${build_goflags} -mod=mod"
   echo "==> Building polystorechaind..."
-  (cd "$ROOT_DIR/polystorechain" && GOFLAGS="$build_goflags" "$GO_BIN" build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GO_BIN="$GO_BIN" ../scripts/chain_go.sh build -o "$POLYSTORECHAIND_BIN" ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {

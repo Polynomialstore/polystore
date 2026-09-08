@@ -32,6 +32,12 @@ jobs:
           bash -n scripts/bench_retrieval_sessions.sh
           python3 scripts/test_bench_retrieval_sessions.py
 
+      - name: Check chain build entrypoint
+        if: matrix.service == 'polystorechain'
+        run: |
+          bash -n scripts/chain_go.sh
+          python3 scripts/test_chain_go.py
+
       - name: Build polystore_core
         if: matrix.service == 'polystore_gateway' || matrix.service == 'polystorechain'
         run: |
@@ -41,17 +47,15 @@ jobs:
       - name: Test ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
         run: |
-          if [ "${{ matrix.service }}" == "polystorechain" ]; then
-            echo "Reconstructing vendor for polystorechain..."
-            go mod vendor
-            git checkout vendor
-          fi
-          
           # Add polystore_core release dir to LD_LIBRARY_PATH for polystore_gateway/polystorechain
           # We use GITHUB_WORKSPACE because working-directory is set to the service dir
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
-          
-          go test ./... -v
+
+          if [ "${{ matrix.service }}" == "polystorechain" ]; then
+            ../scripts/chain_go.sh test ./... -v
+          else
+            go test ./... -v
+          fi
 
   # ------------------------------------------------------------------
   # RUST CRATES (Core, CLI, P2P, Mock L1)

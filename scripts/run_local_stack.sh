@@ -435,20 +435,9 @@ ensure_polystorechaind() {
   ensure_polystore_core_shared
   banner "Building and installing polystorechaind (via $GO_BIN)"
   
-  # Reconstruct vendor directory to handle partial vendoring strategy
-  (
-    cd "$ROOT_DIR/polystorechain"
-    echo "Reconstructing vendor for polystorechain..."
-    "$GO_BIN" mod vendor
-    # Restore tracked vendor files (if any) to preserve patches/partial vendoring
-    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      git checkout vendor 2>/dev/null || true
-    fi
-  )
-
-  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" build -o "$ROOT_DIR/polystorechain/polystorechaind" ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GO_BIN="$GO_BIN" ../scripts/chain_go.sh build -o "$ROOT_DIR/polystorechain/polystorechaind" ./cmd/polystorechaind)
   # Also install to GOPATH/bin to ensure it's in PATH for arbitrary shell calls
-  (cd "$ROOT_DIR/polystorechain" && "$GO_BIN" install ./cmd/polystorechaind)
+  (cd "$ROOT_DIR/polystorechain" && GO_BIN="$GO_BIN" ../scripts/chain_go.sh install ./cmd/polystorechaind)
 }
 
 ensure_polystore_cli() {

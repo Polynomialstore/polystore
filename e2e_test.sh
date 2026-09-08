@@ -26,7 +26,7 @@ echo "[E2E] Building polystorechaind..."
 pushd "$CHAIN_DIR" >/dev/null
 cp "$ROOT_DIR/demos/kzg/trusted_setup.txt" ./trusted_setup.txt
 export CGO_LDFLAGS="-L$CORE_DIR/target/release -lpolystore_core"
-go build -o "$ROOT_DIR/polystorechaind" ./cmd/polystorechaind
+../scripts/chain_go.sh build -o "$ROOT_DIR/polystorechaind" ./cmd/polystorechaind
 popd >/dev/null
 
 BINARY="$ROOT_DIR/polystorechaind"

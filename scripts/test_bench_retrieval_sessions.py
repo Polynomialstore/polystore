@@ -1,5 +1,6 @@
 """Safety checks for the actual benchmark entrypoint; no build or node is run."""
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +12,21 @@ SCRIPT = Path(__file__).with_name("bench_retrieval_sessions.sh")
 
 
 class BenchmarkHomeTest(unittest.TestCase):
+    def setUp(self):
+        # Mock builds must not prepare or stamp the developer's real vendor tree.
+        checkout = tempfile.TemporaryDirectory()
+        self.addCleanup(checkout.cleanup)
+        root = Path(checkout.name)
+        for directory in ("scripts", "polystore_core", "polystorechain/vendor"):
+            (root / directory).mkdir(parents=True)
+        for name in (SCRIPT.name, "chain_go.sh"):
+            shutil.copy2(SCRIPT.with_name(name), root / "scripts" / name)
+        for name in ("go.mod", "go.sum", "vendor/correction.go"):
+            (root / "polystorechain" / name).write_text("mock dependency\n")
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+        self.script = root / "scripts" / SCRIPT.name
+
     def test_existing_paths_are_preserved_before_build(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -31,7 +47,7 @@ class BenchmarkHomeTest(unittest.TestCase):
             dangling.symlink_to(root / "absent", target_is_directory=True)
             for home in (existing, link, dangling, sentinel):
                 with self.subTest(home=home.name):
-                    result = subprocess.run(["bash", str(SCRIPT)], env=dict(env, POLYSTORE_BENCH_HOME=str(home)), capture_output=True, text=True, timeout=10)
+                    result = subprocess.run(["bash", str(self.script)], env=dict(env, POLYSTORE_BENCH_HOME=str(home)), capture_output=True, text=True, timeout=10)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("must not already exist", result.stderr)
                     self.assertFalse(build_marker.exists(), result.stderr)
@@ -51,7 +67,7 @@ class BenchmarkHomeTest(unittest.TestCase):
             env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home))
             for keep in (False, True):
                 with self.subTest(keep=keep):
-                    result = subprocess.run(["bash", str(SCRIPT)] + (["--keep-home"] if keep else []), env=env, capture_output=True, text=True, timeout=10)
+                    result = subprocess.run(["bash", str(self.script)] + (["--keep-home"] if keep else []), env=env, capture_output=True, text=True, timeout=10)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("cargo build --release failed", result.stderr)
                     self.assertEqual(home.is_dir(), keep)
@@ -63,7 +79,7 @@ class BenchmarkHomeTest(unittest.TestCase):
             fakebin.mkdir()
             for name, body in (
                 ("cargo", "exit 0"),
-                ("go", 'printf "%s\\n" "$@" > "$BUILD_ARGS"; exit 89'),
+                ("go", 'if [ "$1" = mod ] && [ "$2" = vendor ]; then exit 0; fi; printf "%s\\n" "$@" > "$BUILD_ARGS"; exit 89'),
             ):
                 command = fakebin / name
                 command.write_text("#!/bin/sh\n" + body + "\n")
@@ -73,7 +89,7 @@ class BenchmarkHomeTest(unittest.TestCase):
             env.pop("POLYSTORE_BENCH_HOME", None)
             homes = []
             for _ in range(2):
-                result = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=10)
+                result = subprocess.run(["bash", str(self.script)], env=env, capture_output=True, text=True, timeout=10)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("chain build failed", result.stderr)
                 args = args_file.read_text().splitlines()
@@ -97,7 +113,7 @@ class BenchmarkHomeTest(unittest.TestCase):
             cargo.write_text('#!/bin/sh\nmv "$POLYSTORE_BENCH_HOME" "$POLYSTORE_BENCH_HOME.original"\nln -s "$OPERATOR_DATA" "$POLYSTORE_BENCH_HOME"\nexit 89\n')
             cargo.chmod(0o755)
             env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home), OPERATOR_DATA=str(target))
-            result = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["bash", str(self.script)], env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("home changed; refusing cleanup", result.stderr)
             self.assertTrue(home.is_symlink())
@@ -131,7 +147,7 @@ exec(compile(code, "<benchmark home>", "exec"))
 ''')
             python.chmod(0o755)
             env = dict(os.environ, PATH=f"{fakebin}:{os.environ['PATH']}", POLYSTORE_BENCH_HOME=str(home))
-            result = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["bash", str(self.script)], env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((home / "operator-data").read_text(), "preserve")
             self.assertTrue(Path(str(home) + ".original").is_dir())

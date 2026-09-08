@@ -34,11 +34,11 @@ if command -v ignite &> /dev/null; then
     # ignite chain build might be tricky with custom CGO flags if not configured in config.yml
     # So we fall back to go build for reliability in this script
     cd polystorechain
-    go build -o ../bin/polystorechaind ./cmd/polystorechaind
+    ../scripts/chain_go.sh build -o ../bin/polystorechaind ./cmd/polystorechaind
     cd ..
 else
     cd polystorechain
-    go build -o ../bin/polystorechaind ./cmd/polystorechaind
+    ../scripts/chain_go.sh build -o ../bin/polystorechaind ./cmd/polystorechaind
     cd ..
 fi
 

@@ -1349,6 +1349,7 @@ github.com/cosmos/evm/mempool/miner
 github.com/cosmos/evm/mempool/txpool
 github.com/cosmos/evm/mempool/txpool/legacypool
 github.com/cosmos/evm/metrics
+github.com/cosmos/evm/precompiles/common
 github.com/cosmos/evm/rpc
 github.com/cosmos/evm/rpc/backend
 github.com/cosmos/evm/rpc/namespaces/ethereum/debug

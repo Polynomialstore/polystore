@@ -60,6 +60,7 @@ import (
 	// EVM Imports
 	codecaddress "github.com/cosmos/cosmos-sdk/codec/address"
 	evmante "github.com/cosmos/evm/ante"
+	precompilecommon "github.com/cosmos/evm/precompiles/common"
 	evmsrvflags "github.com/cosmos/evm/server/flags"
 	feemarket "github.com/cosmos/evm/x/feemarket"
 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
@@ -306,11 +307,20 @@ func New(
 	// Keep 31337 fallback for legacy localhost behavior when all sources are unset.
 	evmChainID := resolveEVMChainID(appOpts)
 
+	// Native precompiles journal every mounted persistent store they can touch,
+	// including auth, bank and PolyStore. The snapshot adapter needs the actual
+	// concrete keys registered by runtime, not replacement keys with equal names.
+	nativeStoreKeys := make(map[string]*storetypes.KVStoreKey)
+	for _, key := range app.GetStoreKeys() {
+		if kvKey, ok := key.(*storetypes.KVStoreKey); ok {
+			nativeStoreKeys[kvKey.Name()] = kvKey
+		}
+	}
 	evmKeeper := evmkeeper.NewKeeper(
 		app.appCodec,
 		evmKey,
 		transientKey,
-		map[string]*storetypes.KVStoreKey{evmtypes.StoreKey: evmKey},
+		nativeStoreKeys,
 		authtypes.NewModuleAddress(govtypes.ModuleName), // Authority
 		app.AuthKeeper,
 		app.BankKeeper,
@@ -329,7 +339,9 @@ func New(
 			Decimals:      uint32(evmtypes.DefaultEVMDecimals),
 		},
 	)
-	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystoreprecompile.MustNew(&app.PolyStoreChainKeeper))
+	polystorePrecompile := polystoreprecompile.MustNew(&app.PolyStoreChainKeeper)
+	polystorePrecompile.BalanceHandlerFactory = precompilecommon.NewBalanceHandlerFactory(app.BankKeeper)
+	app.EVMKeeper.RegisterStaticPrecompile(polystoreprecompile.Address, polystorePrecompile)
 
 	addressCodec := codecaddress.NewBech32Codec(AccountAddressPrefix)
 	realEvmModule := evm.NewAppModule(app.EVMKeeper, app.AuthKeeper, app.BankKeeper, addressCodec)
