@@ -128,10 +128,10 @@ async function isCommitCompleteOrReset(page: Page, commitBtn: Locator, filePath:
     }
   }
 
-  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes[0]?.getAttribute('data-panel-state') ?? null).catch(() => null)
+  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-panel-state') : null).catch(() => null)
   if (panelState === 'success') return true
 
-  const text = ((await commitBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || '').trim()
+  const text = ((await commitBtn.allTextContents().then((texts) => texts.length === 1 ? texts[0] : '').catch(() => '')) || '').trim()
   if (/Committed!/i.test(text)) return true
   return false
 }
@@ -284,7 +284,20 @@ test('upload completion polling observes removed controls', async ({ page }) => 
   // Missing controls alone are not completion and must not block the next poll.
   expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin')).toBe(false)
 
-  await page.getByTestId('mdu-upload-card').evaluate((card) => card.setAttribute('data-panel-state', 'success'))
+  // Duplicate locators remain invalid, matching the previous strict reads.
+  await page.setContent(`
+    <div data-testid="mdu-upload-card" data-panel-state="uploading"></div>
+    <button data-testid="mdu-commit" disabled>Committed!</button>
+    <button data-testid="mdu-commit" disabled>Committed!</button>
+  `)
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin')).toBe(false)
+  await page.setContent(`
+    <div data-testid="mdu-upload-card" data-panel-state="success"></div>
+    <div data-testid="mdu-upload-card" data-panel-state="success"></div>
+  `)
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin')).toBe(false)
+
+  await page.setContent('<div data-testid="mdu-upload-card" data-panel-state="success"></div>')
 
   await expect.poll(() => isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin'), { timeout: 1_000 }).toBe(true)
   await page.setContent('')

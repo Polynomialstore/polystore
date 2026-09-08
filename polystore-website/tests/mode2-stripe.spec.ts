@@ -222,11 +222,11 @@ async function readDownloadBytesMaybe(page: Page, button: Locator, timeout = 90_
 }
 
 async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
-  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes[0]?.getAttribute('data-panel-state') ?? null).catch(() => null)
+  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-panel-state') : null).catch(() => null)
   if (panelState !== 'idle') return false
-  const step2State = await page.getByTestId('workflow-step-2').evaluateAll((nodes) => nodes[0]?.getAttribute('data-step-state') ?? null).catch(() => null)
-  const step3State = await page.getByTestId('workflow-step-3').evaluateAll((nodes) => nodes[0]?.getAttribute('data-step-state') ?? null).catch(() => null)
-  const step4State = await page.getByTestId('workflow-step-4').evaluateAll((nodes) => nodes[0]?.getAttribute('data-step-state') ?? null).catch(() => null)
+  const step2State = await page.getByTestId('workflow-step-2').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-step-state') : null).catch(() => null)
+  const step3State = await page.getByTestId('workflow-step-3').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-step-state') : null).catch(() => null)
+  const step4State = await page.getByTestId('workflow-step-4').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-step-state') : null).catch(() => null)
   const fileInputCount = await page.getByTestId('mdu-file-input').count().catch(() => 0)
   return step2State === 'idle' && step3State === 'idle' && step4State === 'idle' && fileInputCount > 0
 }
@@ -258,9 +258,9 @@ async function isCommitCompleteOrReset(
   if (allowFileRowCompletion && expectedFilePath) {
     if (await hasDealFileRow(page, expectedFilePath)) return true
   }
-  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes[0]?.getAttribute('data-panel-state') ?? null).catch(() => null)
+  const panelState = await page.getByTestId('mdu-upload-card').evaluateAll((nodes) => nodes.length === 1 ? nodes[0].getAttribute('data-panel-state') : null).catch(() => null)
   if (allowFileRowCompletion && panelState === 'success') return true
-  const text = ((await commitBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || '').trim()
+  const text = ((await commitBtn.allTextContents().then((texts) => texts.length === 1 ? texts[0] : '').catch(() => '')) || '').trim()
   if (/Committed!/i.test(text)) return true
   if (allowFileRowCompletion && allowReset && (await isUploaderResetToInitialState(page))) return true
   return false
@@ -335,7 +335,7 @@ async function completeUploadAndCommit(
           ) return true
           const enabled = await commitBtn.evaluateAll((buttons) => buttons.length === 1 && buttons[0].matches(':enabled')).catch(() => false)
           if (enabled) return true
-          const text = ((await uploadBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || '').trim()
+          const text = ((await uploadBtn.allTextContents().then((texts) => texts.length === 1 ? texts[0] : '').catch(() => '')) || '').trim()
           return /Upload Complete/i.test(text)
         }, { timeout: 120_000 })
         .toBe(true)
@@ -1370,14 +1370,14 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await waitForUploadControls(uploadBtn, commitBtn, 300_000)
     if ((await uploadBtn.count().catch(() => 0)) > 0 && (await uploadBtn.isVisible().catch(() => false))) {
-      const preUploadText = ((await uploadBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || '').trim()
+      const preUploadText = ((await uploadBtn.allTextContents().then((texts) => texts.length === 1 ? texts[0] : '').catch(() => '')) || '').trim()
       if (!/Upload Complete/i.test(preUploadText)) {
         await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
         await uploadBtn.click()
       }
       await expect
         .poll(async () => {
-          const text = (await uploadBtn.allTextContents().then((texts) => texts[0] || '').catch(() => '')) || ''
+          const text = (await uploadBtn.allTextContents().then((texts) => texts.length === 1 ? texts[0] : '').catch(() => '')) || ''
           const committed = await commitBtn.evaluateAll((buttons) => buttons.length === 1 && buttons[0].matches(':enabled')).catch(() => false)
           return /Upload Complete/i.test(text) || committed
         }, { timeout: 300_000 })
@@ -1408,6 +1408,19 @@ test('upload completion polling observes removed controls', async ({ page }) => 
   const commitBtn = page.getByTestId('mdu-commit')
   await commitBtn.evaluate((button) => button.remove())
   // Missing controls alone are not completion and must not block the next poll.
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin', '', '', true)).toBe(false)
+
+  // Duplicate locators remain invalid, matching the previous strict reads.
+  await page.setContent(`
+    <div data-testid="mdu-upload-card" data-panel-state="uploading"></div>
+    <button data-testid="mdu-commit" disabled>Committed!</button>
+    <button data-testid="mdu-commit" disabled>Committed!</button>
+  `)
+  expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin', '', '', true)).toBe(false)
+  await page.setContent(`
+    <div data-testid="mdu-upload-card" data-panel-state="success"></div>
+    <div data-testid="mdu-upload-card" data-panel-state="success"></div>
+  `)
   expect(await isCommitCompleteOrReset(page, commitBtn, 'uploaded.bin', '', '', true)).toBe(false)
 
   await page.setContent(`
