@@ -5,7 +5,8 @@ This is the first #257 implementation slice; these measurements do not qualify
 authenticated retrieval, delivery, sustained capacity, or activation.
 
 Three interleaved baseline/candidate runs on an Apple M3, macOS, with
-`GOMAXPROCS=2`, compare the same logical 8 MiB metadata containing 1,000 records.
+`GOMAXPROCS=2`, compare the same logical 8 MiB metadata containing 1,000 records
+with distinct `entry{index}` paths.
 No other test, build, or node process ran during the measurements; normal
 desktop processes remained. This is a local characterization, not a dedicated
 performance runner. Raw timings, source heads and native library SHA-256 values
@@ -16,16 +17,19 @@ desktop, with its native build cache and repository-tracked artifacts.
 
 | Operation | Previous raw FAT median | Validated FAT v2 median | Go heap, both versions |
 | --- | ---: | ---: | ---: |
-| Load and free 8 MiB / 1,000 records | 0.198 ms | 2.011 ms | 8 bytes / 1 allocation |
-| Read all 1,000 records | 0.085 ms | 0.137 ms | 256,000 bytes / 1,000 allocations |
-| Export 8 MiB | 0.557 ms | 0.530 ms | 8,388,608 bytes / 1 allocation |
+| Load and free 8 MiB / 1,000 records | 0.192 ms | 2.111 ms | 8 bytes / 1 allocation |
+| Read all 1,000 records | 0.084 ms | 0.136 ms | 256,000 bytes / 1,000 allocations |
+| Export 8 MiB | 0.554 ms | 0.542 ms | 8,388,608 bytes / 1 allocation |
 
 The load increase is an explicit security cost: the old loader did not validate
-all roots, records, padding and unused bytes. The coordinator accepts this
+all roots, records, unique active paths, padding and unused bytes. The coordinator accepts this
 bounded cost for the format slice. Scalar decoding was removed from public
 root range checks, and unused padding uses one contiguous scan. Record reads
 copy only the requested fixed-size record. No cache or separate parser is
-introduced to avoid validation.
+introduced to avoid validation. Uniqueness uses an in-place standard sort of
+at most 23,807 u16 indices (47,614 stack bytes), with bounded O(n log n)
+comparisons. The maximum active inventory allocation guard also passes without
+heap requests; ordinary record reads do not carry that temporary stack index.
 
 Go allocation counters exclude Rust allocations. The maintained
 `fat_v2_allocations_test.rs` check measures native allocator requests: borrowed

@@ -16,8 +16,8 @@
       "native_sha256": "039f5dc551ce04bd58304f2b1311ac6aa7a0edc75751ffc75ca2220ecbaa5571"
     },
     "candidate": {
-      "head": "53fc75decf99bf73c898d78400790f5b34bd846d",
-      "native_sha256": "79e885fa7e4dff6edfc6bc60cf12d7868620a90cac242f139a8a080e53eef21a"
+      "head": "565a259af752e4eebd69ce3ac5aee76597c0f8fa",
+      "native_sha256": "805e1a555a8047fe03356bb606b0c94af2e2f30560155df34e09054dfec6cdae"
     }
   },
   "samples": [
@@ -25,8 +25,8 @@
       "variant": "baseline",
       "round": 0,
       "operation": "load_8MiB_1000_records",
-      "iterations": 1261,
-      "ns_per_op": 201790,
+      "iterations": 1497,
+      "ns_per_op": 182768,
       "go_bytes_per_op": 8,
       "go_allocations_per_op": 1
     },
@@ -34,71 +34,71 @@
       "variant": "baseline",
       "round": 0,
       "operation": "read_1000_records",
-      "iterations": 2767,
-      "ns_per_op": 83255,
+      "iterations": 2714,
+      "ns_per_op": 83174,
       "go_bytes_per_op": 256000,
       "go_allocations_per_op": 1000
     },
     {
       "variant": "baseline",
       "round": 0,
-      "operation": "export_8MiB",
-      "iterations": 412,
-      "ns_per_op": 557481,
-      "go_bytes_per_op": 8388608,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "baseline",
-      "round": 1,
-      "operation": "load_8MiB_1000_records",
-      "iterations": 1302,
-      "ns_per_op": 196378,
-      "go_bytes_per_op": 8,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "baseline",
-      "round": 1,
-      "operation": "read_1000_records",
-      "iterations": 2712,
-      "ns_per_op": 85130,
-      "go_bytes_per_op": 256000,
-      "go_allocations_per_op": 1000
-    },
-    {
-      "variant": "baseline",
-      "round": 1,
-      "operation": "export_8MiB",
-      "iterations": 384,
-      "ns_per_op": 557020,
-      "go_bytes_per_op": 8388608,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "baseline",
-      "round": 2,
-      "operation": "load_8MiB_1000_records",
-      "iterations": 1406,
-      "ns_per_op": 198403,
-      "go_bytes_per_op": 8,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "baseline",
-      "round": 2,
-      "operation": "read_1000_records",
-      "iterations": 2574,
-      "ns_per_op": 84993,
-      "go_bytes_per_op": 256000,
-      "go_allocations_per_op": 1000
-    },
-    {
-      "variant": "baseline",
-      "round": 2,
       "operation": "export_8MiB",
       "iterations": 428,
-      "ns_per_op": 546854,
+      "ns_per_op": 554428,
+      "go_bytes_per_op": 8388608,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "baseline",
+      "round": 1,
+      "operation": "load_8MiB_1000_records",
+      "iterations": 1449,
+      "ns_per_op": 191708,
+      "go_bytes_per_op": 8,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "baseline",
+      "round": 1,
+      "operation": "read_1000_records",
+      "iterations": 2488,
+      "ns_per_op": 85413,
+      "go_bytes_per_op": 256000,
+      "go_allocations_per_op": 1000
+    },
+    {
+      "variant": "baseline",
+      "round": 1,
+      "operation": "export_8MiB",
+      "iterations": 416,
+      "ns_per_op": 559154,
+      "go_bytes_per_op": 8388608,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "operation": "load_8MiB_1000_records",
+      "iterations": 1274,
+      "ns_per_op": 199242,
+      "go_bytes_per_op": 8,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "operation": "read_1000_records",
+      "iterations": 2617,
+      "ns_per_op": 83543,
+      "go_bytes_per_op": 256000,
+      "go_allocations_per_op": 1000
+    },
+    {
+      "variant": "baseline",
+      "round": 2,
+      "operation": "export_8MiB",
+      "iterations": 432,
+      "ns_per_op": 551455,
       "go_bytes_per_op": 8388608,
       "go_allocations_per_op": 1
     },
@@ -106,8 +106,8 @@
       "variant": "candidate",
       "round": 0,
       "operation": "load_8MiB_1000_records",
-      "iterations": 114,
-      "ns_per_op": 1944058,
+      "iterations": 109,
+      "ns_per_op": 2076671,
       "go_bytes_per_op": 8,
       "go_allocations_per_op": 1
     },
@@ -115,80 +115,80 @@
       "variant": "candidate",
       "round": 0,
       "operation": "read_1000_records",
-      "iterations": 1748,
-      "ns_per_op": 133735,
+      "iterations": 1731,
+      "ns_per_op": 134898,
       "go_bytes_per_op": 256000,
       "go_allocations_per_op": 1000
     },
     {
       "variant": "candidate",
       "round": 0,
+      "operation": "export_8MiB",
+      "iterations": 426,
+      "ns_per_op": 567094,
+      "go_bytes_per_op": 8388608,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "operation": "load_8MiB_1000_records",
+      "iterations": 106,
+      "ns_per_op": 2111283,
+      "go_bytes_per_op": 8,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "operation": "read_1000_records",
+      "iterations": 1724,
+      "ns_per_op": 136961,
+      "go_bytes_per_op": 256000,
+      "go_allocations_per_op": 1000
+    },
+    {
+      "variant": "candidate",
+      "round": 1,
+      "operation": "export_8MiB",
+      "iterations": 438,
+      "ns_per_op": 526919,
+      "go_bytes_per_op": 8388608,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
+      "operation": "load_8MiB_1000_records",
+      "iterations": 106,
+      "ns_per_op": 2126257,
+      "go_bytes_per_op": 8,
+      "go_allocations_per_op": 1
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
+      "operation": "read_1000_records",
+      "iterations": 1729,
+      "ns_per_op": 135703,
+      "go_bytes_per_op": 256000,
+      "go_allocations_per_op": 1000
+    },
+    {
+      "variant": "candidate",
+      "round": 2,
       "operation": "export_8MiB",
       "iterations": 442,
-      "ns_per_op": 511060,
-      "go_bytes_per_op": 8388608,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "candidate",
-      "round": 1,
-      "operation": "load_8MiB_1000_records",
-      "iterations": 111,
-      "ns_per_op": 2010677,
-      "go_bytes_per_op": 8,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "candidate",
-      "round": 1,
-      "operation": "read_1000_records",
-      "iterations": 1692,
-      "ns_per_op": 136971,
-      "go_bytes_per_op": 256000,
-      "go_allocations_per_op": 1000
-    },
-    {
-      "variant": "candidate",
-      "round": 1,
-      "operation": "export_8MiB",
-      "iterations": 430,
-      "ns_per_op": 535866,
-      "go_bytes_per_op": 8388608,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "candidate",
-      "round": 2,
-      "operation": "load_8MiB_1000_records",
-      "iterations": 110,
-      "ns_per_op": 2050510,
-      "go_bytes_per_op": 8,
-      "go_allocations_per_op": 1
-    },
-    {
-      "variant": "candidate",
-      "round": 2,
-      "operation": "read_1000_records",
-      "iterations": 1671,
-      "ns_per_op": 136672,
-      "go_bytes_per_op": 256000,
-      "go_allocations_per_op": 1000
-    },
-    {
-      "variant": "candidate",
-      "round": 2,
-      "operation": "export_8MiB",
-      "iterations": 422,
-      "ns_per_op": 529614,
+      "ns_per_op": 542284,
       "go_bytes_per_op": 8388608,
       "go_allocations_per_op": 1
     }
   ],
   "infrastructure": "INFRASTRUCTURE_UNAVAILABLE: dedicated runner; local desktop fallback. Local native build cache available; artifacts committed to repository.",
   "harness": {
-    "commit": "890cbc431c196bcdd2a6f8ce0865fbc971120bb5",
+    "commit": "565a259af752e4eebd69ce3ac5aee76597c0f8fa",
     "path": "polystorechain/x/crypto_ffi/metadata_v2_test.go",
-    "git_blob": "a299243990991ffa65c142e41a688799273294f4",
-    "scope": "BenchmarkMdu0Metadata function unchanged from measured bytes; baseline copied only that function."
+    "git_blob": "c9da312f467e6e968b159693fcc5f51dbc4689bf",
+    "scope": "Identical BenchmarkMdu0Metadata function in both variants; 1,000 unique entry{index} paths constructed outside timing. Baseline copied only that function; candidate includes full path uniqueness validation."
   }
 }
