@@ -394,3 +394,39 @@ func TestProtocolAuditSession_RequiresStoredTask(t *testing.T) {
 	_, err = f.keeper.AuditTasks.Get(ctx, collections.Join(epochID, taskID))
 	require.Error(t, err)
 }
+
+// Mode1 ranges may cross MDUs, but session submission is one atomic message.
+// All native handlers (also used by EVM opens) must reject an unfulfillable open.
+func TestAllSessionOpensRejectTooManyProofsBeforeBilling(t *testing.T) {
+	setup := setupProtocolRepairSession(t)
+	d := setup.deal
+	d.RedundancyMode, d.Mode2Slots, d.ServiceHint = 1, nil, "General"
+	d.Providers = []string{setup.active}
+	d.TotalMdus = 4
+	require.NoError(t, setup.f.keeper.Deals.Set(setup.ctx, d.Id, d))
+	_, err := setup.msgServer.OpenRetrievalSession(setup.ctx, &types.MsgOpenRetrievalSession{
+		Creator: d.Owner, DealId: d.Id, Provider: setup.active, ManifestRoot: d.ManifestRoot,
+		StartMduIndex: 2, BlobCount: 65, Nonce: 1,
+	})
+	require.ErrorContains(t, err, "proof count must be 1..64")
+	_, err = setup.msgServer.OpenRetrievalSessionSponsored(setup.ctx, &types.MsgOpenRetrievalSessionSponsored{
+		Creator: setup.pending, DealId: d.Id, Provider: setup.active, ManifestRoot: d.ManifestRoot,
+		StartMduIndex: 2, BlobCount: 65, Nonce: 1, MaxTotalFee: math.ZeroInt(),
+	})
+	require.ErrorContains(t, err, "proof count must be 1..64")
+	_, err = setup.msgServer.OpenProtocolRetrievalSession(setup.ctx, &types.MsgOpenProtocolRetrievalSession{
+		Creator: setup.pending, DealId: d.Id, Provider: setup.active, ManifestRoot: d.ManifestRoot,
+		Purpose:       types.RetrievalSessionPurpose_RETRIEVAL_SESSION_PURPOSE_PROTOCOL_REPAIR,
+		StartMduIndex: 2, BlobCount: 65, Nonce: 1, MaxTotalFee: math.ZeroInt(),
+	})
+	require.ErrorContains(t, err, "proof count must be 1..64")
+	got, err := setup.f.keeper.Deals.Get(setup.ctx, d.Id)
+	require.NoError(t, err)
+	require.Equal(t, d, got)
+	require.Equal(t, "1000stake", setup.bank.moduleBalances[types.ProtocolBudgetModuleName].String())
+	require.True(t, setup.bank.moduleBalances[types.ModuleName].IsZero())
+	require.NoError(t, setup.f.keeper.RetrievalSessions.Walk(setup.ctx, nil, func(_ []byte, _ types.RetrievalSession) (bool, error) {
+		t.Fatal("rejected open stored a session")
+		return true, nil
+	}))
+}

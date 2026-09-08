@@ -165,6 +165,11 @@ func validatePolyFSRetrievalRange(deal types.Deal, stripe stripeParams, startMdu
 			return 0, 0, sdkerrors.ErrInvalidRequest.Wrap("blob range exceeds deal content")
 		}
 	}
+	// A session is submitted atomically, so every open route must enforce the
+	// same proof count bound before charging or reserving its fees.
+	if err := ValidateProofCount(blobCount); err != nil {
+		return 0, 0, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
 	return startGlobal, endGlobal, nil
 }
 

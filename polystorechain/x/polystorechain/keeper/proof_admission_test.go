@@ -128,3 +128,14 @@ func TestWholeLivenessListAdmittedBeforeCrypto(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), count)
 }
+
+func TestRetrievalRangeFitsAtomicProofSubmission(t *testing.T) {
+	deal := types.Deal{WitnessMdus: 1, TotalMdus: 4}
+	stripe := stripeParams{mode: 1, leafCount: 64}
+	for _, count := range []uint64{1, 64} {
+		_, _, err := validatePolyFSRetrievalRange(deal, stripe, 2, 0, count)
+		require.NoError(t, err)
+	}
+	_, _, err := validatePolyFSRetrievalRange(deal, stripe, 2, 0, 65)
+	require.ErrorContains(t, err, "proof count must be 1..64")
+}

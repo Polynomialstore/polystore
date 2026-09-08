@@ -160,6 +160,7 @@ them does not activate challenge v2 or qualify the data-plane requirements above
 | Raw native/EVM-wrapped transaction | 1 MiB, checked by BaseApp's decoder before protobuf materialization |
 | Proposal transaction body | Check every raw transaction and the aggregate protobuf-framed size against consensus `block.max_bytes` before the first transaction decode; CometBFT separately bounds the complete block |
 | Declared proof list | 1–64 proofs, at most 128 KiB of admitted proof/receipt envelope |
+| Session open | Owner, sponsored and protocol opens share the same 1–64 blob bound before billing; larger Mode 1 ranges require multiple sessions |
 | Precompile ABI | 256 KiB calldata body; arrays at most 64 elements; bytes/string values at most 4096 bytes; at most 8192 visited values before geth decoding |
 | ABI dynamic tails | Contiguous in declaration order, with no aliasing, repeated tails or unused trailing bytes; the existing ABI encoders generate this shape |
 | Merkle witnesses | Exactly the siblings consumed for the actual leaf count and index, including odd-node promotion; unused trailing siblings are rejected |
