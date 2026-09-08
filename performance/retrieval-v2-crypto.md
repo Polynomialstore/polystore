@@ -130,3 +130,14 @@ bash scripts/bench_retrieval_sessions.sh` (on one shell line). This harness defa
 to nonconstant data and remains a legacy fixed-z compatibility smoke. It does
 not exercise the v2 batch path; the actual v2 keeper integration and repeated
 measurements above cover that path. Full live v2 delivery remains #257/#260 work.
+
+## Final selected mixed workload
+
+The [five-pair final comparison](../bench/retrieval_session_capacity/mixed-final-260/README.md)
+includes the selected #258 generator and mixed K8/K2 owners, deals and providers.
+Median verification for six fresh sessions / 52 openings improves from 274.638 ms
+to 45.209 ms (6.075x), with identical 26,155,844 gas. Fresh generation falls from
+6485.806 ms to 1761.299 ms. Both timing ranges are disjoint. Go allocation count
+falls from 1,235 to 1,143; allocated bytes rise from 145,669 to 168,645, consistent
+with the bounded batch transport discussed above. This is keeper-only evidence;
+#260 retains ownership of final delivery and sustained capacity qualification.

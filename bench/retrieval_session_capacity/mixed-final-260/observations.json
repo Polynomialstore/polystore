@@ -1,0 +1,312 @@
+[
+  {
+    "repeat": 1,
+    "variant": "baseline",
+    "metrics": {
+      "ns/op": 274637861.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 6485805806.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 145669.0,
+      "allocs/op": 1235.0
+    },
+    "wall_s": 42.19,
+    "user_s": 41.83,
+    "system_s": 0.34,
+    "max_rss_bytes": 121798656,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "raw_sha256": "83abeb1263c8a003a42d634794fe1b3935a95153469004bfd04310b4834c4bfe"
+  },
+  {
+    "repeat": 1,
+    "variant": "candidate",
+    "metrics": {
+      "ns/op": 44896292.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 1780035417.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 168650.0,
+      "allocs/op": 1143.0
+    },
+    "wall_s": 15.23,
+    "user_s": 12.11,
+    "system_s": 0.19,
+    "max_rss_bytes": 133464064,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "raw_sha256": "eb521de41ff5b184dc3df7c2e1d3a6fe46763db1eb563fd8511d655f287305af"
+  },
+  {
+    "repeat": 2,
+    "variant": "candidate",
+    "metrics": {
+      "ns/op": 43973194.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 1713232389.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 168650.0,
+      "allocs/op": 1143.0
+    },
+    "wall_s": 11.7,
+    "user_s": 12.0,
+    "system_s": 0.12,
+    "max_rss_bytes": 135839744,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "raw_sha256": "2ff13fa341e4a08ccb275f45284a562d66e723857ebd72c3ac12d0369fd4a993"
+  },
+  {
+    "repeat": 2,
+    "variant": "baseline",
+    "metrics": {
+      "ns/op": 276864292.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 6434195278.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 145685.0,
+      "allocs/op": 1235.0
+    },
+    "wall_s": 41.63,
+    "user_s": 41.55,
+    "system_s": 0.23,
+    "max_rss_bytes": 121765888,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "raw_sha256": "a397ba585f66aa52bcdea61af81dd52d828aefc4f7cabe8786600e19a136878d"
+  },
+  {
+    "repeat": 3,
+    "variant": "baseline",
+    "metrics": {
+      "ns/op": 275099445.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 6499939917.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 145669.0,
+      "allocs/op": 1235.0
+    },
+    "wall_s": 41.99,
+    "user_s": 41.75,
+    "system_s": 0.24,
+    "max_rss_bytes": 133316608,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "raw_sha256": "a9b44e3f89814d2963a6205aaee6dead081148a77329ba9626f7468dcdb2cf58"
+  },
+  {
+    "repeat": 3,
+    "variant": "candidate",
+    "metrics": {
+      "ns/op": 45588070.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 1761299293.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 168645.0,
+      "allocs/op": 1143.0
+    },
+    "wall_s": 12.13,
+    "user_s": 12.15,
+    "system_s": 0.17,
+    "max_rss_bytes": 124567552,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "raw_sha256": "1669385f91fd1c8618cbfa5996422d5eb577a938ac53f6e70672190fc10fe212"
+  },
+  {
+    "repeat": 4,
+    "variant": "candidate",
+    "metrics": {
+      "ns/op": 45871278.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 1750867792.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 168645.0,
+      "allocs/op": 1143.0
+    },
+    "wall_s": 11.97,
+    "user_s": 12.13,
+    "system_s": 0.15,
+    "max_rss_bytes": 135741440,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "raw_sha256": "8b564f12881b67455c26bdf6f533a4c05f017e231a768559cf1a9aede3afdbd5"
+  },
+  {
+    "repeat": 4,
+    "variant": "baseline",
+    "metrics": {
+      "ns/op": 273643083.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 6520425417.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 145669.0,
+      "allocs/op": 1235.0
+    },
+    "wall_s": 42.58,
+    "user_s": 42.05,
+    "system_s": 0.34,
+    "max_rss_bytes": 127107072,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "raw_sha256": "f429c3f5e64766defae92975c011aaab9278a5ecfdaccf86c9fcbb0f78e1ca82"
+  },
+  {
+    "repeat": 5,
+    "variant": "baseline",
+    "metrics": {
+      "ns/op": 274292389.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 6477388737.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 145674.0,
+      "allocs/op": 1235.0
+    },
+    "wall_s": 42.14,
+    "user_s": 41.9,
+    "system_s": 0.29,
+    "max_rss_bytes": 133988352,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+    "library_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+    "raw_sha256": "37ec3fa971d38080472bc1e88c1c23bd2448a06598b140236769ecdfcb6a9ec3"
+  },
+  {
+    "repeat": 5,
+    "variant": "candidate",
+    "metrics": {
+      "ns/op": 45208597.0,
+      "gas/op": 26155844.0,
+      "gas/proof": 502997.0,
+      "generation-ns/op": 1777217972.0,
+      "proofs/op": 52.0,
+      "sessions/op": 6.0,
+      "B/op": 168645.0,
+      "allocs/op": 1143.0
+    },
+    "wall_s": 12.21,
+    "user_s": 12.2,
+    "system_s": 0.18,
+    "max_rss_bytes": 124567552,
+    "command": [
+      "/usr/bin/time",
+      "-l",
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test",
+      "-test.run=^$",
+      "-test.bench=^BenchmarkSubmitRetrievalSessionProofV2Mixed$",
+      "-test.benchtime=3x",
+      "-test.count=1",
+      "-test.timeout=120s"
+    ],
+    "binary_sha256": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+    "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "raw_sha256": "438ddbec82fb75f5ebc5e03203a90ab6c49086e10aafc27b7c97d3a916f55514"
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "kind": "mixed-keeper-comparison",
+  "network_capacity_qualified": false,
+  "baseline_source": "34e7c2db182eb08957f56f8dc9f29b0acdc0c0d5",
+  "candidate_source": "0bac7796bc9110431020951eb9e6a269e798a09c",
+  "selected_native_pr": 277,
+  "fixture_commit": "d2fa788f",
+  "fixture_sha256": "63c54fc917602b493ed722cc2c916bc58f1866f8a2e8bb136090eaed71109489",
+  "setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "host": "Darwin-25.2.0-arm64-arm-64bit-Mach-O",
+  "go": "go version go1.25.5 darwin/arm64",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "GOMAXPROCS": 2,
+  "finite_gas": 64000000,
+  "finite_block_bytes": 2097152,
+  "repeats_per_variant": 5,
+  "iterations_per_process": 3,
+  "warmup": "benchmark performs a distinct fresh warmup before every measured invocation; Go calibration also runs outside reported3iterations",
+  "ordering": "alternating baseline/candidate then candidate/baseline",
+  "timer": "six first successful keeper proof submissions only; generation separate; no open/confirm/payout or network timing",
+  "baseline_build": {
+    "qualification": false,
+    "purpose": "actual benchmark entrypoint smoke after warmup nonce correction; no retained performance comparison",
+    "fixture_commit": "d2fa788f",
+    "source_version": "34e7c2db",
+    "benchtime": "1x",
+    "sha256": {
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-mixed/polystorechain/x/polystorechain/keeper/retrieval_v2_bench_test.go": "63c54fc917602b493ed722cc2c916bc58f1866f8a2e8bb136090eaed71109489",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/keeper-mixed.test": "e99c252e3b2fedee88bfc1aa0d9517196aa548a540123517d59b45164fc97f1b",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/overlay.json": "6d46fadac13156979beec7c5dfde6552951f349f4a213597bf589fec325d78f6",
+      "/tmp/polystore-254-execution/260-mixed-baseline-smoke/warmup-green.log": "f9bea350ab66933b50df4efc1eba5686866d87c71bc1a2863e18806abdbdfc06",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-255-audits/polystore_core/target/release/libpolystore_core.dylib": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71"
+    }
+  },
+  "candidate_build": {
+    "source": "0bac7796bc9110431020951eb9e6a269e798a09c",
+    "sha256": {
+      "/tmp/polystore-254-execution/260-mixed-final-candidate/keeper-mixed.test": "dc424293b24e83898414d5f101354d7304c58eac8129e729163e8eec0da58fb8",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/x/polystorechain/keeper/retrieval_v2_bench_test.go": "63c54fc917602b493ed722cc2c916bc58f1866f8a2e8bb136090eaed71109489",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+    },
+    "purpose": "final mixed keeper baseline comparison build; collection pending",
+    "qualification": false
+  },
+  "script_sha256": "75bd56e04a7646d2844aec757c254adf01e8b558284ea0d54e2c0303d361aab1",
+  "bounded_command_helper_sha256": "3e5bf7c1e697e02d61ba583def78dd516bcc63abf9490f0e0d886dd091dbccc4"
+}
