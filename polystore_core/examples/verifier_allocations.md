@@ -110,3 +110,42 @@ required public K8/K2 keeper benchmarks, include the Go transport buffer, or
 measure stack, RSS, allocator internals or direct C allocations. The maximum
 shape is a tested bound case, not a proof that every malformed input reaches
 that same peak. The probe reports memory; it makes no throughput claim.
+
+## Fresh native opening allocation measurement
+
+```sh
+cargo run --release --locked --offline -j 2 --example verifier_allocations -- --generation
+```
+
+This mode measures `KzgContext::compute_proof` for one 128 KiB nonconstant
+canonical blob using the existing fixture's cell pattern. It reports a fixed C2
+challenge (asserted off-domain) and the interior domain point at index 3
+separately. The K/M columns are empty because this atomic operation does not
+require RS expansion or qualify a storage profile. Each invocation recomputes
+the opening; it does not reuse a cached proof.
+
+Setup, blob construction, commitment, warmup and validation stay outside the
+counted regions. A warm proof must be nonidentity and verify; changing its y must
+fail. Each of two measured calls must return the same proof/y, verify, produce
+identical allocation statistics and retain zero requested Rust heap bytes.
+The shared allocation/deallocation/reallocation controls run first. These are
+bounded native requested-heap measurements for the two selected paths, excluding
+direct C allocations, stack, allocator overhead, RSS, setup/input storage and
+concurrent calls. They do not establish a universal memory bound or throughput.
+
+Observed on source `6b33d0b61ab7e9bed1dfffb842ae4619d324b095` plus this
+example extension, using Rust/Cargo 1.90.0, `aarch64-apple-darwin`, the release
+profile and checked-in lockfile: both stages and both passes reported 622,592
+peak requested bytes, 665,336 total requested bytes, 888 allocation calls,
+3 reallocations and zero retained bytes. These are candidate-only observations;
+no baseline allocation reduction has been measured here.
+
+For a source comparison, use this exact example in separate clean baseline and
+candidate checkouts with the same lockfile, setup, toolchain, target and release
+settings. Copy only the example into an isolated baseline checkout if its source
+predates this mode; keep its library source unchanged. Use separate Cargo target
+directories. Retain each source commit, example/setup/lockfile/executable SHA-256,
+Rust/Cargo versions, exact command and complete CSV output. The executable links
+the corresponding Rust library; a different `DYLD_LIBRARY_PATH` does not select
+a different implementation for this example. No baseline comparison is implied
+by merely adding or running this mode.
