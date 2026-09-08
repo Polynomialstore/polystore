@@ -1,0 +1,29 @@
+{
+  "createdAt": "2026-09-08T19:15:04Z",
+  "databaseId": 34267852521,
+  "event": "workflow_dispatch",
+  "headSha": "ed72c70e07cba1b9271e47ecd0e960266485a5af",
+  "url": "https://github.com/Polynomialstore/polystore/actions/runs/34267852521",
+  "workflowName": "PolyStore E2E Heavy",
+  "sourceTrees": {
+    "polystorechain": "cd8ccc3f183ce383ccfa9c08f90057ac47bcbf29",
+    "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "polystore_gateway": "1a9bf50ee6f02ef2b746d2ba5fd82554ec3b5fdd",
+    "polystore-website/src": "b16e08594cbcf59ebd973804f434ad82436a2973",
+    "scripts": "c885ca006931d29f0c029d99f1524a60d29f0763"
+  },
+  "harnessSha256": {
+    ".github/workflows/e2e_heavy_nightly.yml": "2d36d5bde62ab42719c42484bab480a24889a828f5763da0d75e70b34526f6d4",
+    "scripts/e2e_mode2_stripe_multi_sp.sh": "4832f2871b72e9fbe7c6fa179cd95c6a6e70105a59894ecb9ed2d2cc71cdce74",
+    "polystore-website/tests/mode2-stripe.spec.ts": "f865ee0a4e6499e223919e89e5b5fcc90283897e4b836c467f8db2c3e5c1ea5c"
+  },
+  "provenanceScope": "GitHub run and checkout/harness source only. Running executable/native/WASM hashes were not recorded.",
+  "conclusion": "failure",
+  "artifactId": 10077463318,
+  "artifactSha256": "f2768de27ee7fd32629b0c3eaad9555ce9ece3a9886a761dde95b785e7b98e79",
+  "rawSummarySha256": "5df06742db651b26fe42e193509d5ebf21810b6323d6c85ec26e81523edf3b9c",
+  "error": "incomplete output write at 920322048: 4294967288 of 126976",
+  "proofRequests": 904,
+  "windowRequests": 905,
+  "qualification": false
+}

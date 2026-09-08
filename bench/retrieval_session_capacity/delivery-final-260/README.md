@@ -47,3 +47,9 @@ for name, expected in json.loads((root / 'retained-files.json').read_text()).ite
 print('PASS: retained-file hashes')
 PY
 ```
+
+## Large-file incomplete attempt
+
+[Run34267852521](https://github.com/Polynomialstore/polystore/actions/runs/34267852521) failed with a Chromium no-space output write after 904 proof requests and 905 window requests. [Raw summary](large-incognito-failed.json.gz) preserves the original JSON losslessly; [run/source identity](large-incognito-failed-run.json) records its hash and artifact identity. There is no completed-file hash or terminal-session census, so these counts are not completed delivery.
+
+[PR #288](https://github.com/Polynomialstore/polystore/pull/288) shares the existing disk-backed browser setup with the streamed test and runs a complete 1 GiB OPFS write/flush/hash preflight before funding. The failed run used Playwright's default incognito context; archived evidence does not distinguish which browser storage limit was reached. The replacement [run34281520872](https://github.com/Polynomialstore/polystore/actions/runs/34281520872) remains pending.
