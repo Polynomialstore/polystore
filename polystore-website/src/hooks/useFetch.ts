@@ -119,7 +119,7 @@ export function useFetch() {
   const saved = useRef<{ url: string; cleanup: () => Promise<void> } | null>(null)
   useEffect(() => () => { active.current?.abort(); if (saved.current) { URL.revokeObjectURL(saved.current.url); void saved.current.cleanup() } }, [])
 
-  async function fetchFile(input: FetchInput): Promise<FetchResult | null> {
+  async function fetchFile(input: FetchInput): Promise<FetchResult> {
     active.current?.abort()
     const controller = new AbortController(); active.current = controller
     const signal = input.signal ? AbortSignal.any([input.signal, controller.signal]) : controller.signal
@@ -264,7 +264,7 @@ export function useFetch() {
     } catch (error) {
       const message = classifyWalletError(error, 'Fetch failed').message
       if (active.current === controller) { setProgress((p) => ({ ...p, phase: 'error', message })); setReceiptStatus('failed'); setReceiptError(message) }
-      return null
+      throw new Error(message)
     } finally { await output?.cleanup().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
   return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan }

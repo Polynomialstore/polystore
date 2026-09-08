@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { bech32 } from 'bech32'
-import { fetchFrozenSession, planRetrievalWindows, parsePinnedGeneration, u64, type PinnedGeneration } from './retrieval'
+import { parseFrozenSession, planRetrievalWindows, parsePinnedGeneration, u64, type PinnedGeneration } from './retrieval'
+import { waitForRetrievalChallenge } from './retrievalFlow'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 const deal = () => ({ id: '9007199254740993', manifest_root: btoa('\x01'.repeat(32)), owner: address(1),
@@ -67,7 +68,7 @@ test('trusted LCD query requires exact committed height and bounds/cancels respo
   await assert.rejects(pending, /cancelled retrieval/); assert.equal(cancelled, true)
 })
 
-test('session LCD query sends exactly 32 protobuf bytes through a URL-safe base64 HTTP path', async () => {
+test('session LCD query uses exact protobuf bytes and waits from null seed to committed challenge', async () => {
   const fixture = JSON.parse(await readFile(new URL('../../../testdata/retrieval-window-v2/session.json', import.meta.url), 'utf8'))
   const generation: PinnedGeneration = { chainId: 'test-1', height: 9n, dealId: 9007199254740993n, generation: 7n,
     root: `0x${Buffer.from(fixture.session.manifest_root, 'base64').toString('hex')}`, owner: fixture.session.owner,
@@ -82,7 +83,7 @@ test('session LCD query sends exactly 32 protobuf bytes through a URL-safe base6
     response.session.session_id = id.toString('base64')
     response.challenge_context = context.toString('base64')
     response.challenge_context_hash = createHash('sha256').update(context).digest('base64')
-    let received: Buffer | undefined
+    let received: Buffer | undefined, queries = 0
     const server = createServer((request, result) => {
       const path = new URL(request.url!, 'http://localhost').pathname
       const prefix = '/polystorechain/polystorechain/v1/retrieval-sessions/'
@@ -90,14 +91,21 @@ test('session LCD query sends exactly 32 protobuf bytes through a URL-safe base6
       if (!path.startsWith(prefix) || !/^[A-Za-z0-9_-]{43}=$/.test(segment)) { result.writeHead(400); result.end(); return }
       received = Buffer.from(segment, 'base64url')
       if (received.length !== 32 || !received.equals(id)) { result.writeHead(400); result.end(); return }
-      result.writeHead(200, { 'content-type': 'application/json', 'x-cosmos-block-height': '12' }); result.end(JSON.stringify(response))
+      queries++
+      result.writeHead(200, { 'content-type': 'application/json', 'x-cosmos-block-height': queries === 1 ? '10' : '12' })
+      result.end(JSON.stringify({ ...response, challenge_seed: queries === 1 ? null : response.challenge_seed }))
     })
     try {
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
       const address = server.address(); assert.ok(address && typeof address !== 'string')
       const sessionId = `0x${id.toString('hex')}`
-      const session = await fetchFrozenSession(`http://127.0.0.1:${address.port}`, { sessionId, pin: generation, window, owner: fixture.session.owner, payee: fixture.session.authorized_proof_provider, funding: 1 })
+      const expected = { sessionId, pin: generation, window, owner: fixture.session.owner, payee: fixture.session.authorized_proof_provider, funding: 1 as const }
+      for (const seed of [undefined, '', null]) assert.equal(parseFrozenSession({ ...response, challenge_seed: seed }, 10n, expected).seed, null)
+      for (const seed of [false, 0, 'bad', Buffer.alloc(31).toString('base64')]) assert.throws(() => parseFrozenSession({ ...response, challenge_seed: seed }, 12n, expected), /base64/)
+      const session = await waitForRetrievalChallenge(`http://127.0.0.1:${address.port}`, expected, AbortSignal.timeout(5000))
       assert.equal(session.sessionId, sessionId); assert.deepEqual(received, id)
+      assert.equal(queries, 2); assert.equal(session.height, 12n)
+      assert.deepEqual(session.seed, new Uint8Array(Buffer.from(response.challenge_seed, 'base64')))
     } finally { server.closeAllConnections(); await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())) }
   }
   assert.match(Buffer.from('fbff'.repeat(16), 'hex').toString('base64'), /\+/)

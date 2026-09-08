@@ -199,7 +199,8 @@ export function parseFrozenSession(payload: unknown, height: bigint, expected: {
     scalarBytes(window.startBlobIndex, 4), ...[BigInt(window.blobCount), 0n, 0n, 0n, openedHeight, openedHeight + 1n, openedHeight + 2n, expiry, pin.endHeight].map((v) => scalarBytes(v, 8))])
   if (!equal(context, base64(response.challenge_context, context.length))) throw new Error('nonmatching canonical challenge context')
   return { sessionId, pin, window, owner, payee, height, openedHeight, expiry, status, funding, context,
-    contextHash: base64(response.challenge_context_hash, 32), seed: (response.challenge_seed === undefined || response.challenge_seed === '') ? null : base64(response.challenge_seed, 32) }
+    // LCD emits null for nil protobuf bytes before the future anchor commits.
+    contextHash: base64(response.challenge_context_hash, 32), seed: (response.challenge_seed == null || response.challenge_seed === '') ? null : base64(response.challenge_seed, 32) }
 }
 export async function fetchFrozenSession(lcd: string, expected: Parameters<typeof parseFrozenSession>[2], signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenSession> {
   // The generated LCD path decodes protobuf bytes as base64, not hex. Use

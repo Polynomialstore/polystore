@@ -158,7 +158,7 @@ interface FileRowProps {
   onFileActivity?: (activity: FileActivity) => void
   downloadBlobAsFile: (blob: Blob, filePath: string) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
-  fetchFile: (params: FetchInput) => Promise<FetchResult | null>
+  fetchFile: (params: FetchInput) => Promise<FetchResult>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
   setBrowserCachedByPath: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
@@ -266,7 +266,6 @@ function FileRow({
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
       const result = await fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
         rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth })
-      if (!result) throw new Error('verified retrieval failed')
       downloadBlobAsFile(result.blob, file.path)
       markDownloadPath('Verified retrieval', result.route || 'network_fetch', 'verified_file', 'pinned_generation')
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'success' })
