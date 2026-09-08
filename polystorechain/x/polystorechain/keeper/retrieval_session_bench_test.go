@@ -123,6 +123,12 @@ func setupBenchRetrievalEnv(tb testing.TB) *benchRetrievalEnv {
 	require.NoError(tb, crypto_ffi.Init("../../../trusted_setup.txt"))
 
 	mduData := make([]byte, 8*1024*1024)
+	if os.Getenv("POLYSTORE_BENCH_FIXTURE_NONCONSTANT") == "1" {
+		// Canonical nonconstant field elements; avoid identity-proof fast paths.
+		for i := 31; i < len(mduData); i += 32 {
+			mduData[i] = byte(1 + (i/32)%251)
+		}
+	}
 	dealAfterCreate, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(tb, err)
 	require.NotNil(tb, dealAfterCreate.Mode2Profile)

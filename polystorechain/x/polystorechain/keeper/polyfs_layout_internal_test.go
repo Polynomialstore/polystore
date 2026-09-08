@@ -9,12 +9,15 @@ import (
 )
 
 func TestIsPolyFSUserDataMduTarget(t *testing.T) {
-	deal := types.Deal{WitnessMdus: 2}
+	deal := types.Deal{WitnessMdus: 2, TotalMdus: 4}
 
 	require.False(t, isPolyFSUserDataMduTarget(deal, 0))
 	require.False(t, isPolyFSUserDataMduTarget(deal, 1))
 	require.False(t, isPolyFSUserDataMduTarget(deal, 2))
 	require.True(t, isPolyFSUserDataMduTarget(deal, 3))
+	require.False(t, isPolyFSUserDataMduTarget(deal, 4))
+	deal.TotalMdus = 0
+	require.False(t, isPolyFSUserDataMduTarget(deal, 3))
 }
 
 func TestValidatePolyFSContentLayout(t *testing.T) {

@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"polystorechain/x/crypto_ffi"
 	nilkeeper "polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
@@ -355,6 +354,10 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 	method, err := p.abi.MethodById(input[:4])
 	if err != nil {
 		return nil, fmt.Errorf("polystore precompile: unknown selector: %w", err)
+	}
+
+	if err := validateABIAdmission(method.Inputs, input[4:]); err != nil {
+		return nil, fmt.Errorf("polystore precompile: invalid ABI envelope: %w", err)
 	}
 
 	switch method.Name {
@@ -1398,22 +1401,31 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 		return nil, errors.New("proveRetrievalBatch: chunks is empty")
 	}
 
+	if err := nilkeeper.ValidateProofCount(uint64(len(chunks))); err != nil {
+		return nil, err
+	}
+	if len(filePath) > nilkeeper.MaxReceiptPathBytes {
+		return nil, errors.New("proveRetrievalBatch: file path too long")
+	}
+	leafCount, err := proofLeafCountForDeal(deal)
+	if err != nil {
+		return nil, err
+	}
 	var bytesServed uint64
+	for i := range chunks {
+		c := &chunks[i]
+		if err := nilkeeper.ValidateLegacyProofRange(deal, &c.Proof, c.RangeStart, c.RangeLen); err != nil {
+			return nil, err
+		}
+		if err := nilkeeper.ValidateChainedProofShape(deal.ManifestRoot, &c.Proof, leafCount); err != nil {
+			return nil, err
+		}
+		bytesServed += c.RangeLen // bounded count and payload bytes per proof
+	}
+	if err := nilkeeper.PrepayProofCrypto(ctx, uint64(len(chunks))); err != nil {
+		return nil, err
+	}
 	for _, c := range chunks {
-		if c.RangeLen == 0 {
-			return nil, errors.New("proveRetrievalBatch: rangeLen must be > 0")
-		}
-		if bytesServed > bytesServed+c.RangeLen {
-			return nil, errors.New("proveRetrievalBatch: bytes overflow")
-		}
-
-		leafCount, err := proofLeafCountForDeal(deal)
-		if err != nil {
-			return nil, fmt.Errorf("proveRetrievalBatch: invalid deal proof profile: %w", err)
-		}
-		if c.Proof.MduIndex <= deal.WitnessMdus {
-			return nil, errors.New("proveRetrievalBatch: proof must target a user data MDU")
-		}
 		ok, err := verifyChainedProof(ctx, deal.ManifestRoot, leafCount, c.Proof)
 		if err != nil {
 			return nil, fmt.Errorf("proveRetrievalBatch: triple proof verification error: %w", err)
@@ -1421,16 +1433,13 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 		if !ok {
 			return nil, errors.New("proveRetrievalBatch: invalid triple proof")
 		}
-
-		bytesServed += c.RangeLen
-		if err := p.keeper.RecordDealActivity(ctx, deal.Id, c.RangeLen, false); err != nil {
-			ctx.Logger().Error("failed to record deal activity", "error", err)
-		}
+	}
+	if err := p.keeper.RecordDealActivity(ctx, deal.Id, bytesServed, false); err != nil {
+		return nil, err
 	}
 
 	// Bandwidth payment (devnet): 1 unit per KiB (rounded up), deducted from escrow.
-	const bytesPerUnit = uint64(1024)
-	units := (bytesServed + bytesPerUnit - 1) / bytesPerUnit
+	units := nilkeeper.LegacyReceiptUnits(bytesServed)
 	if units == 0 {
 		units = 1
 	}
@@ -1483,6 +1492,9 @@ func decodeChunks(v any) ([]decodedChunk, error) {
 		return nil, fmt.Errorf("chunks must be a slice, got %T", v)
 	}
 
+	if err := nilkeeper.ValidateProofCount(uint64(rv.Len())); err != nil {
+		return nil, err
+	}
 	out := make([]decodedChunk, 0, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		cv := rv.Index(i)
@@ -1606,66 +1618,7 @@ func proofLeafCountForDeal(deal types.Deal) (uint64, error) {
 }
 
 func verifyChainedProof(ctx sdk.Context, manifestRoot []byte, leafCount uint64, chainedProof types.ChainedProof) (bool, error) {
-	if len(manifestRoot) != types.POLYFS_ROOT_SIZE {
-		return false, nil
-	}
-	if len(chainedProof.ManifestOpening) != 48 || len(chainedProof.MduRootFr) != 32 ||
-		len(chainedProof.RootTableDuCommitment) != 48 || len(chainedProof.BlobCommitment) != 48 ||
-		len(chainedProof.RootTableDuMerklePath) == 0 || len(chainedProof.MerklePath) == 0 ||
-		len(chainedProof.ZValue) != 32 || len(chainedProof.YValue) != 32 || len(chainedProof.KzgOpeningProof) != 48 {
-		return false, nil
-	}
-	if chainedProof.MduIndex == 0 || uint64(chainedProof.BlobIndex) >= leafCount {
-		return false, nil
-	}
-
-	flattenedRootTableMerkle := make([]byte, 0, len(chainedProof.RootTableDuMerklePath)*32)
-	for _, node := range chainedProof.RootTableDuMerklePath {
-		if len(node) != 32 {
-			return false, nil
-		}
-		flattenedRootTableMerkle = append(flattenedRootTableMerkle, node...)
-	}
-
-	flattenedMerkle := make([]byte, 0, len(chainedProof.MerklePath)*32)
-	for _, node := range chainedProof.MerklePath {
-		if len(node) != 32 {
-			return false, nil
-		}
-		flattenedMerkle = append(flattenedMerkle, node...)
-	}
-
-	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
-		manifestRoot,
-		chainedProof.MduIndex,
-		chainedProof.MduRootFr,
-		chainedProof.RootTableDuCommitment,
-		flattenedRootTableMerkle,
-		chainedProof.ManifestOpening,
-	)
-	if err != nil {
-		ctx.Logger().Error("VerifyMdu0RootTableProof error", "error", err)
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-
-	ok, err = crypto_ffi.VerifyMduProof(
-		chainedProof.MduRootFr,
-		chainedProof.BlobCommitment,
-		flattenedMerkle,
-		chainedProof.BlobIndex,
-		leafCount,
-		chainedProof.ZValue,
-		chainedProof.YValue,
-		chainedProof.KzgOpeningProof,
-	)
-	if err != nil {
-		ctx.Logger().Error("VerifyMduProof error", "error", err)
-		return false, err
-	}
-	return ok, nil
+	return nilkeeper.VerifyPolyFSChainedProof(manifestRoot, &chainedProof, leafCount)
 }
 
 func (p *Precompile) emitEventDealCreated(evm *vm.EVM, dealID uint64, owner common.Address) {
