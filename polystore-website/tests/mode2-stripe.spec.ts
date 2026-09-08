@@ -124,7 +124,7 @@ async function captureDownloadDiagnostics(page: Page): Promise<string> {
   const source = ((await page.getByTestId('transport-cache-source').textContent().catch(() => '')) || '').trim()
   const freshness = ((await page.getByTestId('transport-cache-freshness').textContent().catch(() => '')) || '').trim()
   const failure = await readDownloadFailureBanner(page)
-  const receipt = ((await page.locator('div').filter({ hasText: /^Receipt failed:/ }).first().textContent().catch(() => '')) || '').trim()
+  const receipt = (await page.locator('div').filter({ hasText: /^Receipt failed:/ }).first().allTextContents()).join('').trim()
   const parts = [
     route ? `route=${route}` : '',
     source ? `cacheSource=${source}` : '',
@@ -161,64 +161,13 @@ async function waitForDownloadEventOrFailure(
   return null
 }
 
-async function clickAction(locator: Locator): Promise<void> {
-  try {
-    await locator.click({ force: true })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (!/outside of the viewport|not visible|intercepts pointer events/i.test(message)) {
-      throw err
-    }
-    await locator.evaluate((node) => {
-      if (node instanceof HTMLElement) node.click()
-    })
-  }
-}
-
 async function readDownloadBytes(page: Page, button: Locator, timeout = 120_000): Promise<Buffer> {
-  const maxAttempts = 2
-  const perAttemptTimeout = Math.max(30_000, Math.floor(timeout / maxAttempts))
-  let latestError = ''
-
   await expect(button).toBeVisible({ timeout: 30_000 })
   await expect(button).toBeEnabled({ timeout: 60_000 })
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const baselineFailure = await readDownloadFailureBanner(page)
-    try {
-      await clickAction(button)
-      const download = await waitForDownloadEventOrFailure(page, perAttemptTimeout, baselineFailure)
-      if (download) {
-        return readDownloadedBytes(download)
-      }
-      latestError = `download event not emitted within ${perAttemptTimeout}ms on attempt ${attempt}`
-    } catch (err) {
-      latestError = err instanceof Error ? err.message : String(err)
-    }
-
-    if (attempt < maxAttempts) {
-      await page.waitForTimeout(750)
-      await expect(button).toBeEnabled({ timeout: 30_000 })
-    }
-  }
-
-  const diagnostics = await captureDownloadDiagnostics(page)
-  throw new Error(`${latestError || 'download failed'} (${diagnostics})`)
-}
-
-async function readDownloadBytesMaybe(page: Page, button: Locator, timeout = 90_000): Promise<Buffer | null> {
   const baselineFailure = await readDownloadFailureBanner(page)
-  await expect(button).toBeVisible({ timeout: 30_000 })
-  await expect(button).toBeEnabled({ timeout: 60_000 })
-  await clickAction(button)
-  let download: Awaited<ReturnType<Page['waitForEvent']>> | null = null
-  try {
-    download = await waitForDownloadEventOrFailure(page, timeout, baselineFailure)
-  } catch {
-    return null
-  }
-  if (!download) return null
-  return readDownloadedBytes(download)
+  const [download] = await Promise.all([waitForDownloadEventOrFailure(page, timeout, baselineFailure), button.click()])
+  if (download) return readDownloadedBytes(download)
+  throw new Error(`download event not emitted (${await captureDownloadDiagnostics(page)})`)
 }
 
 async function isUploaderResetToInitialState(page: Page): Promise<boolean> {
@@ -652,233 +601,66 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     await expect(autoDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
 
-    if (isMode2Fast) {
-      const gatewayDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway')
-      const providerDownloadBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
-      const browserSlabBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-slab')
-      await expect(gatewayDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-      await expect(providerDownloadBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-      await expect(browserSlabBtn).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-
-      const gatewayBytes = await readDownloadBytes(page, gatewayDownloadBtn, mode2FastMaybeDownloadMs)
-      expect(gatewayBytes.equals(fileBytes)).toBe(true)
-      await expect(routeEl).toBeVisible({ timeout: 60_000 })
-      await expect(fileRow).toBeVisible({ timeout: 60_000 })
-      return
-    }
-
-    const openDownloadAction = (testId: string) => openFileActionMenuItem(page, filePath, testId)
-    const readActionBytes = async (testId: string, timeout?: number): Promise<Buffer> =>
-      readDownloadBytes(page, await openDownloadAction(testId), timeout)
-    const readActionBytesMaybe = async (testId: string, timeout?: number): Promise<Buffer | null> =>
-      readDownloadBytesMaybe(page, await openDownloadAction(testId), timeout)
-
-    await expect(await openDownloadAction('deal-detail-download-gateway')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-    await expect(await openDownloadAction('deal-detail-download-sp')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-    await expect(await openDownloadAction('deal-detail-download-browser-slab')).toBeEnabled({ timeout: mode2FastPrimaryWaitMs })
-
-    let blockGateway = false
-    const maybeBlockGateway = async (route: import('@playwright/test').Route) => {
-      if (blockGateway && route.request().method().toUpperCase() !== 'OPTIONS') {
-        await route.abort('failed')
-        return
-      }
-      await route.continue()
-    }
-    for (const gatewayOrigin of gatewayOrigins) {
-      await page.route(`${gatewayOrigin}/**`, maybeBlockGateway)
-    }
-
-    let fetchGatewayCalls = 0
-    let fetchProviderCalls = 0
-    let planGatewayCalls = 0
-    let planProviderCalls = 0
-    let fetchGatewayRequests = 0
-    let planGatewayRequests = 0
-    let downloadGatewayCalls = 0
-    let downloadProviderCalls = 0
-    let downloadGatewayRequests = 0
-    let downloadProviderRequests = 0
-    const unsignedMissingRangeRequests: string[] = []
-    page.on('response', (resp) => {
-      const url = resp.url()
-      const isFetchPath = url.includes('/gateway/fetch/') || url.includes('/sp/retrieval/fetch/')
-      const isPlanPath = url.includes('/plan-retrieval-session/')
-      const isDownloadPath = url.includes('/gateway/download/') || url.includes('/sp/retrieval/download/')
-      if (!isFetchPath && !isPlanPath && !isDownloadPath) return
-      let origin = ''
-      try {
-        origin = new URL(url).origin
-      } catch (err) {
-        void err
-      }
-      const viaGateway = isGatewayOrigin(origin)
-      if (isDownloadPath) {
-        if (resp.request().method().toUpperCase() === 'GET') {
-          if (viaGateway) downloadGatewayCalls += 1
-          else downloadProviderCalls += 1
-        }
-        return
-      }
-      if (isFetchPath) {
-        if (viaGateway) fetchGatewayCalls += 1
-        else fetchProviderCalls += 1
-        return
-      }
-      if (viaGateway) planGatewayCalls += 1
-      else planProviderCalls += 1
-    })
-    page.on('request', (req) => {
-      const url = req.url()
-      const isFetchPath = url.includes('/gateway/fetch/') || url.includes('/sp/retrieval/fetch/')
-      const isPlanPath = url.includes('/plan-retrieval-session/')
-      const isDownloadPath = url.includes('/gateway/download/') || url.includes('/sp/retrieval/download/')
-      if (!isFetchPath && !isPlanPath && !isDownloadPath) return
-      let origin = ''
-      try {
-        origin = new URL(url).origin
-      } catch (err) {
-        void err
-      }
-      const viaGateway = isGatewayOrigin(origin)
-      if (isDownloadPath) {
-        if (req.method().toUpperCase() === 'GET') {
-          if (viaGateway) downloadGatewayRequests += 1
-          else downloadProviderRequests += 1
-        }
-        return
-      }
-      if (viaGateway && isPlanPath) {
-        planGatewayRequests += 1
-      }
-      if (!isFetchPath) return
-      if (viaGateway) fetchGatewayRequests += 1
-      const headers = req.headers()
-      const hasAuth = Boolean(headers.authorization || headers['x-polystore-auth'] || headers['x-polystore-signature'] || headers['x-polystore-voucher'])
-      const range = String(headers.range || '').trim()
-      if (!hasAuth && !/^bytes=\d+-\d*$/.test(range)) {
-        unsignedMissingRangeRequests.push(`${req.method()} ${url} range=${range || '<none>'}`)
+    // All download actions now share the authenticated, paid window path.
+    // Count session-bound windows, excluding the unpaid metadata reads.
+    const windows: Array<{ gateway: boolean; session: string }> = []
+    page.on('request', (request) => {
+      const session = request.headers()['x-polystore-session-id']
+      if (session && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(new URL(request.url()).pathname)) {
+        windows.push({ gateway: isGatewayOrigin(new URL(request.url()).origin), session })
       }
     })
-    const assertUnsignedRangeInvariant = (step: string) => {
-      expect(unsignedMissingRangeRequests, `unsigned /gateway/fetch requests without Range (${step})`).toEqual([])
+    const assertSettled = async () => {
+      await expect(page.getByRole('status').filter({ hasText: /unsettled provider payment/ })).toHaveCount(0)
+      const ids = [...new Set(windows.map((window) => window.session))]
+      expect(ids.length).toBeGreaterThan(0)
+      await expect.poll(async () => Promise.all(ids.map(async (id) => {
+        expect(id).toMatch(/^0x[0-9a-f]{64}$/)
+        const encoded = Buffer.from(id.slice(2), 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
+        const lcd = process.env.VITE_LCD_BASE || `http://localhost:${process.env.LCD_PORT || 1317}`
+        const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions/${encodeURIComponent(encoded)}`)
+        expect(response.ok()).toBe(true)
+        expect(response.headers()['x-cosmos-block-height']).toMatch(/^[1-9][0-9]*$/)
+        const { session } = await response.json()
+        expect(Buffer.from(session.session_id, 'base64').toString('hex')).toBe(id.slice(2))
+        return session.status
+      })), { timeout: 30_000 }).toEqual(ids.map(() => 'RETRIEVAL_SESSION_STATUS_COMPLETED'))
     }
+    const gatewayButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-gateway-provider')
+    const gatewayBytes = await readDownloadBytes(page, gatewayButton, mode2FastMaybeDownloadMs)
+    console.log('[secured retrieval] gateway bytes downloaded')
+    expect(gatewayBytes.equals(fileBytes)).toBe(true)
+    expect(windows.length).toBeGreaterThan(0)
+    expect(windows.every((window) => window.gateway)).toBe(true)
+    await assertSettled()
+    await expect(routeEl).toContainText(/gateway/i)
+    await expect(fileRow).toBeVisible()
+    if (isMode2Fast) return
 
-    const clearBrowserCache = async () => {
-      const clearBrowserCacheBtn = await openDownloadAction('deal-detail-clear-browser-cache')
-      if (await clearBrowserCacheBtn.isEnabled().catch(() => false)) {
-        await clickAction(clearBrowserCacheBtn)
-      }
-      await expect(fileRow).toHaveAttribute('data-cache-browser', 'no', { timeout: 60_000 })
-    }
-
-    await clearBrowserCache()
-
-    const autoGatewayFetchBefore = fetchGatewayCalls
-    const autoProviderFetchBefore = fetchProviderCalls
-    const autoGatewayPlanBefore = planGatewayCalls
-    const autoProviderPlanBefore = planProviderCalls
-    const autoBytes = await readDownloadBytes(page, autoDownloadBtn, mode2FastMaybeDownloadMs)
-    expect(autoBytes.equals(fileBytes)).toBe(true)
-    await expect(page.getByTestId('transport-cache-source')).toContainText(/gateway[ _]mdu[ _]cache|network[ _]fetch/i, { timeout: 60_000 })
-    await expect(page.getByTestId('transport-cache-freshness')).toContainText(/fresh|unknown|stale/i, { timeout: 60_000 })
-    expect(fetchGatewayCalls > autoGatewayFetchBefore || planGatewayCalls > autoGatewayPlanBefore).toBe(true)
-    expect(fetchProviderCalls).toBe(autoProviderFetchBefore)
-    expect(planProviderCalls).toBe(autoProviderPlanBefore)
-    assertUnsignedRangeInvariant('auto download')
-    await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
-
-    const cacheFetchProviderBefore = fetchProviderCalls
-    const cachePlanProviderBefore = planProviderCalls
-    const cachedBytes = await readDownloadBytesMaybe(page, autoDownloadBtn, 90_000)
-    if (cachedBytes) {
-      expect(cachedBytes.equals(fileBytes)).toBe(true)
-      expect(fetchProviderCalls).toBe(cacheFetchProviderBefore)
-      expect(planProviderCalls).toBe(cachePlanProviderBefore)
-    } else {
-      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
-      await expect(errorBanner).toContainText(/browser cache unavailable|not cached|local_manifest_missing/i, { timeout: 60_000 })
-    }
-    assertUnsignedRangeInvariant('browser cache download')
-
-    const slabFetchGatewayBefore = fetchGatewayCalls
-    const slabFetchProviderBefore = fetchProviderCalls
-    const slabPlanGatewayBefore = planGatewayCalls
-    const slabPlanProviderBefore = planProviderCalls
-    const slabBytes = await readActionBytesMaybe('deal-detail-download-browser-slab')
-    if (slabBytes) {
-      expect(slabBytes.equals(fileBytes)).toBe(true)
-      expect(fetchGatewayCalls).toBe(slabFetchGatewayBefore)
-      expect(fetchProviderCalls).toBe(slabFetchProviderBefore)
-      expect(planGatewayCalls).toBe(slabPlanGatewayBefore)
-      expect(planProviderCalls).toBe(slabPlanProviderBefore)
-      assertUnsignedRangeInvariant('browser slab download')
-    } else {
-      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
-      await expect(errorBanner).toContainText(/local slab not available/i, { timeout: 60_000 })
-    }
-
-    await clearBrowserCache()
-    const providerFetchBefore = fetchProviderCalls
-    const providerPlanBefore = planProviderCalls
-    const providerBytes = await readActionBytes('deal-detail-download-sp')
+    const gatewaySessions = new Set(windows.map((window) => window.session))
+    windows.length = 0
+    const providerButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
+    const providerBytes = await readDownloadBytes(page, providerButton)
+    console.log('[secured retrieval] provider bytes downloaded')
     expect(providerBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i, { timeout: 60_000 })
-    await expect(page.getByTestId('transport-cache-source')).toContainText(/network[ _]fetch/i, { timeout: 60_000 })
-    expect(fetchProviderCalls > providerFetchBefore || planProviderCalls > providerPlanBefore).toBe(true)
-    assertUnsignedRangeInvariant('on-chain retrieval button')
+    expect(windows.length).toBeGreaterThan(0)
+    expect(windows.every((window) => !window.gateway && !gatewaySessions.has(window.session))).toBe(true)
+    await assertSettled()
+    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i)
 
-    await clearBrowserCache()
-    const gatewayFetchBefore = fetchGatewayCalls
-    const gatewayPlanBefore = planGatewayCalls
-    const gatewayProviderFetchBefore = fetchProviderCalls
-    const gatewayProviderPlanBefore = planProviderCalls
-    const gatewayDownloadCallsBefore = downloadGatewayCalls
-    const gatewayDownloadReqBefore = downloadGatewayRequests
-    const providerDownloadCallsBefore = downloadProviderCalls
-    const providerDownloadReqBefore = downloadProviderRequests
-    const gatewayBytes = await readActionBytesMaybe('deal-detail-download-gateway', 120_000)
-    if (gatewayBytes) {
-      expect(gatewayBytes.equals(fileBytes)).toBe(true)
-      expect(downloadGatewayCalls - gatewayDownloadCallsBefore).toBe(1)
-      expect(downloadGatewayRequests - gatewayDownloadReqBefore).toBe(1)
-      expect(downloadProviderCalls).toBe(providerDownloadCallsBefore)
-      expect(downloadProviderRequests).toBe(providerDownloadReqBefore)
-      expect(fetchGatewayCalls).toBe(gatewayFetchBefore)
-      expect(planGatewayCalls).toBe(gatewayPlanBefore)
-      expect(fetchProviderCalls).toBe(gatewayProviderFetchBefore)
-      expect(planProviderCalls).toBe(gatewayProviderPlanBefore)
-      assertUnsignedRangeInvariant('gateway retrieval button')
-    } else {
-      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
-      await expect(errorBanner).toContainText(/download failed|gateway|cache/i, { timeout: 60_000 })
-    }
-
-    blockGateway = true
-    await page.evaluate(() => {
-      window.localStorage.setItem('polystore_local_gateway_connected', '0')
-      window.localStorage.setItem('polystore_transport_preference', 'auto')
-    })
-    await clearBrowserCache()
-    const fallbackGatewayFetchReqBefore = fetchGatewayRequests
-    const fallbackGatewayPlanReqBefore = planGatewayRequests
-    const fallbackGatewayFetchRespBefore = fetchGatewayCalls
-    const fallbackGatewayPlanRespBefore = planGatewayCalls
-    const fallbackFetchBefore = fetchProviderCalls
-    const fallbackPlanBefore = planProviderCalls
+    // Losing the user-gateway must still permit verified direct delivery.
+    for (const origin of gatewayOrigins) await page.route(`${origin}/**`, (route) => route.abort('failed'))
+    await page.evaluate(() => window.localStorage.setItem('polystore_local_gateway_connected', '0'))
+    windows.length = 0
     const fallbackBytes = await readDownloadBytes(page, autoDownloadBtn)
+    console.log('[secured retrieval] gateway-absent bytes downloaded')
     expect(fallbackBytes.equals(fileBytes)).toBe(true)
-    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i, { timeout: 60_000 })
-    expect(fetchGatewayRequests).toBeGreaterThanOrEqual(fallbackGatewayFetchReqBefore)
-    expect(planGatewayRequests).toBeGreaterThanOrEqual(fallbackGatewayPlanReqBefore)
-    expect(fetchGatewayCalls).toBe(fallbackGatewayFetchRespBefore)
-    expect(planGatewayCalls).toBe(fallbackGatewayPlanRespBefore)
-    expect(fetchProviderCalls > fallbackFetchBefore || planProviderCalls > fallbackPlanBefore).toBe(true)
-    assertUnsignedRangeInvariant('auto fallback retrieval')
-    blockGateway = false
+    await expect(page.getByText('Retrieval Options', { exact: true })).toBeHidden()
+    expect(windows.some((window) => !window.gateway)).toBe(true)
+    await expect(routeEl).toContainText(/Browser\s*->\s*Provider|direct sp/i)
   })
 
-  test('mode2 upload without gateway still supports browser MDU download path', async ({ page }) => {
+  test('mode2 upload without gateway supports verified provider download', async ({ page }) => {
     test.setTimeout(mode2FastTestTimeoutMs)
 
     const filePath = 'mode2-no-gateway-upload.txt'
@@ -1012,17 +794,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
 
     const compressCheckbox = page.getByTestId('mdu-compress-toggle')
     if (await compressCheckbox.isChecked().catch(() => false)) {
-      await compressCheckbox.evaluate((node) => {
-        const input = node as HTMLInputElement
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set
-        if (setter) {
-          setter.call(input, false)
-        } else {
-          input.checked = false
-        }
-        input.dispatchEvent(new Event('input', { bubbles: true }))
-        input.dispatchEvent(new Event('change', { bubbles: true }))
-      })
+      await page.getByText('Compress before upload', { exact: true }).click()
       await expect(compressCheckbox).not.toBeChecked()
     }
 
@@ -1077,32 +849,20 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await expect(workspaceTitle).toHaveText(new RegExp(`#${dealId}`), { timeout: 60_000 })
 
     const fileRow = await waitForDealFileRow(page, dealId, filePath, mode2FastUploadWaitMs)
-    const browserSlabBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-download-browser-slab')
-    await expect(browserSlabBtn).toBeVisible({ timeout: 60_000 })
+    const providerButton = await openFileActionMenuItem(page, filePath, 'deal-detail-download-sp')
+    const downloaded = await readDownloadBytes(page, providerButton, mode2FastMaybeDownloadMs)
+    expect(downloaded.equals(fileBytes)).toBe(true)
+    expect(unsignedMissingRangeRequests, 'unsigned legacy file fetches').toEqual([])
+    await expect(fileRow).toBeVisible()
 
-    let slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, mode2FastMaybeDownloadMs)
-    if (!slabBytes) {
-      await waitForDealFileRow(page, dealId, filePath, mode2FastPrimaryWaitMs)
-      slabBytes = await readDownloadBytesMaybe(page, browserSlabBtn, mode2FastMaybeDownloadMs)
-    }
-    if (!slabBytes) {
-      const errorBanner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
-      await expect(errorBanner).toContainText(/local slab not available/i, { timeout: 60_000 })
-      throw new Error('browser slab download did not produce a file')
-    }
-    expect(slabBytes.equals(fileBytes)).toBe(true)
-    expect(unsignedMissingRangeRequests, 'unsigned /gateway/fetch requests without Range (fallback slab test)').toEqual([])
-    await expect(fileRow).toHaveAttribute('data-cache-browser', 'yes', { timeout: 60_000 })
-    const clearBrowserCacheBtn = await openFileActionMenuItem(page, filePath, 'deal-detail-clear-browser-cache')
-    await expect(clearBrowserCacheBtn).toBeEnabled({ timeout: 60_000 })
   })
 
   test('mode2 append keeps prior files', async ({ page }) => {
     test.slow()
     test.setTimeout(600_000)
 
-    const fileA = { name: 'mode2-a.txt', buffer: Buffer.alloc(32 * 1024, 'A') }
-    const fileB = { name: 'mode2-b.txt', buffer: Buffer.alloc(32 * 1024, 'B') }
+    const fileA = { name: 'mode2-a.txt', buffer: crypto.randomBytes(32 * 1024) }
+    const fileB = { name: 'mode2-b.txt', buffer: crypto.randomBytes(32 * 1024) }
 
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto(dashboardPath, { waitUntil: 'networkidle' })
@@ -1154,11 +914,11 @@ async function ensureWalletConnected(page: Page): Promise<void> {
     await expect(fileARow).toContainText('start 0')
     await expect(fileBRow).not.toContainText('start 0')
 
-    const fileAGatewayBtn = await openFileActionMenuItem(page, fileA.name, 'deal-detail-download-gateway')
+    const fileAGatewayBtn = await openFileActionMenuItem(page, fileA.name, 'deal-detail-download-gateway-provider')
     const fileABytes = await readDownloadBytes(page, fileAGatewayBtn, 120_000)
     expect(fileABytes.equals(fileA.buffer)).toBe(true)
 
-    const fileBGatewayBtn = await openFileActionMenuItem(page, fileB.name, 'deal-detail-download-gateway')
+    const fileBGatewayBtn = await openFileActionMenuItem(page, fileB.name, 'deal-detail-download-gateway-provider')
     const fileBBytes = await readDownloadBytes(page, fileBGatewayBtn, 120_000)
     expect(fileBBytes.equals(fileB.buffer)).toBe(true)
   })

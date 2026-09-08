@@ -155,6 +155,7 @@ interface FileRowProps {
   isAnyDownloading: boolean
   isOpen: boolean
   onToggleMenu: () => void
+  onCloseMenu: () => void
   onFileActivity?: (activity: FileActivity) => void
   downloadBlobAsFile: (blob: Blob, filePath: string) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
@@ -198,6 +199,7 @@ function FileRow({
   isAnyDownloading,
   isOpen,
   onToggleMenu,
+  onCloseMenu,
   onFileActivity,
   downloadBlobAsFile,
   markDownloadPath,
@@ -273,7 +275,7 @@ function FileRow({
       const message = error instanceof Error ? error.message : String(error)
       setFileActionError(message)
       if (manifestRoot) onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'failed', error: message })
-    } finally { setBusyFilePath(null); onToggleMenu() }
+    } finally { setBusyFilePath(null); onCloseMenu() }
   }
   const handleAutoDownload = () => downloadVerified(transportPreference)
   const handleOnchainRetrieval = () => downloadVerified('prefer_direct_sp')
@@ -1994,6 +1996,7 @@ export function DealDetail({
                               isAnyDownloading={downloading}
                               isOpen={openMenuFilePath === f.path}
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
+                              onCloseMenu={() => setOpenMenuFilePath(null)}
                               onFileActivity={onFileActivity}
                               downloadBlobAsFile={downloadBlobAsFile}
                               markDownloadPath={markDownloadPath}

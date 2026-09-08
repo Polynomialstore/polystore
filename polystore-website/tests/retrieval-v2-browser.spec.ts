@@ -8,7 +8,6 @@ import type { FrozenSession, PinnedGeneration, RetrievalWindow } from '../src/li
 
 // Use a separately started Vite server. An installed Chromium executable can
 // be selected without downloading Playwright's browser bundle.
-test.use({ launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {} })
 
 test('secured selected window uses real Chromium Worker/WASM and OPFS before simulated ACK', async ({ page }) => {
   test.setTimeout(120_000)
