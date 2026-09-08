@@ -15,6 +15,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 import retrieval_bench_artifact as artifact
 
@@ -335,6 +336,39 @@ class BenchmarkArtifactTest(unittest.TestCase):
 
 
 class RetrievalSchedulerTest(unittest.TestCase):
+    def test_unresolved_warmup_exposure_overlaps_later_measurement(self):
+        for outcome in ("unknown", "committed_success", "committed_failure", "checktx_rejected", "not_submitted"):
+            with self.subTest(outcome=outcome):
+                now = 0
+                measurement_offset = 20_000_000
+                jobs = [{"id": phase, "operation_id": phase, "phase": phase,
+                         "signer": "address-" + phase, "offered_offset_ns": offset,
+                         "timeout_seconds": 1, "query": ["must-not-run"],
+                         "submit": ["must-not-run", "--from", "address-" + phase]}
+                        for phase, offset in (("warmup", 0), ("measurement", measurement_offset))]
+
+                def record_transaction(item):
+                    nonlocal now
+                    if item["phase"] == "warmup":
+                        # Admit measurement only after the coordinator has
+                        # recorded the warmup result and removed its worker.
+                        now = measurement_offset
+
+                def result(job):
+                    return {"outcome": outcome if job["phase"] == "warmup" else "committed_success"}
+
+                with patch.object(artifact, "monotonic_ns", side_effect=lambda: now), \
+                        patch.object(artifact, "scheduled_transaction", side_effect=result):
+                    report = artifact.schedule_transactions(jobs, max_in_flight=2, max_queued=1,
+                                                            max_queued_per_signer=1,
+                                                            record_transaction=record_transaction)
+                warmup, measurement = report["transactions"]
+                self.assertLess(warmup["finished_ns"], measurement["offered_ns"])
+                self.assertEqual(measurement["outcome"], "committed_success")
+                self.assertEqual(report["phases"]["warmup"]["outcomes"][outcome], 1)
+                self.assertEqual(report["quarantined_signers"], ["address-warmup"] if outcome == "unknown" else [])
+                self.assertEqual(report["warmup_overlapped_measurement"], outcome == "unknown")
+
     def test_fake_subprocess_load_bounds_signers_quarantine_and_accounting(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

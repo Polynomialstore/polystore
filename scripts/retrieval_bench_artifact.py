@@ -291,7 +291,7 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         known.add(job["id"])
 
     start = monotonic_ns()
-    pending, running, active, quarantined, records, finished, seen_hashes = [], {}, set(), set(), [], {}, set()
+    pending, running, active, quarantined, records, finished, seen_hashes = [], {}, set(), {}, [], {}, set()
     peak_pending = peak_running = peak_signer_pending = 0
     warmup_overlap = False
 
@@ -303,7 +303,7 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 "offered_ns": start + job["offered_offset_ns"], "started_ns": started,
                 "finished_ns": monotonic_ns(), **result}
         if item["outcome"] == "unknown":
-            quarantined.add(job["signer"])
+            quarantined[job["signer"]] = job["phase"]
         if item.get("txhash"):
             if item["txhash"] in seen_hashes:
                 item["original_outcome"], item["outcome"] = item["outcome"], "duplicate"
@@ -356,8 +356,9 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
             while index < len(jobs) and start + jobs[index]["offered_offset_ns"] <= monotonic_ns():
                 job = jobs[index]
                 index += 1
-                warmup_overlap |= job["phase"] == "measurement" and any(
-                    item["phase"] == "warmup" for item in pending + [item for item, _ in running.values()])
+                # A finished worker can leave an unresolved warmup broadcast.
+                warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
+                    item["phase"] == "warmup" for item in pending + [item for item, _ in running.values()]))
                 signer_queued = sum(item["signer"] == job["signer"] for item in pending)
                 if job["signer"] in quarantined:
                     record(job, {"outcome": "not_submitted", "error": "signer_quarantined"})
