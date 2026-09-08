@@ -344,6 +344,8 @@ def validate_scheduled_command(job):
     if position + 1 == len(submit) or submit[position + 1] != signer:
         raise ValueError("submit --from does not match resolved signer")
     job["timeout_seconds"] = integer(job["timeout_seconds"], "timeout_seconds", 1, 60)
+    if "_deadline_ns" in job:
+        job["_deadline_ns"] = integer(job["_deadline_ns"], "absolute deadline", 1)
 
 
 def execute_scheduled_transaction(job):
@@ -351,8 +353,10 @@ def execute_scheduled_transaction(job):
         return scheduled_transaction(job)
     lifecycle, state = job["_lifecycle"], job["_state"]
     began = monotonic_ns()
-    deadline = began + job["timeout_seconds"] * 10**9
+    deadline = min(began + job["timeout_seconds"] * 10**9, job.get("_deadline_ns", (1 << 63) - 1))
     try:
+        if began >= deadline:
+            raise TimeoutError("proof preparation started after the run deadline")
         # The sole integration function must query the canonical anchored
         # context and build the existing proof, honoring this absolute deadline.
         # It runs on this already bounded worker, never the admission writer.

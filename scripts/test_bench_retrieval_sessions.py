@@ -922,13 +922,14 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
             self.run_operations([self.operation("first")])
 
     def test_proof_preparation_and_commit_use_one_stage_deadline(self):
-        now, deadlines = [0], []
+        now, deadlines, preparation_deadlines = [0], [], []
         ledger = artifact.RetrievalLifecycleJournal(self.root / "deadline.sqlite", ["owner-a", "provider-a"], self.prepare)
         self.addCleanup(ledger.db.close)
         state = ledger.initial(self.operation("deadline"))["_state"]
         state["session_id"] = hashlib.sha256(b"deadline").hexdigest()
         proof = ledger.stage_job(state, "submit-proof")
         def prepare(operation, session_id, deadline):
+            preparation_deadlines.append(deadline)
             value = self.prepare(operation, session_id, deadline)
             now[0] = 800_000_000
             return value
@@ -948,6 +949,21 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
         self.assertEqual(result["outcome"], "unknown")
         self.assertEqual(result["preparation_latency_ns"], 800_000_000)
         self.assertEqual(deadlines, [1_000_000_000, 1_000_000_000])
+        # A shorter run-wide cap also binds preparation, and expired preparation
+        # must never broadcast even when its nominal stage budget remains.
+        now[0] = 0
+        deadlines.clear()
+        proof["_deadline_ns"] = 500_000_000
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+             patch.object(artifact, "run_bounded_command", side_effect=command):
+            result = artifact.execute_scheduled_transaction(proof)
+        self.assertEqual(preparation_deadlines, [1_000_000_000, 500_000_000])
+        self.assertEqual(result["outcome"], "not_submitted")
+        self.assertEqual(deadlines, [])
+        with patch.object(artifact, "monotonic_ns", return_value=600_000_000), \
+             patch.object(ledger, "prepare_session_proof") as build:
+            self.assertEqual(artifact.execute_scheduled_transaction(proof)["outcome"], "not_submitted")
+        build.assert_not_called()
 
 
 class FourValidatorLifecycleTest(unittest.TestCase):
