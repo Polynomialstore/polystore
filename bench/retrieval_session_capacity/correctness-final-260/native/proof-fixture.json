@@ -1,0 +1,900 @@
+{
+  "session_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+  "proofs": [
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "kBtl3DErK/kk7KeQBJonC8t3WksOGeAV8PZExUChzqL+2sNVYrSGJNSHZ52fyZI9",
+      "merkle_path": [
+        "pLNi1zhGt11/GRVmp4mYVICPfkU/FGX8YeXryyQ5qfw=",
+        "lhphlZvFiXdugEm0NipLHPiyhxN16qsX5e1AwIMHHqY=",
+        "WYHyhqDLaYbtjZmcyuvgrsPlbMsMfE65ReSwBQpkirE=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "z_value": "KgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "ZDnDtoGCivGF6C6PYxPFSd6DxoDejlqpexo5VLds3N4=",
+      "kzg_opening_proof": "ldSzYgpqiBp/5mVzFBCJLg5CmjxTtYTae4eB5WlKg/w0kK+ZWj80bbnGvlzcfTuU"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "tmvFVk7pf8KmAvu2IASKm2U6vRC13z7IPEPg1GgH7ufKMwPz6t7SC99st+vGiyth",
+      "merkle_path": [
+        "hF5ns/aJZXWjxCt8VkSOvYYdE1f5Qr/ymbH+B17QzXQ=",
+        "lhphlZvFiXdugEm0NipLHPiyhxN16qsX5e1AwIMHHqY=",
+        "WYHyhqDLaYbtjZmcyuvgrsPlbMsMfE65ReSwBQpkirE=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 1,
+      "z_value": "KgAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "O3hyS8VM6JkBVlBmz6x2RcB1ACLrmwpLqJvxxN8/70k=",
+      "kzg_opening_proof": "qTNze78LpsUg9GDB90Dm62iBiMEXzq3lA2zXbli4XieJE3uBHQWhEhPqbqlp1DRi"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "iqvi601iHWRP4M/4ORtNV3Tv7AxgM4gJlpPwVwbbx847WBfgUvzK3Q9yvHzDTaUS",
+      "merkle_path": [
+        "hk9nykVZ05VfikBCknDb+/Nrpun6XyBGtfN3oVQz0SY=",
+        "sitJt4jlnvxCxv6kFszHJvYyc3o4Bp1Vdv/01JfDXrQ=",
+        "WYHyhqDLaYbtjZmcyuvgrsPlbMsMfE65ReSwBQpkirE=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 2,
+      "z_value": "KgAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "DvLXAxGrBtVk2bisP6KIBs73wb1SgWYe/H9FzVICyEU=",
+      "kzg_opening_proof": "rmm2caPkvUPU5wqtlXAa2kyiLqJyTI0km4AhYJvEYL7Z2riw1k7mseICBXzeXWtN"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "p0CE2bDylsrjY927GEf0iaFzWpjFE8frB2lL3qUAm+13s+pmpwXyBWvcySZeyWbV",
+      "merkle_path": [
+        "Sbgep7R7m9psBC1EV2rH6p1F9Sw++qfMGRD8kom2FlQ=",
+        "sitJt4jlnvxCxv6kFszHJvYyc3o4Bp1Vdv/01JfDXrQ=",
+        "WYHyhqDLaYbtjZmcyuvgrsPlbMsMfE65ReSwBQpkirE=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 3,
+      "z_value": "KgAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Kp+iBrbeF3HJs77X3zuSzAtH9wYNCwsMWlVohXRzZVs=",
+      "kzg_opening_proof": "q9tEqAzrMM5I89bxGIdo3R4luPG3QEzUklcLvUtzTs8HNioein8yp0EabFOl/HVU"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "lkeu/HSkg/jj8ysdGqh8meonARPIu0C+Gk1aIznXUa97AcFCG6ZAmZysvh8XlM93",
+      "merkle_path": [
+        "92CaBpfDOlK4xG96+luD/tv4HV7EGY0ZAMXxdyicpPU=",
+        "O4dxhled6WOfSc3S5np7rYdgJjnXRh+XR7FzkslZ6N4=",
+        "Yf52fQkUEbwwnQHxB8ktAeWXhYvhNrLpRNZIyNOpWvI=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 4,
+      "z_value": "KgAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Dj1qsNbvleUGDlFQlyFeAggTFBzh6a/U8nI3YyW964I=",
+      "kzg_opening_proof": "t/kXc5sSz7iVmtqGIPkoI/FyQu+1fUfxHAztsSH2uoSXDRmkh44brztBHLSUAUUL"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "gJxLmw1czRbt15YUAmRMvSTUtqbWX6y6ywbLnIZwkomQ+AcFotVLbOvcGEKGRuFi",
+      "merkle_path": [
+        "RbW4F7p7ndl5ly7wox7uUNVkdBjo9xZRidzaJKeJIbw=",
+        "O4dxhled6WOfSc3S5np7rYdgJjnXRh+XR7FzkslZ6N4=",
+        "Yf52fQkUEbwwnQHxB8ktAeWXhYvhNrLpRNZIyNOpWvI=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 5,
+      "z_value": "KgAAAAAAAAAABQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "XKBp3Df7EFGWFqb2GGi4RC+3i7gTEvW/84hFPNLs6Qg=",
+      "kzg_opening_proof": "pUdzqHLKweSt9UmQO56akAgUAOHlF02hFwdQ2oc83B2mzTxVhOZU8g5P1ULBj78G"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "gr22SJqwjy7OhZDGJBMREavpSW0/AH1CFIRw8WX9Ue3reSafAXJKlihfQ+92ICJH",
+      "merkle_path": [
+        "Q3t70LM2r9MbpuJKw7J+OMw4i3s5M1FQZiOg430+QW8=",
+        "/Sdx77wnIZJ++ikt80WnBXbW9Q5E5jcjjpMuKcxadv0=",
+        "Yf52fQkUEbwwnQHxB8ktAeWXhYvhNrLpRNZIyNOpWvI=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 6,
+      "z_value": "KgAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "cGAR1KKyZ128JUB+JY0e3xwzQXTNm04jXd8V2bmRzrY=",
+      "kzg_opening_proof": "odMYIi8zyVL9P8y3eMtvA79Fer7I9ClVvXrqk/HNIOG4UJKfVl/w3wnXupP/qi8L"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "rzkYp6N6xMZGq0kH767R/p6PQFoxCJ4ZRd/OfM7r+ceCfHQEgft1/O0jOlMhm127",
+      "merkle_path": [
+        "ecd18AC9YUgkzzUth5MnIGMlwnkvaBcuiVhLm4vwL2w=",
+        "/Sdx77wnIZJ++ikt80WnBXbW9Q5E5jcjjpMuKcxadv0=",
+        "Yf52fQkUEbwwnQHxB8ktAeWXhYvhNrLpRNZIyNOpWvI=",
+        "GvwRuoJgNVLul48ysZcqVjKvjRr2xl3EADKZdBhwp6U=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 7,
+      "z_value": "KgAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "W2Ra+nLAU8igQ6c/BKz5GtkaJTiCffCtpokD/wxXwMI=",
+      "kzg_opening_proof": "gNVa5G2ta5weWzgDCAE7WOXvM2TE5wDswh+rJbJ9vh/yi/ddCEuGGIlmATjA+noc"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "hqFy7YBdAk6GHIJTox3YUO6oi6TwwXt2reemu+omexd94kFHDhLJfcDCHBu6ndZa",
+      "merkle_path": [
+        "f40MbbkBCnpvtiDV7fI/D6IO401CbvbwcJjS4hIsv+w=",
+        "DTfBr8FIOjIJPR6aqJj/w7tHAiuIDp7gPkvudPq8w2U=",
+        "b74dCNPea/4txODpD6prQNwCmum672Z7UtJ94O6iunQ=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 8,
+      "z_value": "KgAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "BkFuFYZt6lX5ve0tpJtzPy36sZLVwUfQAdtemiidTk0=",
+      "kzg_opening_proof": "lJ04/v4Uy55l4qQDDg8mrvU6w0FvtaEqPIEwTLl3Cs4GvLzgrWGWGcl+AuIJ4C6A"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "jCgEwGGumGo6UzWJOTq9Lbec5Yu95zlznvuSLYSjhNcJhYwxK7hZkKNjLd91JBEs",
+      "merkle_path": [
+        "u5eDkVo0C5gBcenc/pIyNfIR5JV6JdqlX5QF9OEFM6E=",
+        "DTfBr8FIOjIJPR6aqJj/w7tHAiuIDp7gPkvudPq8w2U=",
+        "b74dCNPea/4txODpD6prQNwCmum672Z7UtJ94O6iunQ=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 9,
+      "z_value": "KgAAAAAAAAAACQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "CyKhYKMVcylXgkzx3UXKCkzj23PaUi8UKYBfFL5VAzY=",
+      "kzg_opening_proof": "hr8hZkFJOYZgNuFyYBSXfIRizitt8gE2aKThQddTFm5KFegpZAU17CmTpBl/Mccm"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "jJ5l7URpekBc5z07RUvSe2JTVMV4qgKvyx63GAtTJIft+evfcGLL3kL6l7giuwv4",
+      "merkle_path": [
+        "HwgJV4dB9wKnFr2tyv5YdehED0HZVeUc1VjmpV+BYc0=",
+        "VzdO/0TDxa6hDpeQv1mLVYc7JApFbzj7fPNNnSbkwM8=",
+        "b74dCNPea/4txODpD6prQNwCmum672Z7UtJ94O6iunQ=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 10,
+      "z_value": "KgAAAAAAAAAACgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "VIXoLapHakFqzRBhgF78BDCL7e+pLN/qJroUVt2ORt8=",
+      "kzg_opening_proof": "hKRdwT6R5IM/9Q3gzsHYdZgSauXb90iD2q+7joFqqibzY+eUOjSGZW1RbrCdTHqs"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "kdbGTS0PKYHDlbQnYITUjU/15z3LiZ1NLiEZNfz/9Uv/UPJ3actszb+mO0YF1MEg",
+      "merkle_path": [
+        "KI0i9VCPOqEdjbV16cELUhT6mTRR8sl5vPPnFm62SDs=",
+        "VzdO/0TDxa6hDpeQv1mLVYc7JApFbzj7fPNNnSbkwM8=",
+        "b74dCNPea/4txODpD6prQNwCmum672Z7UtJ94O6iunQ=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 11,
+      "z_value": "KgAAAAAAAAAACwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "WnfVjbdzDrN+a2SNChW2meSv83Ra15HDb6NZ1fi9NyU=",
+      "kzg_opening_proof": "i2AodIm/xBZAUEgVOcXBkqt7MW+U2qb9Ni2uDWnO4eprEXsOEE1fyBO850DZf7WB"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "jQsOUZcKUDFgWa/l4vd6j3UPRFf4P7E9MBeQLt57fSudMQIrqA8v7KbpDaTxkd8t",
+      "merkle_path": [
+        "GQ91a4H9lDjxtNx1SLCpZHCxeEZCaFWBVirJPnbdECA=",
+        "1b2PeZYkblcLf591hb3/NWtTm3Fvx0amPznyoGHNYLQ=",
+        "/ODtdUhm4ZAl6qPbO8A34asGQ+FUS6SpISLBy+wwFD0=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 12,
+      "z_value": "KgAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "cF1ji6Y01VIofXo2XwxsyN0aWG2wx430ur4FxRq0+nI=",
+      "kzg_opening_proof": "qyUyIXJ1Vd5FJ5alaaczp9eoa19ss2n7yFeNxfPOw2T9uNyQtIMp3egFiZPQRnmJ"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "s8T0xaaEW9qMZUPW4I7+aC/z8Z4PEJKuRC7l+NxFwTqHM4VVQrZGyKjG1tKVuvQE",
+      "merkle_path": [
+        "hj/gM60hQVH+sbVSfxHT1lkY+ikd8b4/v/kBua9kXls=",
+        "1b2PeZYkblcLf591hb3/NWtTm3Fvx0amPznyoGHNYLQ=",
+        "/ODtdUhm4ZAl6qPbO8A34asGQ+FUS6SpISLBy+wwFD0=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 13,
+      "z_value": "KgAAAAAAAAAADQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "P8ndeO2wqONlLjCcgjEhWp+yJqSbHmpMZMuWPPLgXE8=",
+      "kzg_opening_proof": "qImT6YN5aPTnY9TFJDFFflT76qT6Nia6iHmCpl7MCWpDqmxYJ4yp2Tw37QmH4QLT"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "tbGhAoOzDp1cl6aaSVEFIzakGDsfP76CLlKocwvCmiSrtiwvdKQypX5qR1zFa0f1",
+      "merkle_path": [
+        "xlfBHXFRmNxzY/juLgM8EA4C4TOcRhntLrDEagX4Tq0=",
+        "jaqnfcF3Ejwb+riKbN0YDrPDBz03EGm+VgnDS25zYMk=",
+        "/ODtdUhm4ZAl6qPbO8A34asGQ+FUS6SpISLBy+wwFD0=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 14,
+      "z_value": "KgAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Aw8BsyPQl0UQkSLeASPueug4U7SWMY05iVnp7SUjPCo=",
+      "kzg_opening_proof": "kyyR1/J7QvNSCyJ56qbjDdW+q+9gaoTumbjdEjmL6hiZVG054wWyztpbfwInZlAX"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "mZOVfD84DFMdsBHW6yffeOQNE2JtEF8hIwd+yr6D9D+/XbYHorvW7Vu4vmnfT+IO",
+      "merkle_path": [
+        "ReBMRyx9SAiIUgwtNPplFwkgJHyVwvCnuuwWZD6i2Xk=",
+        "jaqnfcF3Ejwb+riKbN0YDrPDBz03EGm+VgnDS25zYMk=",
+        "/ODtdUhm4ZAl6qPbO8A34asGQ+FUS6SpISLBy+wwFD0=",
+        "ra+whGHaCQApOB6yUNUtxY0k+L2JRem5CRgGY5BRQp4=",
+        "GsRnBn5nSmqcxLsmJ+EcO6Ks/gI+bfqpqezmz0oQVsc=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 15,
+      "z_value": "KgAAAAAAAAAADwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "UfKbLMut/MP4kXCz6nyZwiRhR2eldGjmbrGwE4Ju1r8=",
+      "kzg_opening_proof": "rP1NUOVd47+MEllHbsKz+Ppx1n5uDl6P3C76nFW9YlOBWQ5EIMjpOteAzDWw2GUv"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "h99+49koifGpJcYnSNX19JcOvH+GHI15E07T15sweYQLTzp/dU53K6Vf/of7ly6n",
+      "merkle_path": [
+        "iAJcqRK94XCTDv+ldE+luRv/X5dBNmcbIhxbH3YPodQ=",
+        "CpEb9CfSexKl8kx7qFN2sMFg6b7b4zxM0PMKo7icOYU=",
+        "E+gkl5PQizbOmE3pKn4ZgyyhBWpy+kKraA+QRXLiQGI=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 16,
+      "z_value": "KgAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "P2uCyfRIT3/7J4vgxRvSVGen7gpyH4RxQC7FM7F7NHk=",
+      "kzg_opening_proof": "tX02Kxix9blLLvo8Mpd3pzppzaB3hlPH2p5829/3IZF7zQrSZ9uVm8sxAB1McqqK"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "mZai+iQFISWVJKxk9C9Gu5fONUGDlun1JjlDNLVphHiYzV6hECnTk59FxG6MpkCj",
+      "merkle_path": [
+        "WE1IZDS4BNV5ZV1yM5Znra6bLEjPMs3vLFD7Uptjf3Y=",
+        "CpEb9CfSexKl8kx7qFN2sMFg6b7b4zxM0PMKo7icOYU=",
+        "E+gkl5PQizbOmE3pKn4ZgyyhBWpy+kKraA+QRXLiQGI=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 17,
+      "z_value": "KgAAAAAAAAAAEQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "aLSOkyiCuDNPJu+dj7ShocFxgMLFlhEVkGrRD86liQo=",
+      "kzg_opening_proof": "oCsxg8k6ewIHaZ3eChCU3piRsA39FY2TNcqfL/3fyn9EZQqB/3y6VO23m25ivMiX"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "tsGftL2hTtTEyOpxiBD3QtAcSZg38VzGv6GUAnR684+vBAigM5F7ydNs3YWEuglX",
+      "merkle_path": [
+        "kiGQaLyMkzrZsMZzrjq5w3FzL20GD6hLq6mb27tYYxQ=",
+        "ynifipVWG79fuHOwihrL0cI8UtxrYtC0F7KrkTlmxHU=",
+        "E+gkl5PQizbOmE3pKn4ZgyyhBWpy+kKraA+QRXLiQGI=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 18,
+      "z_value": "KgAAAAAAAAAAEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "RSYyRi/QM5L1GeFbnerTgsghdZs4/gwgVFXliqC1A38=",
+      "kzg_opening_proof": "kqioy9YCgzy7J3kp5bl3vkwit3FOKJs7cEHzMpUDpxR7DOXCMVtq/PrrunTBCqh1"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "sOr5ARjDjyHTIyE42GwfQ5PMSmwUBntGLNDBAmVTO6kESG7vvx9z6ZcQc3SXCyWm",
+      "merkle_path": [
+        "F8RZv8Yd5nneXdhseAKKXbIqduGfrgjG8OAPqjpuVkk=",
+        "ynifipVWG79fuHOwihrL0cI8UtxrYtC0F7KrkTlmxHU=",
+        "E+gkl5PQizbOmE3pKn4ZgyyhBWpy+kKraA+QRXLiQGI=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 19,
+      "z_value": "KgAAAAAAAAAAEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "O5IrlRcNtH1cRnLm0ggBKZh2OOseINcLWWsA5wpbTIE=",
+      "kzg_opening_proof": "ixim0+kV4TRPco8ViG4wCr4FTxEJJZSX90VgC9yrwBrgLgJoZlORjz/U8+iwhFhn"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "pgkuQNM6U4jie4+CvO3BvxVCKBjEmUAU9D+S6s8HDhcLZcYf4g1fJ4hTd+r3r3jn",
+      "merkle_path": [
+        "AbL5Wg4WL8L4yam07ObWC6wRYFu1019bpHQWIUA26GI=",
+        "4fErkiDfU7ZYulLwMfSqbV82wbLhFnDAMxf3p08fuHg=",
+        "JBqad6O0A4tTVzQDeeJE7sD6NHVLaV6k8fxAlx1nL8U=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 20,
+      "z_value": "KgAAAAAAAAAAFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Bybakyf/zk4RLLtXa9hr5fs+NCzEf1MkcQ5cEzrAi2A=",
+      "kzg_opening_proof": "oNZD6kOaiVpKeDsXDn25meQm6MWUaAFcrTuobFuvsSQKHcV4M+VGa+6hzJGoXQE/"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "q8kmBeM16ELKopjLa8v5QpVYm59/7mYoxTN5xafZp/bLkJc+1OFLrclaTGHrlXec",
+      "merkle_path": [
+        "t4xo8INA+GIlItPdV89DIAJPPIpLi8Sa55SuityX1Wk=",
+        "4fErkiDfU7ZYulLwMfSqbV82wbLhFnDAMxf3p08fuHg=",
+        "JBqad6O0A4tTVzQDeeJE7sD6NHVLaV6k8fxAlx1nL8U=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 21,
+      "z_value": "KgAAAAAAAAAAFQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "EnCGYPQtJ0LduN1bqGFegNjrZXomFEoZHl6Wff4qhqg=",
+      "kzg_opening_proof": "kyjhASJVtwdIsKZVZPpz45FG3jmJDsyDnMF3cqj8DwCqz9VjMhP1y6avcOe30JP+"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "jmKE73GbIGMlvxB82S2SNciEpKWBvRb8SkYow1fraXi2gYKm5Ld0EtYuCptxh72R",
+      "merkle_path": [
+        "ootgIvjMVw+jb8+HYqY3zbDoLNYT6RPDRh2jGoJBzmU=",
+        "0zOgIrvao6ETNQuTv0BO5yq28rqNg9ohGDkuVLP85bU=",
+        "JBqad6O0A4tTVzQDeeJE7sD6NHVLaV6k8fxAlx1nL8U=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 22,
+      "z_value": "KgAAAAAAAAAAFgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Ke5EETqPmthPwHdPXk5Ka/RmpzdFlZY7TTvCHmwHH88=",
+      "kzg_opening_proof": "jiBJkH4zix/XaB6LGJe2Inzwn1ona3wrZ16tYTMS2N35hY0O3IKChWjxMHdebsO9"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "pndes4xRXDKPKwxNECti1nJBjErZOY2kI3fjFfJfSDARdvPojrhkpoNffSVbImGS",
+      "merkle_path": [
+        "xQu8f5r8CbEGWzjdOQdWFXVaU2DpBFSXmVOc4y81JsA=",
+        "0zOgIrvao6ETNQuTv0BO5yq28rqNg9ohGDkuVLP85bU=",
+        "JBqad6O0A4tTVzQDeeJE7sD6NHVLaV6k8fxAlx1nL8U=",
+        "l0jVYiLEVgGSo0jLsV5AobuLgzZmB5suDq5O2LnZzuU=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 23,
+      "z_value": "KgAAAAAAAAAAFwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "ZUtVj1LQSh4bnNy8aQ89zGw/N+Qs+pBKzRgjRI8weR8=",
+      "kzg_opening_proof": "iu1q9WOILvJtwIZvg1myrohVgCXS0k5cpcNXXSKbZ5HX2JWJOjR+fxsnOxnbWfX0"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "pJFjbWsLA59Tz7vLaZy+u1nqmyKQlIemecDTaDxP9B1RPR5GOqWMBUaWmu/77C+U",
+      "merkle_path": [
+        "oddqPpdFk2HTjZtCAf/NAq8xdCarzRWme7LjdDRkoaQ=",
+        "sRy3pL3M64YAgcX3VsyA6OPAxKCAn3xFpWaTMh13oS8=",
+        "09/QC9YBeP9jCpUXEyQtNBw6rfxQw2gxMVP10amjWFQ=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 24,
+      "z_value": "KgAAAAAAAAAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "NvRcWtm51nRfyva7MCjSrpJ6owNw9FXJaWyPScthTkw=",
+      "kzg_opening_proof": "hPkHRXbRrG3PL6t1Zkgl+UI7Ik8B6F+hAsKFEkbijiGg2nWjrNwlw9oeKOclsCQI"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "pLm89EQYSg/91o2sEYCakDT18TqsmehUrYWK86TeWOthOCw7sxvf/8J4ao+P1sDy",
+      "merkle_path": [
+        "hJzHCr21HB+gGu7nZLt9Y1fHcIHxhOS916jtneNOSdE=",
+        "sRy3pL3M64YAgcX3VsyA6OPAxKCAn3xFpWaTMh13oS8=",
+        "09/QC9YBeP9jCpUXEyQtNBw6rfxQw2gxMVP10amjWFQ=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 25,
+      "z_value": "KgAAAAAAAAAAGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "c8QuCLF/6My5OpGG7qNcr6dDQkQFaSDStH9vzFka6hY=",
+      "kzg_opening_proof": "lBhMn0q9hFrLeB+e40GM2ZexGnaCJdusQ7y+P8F/OGmriE1WTjNxZZpd+OVo8lYw"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "hj/c3c192tKJoHPvqoCGDBys2B9z/sM+q884046bkXUW6r4xM4aeV3ohWpov5Eft",
+      "merkle_path": [
+        "gSl8Q8RoFenugG0E5BTAiNSxezdEh9vxG/6gWNPg/EY=",
+        "bUv6kpvb7LNILkLIHHrRImVOuCKSuzJQ/ZiBR3XAtvs=",
+        "09/QC9YBeP9jCpUXEyQtNBw6rfxQw2gxMVP10amjWFQ=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 26,
+      "z_value": "KgAAAAAAAAAAGgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "cpxjFAiO9reF/ChqVGGPP2BFEST4VMP9q6/bWaInU3Q=",
+      "kzg_opening_proof": "pl7mr/OUAPmKslQB9XOu893acWGytr8GkKGi9EluV8GkxCWnZv1JkxE0rMhkrfbX"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "tpibwutRItmXmearp0luR+1vM2SdNGLY8DuClGLybo3pkmx5IyVMVcC5ZgCboW1i",
+      "merkle_path": [
+        "nfVaEfCJ6N2bMwvnUqFDEbLRSbwBJt4Y56Pxq7reVr0=",
+        "bUv6kpvb7LNILkLIHHrRImVOuCKSuzJQ/ZiBR3XAtvs=",
+        "09/QC9YBeP9jCpUXEyQtNBw6rfxQw2gxMVP10amjWFQ=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 27,
+      "z_value": "KgAAAAAAAAAAGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "Emr2ieO1Thg/qMsP5rJGDxyy2+1W0wSSl+wDg1n5jns=",
+      "kzg_opening_proof": "kH0dq6yXiPA0e/Wh6/1jCVMjnPha7F7nLhNZAA8q4M2/W/PJx2CCfM0/yQv5eaVG"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "sSxs5LPEa9n/66JIoMYXlQQzP9rJk1YHGnnWG1aRbXjOuN3Knoc8O/tUljGJev/a",
+      "merkle_path": [
+        "2ZO9NEZDprsNQ2j4QjWSCTgWw/Z8YwUVX9J9EOnddlI=",
+        "f1tit48CpLsPeBEufl/Abhnwn2Pm6RKPKhn/O47QDmI=",
+        "m2RKDeLzqjVNgnW5hQWjyQJKFd3BZb6riOC+2F4vWhM=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 28,
+      "z_value": "KgAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "J8BJrhYsCi6EYvHTRQ+AvdXIxRTSYDgI63KjUHEX1fo=",
+      "kzg_opening_proof": "jQyGn8/1V0qCZ1wMrXjh0g/mLM0ErRpe5UVCLFm5yU0gGcKJhmRZ3lj29xlUt8t3"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "l7aUeJBQfXKlB/19OYP09kDFhJdpIgAwPpeqoZZZDwesSgd/BbUXjJckQjVxpusK",
+      "merkle_path": [
+        "5yZtRmIBY/GM2obVKzZf2FJVu0WdRU5kmonTbv+7gb8=",
+        "f1tit48CpLsPeBEufl/Abhnwn2Pm6RKPKhn/O47QDmI=",
+        "m2RKDeLzqjVNgnW5hQWjyQJKFd3BZb6riOC+2F4vWhM=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 29,
+      "z_value": "KgAAAAAAAAAAHQAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "c0RZmArdGYrlpGQOF1cj28X0eiMKBGQzSkJ5Bfe8Uoo=",
+      "kzg_opening_proof": "kww/nABa3s9Y3wIOKO2CHkXthwoa9Mq7dNtJEX5HHdpCZb+l3okknkBq/81cBlca"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "l1kEiCI+B/9CzFl1fEWDHLMpOi2pcceTG60VhnHlq4Xk08Ep+oiwcqEhVXDMOgRp",
+      "merkle_path": [
+        "N+t8sEAxeOHxMjLzln+pE5Ko7wgZZ62JkLXUzd28JwY=",
+        "1zG609io7+eLOBgdMuVBvGhUVB3B45e4Q7xEhTxd25w=",
+        "m2RKDeLzqjVNgnW5hQWjyQJKFd3BZb6riOC+2F4vWhM=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 30,
+      "z_value": "KgAAAAAAAAAAHgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "WjcCn15g5Qlllx4eykMycvclrrJDKEb2zDoYe3iAxf0=",
+      "kzg_opening_proof": "jk2ddrWzFXNHJnCY86XGXpH574uBXYV9Jt9YcOy0C8zMRk5UI3FYapYavPR/tRgY"
+    },
+    {
+      "mdu_index": 2,
+      "mdu_root_fr": "UjR+3+EGMNkl/DfGfvjWpJoq0vKxMEiZZYX9miwQZp0=",
+      "manifest_opening": "rWx3H0YqCx/3Pf0aVkp7JzJke5P49cg/ulbUYD9x4uRfuVXExJ2dD8lBx7HzheZg",
+      "root_table_du_commitment": "sghVhS4DfdBdcNsPvoZPA57NuAEWpvTK33+6xH7U0IjvbBdZfd1Jv1BbqL8vB24y",
+      "root_table_du_merkle_path": [
+        "a12fvkfL6LFnGVS/uCrNWF2SmNDnXz0UQDUqUxRJJzg=",
+        "yaErZEajWh/14AM1t4b1+z1SelIDsVaIv1PKvFdm9Uo=",
+        "Pl+ckZpr/4wqpS4v/m+PC74a9rPNqUGNOrWrew89Fus=",
+        "QRmyIo9w/Q8jGgxh8Wwlhmd0rqDMPk+8W7l3rblBr3U=",
+        "060aIWiWMiC8dtKwEf+eRRR/KyKADtzQgDpC9lHB2bQ=",
+        "Of4+b/B7Q0Z5e+S37+AeSjgJeTdQZji38DlQQ7dOsOo="
+      ],
+      "blob_commitment": "iMFcqm3FjXZnoDWvi6T8EBcsHJsvnL1TR7P2pNeI3BK1r64QOhhtVJP0h9lDlpyr",
+      "merkle_path": [
+        "J63X178lseLLeuMPyLaJVVs5/IzWIDwxLOILxTwk6vU=",
+        "1zG609io7+eLOBgdMuVBvGhUVB3B45e4Q7xEhTxd25w=",
+        "m2RKDeLzqjVNgnW5hQWjyQJKFd3BZb6riOC+2F4vWhM=",
+        "LEFoHECgDpjGl++mUq5lgZfNdGUTy6q7nywSXMJ/Glw=",
+        "mDuV7qtINRyPEFfFFT7JnOKmPFy8+AjNGnRsIscF3pY=",
+        "eQWTTiGAp7TQ3WWI5d4usTsBvqZPr/CwcZjT2gMzbR8=",
+        "MJADJtWOp1lgdv+bwvsEH1lXAXIRSYBoWUGL5zHBUro="
+      ],
+      "blob_index": 31,
+      "z_value": "KgAAAAAAAAAAHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "y_value": "CEqlkOSumwfiDKNnmcObii3chytI6sDlz71hrSLWb6Q=",
+      "kzg_opening_proof": "pA84U4g1e0CQP6IhjhrfqFrByCKkHHDaNmZC3g81KuNZ6hYbluxQXoaqIEwjzCLP"
+    }
+  ]
+}

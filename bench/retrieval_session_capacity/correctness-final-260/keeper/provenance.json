@@ -1,0 +1,29 @@
+{
+  "baseline_commit": "50a5cb2f999f5c455b8055a933eda941168e55fe",
+  "baseline_status": "",
+  "baseline_blobs": {
+    "polystorechain/x/polystorechain/keeper/msg_server.go": "3d74a95370a0d39037db7710362d2fba952bf9a9",
+    "polystorechain/x/polystorechain/keeper/msg_server_retrieval_sessions_test.go": "b496308f408f13f4417dac19ee6929f4a074a570",
+    "polystorechain/x/polystorechain/keeper/msg_server_retrieval_fees_test.go": "5c78cf06f1f54c9bc6437b993f6f51a06fea4d42",
+    "polystorechain/go.mod": "95f585d11945153c8e22c737684f58975640c2be",
+    "polystorechain/go.sum": "2ca9b5fd8541bc9b40893aa6e66b5c6a9578ce5a"
+  },
+  "current_commit": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+  "baseline_native_sha256": "4ed8aa1c19bc41d372de60fc726924870c1cbe7eb2feff7ad9c1199e806a4c71",
+  "current_native_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+  "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "native_source_match": "Baseline core/src is unchanged from recorded M1 baseline34e7c2db; library hash matches that retained build. Current library matches final candidate provenance.",
+  "baseline_core_diff_to_m1": "",
+  "go_version": "go version go1.25.5 darwin/arm64",
+  "files": {
+    "overlay.json": "e1dcb9574ae667a9dcff5c18d1f1a7a2d6fa23d1646299c76992d96b5115399f",
+    "copied-proof-red-mod.log": "d572203c3e9e3d3accacec05380b71510b4ffe577404f510e9cae3008cc32d06",
+    "sessions_test.go": "b78d9c411fd2faf178a421affe15b14dc1be50a45adf99d730951ded51f7ef50",
+    "all-red.log": "bd7be91540121b2ab038342614451b4b9656855bdb766e2c7de8e6944e414a69",
+    "copied-proof-red.log": "d188dc3f84dcc0d1168c4bce8f42bd2a0f87d21cc0901cb42c22267471b313fd",
+    "current-green.log": "bcfb5106dd999ecfdaad6dcc6bd4a5f65e0c762a745ec8d6c9b4715859ed89eb",
+    "fees_test.go": "b79593a8ef37a831514fee2d6582f4cb3b72b3a7b106aca80566b6ed75b593a8",
+    "overlay-all.json": "4a3dad0fb68326105d127bdaf4111ed96d159445aded67c737333c662db30fe5"
+  },
+  "limits": "Actual baseline keeper package with temporary test overlays and cached module dependencies, not full original EVM/vendor deployment. RED safe assertions use original pre-v2 APIs; GREEN uses owning v2 and legacy-quarantine tests. No source mutation."
+}

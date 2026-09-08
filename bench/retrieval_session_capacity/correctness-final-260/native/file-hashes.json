@@ -1,0 +1,12 @@
+{
+  "current-trailer.log": "7223e645f93d072b2d695989fa8ce3994ae009dd6907b104ab2ce49b0fee3a8f",
+  "old-trailer.log": "d8451dd1b307adbf5c70c3f15d47af0869ab854df9e57f822ddaf6b51c91804e",
+  "results.json": "aab740bb02dbaec3b1c67cb570373f40d2be8aada1c2950d9eb3f4a2ca925609",
+  "README.md": "cfa435e54af3c5d3a78df065853bc636ca3de6dd206ae89797a5e64ab7b84579",
+  "old-merkle.log": "e6d6e04b0f3ad1832f7ad6e0b057e7484b62091ae2d10cf38dba5f6e8d54b77d",
+  "current-merkle.log": "77e29af440b240efc8233d16f000b9b741133fb3f30afb03a2ca9c718f789530",
+  "probe.py": "51281017b439dffed4327f3b86409257af837b4ba44b3a70e5da16a79aa207e0",
+  "proof-fixture.json": "501cf95ceb819100b59fae715df5bb5524de8e23d23174e98e47c441e13065b3",
+  "current-reinit.log": "3d34222fb21650b74c3f8ccfee50a369a8db4060d6da2891a0d2c92e387999a5",
+  "old-reinit.log": "4d0ff39557985d5668bf159c181338f9b06de9147d1a085848e672cbd84d4520"
+}
