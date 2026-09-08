@@ -7,7 +7,7 @@ import { decodeComputeRetrievalSessionIdsResult, encodeConfirmRetrievalSessionsD
 import { account, fetchFrozenSession, fetchActiveRetrievalGeneration, fetchRetrievalAvailability, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
 import { waitForRetrievalChallenge } from '../lib/retrievalFlow'
 import type { SponsoredRetrievalAuth } from './useFetch'
-import { assertRetrievalWalletScope, browserRetrievalStore, retrievalIntentKey, settleBrowserTransaction, withRetrievalLock } from '../lib/retrievalTransactions'
+import { assertRetrievalWalletScope, browserRetrievalStore, retrievalIntentKey, retrievalGasLimit, settleBrowserTransaction, withRetrievalLock } from '../lib/retrievalTransactions'
 
 let lastBrowserNonce = 0n
 
@@ -49,6 +49,7 @@ export function useRetrievalSessions() {
       if (current.root !== pin.root || current.generation !== pin.generation || current.layout !== pin.layout || current.k !== pin.k || current.m !== pin.m || current.metadataMdus !== pin.metadataMdus || current.userMdus !== pin.userMdus || current.owner !== pin.owner || current.endHeight !== pin.endHeight || windows.some((w) => !current.assignments[w.slot]?.active || current.assignments[w.slot].provider !== w.provider)) throw new Error('committed generation or assignment changed before payment')
       const key = 'open:' + await retrievalIntentKey([scope(), recoveryKey, pin.dealId, pin.root, pin.generation, windows.map((w) => [w.mduIndex, w.startBlobIndex, w.blobCount, w.provider, w.slot]), deputy, auth])
       return withRetrievalLock(key, async () => {
+        let gas = 0n
         const transaction = await settleBrowserTransaction({
           key, store: browserRetrievalStore(), signal: deadline,
           prepare: async () => {
@@ -72,9 +73,11 @@ export function useRetrievalSessions() {
             const sponsored = requests.map((r) => ({ ...r, maxTotalFee: 0n, authType: auth.type === 'allowlist' ? 1 : auth.type === 'voucher' ? 2 : 0,
               allowlistLeafIndex: auth.type === 'allowlist' ? uint(auth.leafIndex) : 0, allowlistMerklePath: auth.type === 'allowlist' ? auth.merklePath : [],
               voucherRedeemer: voucher?.redeemer ?? '', voucherProvider: voucher?.provider ?? '', voucherExpiresAt: numberU64(voucher?.expiresAt), voucherNonce: numberU64(voucher?.nonce), voucherSignature: voucher?.signature ?? '0x' as Hex }))
-            return { data: encodeRetrievalV2Data(isOwner ? 'openRetrievalSessions' : 'openRetrievalSessionsSponsored', isOwner ? requests : sponsored), intent: { ids: ids.sessionIds, pin } }
+            const data = encodeRetrievalV2Data(isOwner ? 'openRetrievalSessions' : 'openRetrievalSessionsSponsored', isOwner ? requests : sponsored)
+            gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data }))
+            return { data, intent: { ids: ids.sessionIds, pin } }
           },
-          send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data }),
+          send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas }),
           receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
           reconcile: async (tx) => {
             const signal = AbortSignal.timeout(15_000)
@@ -91,10 +94,15 @@ export function useRetrievalSessions() {
       if (!sessions.length || sessions.length > 64) throw new Error('invalid confirmation wave')
       const { address, wallet, client } = requireWallet()
       const key = 'ack:' + await retrievalIntentKey([scope(), recoveryKey, sessions.map((s) => s.sessionId)])
+      let gas = 0n
       await withRetrievalLock(key, () => settleBrowserTransaction({
         key, store: browserRetrievalStore(), signal,
-        prepare: async () => ({ data: encodeConfirmRetrievalSessionsData(sessions.map((s) => s.sessionId)), intent: sessions.map((s) => s.sessionId) }),
-        send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data }),
+        prepare: async () => {
+          const data = encodeConfirmRetrievalSessionsData(sessions.map((s) => s.sessionId))
+          gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data }))
+          return { data, intent: sessions.map((s) => s.sessionId) }
+        },
+        send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas }),
         receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
         reconcile: async () => {
           const deadline = AbortSignal.timeout(15_000)
