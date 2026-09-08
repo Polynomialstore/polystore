@@ -1,0 +1,38 @@
+{
+  "status": "PASS",
+  "exit_code": 0,
+  "package_seconds": 1.705,
+  "runtime_commit": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+  "runtime_tracked_status": "",
+  "candidate_parent": "6976513088e67cb643b9a02a75564668ce9d8f27",
+  "source_comparison": "Candidate parent and runtime have identical tracked polystorechain, polystore_core and scripts/chain_go.sh bytes. The working candidate contributes only the two test files below through the Go overlay; production source is unchanged.",
+  "runtime_git_trees": {
+    "polystorechain": "0253e79d531087c16b1b879ec5960cd7ba3ec6de",
+    "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "polystorechain/vendor": "14e3026b93fcbb4d610d8978b19944098cf4c4cb"
+  },
+  "overlay_test_sources": {
+    "polystorechain/x/polystorechain/keeper/retrieval_challenge_completion_test.go": "8f2b45e30082bf80356b98a3bdfbffd3dfc03a60cb5914506f02bbbea1cb021d",
+    "polystorechain/x/polystorechain/keeper/retrieval_migration_test.go": "75ce1a948478594ffc1b206379299d383830130508d4e4bc795ddf5b50c26e53"
+  },
+  "cwd": "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation",
+  "command": "GOMAXPROCS=2 GOFLAGS=-p=2 CGO_LDFLAGS=-L/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release DYLD_LIBRARY_PATH=/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release ./scripts/chain_go.sh test -overlay=/tmp/polystore-254-execution/283-migration-checks/overlay.json ./x/polystorechain/keeper -run '^TestRetrievalV2(Migration.*|TerminalAdmissionAndMissingPinFailClosed|LegacyLiabilityQuarantineAndZeroFeeMissingPin|DeputyConfirmFirstConservesFees|RejectsCopiedProofBeforePayeePin)$' -count=1 -timeout=120s -v > /tmp/polystore-254-execution/283-migration-checks/current-green-final.log 2>&1",
+  "go_version": "go version go1.25.5 darwin/arm64",
+  "gocache": "/Users/michaelseiler/Library/Caches/go-build",
+  "gocache_override": false,
+  "dependency_mode": "scripts/chain_go.sh selects the existing reconstructed vendor tree with tracked corrections",
+  "native_library_path": "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+  "native_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+  "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "loader_prerequisite": "The initial loader failure is excluded from GREEN. Before the passing run, the ignored polystore_core/target/release/deps/libpolystore_core.dylib symlink was restored to ../libpolystore_core.dylib; native library bytes were unchanged.",
+  "files": {
+    "current-green-final.log": "4963c3593fd9e931b4ee8ed0eaf7eeaa2d5f885e88e00aa0def4df7f978734c5",
+    "migration-overlay.json": "6a05013f5751713f33d621ba089159b57664e67fdd46619828dc5f06e4e755d6"
+  },
+  "coverage": [
+    "16 legacy liability cases: OPEN, USER_CONFIRMED, PROOF_SUBMITTED with/without pin, each funded by explicit deal escrow, unspecified legacy escrow, requester or protocol budget",
+    "Activation and rejected calls preserve liabilities; original-expiry cancellation refunds once to the recorded source and removes pins without activity, failure or evidence credit",
+    "Historical COMPLETED retries remain terminal; zero-fee completion clears pins and invalid/missing pins cannot complete"
+  ],
+  "limits": "Real legacy opens and user confirmation plus real BeginBlock activation and public keeper handlers. Historical proof-submitted/completed records are explicitly synthetic persisted-state injection, not historical proof transaction execution. This focused keeper run does not establish delivery or network capacity. Earlier historical RED and current-green.log identities remain unchanged."
+}

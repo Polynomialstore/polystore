@@ -30,10 +30,8 @@
   "go_version": "go version go1.25.5 darwin/arm64",
   "files": {
     "current-overlay.json": "7732ca3d2e8817ccd00c06b2c80108a782ccaa3300eb5049302f12e7d97aecb3",
-    "completed-test-archive-cleanup.json": "3d3910e2f8684f544b118d6402834f7ac8725b80c6d2e3999349e2b8c65dd22b",
     "overlay.json": "c7a76b677e765985beb295975c22f49d7e5ac1b568e60f036ad084329053c06c",
     "all-red-guard.py": "184ce18a17a8e7552f6f7be6955a03a3c5917fa750bc32d827d3bbc6c04ee70a",
-    "completed-test-binary-cleanup.json": "c792c1a23195c9b3744c8fae390e5a022dcb61ef25cb6e2a01ed073140e01329",
     "README.md": "5d4cc533a00fefdad354579df1eab880f72e8a2021f6fc2e88d3ebdda1f7bd1f",
     "all-red.log": "8c65dcfa715598d8f304bb3be809d0cf6b8a9c5928b74ea8f8dbac0466e67ace",
     "retry-guard.json": "ec35f2216f3fa8f332d0581dacd79ff701bcb93fe8577096fe6fc608e6c7a651",

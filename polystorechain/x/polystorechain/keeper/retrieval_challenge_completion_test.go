@@ -67,6 +67,8 @@ func TestRetrievalV2DeputyConfirmFirstConservesFees(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, completed.Status)
 			require.True(t, completed.LockedFee.IsZero())
+			_, err = f.keeper.RetrievalSessionProofProvider.Get(ctx, opened.SessionId)
+			require.ErrorIs(t, err, collections.ErrNotFound, "successful completion removes the payee pin even when the fee is zero")
 			burn := (uint64(tc.price)*tc.bps + 9999) / 10000
 			paid := bank.accountBalances[deputy].AmountOf(sdk.DefaultBondDenom)
 			require.Equal(t, math.NewInt(tc.price-int64(burn)), paid)
@@ -78,6 +80,8 @@ func TestRetrievalV2DeputyConfirmFirstConservesFees(t *testing.T) {
 			_, err = server.ConfirmRetrievalSession(ctx, &types.MsgConfirmRetrievalSession{Creator: owner, SessionId: opened.SessionId})
 			require.NoError(t, err)
 			require.Len(t, bank.transfers, beforeTransfers)
+			_, err = f.keeper.RetrievalSessionProofProvider.Get(ctx, opened.SessionId)
+			require.ErrorIs(t, err, collections.ErrNotFound, "terminal retries cannot recreate the payee pin")
 			activity, err := f.keeper.DealActivityStates.Get(ctx, deal.Id)
 			require.NoError(t, err)
 			require.Equal(t, uint64(1), activity.SuccessfulRetrievalsTotal)

@@ -23,7 +23,11 @@
     "copied-proof-red.log": "d188dc3f84dcc0d1168c4bce8f42bd2a0f87d21cc0901cb42c22267471b313fd",
     "current-green.log": "bcfb5106dd999ecfdaad6dcc6bd4a5f65e0c762a745ec8d6c9b4715859ed89eb",
     "fees_test.go": "b79593a8ef37a831514fee2d6582f4cb3b72b3a7b106aca80566b6ed75b593a8",
-    "overlay-all.json": "4a3dad0fb68326105d127bdaf4111ed96d159445aded67c737333c662db30fe5"
+    "overlay-all.json": "4a3dad0fb68326105d127bdaf4111ed96d159445aded67c737333c662db30fe5",
+    "current-green-final.log": "4963c3593fd9e931b4ee8ed0eaf7eeaa2d5f885e88e00aa0def4df7f978734c5",
+    "migration-overlay.json": "6a05013f5751713f33d621ba089159b57664e67fdd46619828dc5f06e4e755d6",
+    "migration-provenance.json": "ae91d6d0120c19c5aac9ab89d0667fef140b38f340b02dba24decb119daf8d5c"
   },
-  "limits": "Actual baseline keeper package with temporary test overlays and cached module dependencies, not full original EVM/vendor deployment. RED safe assertions use original pre-v2 APIs; GREEN uses owning v2 and legacy-quarantine tests. No source mutation."
+  "limits": "Actual baseline keeper package with temporary test overlays and cached module dependencies, not full original EVM/vendor deployment. RED safe assertions use original pre-v2 APIs; GREEN uses owning v2 and legacy-quarantine tests. No source mutation.",
+  "additional_green": "migration-provenance.json records a separate focused run using the frozen runtime plus current topic-branch test overlays; the earlier current_commit and current-green.log describe the original evidence run."
 }
