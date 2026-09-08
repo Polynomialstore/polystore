@@ -9,6 +9,67 @@ import type { FrozenSession, PinnedGeneration, RetrievalWindow } from '../src/li
 // Use a separately started Vite server. An installed Chromium executable can
 // be selected without downloading Playwright's browser bundle.
 
+test('real OPFS checkpoint survives reload and excludes a second tab after a simulated lost ACK receipt', async ({ page, context }) => {
+  test.setTimeout(60_000)
+  await context.route('**/retrieval-checkpoint-harness', (route) => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><title>Retrieval recovery check</title>',
+  }))
+  await page.goto('/retrieval-checkpoint-harness')
+  const job = await page.evaluateHandle(async () => {
+    const checkpointPath = '/src/lib/retrievalCheckpoint.ts', transactionPath = '/src/lib/retrievalTransactions.ts'
+    const { openRetrievalCheckpoint } = await import(/* @vite-ignore */ checkpointPath) as typeof import('../src/lib/retrievalCheckpoint')
+    const { browserRetrievalStore, settleBrowserTransaction } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
+    const job = await openRetrievalCheckpoint(['runtime-recovery'], 1024n)
+    const bytes = Uint8Array.from({ length: 1024 }, (_, i) => (i * 17 + (i >>> 8)) & 255)
+    await job.output.write(0n, bytes); await job.output.flush()
+    const hash = `0x${'12'.repeat(32)}` as const
+    // Storage/transaction recovery only; chain receipts and ACK are simulated.
+    const sessions = [{ sessionId: hash, context: new Uint8Array([1, 2, 3]), pin: { dealId: 17n } }] as FrozenSession[]
+    job.prepare(0n, sessions)
+    try {
+      await settleBrowserTransaction({ store: browserRetrievalStore(), key: 'runtime-ack',
+        prepare: async () => ({ data: '0x1234', intent: [hash] }),
+        send: async () => { localStorage.setItem('runtime-sends', String(Number(localStorage.getItem('runtime-sends') ?? 0) + 1)); return hash },
+        receipt: async () => { throw new Error('simulated lost receipt') }, reconcile: async () => false,
+      })
+      throw new Error('uncertain receipt was accepted')
+    } catch (error) { if (!String(error).includes('outcome is unresolved')) throw error }
+    return job
+  })
+  const id = await job.evaluate((value) => value.state.id)
+  const other = await context.newPage()
+  await other.goto('/retrieval-checkpoint-harness')
+  expect(await other.evaluate(async () => {
+    const path = '/src/lib/retrievalCheckpoint.ts'
+    const { openRetrievalCheckpoint } = await import(/* @vite-ignore */ path) as typeof import('../src/lib/retrievalCheckpoint')
+    try { const unexpected = await openRetrievalCheckpoint(['runtime-recovery'], 1024n); await unexpected.retain(); return 'unexpected acquisition' }
+    catch (error) { return String(error) }
+  })).toContain('already running in another tab')
+  await job.evaluate(async (value) => value.retain())
+  await page.reload()
+  const result = await page.evaluate(async () => {
+    const checkpointPath = '/src/lib/retrievalCheckpoint.ts', transactionPath = '/src/lib/retrievalTransactions.ts'
+    const { openRetrievalCheckpoint } = await import(/* @vite-ignore */ checkpointPath) as typeof import('../src/lib/retrievalCheckpoint')
+    const { browserRetrievalStore, settleBrowserTransaction } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
+    const job = await openRetrievalCheckpoint(['runtime-recovery'], 1024n), store = browserRetrievalStore()
+    try {
+      const session = job.state.pending?.sessions[0]
+      if (!session || session.pin.dealId !== 17n || !(session.context instanceof Uint8Array)) throw new Error('frozen session checkpoint did not round-trip')
+      const bytes = new Uint8Array(await (await job.output.file()).arrayBuffer())
+      if (bytes.length !== 1024 || bytes.some((b, i) => b !== ((i * 17 + (i >>> 8)) & 255))) throw new Error('persisted bytes changed')
+      await settleBrowserTransaction({ store, key: 'runtime-ack',
+        prepare: async () => { throw new Error('retry prepared a replacement') }, send: async () => { throw new Error('retry sent a replacement') },
+        receipt: async (hash) => ({ status: 'success', transactionHash: hash, blockNumber: 9n }), reconcile: async () => false,
+      })
+      job.complete(0n, [{ sessionId: session.sessionId, state: 'committed' }])
+      store.remove('runtime-ack'); job.cleaned(); job.finish()
+      return { id: job.state.id, through: String(job.state.through), sends: Number(localStorage.getItem('runtime-sends')), bytes: bytes.length }
+    } finally { await job.output.cleanup(); localStorage.removeItem('runtime-sends') }
+  })
+  expect(result).toEqual({ id, through: '0', sends: 1, bytes: 1024 })
+  await other.close()
+})
+
 test('secured selected window uses real Chromium Worker/WASM and OPFS before simulated ACK', async ({ page }) => {
   test.setTimeout(120_000)
   const root = new URL('../../testdata/retrieval-window-v2/', import.meta.url)
