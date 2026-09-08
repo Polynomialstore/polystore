@@ -13,6 +13,22 @@ CORE_DIR="$ROOT_DIR/polystore_core"
 MODULE_CLI="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-nilchain}"
 ARTIFACT_HELPER="$ROOT_DIR/scripts/retrieval_bench_artifact.py"
 MODE="${POLYSTORE_BENCH_MODE:-legacy-serial}"
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  cat <<'HELP'
+Default: legacy-serial fixture/latency run; optional --keep-home.
+Four-validator lifecycle preparation (no workload or capacity qualification):
+  POLYSTORE_BENCH_MODE=four-validator-lifecycle scripts/bench_retrieval_sessions.sh \
+    --binary /absolute/polystorechaind --library /absolute/libpolystore_core.dylib \
+    --home /new/private/run-directory
+This opt-in mode retains its homes, logs and evidence.json after an owned-node
+stop/restart check. It requires the fixed local ports documented by --help in:
+  python3 scripts/retrieval_bench_artifact.py four-validator-lifecycle --help
+HELP
+  exit 0
+fi
+if [ "$MODE" = "four-validator-lifecycle" ]; then
+  exec python3 "$ARTIFACT_HELPER" four-validator-lifecycle "$@"
+fi
 FIXTURE_DATA="${POLYSTORE_BENCH_FIXTURE_DATA:-nonconstant}"
 EXECUTION_BUDGET_MS="${POLYSTORE_BENCH_EXECUTION_BUDGET_MS:-700}"
 MEMORY_CEILING_BYTES="${POLYSTORE_BENCH_MEMORY_CEILING_BYTES:-2147483648}"

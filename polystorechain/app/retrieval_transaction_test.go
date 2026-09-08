@@ -36,41 +36,11 @@ func TestRetrievalSessionSignedTransactionRollback(t *testing.T) {
 	if runGenesisTestInFreshProcess(t) {
 		return
 	}
-	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir(), "evm.evm-chain-id": evmtypes.DefaultEVMChainID}, baseapp.SetChainID(SimAppChainID))
 	key := secp256k1.GenPrivKeyFromSecret([]byte("retrieval transaction rollback owner"))
+	a := newRetrievalTransactionApp(t, key)
 	owner := sdk.AccAddress(key.PubKey().Address())
 	provider := sdk.AccAddress(bytes.Repeat([]byte{0x23}, 20))
 	module := authtypes.NewModuleAddress(types.ModuleName)
-	valSet, err := simtestutil.CreateRandomValidatorSet()
-	require.NoError(t, err)
-	genesis, err := simtestutil.GenesisStateWithValSet(a.AppCodec(), a.DefaultGenesis(), valSet,
-		[]authtypes.GenesisAccount{authtypes.NewBaseAccount(owner, key.PubKey(), 0, 0)},
-		banktypes.Balance{Address: owner.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin("stake", 1000000), sdk.NewInt64Coin("aatom", 10000000))},
-		banktypes.Balance{Address: module.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin("stake", 100))})
-	require.NoError(t, err)
-	var bank banktypes.GenesisState
-	a.AppCodec().MustUnmarshalJSON(genesis[banktypes.ModuleName], &bank)
-	bank.DenomMetadata = append(bank.DenomMetadata, banktypes.Metadata{
-		Description: "EVM fee token metadata", Base: "aatom", Display: "atom", Name: "Atom", Symbol: "ATOM",
-		DenomUnits: []*banktypes.DenomUnit{{Denom: "aatom", Exponent: 0, Aliases: []string{"uatom"}}, {Denom: "atom", Exponent: 18}},
-	})
-	genesis[banktypes.ModuleName] = a.AppCodec().MustMarshalJSON(&bank)
-	params := types.DefaultParams()
-	params.RetrievalV2ActivationHeight = 1
-	params.BaseRetrievalFee = sdk.NewInt64Coin("stake", 3)
-	params.RetrievalPricePerBlob = sdk.NewInt64Coin("stake", 7)
-	genesis[types.ModuleName] = a.AppCodec().MustMarshalJSON(&types.GenesisState{Params: params})
-	mint := minttypes.DefaultGenesisState()
-	mint.Minter.Inflation = sdkmath.LegacyZeroDec()
-	mint.Params.InflationRateChange = sdkmath.LegacyZeroDec()
-	mint.Params.InflationMin = sdkmath.LegacyZeroDec()
-	mint.Params.InflationMax = sdkmath.LegacyZeroDec()
-	genesis[minttypes.ModuleName] = a.AppCodec().MustMarshalJSON(mint)
-	rawGenesis, err := json.Marshal(genesis)
-	require.NoError(t, err)
-	_, err = a.InitChain(&abci.RequestInitChain{ChainId: SimAppChainID, AppStateBytes: rawGenesis,
-		ConsensusParams: &cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: types.MaxRetrievalV2BlockBytes}}})
-	require.NoError(t, err)
 	setup := a.NewContextLegacy(false, cmtproto.Header{Height: 1, ChainID: SimAppChainID})
 	deal := types.Deal{Id: 1, Owner: owner.String(), Providers: []string{provider.String()}, ManifestRoot: bytes.Repeat([]byte{1}, 32),
 		TotalMdus: 3, WitnessMdus: 1, Size_: 1024, RedundancyMode: 1, EscrowBalance: sdkmath.NewInt(100), StartBlock: 1, EndBlock: 100,
@@ -167,4 +137,43 @@ func runGenesisTestInFreshProcess(t *testing.T) bool {
 	require.NoError(t, err, "%s", output)
 	t.Logf("%s", output)
 	return true
+}
+
+// Shared full-genesis setup for signed retrieval transaction regressions.
+func newRetrievalTransactionApp(t *testing.T, key *secp256k1.PrivKey) *App {
+	t.Helper()
+	a := New(log.NewNopLogger(), dbm.NewMemDB(), nil, true, simtestutil.AppOptionsMap{"home": t.TempDir(), "evm.evm-chain-id": evmtypes.DefaultEVMChainID}, baseapp.SetChainID(SimAppChainID))
+	owner := sdk.AccAddress(key.PubKey().Address())
+	module := authtypes.NewModuleAddress(types.ModuleName)
+	valSet, err := simtestutil.CreateRandomValidatorSet()
+	require.NoError(t, err)
+	genesis, err := simtestutil.GenesisStateWithValSet(a.AppCodec(), a.DefaultGenesis(), valSet,
+		[]authtypes.GenesisAccount{authtypes.NewBaseAccount(owner, key.PubKey(), 0, 0)},
+		banktypes.Balance{Address: owner.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin("stake", 1000000), sdk.NewInt64Coin("aatom", 10000000))},
+		banktypes.Balance{Address: module.String(), Coins: sdk.NewCoins(sdk.NewInt64Coin("stake", 100))})
+	require.NoError(t, err)
+	var bank banktypes.GenesisState
+	a.AppCodec().MustUnmarshalJSON(genesis[banktypes.ModuleName], &bank)
+	bank.DenomMetadata = append(bank.DenomMetadata, banktypes.Metadata{
+		Description: "EVM fee token metadata", Base: "aatom", Display: "atom", Name: "Atom", Symbol: "ATOM",
+		DenomUnits: []*banktypes.DenomUnit{{Denom: "aatom", Exponent: 0, Aliases: []string{"uatom"}}, {Denom: "atom", Exponent: 18}},
+	})
+	genesis[banktypes.ModuleName] = a.AppCodec().MustMarshalJSON(&bank)
+	params := types.DefaultParams()
+	params.RetrievalV2ActivationHeight = 1
+	params.BaseRetrievalFee = sdk.NewInt64Coin("stake", 3)
+	params.RetrievalPricePerBlob = sdk.NewInt64Coin("stake", 7)
+	genesis[types.ModuleName] = a.AppCodec().MustMarshalJSON(&types.GenesisState{Params: params})
+	mint := minttypes.DefaultGenesisState()
+	mint.Minter.Inflation = sdkmath.LegacyZeroDec()
+	mint.Params.InflationRateChange = sdkmath.LegacyZeroDec()
+	mint.Params.InflationMin = sdkmath.LegacyZeroDec()
+	mint.Params.InflationMax = sdkmath.LegacyZeroDec()
+	genesis[minttypes.ModuleName] = a.AppCodec().MustMarshalJSON(mint)
+	rawGenesis, err := json.Marshal(genesis)
+	require.NoError(t, err)
+	_, err = a.InitChain(&abci.RequestInitChain{ChainId: SimAppChainID, AppStateBytes: rawGenesis,
+		ConsensusParams: &cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: types.MaxRetrievalV2BlockBytes}}})
+	require.NoError(t, err)
+	return a
 }
