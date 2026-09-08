@@ -3,7 +3,8 @@
 Build/test the chain with `../scripts/chain_go.sh build|test|vet|install ...`
 from this directory. The wrapper selects vendor mode even when the environment
 sets `GOFLAGS=-mod=mod`, reconstructs dependencies when go.mod/go.sum change,
-and preserves tracked vendor files including uncommitted edits. Run
+and preserves tracked source patches including uncommitted edits. Generated
+`vendor/modules.txt` is retained from the new dependency graph. Run
 `../scripts/chain_go.sh vendor` to force reconstruction. Stage newly added vendor
 patch files before reconstruction. Use one build/preparation process per checkout.
 Other Go modules keep their own dependency mode.
