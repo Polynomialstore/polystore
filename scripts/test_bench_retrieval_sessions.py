@@ -1066,6 +1066,46 @@ class PreparedRetrievalProofTest(unittest.TestCase):
         self.assertEqual(report["phases"]["measurement"]["offered"], 0)
         self.assertEqual(report["phases"]["measurement"]["inventory_depleted"], 1)
 
+    def test_collected_warmup_is_compared_with_measurement_offer_time(self):
+        class ImmediateExecutor:
+            def __init__(self, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def submit(self, function, job):
+                future = Future()
+                future.set_result(function(job))
+                return future
+
+        for offset, unknown, overlap in ((0, False, True), (100, False, False), (100, True, True)):
+            with self.subTest(offset=offset, unknown=unknown):
+                now = [1_000_000_000]
+                warmup = self.operation()
+                warmup["phase"] = "warmup"
+                empty = self.operation("empty", prepared=False)
+                empty["offered_offset_ns"] = offset
+                def submit(job):
+                    now[0] += 10
+                    return dict(outcome="unknown", error="lost response") if unknown else self.submit(job)
+                def advance(seconds):
+                    now[0] += min(10, max(1, round(seconds * 1e9)))
+                with patch.object(artifact, "ThreadPoolExecutor", ImmediateExecutor), \
+                     patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+                     patch.object(artifact.time, "sleep", side_effect=advance), \
+                     patch.object(artifact, "scheduled_transaction", side_effect=submit):
+                    report = self.run_operations([warmup, empty])
+                warmup_row, = self.rows("transactions")
+                empty_row = next(row for row in self.rows("operations") if row["inventory_depleted"])
+                # Completion was already collected when the depleted offer was
+                # admitted; the absolute offer time still decides overlap.
+                self.assertLessEqual(warmup_row["finished_ns"],
+                                     report["started_ns"] + offset + empty_row["terminal_latency_ns"])
+                self.assertEqual(warmup_row["finished_ns"] > report["started_ns"] + offset, offset == 0)
+                self.assertEqual(report["warmup_overlapped_measurement"], overlap)
+                self.assertEqual(report["proof_submitted"], 0 if unknown else 1)
+                self.assertEqual(report["phases"]["measurement"]["offered"], 0)
+                self.assertEqual(report["phases"]["measurement"]["inventory_depleted"], 1)
+                self.assertEqual(bool(report["quarantined_signers"]), unknown)
+
     def test_invalid_preparation_never_reaches_submission(self):
         for fault in ("status", "anchor", "context", "seed", "expiry", "digest", "path", "signer", "confirm"):
             op = self.operation(fault)
