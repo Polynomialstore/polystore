@@ -1,0 +1,1137 @@
+{
+  "schema_version": 1,
+  "mode": "four-validator-lifecycle",
+  "qualification": false,
+  "status": "supplementary_final_audit_recovery_passed",
+  "topology": "four processes on one local host",
+  "workload": "none",
+  "transactions_submitted": 0,
+  "chain_id": "polystore_260-1",
+  "commands": [
+    [
+      "/private/tmp/polystore-254-execution/260-saturation-polystorechaind",
+      "start",
+      "--home",
+      "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator0",
+      "--rpc.laddr",
+      "tcp://127.0.0.1:26657",
+      "--p2p.laddr",
+      "tcp://127.0.0.1:26656",
+      "--grpc.address",
+      "127.0.0.1:9090",
+      "--api.enable=true",
+      "--grpc-web.enable=false",
+      "--json-rpc.enable=false",
+      "--minimum-gas-prices",
+      "0.001aatom"
+    ],
+    [
+      "/private/tmp/polystore-254-execution/260-saturation-polystorechaind",
+      "start",
+      "--home",
+      "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator1",
+      "--rpc.laddr",
+      "tcp://127.0.0.1:26654",
+      "--p2p.laddr",
+      "tcp://127.0.0.1:26653",
+      "--grpc.address",
+      "127.0.0.1:9088",
+      "--api.enable=true",
+      "--grpc-web.enable=false",
+      "--json-rpc.enable=false",
+      "--minimum-gas-prices",
+      "0.001aatom"
+    ],
+    [
+      "/private/tmp/polystore-254-execution/260-saturation-polystorechaind",
+      "start",
+      "--home",
+      "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator2",
+      "--rpc.laddr",
+      "tcp://127.0.0.1:26651",
+      "--p2p.laddr",
+      "tcp://127.0.0.1:26650",
+      "--grpc.address",
+      "127.0.0.1:9086",
+      "--api.enable=true",
+      "--grpc-web.enable=false",
+      "--json-rpc.enable=false",
+      "--minimum-gas-prices",
+      "0.001aatom"
+    ],
+    [
+      "/private/tmp/polystore-254-execution/260-saturation-polystorechaind",
+      "start",
+      "--home",
+      "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator3",
+      "--rpc.laddr",
+      "tcp://127.0.0.1:26648",
+      "--p2p.laddr",
+      "tcp://127.0.0.1:26647",
+      "--grpc.address",
+      "127.0.0.1:9084",
+      "--api.enable=true",
+      "--grpc-web.enable=false",
+      "--json-rpc.enable=false",
+      "--minimum-gas-prices",
+      "0.001aatom"
+    ]
+  ],
+  "nodes": [
+    {
+      "home": "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator0",
+      "rpc": 26657,
+      "p2p": 26656,
+      "grpc": 9090,
+      "api": 1317,
+      "metrics": 26660,
+      "node_id": "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604",
+      "validator_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "lE13shR/Aq8jKz0Q5e0DrFZVceW2hnYNryLZJf0s5cg="
+      },
+      "config_sha256": "24d388e05f3dd887b12f20f2be9353132e0bc485083fdfbf60df50c6055d01c4",
+      "app_config_sha256": "766e4cf765db4467e73dc7405c862fb6fc9201127e89c4e496428c1be169e682"
+    },
+    {
+      "home": "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator1",
+      "rpc": 26654,
+      "p2p": 26653,
+      "grpc": 9088,
+      "api": 1316,
+      "metrics": 26661,
+      "node_id": "debc88b826737ecd83079a007f380ca8d0ce6047",
+      "validator_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "sVEAX5b8whU0gE87Jfj58IE2h0eNzI4jO4Tk43FHqxI="
+      },
+      "config_sha256": "09d62e291ae4958f7b174eff4cde856d17ed9968c3ba03347e9e5071db8f78bc",
+      "app_config_sha256": "719a18baa446f603c88d092c5132794fd4dc375bac5007e001a628cc17a64e60"
+    },
+    {
+      "home": "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator2",
+      "rpc": 26651,
+      "p2p": 26650,
+      "grpc": 9086,
+      "api": 1315,
+      "metrics": 26662,
+      "node_id": "5a88db830836194e1f45e961dbee8fc25d77f86e",
+      "validator_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "T0MIhHNQoi2N8Qnk3dhtkcdwaY425LLPkkCekALB7O4="
+      },
+      "config_sha256": "655627cb8aeed8273cfab32bfa35f445776a144f9229d4fff8a02a41a8a919d3",
+      "app_config_sha256": "f3d743f6480f1515c9b2d9b0eee289a3c8eac4fd2d16933192644fafc6bd12ca"
+    },
+    {
+      "home": "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/nodes/validator3",
+      "rpc": 26648,
+      "p2p": 26647,
+      "grpc": 9084,
+      "api": 1314,
+      "metrics": 26663,
+      "node_id": "26c241e1c8e27c3b508236079699ba36dd2835fd",
+      "validator_key": {
+        "type": "tendermint/PubKeyEd25519",
+        "value": "gcsEY8Uot69PNh4SOMkFlIX5dVSzK5mSAoKJKxCKbq0="
+      },
+      "config_sha256": "bdfbb803ac0b90e6af6d533c7cf4866d5b4645d0587a909c74fafa6b27198328",
+      "app_config_sha256": "9e87c60e6dbfac8b64cdf507be746d4f7f23723a3943db8061292eeea7226085"
+    }
+  ],
+  "signers": {
+    "owner0": "nil16cgz72kyz9eecnu6rwj525z660uhwxvtv3xyw3",
+    "owner1": "nil1cgm9x6curfau8scnl0f839ezwq8jquk5gekuh5",
+    "owner2": "nil1wfjsncynneuq8wee8ja52kkjqjxw0z9u569wcm",
+    "owner3": "nil10y7kv0jqy2e7fnwuv39yga53u59j3e4tw4vdqc",
+    "owner4": "nil19f33zp448mfswl3stpg4gffxlz3xay4sykwekf",
+    "owner5": "nil14d7qxv68wzc4ucepdpar0p5m2c05zmtpz74lh9",
+    "owner6": "nil19pvhdxedkfw9p69nvjp3udu6fdsjr8uaqgr0at",
+    "owner7": "nil1urhnqvhucz892svaeenhcawefpwlvwc73zdmh7",
+    "owner8": "nil1nhx28qnwgszux0xmmw0nwlz6kt27fmzekzlv3f",
+    "owner9": "nil1ft849z55wrg63zz99td435q6f52hmks69uecut",
+    "owner10": "nil1sdwr82dhlt3ekx7d5eufqxdn8c86k5e7e382n6",
+    "owner11": "nil1ph2fkegehvx80rxvg2hvtpcja8fk37gm4ryc03",
+    "owner12": "nil19qhsjfmlm8dggx32fsx88uhc39w02tu9wspax6",
+    "owner13": "nil1fdlvqlwj0t8ngejwt8dlkf2dgna0u3eeuqlk7g",
+    "owner14": "nil1j9d7pdcaku9azu65kjn7pzgpksy9lg6cpskm8f",
+    "owner15": "nil1muv4r2zgdvvc2f0als0yquerh0zs8xmmg9uk96",
+    "provider0": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+    "provider1": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+    "provider2": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+    "provider3": "nil1y2kxk0k7u0cm498t0uw8yh6uqsdwkp72x4t9r4",
+    "provider4": "nil1f7xtehaev006vy03alpc4lzxfe953u882aay2a",
+    "provider5": "nil1ke5afxre9ervaep24hk52q4xq249fzp5qew572",
+    "provider6": "nil1ywd30plxnc03ujn4k43pxt36kcuxyl82cf8w5s",
+    "provider7": "nil1xjnl34lc79ff7p67lcej4kgjzwc5xwxxvl56fv",
+    "provider8": "nil16ptz8uk386yacvgmpwusvwvntd8lz3r4etx5ve",
+    "provider9": "nil188cpfzy8wmytc97hj23g6yq90gheqs5u8n6pz5",
+    "provider10": "nil1uufyg33dnexjhljg0zhjdrs5wp3gqdmv2k9ltt",
+    "provider11": "nil1y2gq0tag6xf3z0k3xc6pef08jtvulecjsc3wlw",
+    "control": "nil16g897puk4lkedzqunf3y9eyjae3h237lzx75rc"
+  },
+  "validator_resources": [
+    {
+      "pid": 92278,
+      "node_id": "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604",
+      "phase": "/tmp/polystore-254-execution/260-saturation-final-c6-audit-recovery1/validator-d74679ea55e1b8e504c4d5f1b7ec4642c20b5604",
+      "peak_rss_bytes": 253050880,
+      "source": "wait4 ru_maxrss",
+      "raw_ru_maxrss": 253050880,
+      "raw_unit": "bytes",
+      "returncode": 0
+    },
+    {
+      "pid": 92279,
+      "node_id": "debc88b826737ecd83079a007f380ca8d0ce6047",
+      "phase": "/tmp/polystore-254-execution/260-saturation-final-c6-audit-recovery1/validator-debc88b826737ecd83079a007f380ca8d0ce6047",
+      "peak_rss_bytes": 253624320,
+      "source": "wait4 ru_maxrss",
+      "raw_ru_maxrss": 253624320,
+      "raw_unit": "bytes",
+      "returncode": 0
+    },
+    {
+      "pid": 92280,
+      "node_id": "5a88db830836194e1f45e961dbee8fc25d77f86e",
+      "phase": "/tmp/polystore-254-execution/260-saturation-final-c6-audit-recovery1/validator-5a88db830836194e1f45e961dbee8fc25d77f86e",
+      "peak_rss_bytes": 238977024,
+      "source": "wait4 ru_maxrss",
+      "raw_ru_maxrss": 238977024,
+      "raw_unit": "bytes",
+      "returncode": 0
+    },
+    {
+      "pid": 92281,
+      "node_id": "26c241e1c8e27c3b508236079699ba36dd2835fd",
+      "phase": "/tmp/polystore-254-execution/260-saturation-final-c6-audit-recovery1/validator-26c241e1c8e27c3b508236079699ba36dd2835fd",
+      "peak_rss_bytes": 244973568,
+      "source": "wait4 ru_maxrss",
+      "raw_ru_maxrss": 244973568,
+      "raw_unit": "bytes",
+      "returncode": 0
+    }
+  ],
+  "limits": [
+    "No retrieval, delivery, adversarial transaction or capacity qualification",
+    "Fixed-height bank state only; no retrieval economic conservation claim",
+    "Restart preserves homes; no export/import or migration claim"
+  ],
+  "provenance": {
+    "source_checkout": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "binary": "/private/tmp/polystore-254-execution/260-saturation-polystorechaind",
+    "native_library": "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation/polystore_core/target/release/libpolystore_core.dylib",
+    "binary_sha256": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba",
+    "native_library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+    "gateway_binary": "/private/tmp/polystore-254-execution/260-saturation-gateway",
+    "gateway_sha256": "dcdafc61ad6e49334095fa573399728675b3979a5706517d6dbe400380f4ebf1",
+    "driver_sha256": "833bbffcaad53377c16747d25213cafcb1a3f1f5cf2b8e5c1814cecb9f0c3ba5",
+    "cli_binary": "/private/tmp/polystore-254-execution/260-final-polystore_cli",
+    "cli_sha256": "78f520b01226feef0788a3ad84aa1ba830bf9fd2031956d22dc7649e4c80b370",
+    "product_source": "/Users/michaelseiler/dev/polynomialstore/polystore-260-saturation",
+    "product_source_commit": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "product_source_status": "",
+    "cli_source_sha256": "0e3c4c15c3569afb402633d329e308e770b7e6e0d4df9f9fdfb67ff72aca98d2",
+    "curl_binary": "/usr/bin/curl",
+    "curl_sha256": "d9431c1ea04612844996bcbdf11d052afdc560116718f338ae6365ddb417e155",
+    "artifact_source_match": "supplied binaries/library; build correspondence not attested"
+  },
+  "genesis_sha256": "85e1a49423c51e87ff2b176acf4f1a7eb7d6d450bfd201eba294d2cda654b768",
+  "profile": {
+    "consensus": {
+      "block": {
+        "max_bytes": "2097152",
+        "max_gas": "64000000"
+      }
+    },
+    "audit_profile": "c6",
+    "timeout_commit": "1s",
+    "execution_budget_ms": 700,
+    "memory_ceiling_per_validator_bytes": 2147483648,
+    "budgets_measured": false,
+    "GOMAXPROCS": "2"
+  },
+  "original_evidence": "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/evidence.json",
+  "original_status": "failed",
+  "scope": "Post-measurement paused-state restart and audit finalization only. Original 900-second measurements and failed status remain unchanged. No retrieval offers replayed.",
+  "started_unix_ns": 1788895344410743000,
+  "disk_floor_bytes": 805306368,
+  "original_artifact_hashes_before": {
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/evidence.json": "9d1868dd37bf141be8b2cc85519dcfbd2ede3676a1dd185d1599d1e455627284",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained.sqlite": "9c5b7c2fe99a937dc92e0839bc27c53ab8b577c5f10e4a024227c2188a3822cc",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/warmup.sqlite": "2bec4b00e04d184363c60e3fe30e05109dec414f10b5a8169124d8a792e26010",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained-blocks.jsonl": "0b9762d449bde6fa9f8260e85d758005ebe2c08a611254e8bd3c0e3340095c24",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained-audits.jsonl": "fd14ef17236856292fa3ce28f0f02928f52b1bb2e0e2856a6e19ba039f5262f0",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-d74679ea55e1b8e504c4d5f1b7ec4642c20b5604.jsonl": "1d4a8a9253afa36c21bfeb72cde80690e44457a69e1672e9f8540288894db0fe",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-debc88b826737ecd83079a007f380ca8d0ce6047.jsonl": "57e3d188b616750df0bce0f3b3e2063ed3896324eb988af1229f16fbcea42a19",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-5a88db830836194e1f45e961dbee8fc25d77f86e.jsonl": "328260432c1ac66883c46c6575d543c70f5afa63c16e38bc09750871314c50d6",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-26c241e1c8e27c3b508236079699ba36dd2835fd.jsonl": "acdc3979fbfa5614432e8057cba8c8bfbd231eb4cadf6316cc153cc4260c1789"
+  },
+  "recovery_script_sha256": "bcc7018795bd6f7da0f61a8996ea585a189e61f1754708555d42e6c300e0c687",
+  "signing_state_heights_before": {
+    "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": "2824",
+    "debc88b826737ecd83079a007f380ca8d0ce6047": "2824",
+    "5a88db830836194e1f45e961dbee8fc25d77f86e": "2824",
+    "26c241e1c8e27c3b508236079699ba36dd2835fd": "2824"
+  },
+  "target_epoch": 29,
+  "target_state_height": 2901,
+  "expected_samples": 96,
+  "minimum_free_bytes": 998117376,
+  "recovery_initial_height": 2823,
+  "audit_before_provider_restart": {
+    "height": 2823,
+    "nodes": [
+      {
+        "node_id": "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8DAA==",
+              "accepted_count": "18",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "debc88b826737ecd83079a007f380ca8d0ce6047",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8DAA==",
+              "accepted_count": "18",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "5a88db830836194e1f45e961dbee8fc25d77f86e",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8DAA==",
+              "accepted_count": "18",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "26c241e1c8e27c3b508236079699ba36dd2835fd",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8BAA==",
+              "accepted_count": "17",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "//8DAA==",
+              "accepted_count": "18",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": false
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      }
+    ],
+    "accepted_samples": 52,
+    "required_samples": 96
+  },
+  "measured_fixed_height_app_hash_preserved": true,
+  "restarted_provider_pids": [
+    92282,
+    92283,
+    92284
+  ],
+  "final_measured_epoch_audit": {
+    "height": 2901,
+    "nodes": [
+      {
+        "node_id": "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "debc88b826737ecd83079a007f380ca8d0ce6047",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "5a88db830836194e1f45e961dbee8fc25d77f86e",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      },
+      {
+        "node_id": "26c241e1c8e27c3b508236079699ba36dd2835fd",
+        "audits": {
+          "0": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 0,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhU09JtjsNu63VSbiH6b+oms+1+yFTT0m2Ow27rdVJuIfpv6iaz7X7IAgAAAAIAAAABAAAAAAAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "1": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1fkz4jm9qz0ugwjmk522e35hj37gfpjxyjnctml",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 1,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlhNhVlsoBP4h0t2opWY0vKPkJDIxE2FWWygE/iHS3ailZjS8o+QkMjEAgAAAAIAAAABAAAAAQAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          },
+          "2": {
+            "audit": {
+              "epoch_id": "29",
+              "assignment": {
+                "deal_id": "0",
+                "provider": "nil1llvs3an4f77gl5h4648x2mfh569kjtrg469u7m",
+                "manifest_root": "wwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlg=",
+                "snapshot": {
+                  "chain_id": "polystore_260-1",
+                  "setup_digest": "05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrc=",
+                  "generation": "1",
+                  "layout": 2,
+                  "k": 2,
+                  "m": 1,
+                  "slot": 2,
+                  "metadata_mdus": "2",
+                  "user_mdus": "1",
+                  "deal_end": "100007"
+                },
+                "kind": 2,
+                "deal_start": "7"
+              },
+              "sample_count": "32",
+              "coverage": "/////w==",
+              "accepted_count": "32",
+              "missed_epochs": "0"
+            },
+            "epoch_length": "100",
+            "canonical_context": "AAAAHnBvbHlzdG9yZS9jaGFsbGVuZ2UtY29udGV4dC92MgAAAAIAAAAPcG9seXN0b3JlXzI2MC0x05ufLQR8ydyi3ljyZLaglEjM0025Z4gaZxPqys8PJrcCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABwwSweBZ2GIhAY7awoCO6fc1YyF8UABb/zcZH96EBTlj/2Qj2dU+8j9L11U5lbTemi2ksaP/ZCPZ1T7yP0vXVTmVtN6aLaSxoAgAAAAIAAAABAAAAAgAAAAAAAAACAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAdAAAAAAAAAGQAAAAAAAAAIAAAAAAAAArwAAAAAAAACvEAAAAAAAAK8gAAAAAAAAtUAAAAAAABhqc=",
+            "seed": "41iAEosb/bN7CLk1Rnj4WMLr9/o4YPQftKorO2UV8iQ=",
+            "finalized": true
+          }
+        },
+        "anchor_block_hash": "E35880128B1BFDB37B08B9354678F858C2EBF7FA3860F41FB4AA2B3B6515F224"
+      }
+    ],
+    "accepted_samples": 96,
+    "required_samples": 96
+  },
+  "final_app_hash": "D78A78EA16C947E8F382A6B9F8F1A13E901477FD163064A7083531F7EBF85FD7",
+  "final_app_hash_block_height": 2902,
+  "all_four_final_headers_agree": true,
+  "stopped_after_height": 2902,
+  "frozen_artifacts_unchanged": true,
+  "original_artifact_hashes_after": {
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/evidence.json": "9d1868dd37bf141be8b2cc85519dcfbd2ede3676a1dd185d1599d1e455627284",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained.sqlite": "9c5b7c2fe99a937dc92e0839bc27c53ab8b577c5f10e4a024227c2188a3822cc",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/warmup.sqlite": "2bec4b00e04d184363c60e3fe30e05109dec414f10b5a8169124d8a792e26010",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained-blocks.jsonl": "0b9762d449bde6fa9f8260e85d758005ebe2c08a611254e8bd3c0e3340095c24",
+    "/tmp/polystore-254-execution/260-saturation-final-c6-retry1/sustained-audits.jsonl": "fd14ef17236856292fa3ce28f0f02928f52b1bb2e0e2856a6e19ba039f5262f0",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-d74679ea55e1b8e504c4d5f1b7ec4642c20b5604.jsonl": "1d4a8a9253afa36c21bfeb72cde80690e44457a69e1672e9f8540288894db0fe",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-debc88b826737ecd83079a007f380ca8d0ce6047.jsonl": "57e3d188b616750df0bce0f3b3e2063ed3896324eb988af1229f16fbcea42a19",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-5a88db830836194e1f45e961dbee8fc25d77f86e.jsonl": "328260432c1ac66883c46c6575d543c70f5afa63c16e38bc09750871314c50d6",
+    "/private/tmp/polystore-254-execution/260-saturation-final-c6-retry1/commit-26c241e1c8e27c3b508236079699ba36dd2835fd.jsonl": "acdc3979fbfa5614432e8057cba8c8bfbd231eb4cadf6316cc153cc4260c1789"
+  },
+  "original_measurement_artifacts_unchanged": true,
+  "finished_unix_ns": 1788895451785555000
+}

@@ -1,0 +1,7 @@
+{
+  "initial_free_bytes": 2420359168,
+  "minimum_free_bytes": 752521216,
+  "disk_floor_bytes": 805306368,
+  "stopped_reason": "disk floor or wall deadline",
+  "returncode": -2
+}

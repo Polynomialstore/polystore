@@ -1,0 +1,231 @@
+{
+  "qualification": false,
+  "run_status": "failed",
+  "run_error": "interrupted by signal 15",
+  "measurement_seconds": 900,
+  "steps": [
+    {
+      "offered_rate": 0.25,
+      "seconds": 180,
+      "offered": 45,
+      "eventual_outcomes": {
+        "committed_success": 45
+      },
+      "committed_success_observed_in_step": 45,
+      "observed_committed_sessions_per_second": 0.25,
+      "cohort_outcomes_recorded_at_or_after_step_end": 0,
+      "all_cohorts_pending_at_step_end": 0,
+      "unknown_recorded_by_step_end": 0,
+      "offered_to_started_p95_ms": 3.862,
+      "admitted_queue_p95_ms": 0.028,
+      "commit_metrics": {
+        "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.0977028330598864160289095159916513073273087104348847086970683023385738255575752131615077879917964",
+          "budget_700ms_established": true
+        },
+        "debc88b826737ecd83079a007f380ca8d0ce6047": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.1089342080597447437780650516540935093323191974803387462625501310907414428019112280930360925406034",
+          "budget_700ms_established": true
+        },
+        "5a88db830836194e1f45e961dbee8fc25d77f86e": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.1056244170608592128145200758523563450734057086826871854810880847525951705608736424428080202448021",
+          "budget_700ms_established": true
+        },
+        "26c241e1c8e27c3b508236079699ba36dd2835fd": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.1030822500544480866257293421930565590376738802144847528058852956539229649734189623486804371091622",
+          "budget_700ms_established": true
+        }
+      }
+    },
+    {
+      "offered_rate": 0.5,
+      "seconds": 180,
+      "offered": 90,
+      "eventual_outcomes": {
+        "committed_success": 90
+      },
+      "committed_success_observed_in_step": 90,
+      "observed_committed_sessions_per_second": 0.5,
+      "cohort_outcomes_recorded_at_or_after_step_end": 0,
+      "all_cohorts_pending_at_step_end": 0,
+      "unknown_recorded_by_step_end": 0,
+      "offered_to_started_p95_ms": 12.726,
+      "admitted_queue_p95_ms": 0.079,
+      "commit_metrics": {
+        "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": {
+          "definite_observations": 132,
+          "boundary_uncertain_observations": 2,
+          "p95_upper_bound_seconds": "0.6363708750655987799420579238054133728187316385922878807188616348659032688069713632647928939236182",
+          "budget_700ms_established": true
+        },
+        "debc88b826737ecd83079a007f380ca8d0ce6047": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.5246313750648276824647576182071100907850539896611348596325745745156147539969320811012520438525180",
+          "budget_700ms_established": true
+        },
+        "5a88db830836194e1f45e961dbee8fc25d77f86e": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.5705702500635026884117857009744771343563168460807259211415997222953489402312894296890259927352979",
+          "budget_700ms_established": true
+        },
+        "26c241e1c8e27c3b508236079699ba36dd2835fd": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.6403172080701475043496139323033306558087651194035505981211626385560821064723476004857827127157545",
+          "budget_700ms_established": true
+        }
+      }
+    },
+    {
+      "offered_rate": 1,
+      "seconds": 180,
+      "offered": 180,
+      "eventual_outcomes": {
+        "committed_success": 180
+      },
+      "committed_success_observed_in_step": 179,
+      "observed_committed_sessions_per_second": 0.9944444444444445,
+      "cohort_outcomes_recorded_at_or_after_step_end": 1,
+      "all_cohorts_pending_at_step_end": 1,
+      "unknown_recorded_by_step_end": 0,
+      "offered_to_started_p95_ms": 3.124,
+      "admitted_queue_p95_ms": 0.121,
+      "commit_metrics": {
+        "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.1338015420764777264816993797520519308913822155887573546382451450525982068027408350872146225030403",
+          "budget_700ms_established": true
+        },
+        "debc88b826737ecd83079a007f380ca8d0ce6047": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 0,
+          "p95_upper_bound_seconds": "0.1282543330760529720267763336381584906757181817171566571160140929522297302202520658933352882589622",
+          "budget_700ms_established": true
+        },
+        "5a88db830836194e1f45e961dbee8fc25d77f86e": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 0,
+          "p95_upper_bound_seconds": "0.1258734580819992144138879903046844979556099509999617386981510753495101817737790061699879223129770",
+          "budget_700ms_established": true
+        },
+        "26c241e1c8e27c3b508236079699ba36dd2835fd": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.1370478330819527123646032849162415420661151956657584205886831771107114881370414278901814718027280",
+          "budget_700ms_established": true
+        }
+      }
+    },
+    {
+      "offered_rate": 2,
+      "seconds": 180,
+      "offered": 360,
+      "eventual_outcomes": {
+        "committed_success": 360
+      },
+      "committed_success_observed_in_step": 357,
+      "observed_committed_sessions_per_second": 1.9833333333333334,
+      "cohort_outcomes_recorded_at_or_after_step_end": 4,
+      "all_cohorts_pending_at_step_end": 4,
+      "unknown_recorded_by_step_end": 0,
+      "offered_to_started_p95_ms": 3.98,
+      "admitted_queue_p95_ms": 0.169,
+      "commit_metrics": {
+        "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.3389244160926648017139563193907106338055165761786309951663334708704067004827835048004384523897125",
+          "budget_700ms_established": true
+        },
+        "debc88b826737ecd83079a007f380ca8d0ce6047": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.3337762920947188746521294115811995523198381182719054718579125408084812195546114287914001319699524",
+          "budget_700ms_established": true
+        },
+        "5a88db830836194e1f45e961dbee8fc25d77f86e": {
+          "definite_observations": 135,
+          "boundary_uncertain_observations": 0,
+          "p95_upper_bound_seconds": "0.3052035830948995817942051419579367203165451179031701243053356112029784873324566070094124170159713",
+          "budget_700ms_established": true
+        },
+        "26c241e1c8e27c3b508236079699ba36dd2835fd": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 2,
+          "p95_upper_bound_seconds": "0.3598217500928204023861992317190914224628893712328442576470355402381177257738511013608965588143796",
+          "budget_700ms_established": true
+        }
+      }
+    },
+    {
+      "offered_rate": 4,
+      "seconds": 180,
+      "offered": 720,
+      "eventual_outcomes": {
+        "committed_success": 528,
+        "not_submitted": 192
+      },
+      "committed_success_observed_in_step": 397,
+      "observed_committed_sessions_per_second": 2.2055555555555557,
+      "cohort_outcomes_recorded_at_or_after_step_end": 135,
+      "all_cohorts_pending_at_step_end": 135,
+      "unknown_recorded_by_step_end": 0,
+      "offered_to_started_p95_ms": 59894.951,
+      "admitted_queue_p95_ms": 59892.366,
+      "commit_metrics": {
+        "d74679ea55e1b8e504c4d5f1b7ec4642c20b5604": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.4422081671101003350631963703484142687707346754875849331780698865189719939020881102154180875912772",
+          "budget_700ms_established": true
+        },
+        "debc88b826737ecd83079a007f380ca8d0ce6047": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.4527708331040613400930908255297756661113757446251219433159356968850161029819379413719244504271708",
+          "budget_700ms_established": true
+        },
+        "5a88db830836194e1f45e961dbee8fc25d77f86e": {
+          "definite_observations": 134,
+          "boundary_uncertain_observations": 0,
+          "p95_upper_bound_seconds": "0.4817651251306599496701086111880782903919254228156198390472930360348700397491371559370012488362046",
+          "budget_700ms_established": true
+        },
+        "26c241e1c8e27c3b508236079699ba36dd2835fd": {
+          "definite_observations": 133,
+          "boundary_uncertain_observations": 1,
+          "p95_upper_bound_seconds": "0.4688602081307929774430050540325367640783132123305188121901703161536617478357311178639420061499982",
+          "budget_700ms_established": true
+        }
+      }
+    }
+  ],
+  "total_outcomes": {
+    "committed_success": 1203,
+    "not_submitted": 192
+  },
+  "committed_success_observed_during_drain": 135,
+  "scheduler_elapsed_ns": 960621122000,
+  "outer_scheduler_and_drain_elapsed_ns": 960752050000,
+  "peak_queued": 128,
+  "peak_in_flight": 8,
+  "quarantined_signers": [],
+  "validator_peak_rss_bytes": [
+    589987840,
+    553926656,
+    573505536,
+    554319872
+  ],
+  "timing_scope": "Completion observation includes committed transaction and pinned proof-state query; it is not the exact commit instant. Per-step metric bounds conservatively include boundary uncertainty. No delivery or settlement throughput."
+}
