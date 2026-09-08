@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/jsonpb"
@@ -55,6 +56,9 @@ func readLCDJSON(ctx context.Context, path string, height uint64, maxBytes int64
 		return nil, 0, fmt.Errorf("LCD returned HTTP %d", resp.StatusCode)
 	}
 	var committed uint64
+	if len(resp.Header.Values(committedHeightHeader)) > 1 {
+		return nil, 0, fmt.Errorf("ambiguous committed LCD height")
+	}
 	if raw := resp.Header.Get(committedHeightHeader); raw != "" {
 		committed, err = strconv.ParseUint(raw, 10, 64)
 		if err != nil || committed == 0 || committed > math.MaxInt64 || strconv.FormatUint(committed, 10) != raw {
@@ -72,7 +76,7 @@ func readLCDJSON(ctx context.Context, path string, height uint64, maxBytes int64
 		return nil, 0, fmt.Errorf("LCD response exceeds limit")
 	}
 	body = bytes.TrimSpace(body)
-	if len(body) == 0 || body[0] != '{' || !json.Valid(body) {
+	if validateJSONObject(body) != nil {
 		return nil, 0, fmt.Errorf("LCD response must contain one complete JSON object")
 	}
 	return body, committed, nil
@@ -127,7 +131,7 @@ func fetchFrozenRetrievalSession(ctx context.Context, sessionID string) (*frozen
 	return freezeRetrievalSessionResponse(r, height)
 }
 
-func freezeRetrievalSessionResponse(r *types.QueryGetRetrievalSessionResponse, height uint64) (*frozenRetrievalSession, error) {
+func frozenRetrievalIdentity(r *types.QueryGetRetrievalSessionResponse, height uint64) (*frozenRetrievalSession, error) {
 	if height == 0 {
 		return nil, fmt.Errorf("session query lacks committed height")
 	}
@@ -147,6 +151,16 @@ func freezeRetrievalSessionResponse(r *types.QueryGetRetrievalSessionResponse, h
 	if !bytes.Equal(canonical, r.ChallengeContext) || !bytes.Equal(hash[:], r.ChallengeContextHash) {
 		return nil, fmt.Errorf("session challenge context does not match frozen state")
 	}
+	return &frozenRetrievalSession{Session: r.Session, Height: height, Context: c, Hash: hash}, nil
+}
+
+func freezeRetrievalSessionResponse(r *types.QueryGetRetrievalSessionResponse, height uint64) (*frozenRetrievalSession, error) {
+	out, err := frozenRetrievalIdentity(r, height)
+	if err != nil {
+		return nil, err
+	}
+	c := out.Context
+
 	if len(r.ChallengeSeed) != 32 {
 		if len(r.ChallengeSeed) == 0 && height < c.Window.Anchor {
 			return nil, errChallengeNotReady
@@ -156,7 +170,6 @@ func freezeRetrievalSessionResponse(r *types.QueryGetRetrievalSessionResponse, h
 	if height < c.Window.First {
 		return nil, errChallengeNotReady
 	}
-	out := &frozenRetrievalSession{Session: r.Session, Height: height, Context: c, Hash: hash}
 	copy(out.Seed[:], r.ChallengeSeed)
 	return out, nil
 }
@@ -219,17 +232,9 @@ func fetchRetentionSnapshot(ctx context.Context, dealIDs []uint64) (*retentionSn
 		if _, exists := out.Current[id]; exists {
 			return nil, fmt.Errorf("duplicate local deal in retention pass")
 		}
-		body, _, err := readLCDJSON(ctx, "/polystorechain/polystorechain/v1/deals/"+strconv.FormatUint(id, 10), height, 64*1024)
+		d, _, err := queryRetrievalDeal(ctx, id, height)
 		if err != nil {
 			return nil, err
-		}
-		var current types.QueryGetDealResponse
-		if err := jsonpb.Unmarshal(bytes.NewReader(body), &current); err != nil {
-			return nil, err
-		}
-		d := current.Deal
-		if d == nil || d.Id != id || d.TotalMdus > 65537 || d.WitnessMdus > 65536 || (d.TotalMdus > 0 && d.WitnessMdus >= d.TotalMdus) {
-			return nil, fmt.Errorf("malformed current deal")
 		}
 		if len(d.ManifestRoot) == 0 {
 			if d.TotalMdus != 0 || d.WitnessMdus != 0 {
@@ -248,4 +253,90 @@ func fetchRetentionSnapshot(ctx context.Context, dealIDs []uint64) (*retentionSn
 		out.Current[id] = *d
 	}
 	return out, nil
+}
+
+// One typed deal at one committed height supplies metadata bounds. A local
+// sidecar and the latest-deal TTL cache cannot extend the unpaid metadata range.
+func queryRetrievalDeal(ctx context.Context, id, height uint64) (*types.Deal, uint64, error) {
+	body, committed, err := readLCDJSON(ctx, "/polystorechain/polystorechain/v1/deals/"+strconv.FormatUint(id, 10), height, 64*1024)
+	if err != nil {
+		return nil, 0, err
+	}
+	var response types.QueryGetDealResponse
+	if err := jsonpb.Unmarshal(bytes.NewReader(body), &response); err != nil {
+		return nil, 0, err
+	}
+	d := response.Deal
+	if d == nil || d.Id != id || d.TotalMdus > 65537 || d.WitnessMdus > 65536 || (d.TotalMdus > 0 && d.WitnessMdus >= d.TotalMdus) ||
+		(len(d.ManifestRoot) != 0 && len(d.ManifestRoot) != 32) || (len(d.ManifestRoot) == 0 && (d.TotalMdus != 0 || d.WitnessMdus != 0)) {
+		return nil, 0, fmt.Errorf("malformed committed deal")
+	}
+	return d, committed, nil
+}
+
+// All callers cap bytes before this check. Reject duplicate keys and malformed
+// UTF-8 instead of allowing decoders to choose different signed/query values.
+func validateJSONObject(body []byte) error {
+	if !utf8.Valid(body) {
+		return fmt.Errorf("invalid JSON UTF-8")
+	}
+	d := json.NewDecoder(bytes.NewReader(body))
+	d.UseNumber()
+	first, err := d.Token()
+	if err != nil || first != json.Delim('{') {
+		return fmt.Errorf("expected JSON object")
+	}
+	var consume func(json.Delim, int) error
+	consume = func(open json.Delim, depth int) error {
+		if depth > 64 {
+			return fmt.Errorf("JSON nesting exceeds limit")
+		}
+		var keys map[string]struct{}
+		if open == '{' {
+			keys = make(map[string]struct{})
+		}
+		for d.More() {
+			if open == '{' {
+				token, err := d.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := token.(string)
+				if !ok {
+					return fmt.Errorf("invalid JSON object key")
+				}
+				// Struct decoders accept case variants and protobuf camel/snake
+				// aliases. Two spellings must not choose different authority.
+				alias := strings.ToLower(strings.ReplaceAll(key, "_", ""))
+				if _, exists := keys[alias]; exists {
+					return fmt.Errorf("duplicate JSON key %q", key)
+				}
+				keys[alias] = struct{}{}
+			}
+			token, err := d.Token()
+			if err != nil {
+				return err
+			}
+			if delim, ok := token.(json.Delim); ok {
+				if err := consume(delim, depth+1); err != nil {
+					return err
+				}
+			}
+		}
+		end, err := d.Token()
+		if err != nil {
+			return err
+		}
+		if (open == '{' && end != json.Delim('}')) || (open == '[' && end != json.Delim(']')) {
+			return fmt.Errorf("invalid JSON container")
+		}
+		return nil
+	}
+	if err := consume('{', 1); err != nil {
+		return err
+	}
+	if _, err := d.Token(); err != io.EOF {
+		return fmt.Errorf("trailing JSON data")
+	}
+	return nil
 }

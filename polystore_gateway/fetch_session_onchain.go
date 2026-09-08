@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -61,13 +62,26 @@ func storeOnChainSessionProof(sessionID string, proof types.ChainedProof) error 
 		current := b.Get([]byte(normalized))
 		var proofs []types.ChainedProof
 		if current != nil {
-			_ = json.Unmarshal(current, &proofs)
+			if err := decodeLegacySessionProofs(current, &proofs); err != nil {
+				return err
+			}
+		}
+		for _, previous := range proofs {
+			if previous.MduIndex == proof.MduIndex && previous.BlobIndex == proof.BlobIndex {
+				return nil
+			}
+		}
+		if len(proofs) >= 64 {
+			return fmt.Errorf("legacy proof count exceeds limit")
 		}
 		proofs = append(proofs, proof)
 
 		bz, err := json.Marshal(proofs)
 		if err != nil {
 			return err
+		}
+		if len(bz) > maxRetrievalMetadataBytes {
+			return fmt.Errorf("legacy proof record exceeds limit")
 		}
 		return b.Put([]byte(normalized), bz)
 	})
@@ -85,30 +99,59 @@ func loadOnChainSessionProofs(sessionID string) ([]types.ChainedProof, error) {
 	err = sessionDB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(onChainSessionProofsBucket)
 		if b == nil {
-			return nil
+			return fmt.Errorf("proof bucket missing")
 		}
 		v := b.Get([]byte(normalized))
 		if v == nil {
 			return nil
 		}
-		return json.Unmarshal(v, &proofs)
+		return decodeLegacySessionProofs(v, &proofs)
 	})
 	return proofs, err
 }
 
-func deleteOnChainSessionProofs(sessionID string) error {
+// Called only after committed success. Both legacy stores are deleted in one
+// transaction; cache eviction follows the durable commit rather than hiding it.
+func deleteSubmittedLegacyProofs(sessionID, signer string) error {
 	if sessionDB == nil {
-		return nil
+		return fmt.Errorf("session DB unavailable")
 	}
 	normalized, _, err := parseSessionIDHex(sessionID)
 	if err != nil {
 		return err
 	}
-	return sessionDB.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(onChainSessionProofsBucket)
-		if b == nil {
-			return nil
+	err = sessionDB.Update(func(tx *bolt.Tx) error {
+		for _, name := range [][]byte{onChainSessionProofsBucket, downloadSessionsBucket} {
+			b := tx.Bucket(name)
+			if b == nil {
+				return fmt.Errorf("session bucket missing")
+			}
+			if err := b.Delete([]byte(normalized)); err != nil {
+				return err
+			}
 		}
-		return b.Delete([]byte(normalized))
+		return clearPendingSigner(tx, signer, "retrieval", []string{normalized})
 	})
+	if err == nil {
+		downloadSessionCache.Delete(normalized)
+	}
+	return err
+}
+
+func decodeLegacySessionProofs(raw []byte, proofs *[]types.ChainedProof) error {
+	if len(raw) == 0 || len(raw) > maxRetrievalMetadataBytes {
+		return fmt.Errorf("legacy proof record size invalid")
+	}
+	wrapped := append([]byte(`{"proofs":`), raw...)
+	wrapped = append(wrapped, '}')
+	if err := validateJSONObject(wrapped); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, proofs); err != nil {
+		return err
+	}
+	if len(*proofs) == 0 || len(*proofs) > 64 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("legacy proof count invalid")
+	}
+	return nil
 }

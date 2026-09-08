@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -202,12 +203,13 @@ func writeRetrievalWindow(w http.ResponseWriter, metadata, window []byte) error 
 }
 
 type storedFrozenProof struct {
-	Version uint32               `json:"version"`
-	Context []byte               `json:"context"`
-	Hash    []byte               `json:"context_hash"`
-	Seed    []byte               `json:"seed"`
-	Proofs  []types.ChainedProof `json:"proofs"`
-	TxHash  string               `json:"tx_hash,omitempty"`
+	Version    uint32               `json:"version"`
+	Context    []byte               `json:"context"`
+	Hash       []byte               `json:"context_hash"`
+	Seed       []byte               `json:"seed"`
+	Proofs     []types.ChainedProof `json:"proofs"`
+	TxHash     string               `json:"tx_hash,omitempty"`
+	Submitting bool                 `json:"submitting,omitempty"`
 }
 
 func frozenProofKey(id [32]byte) []byte { return []byte("v2:" + hex.EncodeToString(id[:])) }
@@ -238,11 +240,12 @@ func storeFrozenSessionProof(f *frozenRetrievalSession, proofs []types.ChainedPr
 				return fmt.Errorf("stored proof exceeds limit")
 			}
 			var existing storedFrozenProof
-			if err := json.Unmarshal(previous, &existing); err != nil {
+			if err := decodeStoredFrozenProof(previous, &existing); err != nil {
 				return err
 			}
 			// A retry never erases a broadcast hash or changes the frozen statement.
 			existing.TxHash = ""
+			existing.Submitting = false
 			normalized, err := json.Marshal(existing)
 			if err != nil {
 				return err
@@ -254,4 +257,64 @@ func storeFrozenSessionProof(f *frozenRetrievalSession, proofs []types.ChainedPr
 		}
 		return bucket.Put(key, encoded)
 	})
+}
+
+func serveCommittedRetrievalMetadata(w http.ResponseWriter, r *http.Request, root ManifestRoot, index uint64) {
+	q := r.URL.Query()
+	id, err := strconv.ParseUint(q.Get("deal_id"), 10, 64)
+	if err != nil || strconv.FormatUint(id, 10) != q.Get("deal_id") || q.Get("owner") == "" || len(q["deal_id"]) != 1 || len(q["owner"]) != 1 {
+		writeJSONError(w, http.StatusBadRequest, "deal_id and owner are required", "")
+		return
+	}
+	var height uint64
+	if raw, present := q["committed_height"]; present {
+		if len(raw) != 1 {
+			writeJSONError(w, http.StatusBadRequest, "invalid committed_height", "")
+			return
+		}
+		height, err = strconv.ParseUint(raw[0], 10, 64)
+		if err != nil || height == 0 || strconv.FormatUint(height, 10) != raw[0] {
+			writeJSONError(w, http.StatusBadRequest, "invalid committed_height", "")
+			return
+		}
+	}
+	deal, committed, err := queryRetrievalDeal(r.Context(), id, height)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "committed metadata authority unavailable", err.Error())
+		return
+	}
+	if deal.Owner != q.Get("owner") || !bytes.Equal(deal.ManifestRoot, root.Bytes[:]) {
+		writeJSONError(w, http.StatusConflict, "metadata does not match committed deal", "")
+		return
+	}
+	if index >= deal.TotalMdus || index > deal.WitnessMdus {
+		writeJSONError(w, http.StatusBadRequest, "metadata index out of range", "open a retrieval session for user data")
+		return
+	}
+	dir, release, err := openFrozenGeneration(id, root)
+	defer release()
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "metadata generation unavailable", err.Error())
+		return
+	}
+	f, err := os.Open(filepath.Join(dir, fmt.Sprintf("mdu_%d.bin", index)))
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "metadata MDU unavailable", err.Error())
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != types.MDU_SIZE {
+		writeJSONError(w, http.StatusConflict, "metadata MDU has invalid size or type", "")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.Itoa(types.MDU_SIZE))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(committedHeightHeader, strconv.FormatUint(committed, 10))
+	w.Header().Set("X-PolyStore-Manifest-Root", root.Canonical)
+	w.Header().Set("X-PolyStore-Mdu-Index", strconv.FormatUint(index, 10))
+	if _, err := io.CopyN(w, f, types.MDU_SIZE); err != nil {
+		log.Printf("Retrieval metadata stream interrupted: deal=%d mdu=%d: %v", id, index, err)
+	}
 }

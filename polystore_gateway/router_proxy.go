@@ -453,7 +453,7 @@ func RouterGatewayManifestInfo(w http.ResponseWriter, r *http.Request) {
 }
 func RouterGatewayDownload(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
 func RouterGatewayMdu(w http.ResponseWriter, r *http.Request)      { RouterGatewayFetch(w, r) }
-func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request) { RouterGatewayFetch(w, r) }
+func RouterGatewayMduKzg(w http.ResponseWriter, r *http.Request)   { RouterGatewayFetch(w, r) }
 func RouterGatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	if requireOnchainSession {
 		if strings.TrimSpace(r.Header.Get("X-PolyStore-Session-Id")) == "" {
@@ -577,14 +577,30 @@ func forwardJSONToProviderBase(w http.ResponseWriter, r *http.Request, providerB
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 
-	resp, err := routerHTTPClient.Do(req)
+	client := routerHTTPClient
+	if path == "/sp/session-proof" {
+		client = sessionProofHTTPClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "failed to contact provider", err.Error())
 		return
 	}
 	defer resp.Body.Close()
 
-	out, _ := io.ReadAll(resp.Body)
+	var out []byte
+	if path == "/sp/session-proof" {
+		out, err = io.ReadAll(io.LimitReader(resp.Body, maxSessionProofOutcomeBytes+1))
+		if len(out) > maxSessionProofOutcomeBytes {
+			err = fmt.Errorf("provider outcome exceeds limit")
+		}
+	} else {
+		out, err = io.ReadAll(resp.Body)
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "provider response incomplete; reconcile the same session IDs", err.Error())
+		return
+	}
 	if ct := strings.TrimSpace(resp.Header.Get("Content-Type")); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	} else {
@@ -725,18 +741,9 @@ func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, env, _, err := readSessionProofRequest(r.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "failed to read body", err.Error())
-		return
-	}
-
-	var env struct {
-		SessionID string `json:"session_id"`
-		Provider  string `json:"provider"`
-	}
-	if err := json.Unmarshal(body, &env); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON", "expected {session_id, provider}")
+		writeJSONError(w, http.StatusBadRequest, "invalid session proof request", err.Error())
 		return
 	}
 

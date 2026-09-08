@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -186,6 +187,8 @@ func exerciseFrozenSessionDelivery(t *testing.T, original types.QueryGetRetrieva
 	wire, _ := json.Marshal(request)
 	for _, bad := range []string{
 		string(wire) + "{}",
+		strings.Replace(string(wire), `"blob_count":"2"`, `"blob_count":"2","blob_count":"2"`, 1),
+		strings.Replace(string(wire), `"blob_count":"2"`, `"blob_count":"2","blobCount":"2"`, 1),
 		strings.Replace(string(wire), `"start_blob_index":8`, `"start_blob_index":4294967296`, 1),
 		strings.Replace(string(wire), `"deal_id":"9007199254740993"`, `"deal_id":9007199254740993`, 1),
 		strings.Replace(string(wire), `"blob_count":"2"`, `"blob_count":"65"`, 1),
@@ -200,5 +203,65 @@ func TestRetrievalWriterReportsPartialFailure(t *testing.T) {
 	w := &p2pWindowRecorder{header: make(http.Header), limit: 100}
 	if err := writeRetrievalWindow(w, []byte(`{}`), make([]byte, 131072)); err == nil {
 		t.Fatal("response write failure was ignored")
+	}
+}
+
+func TestRetrievalMetadataPinsHeightAndIgnoresSidecarBounds(t *testing.T) {
+	useTempUploadDir(t)
+	root := mustTestManifestRoot(t, "historical-metadata")
+	other := mustTestManifestRoot(t, "latest-metadata")
+	dir := dealScopedDir(901, root)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mdu_0.bin", "mdu_1.bin", "mdu_2.bin"} {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, types.MDU_SIZE), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Malformed, overclaiming sidecars cannot supply free-read authority.
+	if err := os.WriteFile(filepath.Join(dir, slabMetadataFileName), []byte(`{"witness_mdus":65535}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	wrongHeight := false
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/polystorechain/polystorechain/v1/deals/901" {
+			t.Error(r.URL.Path)
+		}
+		height, selected := "20", other
+		if r.Header.Get(committedHeightHeader) == "10" {
+			height, selected = "10", root
+		}
+		if wrongHeight {
+			height = "20"
+		}
+		w.Header().Set(committedHeightHeader, height)
+		_ = json.NewEncoder(w).Encode(map[string]any{"deal": map[string]any{"id": "901", "owner": "nil-owner", "manifest_root": selected.Bytes[:], "witness_mdus": "1", "total_mdus": "3"}})
+	}))
+	old := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcd.Close(); lcdBase = old }()
+	invoke := func(index, height string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/sp/retrieval/mdu/"+root.Canonical+"/"+index+"?deal_id=901&owner=nil-owner"+height, nil)
+		r = mux.SetURLVars(r, map[string]string{"cid": root.Canonical, "index": index})
+		w := httptest.NewRecorder()
+		GatewayMdu(w, r)
+		return w
+	}
+	for _, index := range []string{"0", "1"} {
+		w := invoke(index, "&committed_height=10")
+		if w.Code != 200 || w.Body.Len() != types.MDU_SIZE || w.Header().Get(committedHeightHeader) != "10" {
+			t.Fatalf("pinned metadata: %d %d", w.Code, w.Body.Len())
+		}
+	}
+	if w := invoke("2", "&committed_height=10"); w.Code != 400 {
+		t.Fatal("sidecar authorized user data", w.Code)
+	}
+	if w := invoke("0", ""); w.Code != 409 {
+		t.Fatal("current-root substitution", w.Code)
+	}
+	wrongHeight = true
+	if w := invoke("0", "&committed_height=10"); w.Code != 502 {
+		t.Fatal("wrong query height accepted", w.Code)
 	}
 }

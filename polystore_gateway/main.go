@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	bolt "go.etcd.io/bbolt"
 	"io"
 	"log"
 	"math/big"
@@ -766,25 +767,29 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 		cancel()
 		out = cmdOut
 		err = cmdErr
-		outStr := string(out)
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
 			return out, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
 		}
-
-		if err != nil {
-			if strings.Contains(outStr, "account sequence mismatch") {
-				log.Printf("runTxWithRetry: account sequence mismatch (CLI error, attempt %d/%d), retrying...", i+1, maxRetries)
-				time.Sleep(1 * time.Second)
+		// Retry only an explicit SDK CheckTx sequence rejection. A successful or
+		// ambiguous broadcast must not be replayed based on arbitrary log text.
+		var check struct {
+			Code      json.RawMessage `json:"code"`
+			Codespace string          `json:"codespace"`
+		}
+		body := extractJSONBody(out)
+		if validateJSONObject(body) == nil && json.Unmarshal(body, &check) == nil {
+			code, codeErr := explicitTxCode(check.Code)
+			if codeErr == nil && code == 32 && check.Codespace == "sdk" && i+1 < maxRetries {
+				log.Printf("runTxWithRetry: CheckTx sequence rejection (attempt %d/%d)", i+1, maxRetries)
+				if err := waitTxRetry(ctx, time.Second); err != nil {
+					return out, err
+				}
 				continue
 			}
-			return out, err
 		}
-
-		if strings.Contains(outStr, "account sequence mismatch") {
-			log.Printf("runTxWithRetry: account sequence mismatch (CheckTx error, attempt %d/%d), retrying...", i+1, maxRetries)
-			time.Sleep(1 * time.Second)
-			continue
+		if err != nil {
+			return out, err
 		}
 
 		return out, nil
@@ -6193,7 +6198,7 @@ func parseSessionIDHex(raw string) (string, []byte, error) {
 
 // SpSubmitRetrievalSessionProof submits proof-of-retrieval for an on-chain RetrievalSession.
 // It expects the gateway to have recorded per-blob ChainedProofs under the given session_id.
-func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+func submitLegacyRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -6215,24 +6220,20 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerKeyName := envDefault("POLYSTORE_PROVIDER_KEY", "faucet")
-	localProviderAddr := cachedProviderAddress(r.Context())
-	if strings.TrimSpace(localProviderAddr) == "" {
-		localProviderAddr, err = resolveKeyAddress(r.Context(), providerKeyName)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to resolve provider key address", err.Error())
-			return
-		}
-	}
-	if strings.TrimSpace(localProviderAddr) == "" {
-		writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "set POLYSTORE_PROVIDER_ADDRESS or POLYSTORE_PROVIDER_KEY")
+	providerKeyName, localProviderAddr, err := retrievalSigner(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "provider signing key unavailable", err.Error())
 		return
 	}
 
 	// Try loading from on-chain proof bucket first
 	var proofs []types.ChainedProof
 	onChainProofs, err := loadOnChainSessionProofs(sessionKey)
-	if err == nil && len(onChainProofs) > 0 {
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "stored session proof is unreadable", err.Error())
+		return
+	}
+	if len(onChainProofs) > 0 {
 		proofs = onChainProofs
 	} else {
 		// Fallback to off-chain download session
@@ -6245,8 +6246,8 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusForbidden, "session provider mismatch", "")
 			return
 		}
-		if len(s.Chunks) == 0 {
-			writeJSONError(w, http.StatusBadRequest, "session has no recorded chunks", "fetch at least one blob chunk before submitting proofs")
+		if len(s.Chunks) == 0 || len(s.Chunks) > 64 {
+			writeJSONError(w, http.StatusBadRequest, "session must have 1..64 recorded chunks", "fetch at least one blob chunk before submitting proofs")
 			return
 		}
 
@@ -6259,9 +6260,9 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 			return chunks[i].ProofDetails.BlobIndex < chunks[j].ProofDetails.BlobIndex
 		})
 
-		seen := make(map[uint64]struct{}, len(chunks))
+		seen := make(map[[2]uint64]struct{}, len(chunks))
 		for _, c := range chunks {
-			key := c.ProofDetails.MduIndex*uint64(types.BLOBS_PER_MDU) + uint64(c.ProofDetails.BlobIndex)
+			key := [2]uint64{c.ProofDetails.MduIndex, uint64(c.ProofDetails.BlobIndex)}
 			if _, ok := seen[key]; ok {
 				continue
 			}
@@ -6272,6 +6273,16 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 
 	if len(proofs) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "session has no usable proofs", "")
+		return
+	}
+
+	request := sessionProofRequest{SessionID: sessionKey}
+	pending, pendingErr := loadPendingSigner(localProviderAddr)
+	if pendingErr != nil || (pending != nil && (pending.Kind != "retrieval" || len(pending.IDs) != 1 || pending.IDs[0] != sessionKey || pending.TxHash == "")) {
+		if pendingErr == nil {
+			pendingErr = fmt.Errorf("actual signer has an unresolved operation; retain proofs and reconcile its original IDs")
+		}
+		writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), "", "pending", "retained", pendingErr)
 		return
 	}
 
@@ -6287,6 +6298,7 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
 
 	bz, err := json.Marshal(msg)
 	if err != nil {
@@ -6297,39 +6309,62 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to write temp file", err.Error())
 		return
 	}
-	_ = tmpFile.Close()
-
-	txHash, err := submitTxAndWait(
-		r.Context(),
-		"tx", "polystorechain", "submit-retrieval-proof",
-		tmpFile.Name(),
-		"--from", providerKeyName,
-		"--chain-id", chainID,
-		"--home", homeDir,
-		"--keyring-backend", "test",
-		"--yes",
-		"--gas", "auto",
-		"--gas-adjustment", "1.6",
-		"--gas-prices", gasPrices,
-		"--broadcast-mode", "sync",
-		"--output", "json",
-	)
-	if err != nil {
-		log.Printf("SpSubmitRetrievalSessionProof: submit failed: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "submit session proof failed", err.Error())
+	if err := tmpFile.Close(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to close proof input", err.Error())
 		return
 	}
 
-	_, _ = takeDownloadSession(sessionKey)
-	_ = deleteOnChainSessionProofs(sessionKey)
+	var txHash string
+	if pending != nil {
+		txHash, err = waitForCommittedTx(r.Context(), pending.TxHash)
+	} else {
+		if err := sessionDB.Update(func(tx *bolt.Tx) error {
+			return claimPendingSigner(tx, localProviderAddr, pendingSignerOperation{Kind: "retrieval", IDs: []string{sessionKey}})
+		}); err != nil {
+			writeJSONError(w, http.StatusConflict, "cannot persist submission intent", err.Error())
+			return
+		}
+		txHash, err = submitTxAndRecord(
+			r.Context(), func(hash string) error {
+				return sessionDB.Update(func(tx *bolt.Tx) error {
+					return claimPendingSigner(tx, localProviderAddr, pendingSignerOperation{Kind: "retrieval", IDs: []string{sessionKey}, TxHash: hash})
+				})
+			},
+			"tx", "polystorechain", "submit-retrieval-proof",
+			tmpFile.Name(),
+			"--from", providerKeyName,
+			"--chain-id", chainID,
+			"--home", homeDir,
+			"--keyring-backend", "test",
+			"--yes",
+			"--gas", "auto",
+			"--gas-adjustment", "1.6",
+			"--gas-prices", gasPrices,
+			"--broadcast-mode", "sync",
+			"--output", "json",
+		)
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status":      "success",
-		"tx_hash":     txHash,
-		"proof_count": len(proofs),
-		"session_id":  sessionKey,
-	})
+	if err != nil {
+		status := "pending"
+		if errors.Is(err, errTxRejected) || errors.Is(err, errTxFailed) {
+			status = "failed"
+			if clearErr := sessionDB.Update(func(tx *bolt.Tx) error {
+				return clearPendingSigner(tx, localProviderAddr, "retrieval", []string{sessionKey})
+			}); clearErr != nil {
+				err = fmt.Errorf("%w; signer recovery: %v", err, clearErr)
+			}
+		}
+		writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), txHash, status, "retained", err)
+		return
+	}
+
+	cleanupErr := deleteSubmittedLegacyProofs(sessionKey, localProviderAddr)
+	cleanup := "complete"
+	if cleanupErr != nil {
+		cleanup = "pending"
+	}
+	writeSubmissionOutcome(w, request, []string{sessionKey}, len(proofs), txHash, "success", cleanup, cleanupErr)
 }
 
 func HealthCheck(w http.ResponseWriter, r *http.Request) {

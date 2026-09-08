@@ -18,7 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -35,7 +34,7 @@ import (
 const (
 	p2pFetchProtocolID  = "/polystore/fetch/1.0.0"
 	p2pMaxRequestBytes  = 256 * 1024
-	p2pMaxHeaderBytes   = 1 * 1024 * 1024
+	p2pMaxHeaderBytes   = 16 * 1024
 	p2pDefaultTimeout   = 45 * time.Second
 	p2pDefaultListenRaw = "/ip4/0.0.0.0/tcp/9100/ws"
 )
@@ -311,7 +310,7 @@ func readP2PFetchRequest(r io.Reader) (*p2pFetchRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > p2pMaxRequestBytes || !utf8.Valid(data) || !json.Valid(data) {
+	if len(data) > p2pMaxRequestBytes || validateJSONObject(data) != nil {
 		return nil, fmt.Errorf("invalid bounded P2P request")
 	}
 	var discriminator struct {
@@ -422,6 +421,9 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	_ = result.Body.Close()
 
 	resp.Status = result.StatusCode
+	if len(resp.Error) > 4096 {
+		resp.Error = resp.Error[:4096]
+	}
 	resp.BodyLen = uint64(len(body))
 	resp.RangeStart = req.RangeStart
 	resp.RangeLen = req.RangeLen
@@ -530,6 +532,9 @@ func writeP2PFetchResponse(w io.Writer, resp *p2pFetchResponse, body []byte) err
 	}
 	if resp.Status < http.StatusOK || resp.Status >= http.StatusMultipleChoices {
 		body = nil
+	}
+	if len(resp.Error) > 4096 {
+		resp.Error = resp.Error[:4096]
 	}
 	resp.BodyLen = uint64(len(body))
 	headerBytes, err := json.Marshal(resp)

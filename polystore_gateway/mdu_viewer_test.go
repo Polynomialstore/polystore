@@ -282,10 +282,12 @@ func TestProviderGatewayMdu_AllowsMetadataWithoutSessionAndRequiresSessionForUse
 		case strings.HasPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/deals/"):
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
-					"id":        "1",
-					"owner":     owner,
-					"cid":       cid.Canonical,
-					"end_block": "1000",
+					"id":            "1",
+					"owner":         owner,
+					"manifest_root": cid.Bytes[:],
+					"total_mdus":    "3",
+					"witness_mdus":  "1",
+					"end_block":     "1000",
 				},
 			})
 			return
@@ -331,7 +333,7 @@ func TestProviderGatewayMdu_AllowsMetadataWithoutSessionAndRequiresSessionForUse
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 missing session for user data, got %d (%s)", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "missing X-PolyStore-Session-Id") {
+	if !strings.Contains(w.Body.String(), "open a retrieval session") {
 		t.Fatalf("expected missing session error, got %s", w.Body.String())
 	}
 }
