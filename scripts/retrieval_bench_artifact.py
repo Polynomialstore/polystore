@@ -6,6 +6,7 @@ never provide completion evidence. Print the offline report without a node:
     python3 scripts/retrieval_bench_artifact.py arithmetic
 """
 import base64
+import argparse
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal, localcontext
 from fractions import Fraction
@@ -18,9 +19,12 @@ import platform
 import re
 import selectors
 import signal
+import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 
 
 # Encoding/layout from polystore_core/src/{kzg,coding}.rs. The offline report
@@ -187,7 +191,7 @@ def committed_tx(value, expected_hash):
     return value
 
 
-def run_bounded_command(argv, deadline):
+def run_bounded_command(argv, deadline, *, env=None):
     """Drain both CLI pipes within one absolute deadline and a combined cap."""
     def remaining():
         seconds = (deadline - monotonic_ns()) / 1e9
@@ -198,7 +202,7 @@ def run_bounded_command(argv, deadline):
     remaining()
     # Only failure to launch is an OSError to the caller. Once launched, pipe
     # failures cannot establish that no broadcast took place.
-    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True) as process:
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env=env) as process:
         failed = True
         try:
             output = [bytearray(), bytearray()]
@@ -628,9 +632,325 @@ def provenance(root, binary, library):
             "measurement_boundary": "paced serial load including CLI, CheckTx, inclusion and final session query"}
 
 
+def set_toml_value(text, section, key, value):
+    """Change one generated setting, rejecting template drift instead of guessing."""
+    current, matches, lines = "", 0, []
+    for line in text.splitlines(keepends=True):
+        header = re.fullmatch(r"\s*\[([^]]+)\]\s*", line.strip())
+        if header:
+            current = header[1]
+        if current == section and re.match(r"\s*" + re.escape(key) + r"\s*=", line):
+            line = f"{key} = {value}\n"
+            matches += 1
+        lines.append(line)
+    if matches != 1:
+        raise ValueError(f"expected one [{section}] {key} setting, got {matches}")
+    return "".join(lines)
+
+
+class FourValidatorLifecycle:
+    """Owned local startup/persistence evidence, not a transaction load driver."""
+
+    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2):
+        self.root = Path(__file__).resolve().parent.parent
+        self.binary, self.library = Path(binary).resolve(strict=True), Path(library).resolve(strict=True)
+        if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
+            raise ValueError("binary must be an executable file")
+        if not self.library.is_file() or self.library.name not in ("libpolystore_core.so", "libpolystore_core.dylib"):
+            raise ValueError("library must be the supplied libpolystore_core.so or .dylib")
+        requested = Path(os.path.abspath(home))
+        self.home = requested.parent.resolve(strict=True) / requested.name
+        # No cleanup by pathname. These private persistent homes are retained,
+        # including on failure; multi-node receives only a new child directory.
+        if os.path.lexists(self.home):
+            raise ValueError("home must not already exist: " + str(self.home))
+        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 900) * 10**9
+        self.env = dict(os.environ, GOMAXPROCS=str(integer(gomaxprocs, "gomaxprocs", 1, 64)),
+                        POLYSTORE_TRUSTED_SETUP=str(self.root / "polystorechain/trusted_setup.txt"))
+        for variable in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+            self.env[variable] = str(self.library.parent) + (":" + self.env[variable] if self.env.get(variable) else "")
+        self.chain = "polystore_260-1"
+        self.nodes = [{"home": str(self.home / "nodes" / f"validator{i}"), "rpc": 26657 - 3*i,
+                       "p2p": 26656 - 3*i, "grpc": 9090 - 2*i, "api": 1317 - i,
+                       "metrics": 26660 + i} for i in range(4)]
+        self.processes, self.reservations, self.signers = [], [], {}
+        self.doc = {"schema_version": 1, "mode": "four-validator-lifecycle", "qualification": False,
+                    "status": "preparing", "topology": "four processes on one local host",
+                    "workload": "none", "transactions_submitted": 0, "chain_id": self.chain,
+                    "commands": [], "nodes": self.nodes, "signers": self.signers,
+                    "limits": ["No retrieval, delivery, adversarial transaction or capacity qualification",
+                               "Fixed-height bank state only; no retrieval economic conservation claim",
+                               "Restart preserves homes; no export/import or migration claim"]}
+
+    def remaining(self):
+        seconds = (self.deadline - monotonic_ns()) / 1e9
+        if seconds <= 0:
+            raise TimeoutError("four-validator lifecycle deadline exceeded")
+        return min(seconds, 5)
+
+    def cli(self, home, *args):
+        argv = [str(self.binary), *map(str, args), "--home", str(home)]
+        self.doc["commands"].append(argv)
+        result = run_bounded_command(argv, self.deadline, env=self.env)
+        if result.returncode:
+            raise ValueError("CLI failed: " + (result.stderr + result.stdout)[-8192:])
+        return result.stdout.strip()
+
+    def save(self):
+        temporary = self.home / "evidence.json.tmp"
+        temporary.write_text(json.dumps(self.doc, indent=2) + "\n")
+        temporary.replace(self.home / "evidence.json")
+
+    def reserve_ports(self):
+        for node in self.nodes:
+            for name in ("rpc", "p2p", "grpc", "api", "metrics"):
+                reservation = socket.socket()
+                self.reservations.append(reservation)
+                reservation.bind(("127.0.0.1", node[name]))
+
+    def prepare(self):
+        self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",
+                 "--node-dir-prefix", "validator", "--chain-id", self.chain,
+                 "--starting-ip-address", "127.0.0.1", "--list-ports", "26657,26654,26651,26648",
+                 "--validators-stake-amount", "100000000,100000000,100000000,100000000",
+                 "--keyring-backend", "test")
+        first = Path(self.nodes[0]["home"])
+        for name in ("owner0", "owner1", "provider0", "provider1"):
+            self.cli(first, "keys", "add", name, "--keyring-backend", "test", "--output", "json")
+            address = self.cli(first, "keys", "show", name, "-a", "--keyring-backend", "test")
+            if not re.fullmatch(r"nil1[0-9a-z]{20,80}", address) or address in self.signers.values():
+                raise ValueError("workload signers must resolve to distinct actual accounts")
+            self.signers[name] = address
+            self.cli(first, "genesis", "add-genesis-account", address,
+                     "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
+        genesis = json.loads((first / "config/genesis.json").read_text())
+        consensus = json.loads((self.root / "scripts/retrieval_consensus_profile.json").read_text())
+        if consensus["block"] != {"max_bytes": "2097152", "max_gas": "64000000"}:
+            raise ValueError("four-validator frozen consensus profile changed")
+        genesis["consensus"]["params"]["block"].update(consensus["block"])
+        params = genesis["app_state"]["nilchain"]["params"]
+        if "retrieval_v2_activation_height" not in params:
+            raise ValueError("binary genesis does not expose v2 activation")
+        params["retrieval_v2_activation_height"] = "1"
+        metadata = genesis["app_state"]["bank"].setdefault("denom_metadata", [])
+        if any(item.get("base") == "aatom" for item in metadata):
+            raise ValueError("aatom metadata already present; review generated defaults")
+        metadata.append({"description": "EVM fee token metadata", "denom_units": [
+            {"denom": "aatom", "exponent": 0, "aliases": ["uatom"]},
+            {"denom": "atom", "exponent": 18, "aliases": []}], "base": "aatom", "display": "atom",
+            "name": "Atom", "symbol": "ATOM", "uri": "", "uri_hash": ""})
+        frozen = json.dumps(genesis, sort_keys=True, indent=1) + "\n"
+        for node in self.nodes:
+            home = Path(node["home"])
+            (home / "config/genesis.json").write_text(frozen)
+            self.cli(home, "genesis", "validate")
+            path = home / "config/config.toml"
+            config = path.read_text()
+            for section, key, value in (("consensus", "timeout_commit", '"1s"'),
+                                        ("p2p", "addr_book_strict", "false"),
+                                        ("instrumentation", "prometheus_listen_addr", f'"127.0.0.1:{node["metrics"]}"')):
+                config = set_toml_value(config, section, key, value)
+            path.write_text(config)
+            node["node_id"] = self.cli(home, "comet", "show-node-id")
+            if not re.fullmatch(r"[0-9a-f]{40}", node["node_id"]):
+                raise ValueError("invalid generated node identity")
+            # Retain only the public half of the consensus identity in artifacts.
+            node["validator_key"] = json.loads((home / "config/priv_validator_key.json").read_text())["pub_key"]
+            key = node["validator_key"]
+            if key.get("type") != "tendermint/PubKeyEd25519" or len(base64.b64decode(key["value"], validate=True)) != 32:
+                raise ValueError("invalid generated validator public key")
+            node["config_sha256"] = sha256(path)
+            node["app_config_sha256"] = sha256(home / "config/app.toml")
+        if len({node["node_id"] for node in self.nodes}) != 4 or len({json.dumps(node["validator_key"], sort_keys=True) for node in self.nodes}) != 4:
+            raise ValueError("expected four independent node and voting keys")
+        self.doc.update(genesis_sha256=sha256(first / "config/genesis.json"), frozen_module_params=params,
+                        profile={"consensus": consensus, "timeout_commit": "1s", "execution_budget_ms": 700,
+                                 "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
+                                 "GOMAXPROCS": self.env["GOMAXPROCS"]})
+
+    def start(self, phase):
+        for field, path in (("binary_sha256", self.binary), ("native_library_sha256", self.library),
+                            ("trusted_setup_sha256", self.env["POLYSTORE_TRUSTED_SETUP"])):
+            if sha256(path) != self.doc["provenance"][field]:
+                raise ValueError("supplied runtime artifact changed before start/restart")
+        for reservation in self.reservations:
+            reservation.close()
+        self.reservations.clear()
+        for node in self.nodes:
+            home = Path(node["home"])
+            if (sha256(home / "config/genesis.json") != self.doc["genesis_sha256"] or
+                sha256(home / "config/config.toml") != node["config_sha256"] or
+                sha256(home / "config/app.toml") != node["app_config_sha256"]):
+                raise ValueError("persistent node configuration changed")
+            argv = [str(self.binary), "start", "--home", str(home),
+                    "--rpc.laddr", f'tcp://127.0.0.1:{node["rpc"]}',
+                    "--p2p.laddr", f'tcp://127.0.0.1:{node["p2p"]}',
+                    "--grpc.address", f'127.0.0.1:{node["grpc"]}',
+                    "--api.enable=true", "--api.address", f'tcp://127.0.0.1:{node["api"]}',
+                    "--grpc-web.enable=false", "--json-rpc.enable=false", "--minimum-gas-prices", "0.001aatom"]
+            self.doc["commands"].append(argv)
+            with (home / f"{phase}.log").open("xb") as log:
+                process = subprocess.Popen(argv, env=self.env, stdout=log, stderr=subprocess.STDOUT,
+                                           start_new_session=True)
+            self.processes.append(process)
+
+    def stop(self):
+        # Popen objects own these children. Never discover/kill by port, name or
+        # a PID from an old artifact. Reap before restart; preserve signing state.
+        for process in self.processes:
+            if process.poll() is None:
+                process.terminate()
+        for process in self.processes:
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        self.processes.clear()
+
+    def query(self, node, route, height=None):
+        headers = {} if height is None else {"x-cosmos-block-height": str(height)}
+        port = node["rpc"] if height is None else node["api"]
+        request = urllib.request.Request(f"http://127.0.0.1:{port}{route}", headers=headers)
+        with urllib.request.urlopen(request, timeout=self.remaining()) as response:
+            body = bytearray()
+            while len(body) <= MAX_COMMAND_OUTPUT_BYTES:
+                self.remaining()
+                chunk = response.read1(min(65536, MAX_COMMAND_OUTPUT_BYTES - len(body) + 1))
+                if not chunk:
+                    break
+                body.extend(chunk)
+            self.remaining()
+            if response.status != 200 or len(body) > MAX_COMMAND_OUTPUT_BYTES:
+                raise ValueError("invalid or oversized node response")
+            if height is not None and response.headers.get("x-cosmos-block-height") != str(height):
+                raise ValueError("economic response does not attest the requested height")
+        value = json.loads(body)
+        if not isinstance(value, dict) or not value or value.get("error"):
+            raise ValueError("malformed node response")
+        return value if height is not None else value["result"]
+
+    def wait_height(self, minimum):
+        while True:
+            self.remaining()
+            if any(process.poll() is not None for process in self.processes):
+                raise ValueError("owned validator exited; inspect retained node logs")
+            try:
+                heights = []
+                for node in self.nodes:
+                    status = self.query(node, "/status")
+                    if status["node_info"]["id"] != node["node_id"] or status["node_info"]["network"] != self.chain:
+                        raise ValueError("RPC endpoint belongs to a different node or chain")
+                    heights.append(integer(status["sync_info"]["latest_block_height"], "height"))
+                if min(heights) >= minimum:
+                    return min(heights)
+            except (urllib.error.URLError, TimeoutError):
+                pass  # Initial listener availability is not committed evidence.
+            time.sleep(min(0.2, self.remaining()))
+
+    def snapshot(self, height):
+        """Block H+1 commits execution of H; all economic reads attest H."""
+        rows = []
+        expected_keys = {json.dumps(node["validator_key"], sort_keys=True) for node in self.nodes}
+        for node in self.nodes:
+            block = self.query(node, f"/block?height={height + 1}")
+            header = block["block"]["header"]
+            if integer(header["height"], "block height", 1) != height + 1 or header["chain_id"] != self.chain:
+                raise ValueError("wrong app-hash block boundary")
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", header["app_hash"]) or not re.fullmatch(r"[0-9a-fA-F]{64}", block["block_id"]["hash"]):
+                raise ValueError("invalid committed app/block hash")
+            validators = self.query(node, f"/validators?height={height}&per_page=100")
+            voting = validators["validators"]
+            if (integer(validators["block_height"], "validator height") != height or
+                integer(validators["total"], "validator total") != 4 or len(voting) != 4 or
+                {json.dumps(v["pub_key"], sort_keys=True) for v in voting} != expected_keys or
+                len({integer(v["voting_power"], "voting power", 1) for v in voting}) != 1):
+                raise ValueError("committed validator set is not the four expected equal-power keys")
+            row = {"height": height, "app_hash_block_height": height + 1,
+                   "app_hash": header["app_hash"].upper(), "block_id": block["block_id"]["hash"].upper(),
+                   "balances": {}, "supply": {}}
+            for denom in ("stake", "aatom"):
+                for name, address in self.signers.items():
+                    coin = self.query(node, f"/cosmos/bank/v1beta1/balances/{address}/by_denom?denom={denom}", height)["balance"]
+                    if coin["denom"] != denom:
+                        raise ValueError("balance denomination mismatch")
+                    row["balances"][name + ":" + denom] = str(integer(coin["amount"], "balance", maximum=10**60))
+                coin = self.query(node, f"/cosmos/bank/v1beta1/supply/by_denom?denom={denom}", height)["amount"]
+                if coin["denom"] != denom:
+                    raise ValueError("supply denomination mismatch")
+                row["supply"][denom] = str(integer(coin["amount"], "supply", 1, 10**60))
+            rows.append(row)
+        if any(row != rows[0] for row in rows[1:]):
+            raise ValueError("validators disagree at the same committed height")
+        return {"nodes_checked": [node["node_id"] for node in self.nodes], **rows[0]}
+
+    def run(self):
+        self.home.mkdir(mode=0o700)
+        previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+        def interrupted(signum, frame):
+            raise KeyboardInterrupt(f"interrupted by signal {signum}")
+        for sig in previous:
+            signal.signal(sig, interrupted)
+        try:
+            self.reserve_ports()
+            self.doc["provenance"] = {"source_checkout": command("git", "-C", str(self.root), "rev-parse", "HEAD"),
+                "binary_sha256": sha256(self.binary), "native_library_sha256": sha256(self.library),
+                "trusted_setup_sha256": sha256(self.env["POLYSTORE_TRUSTED_SETUP"]),
+                "harness_sha256": sha256(__file__), "host": platform.platform(),
+                "artifact_source_match": "supplied binary/library; build correspondence not attested"}
+            self.prepare()
+            self.save()
+            self.start("initial")
+            height = self.wait_height(3) - 1
+            self.doc["before_restart"] = self.snapshot(height)
+            expected = {name + ":" + denom: amount for name in self.signers for denom, amount in
+                        (("stake", "100000000000"), ("aatom", "1000000000000000000"))}
+            if self.doc["before_restart"]["balances"] != expected:
+                raise ValueError("independent signers do not have the declared genesis funding")
+            self.save()
+            self.stop()
+            self.reserve_ports()
+            self.start("restart")
+            later = self.wait_height(height + 3) - 1
+            self.doc["after_restart_original_height"] = self.snapshot(height)
+            if self.doc["after_restart_original_height"] != self.doc["before_restart"]:
+                raise ValueError("restart changed the original committed state boundary")
+            self.doc["after_restart_later_height"] = self.snapshot(later)
+            if self.doc["after_restart_later_height"]["balances"] != expected:
+                raise ValueError("unsubmitted workload signer balances changed after restart")
+            self.doc["status"] = "lifecycle_checks_passed"
+        except BaseException as error:
+            self.doc.update(status="failed", error=str(error)[-8192:])
+            raise
+        finally:
+            try:
+                self.stop()
+                for reservation in self.reservations:
+                    reservation.close()
+                self.save()
+            finally:
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
+        return self.home / "evidence.json"
+
+
+def four_validator_main(args):
+    parser = argparse.ArgumentParser(description="Four-validator lifecycle preparation; retains private homes and logs. No capacity qualification.",
+        epilog="Fixed local ports: RPC 26657/26654/26651/26648; P2P 26656/26653/26650/26647; gRPC 9090/9088/9086/9084; API 1317..1314; metrics 26660..26663.")
+    parser.add_argument("--binary", required=True)
+    parser.add_argument("--library", required=True)
+    parser.add_argument("--home", required=True, help="new directory whose parent already exists; never deleted")
+    parser.add_argument("--timeout", type=int, default=180, help="absolute preparation + lifecycle deadline, 30..900 seconds")
+    parser.add_argument("--gomaxprocs", type=int, default=2)
+    options = parser.parse_args(args)
+    print(FourValidatorLifecycle(**vars(options)).run())
+
+
 def main():
     action, *args = sys.argv[1:]
-    if action == "arithmetic":
+    if action == "four-validator-lifecycle":
+        four_validator_main(args)
+    elif action == "arithmetic":
         if args:
             raise ValueError("arithmetic takes no arguments: it reports the frozen C3/C6 planning profile")
         print(json.dumps(arithmetic_report(), indent=2))

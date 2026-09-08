@@ -5,6 +5,7 @@ import copy
 from decimal import Decimal
 from fractions import Fraction
 import hashlib
+import io
 from itertools import combinations
 import json
 from math import comb
@@ -671,6 +672,246 @@ class RetrievalSchedulerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot span"):
             artifact.schedule_transactions([dict(job, phase="warmup"), dict(job, id="b")],
                                            max_in_flight=2, max_queued=2, max_queued_per_signer=1)
+
+
+class FourValidatorLifecycleTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.binary = self.root / "polystorechaind"
+        # A real short-lived mock CLI writes the same generated file shapes.
+        # Validator starts below are Popen mocks; no node or listener is run.
+        self.binary.write_text(textwrap.dedent('''\
+            #!/usr/bin/env python3
+            import base64, json, pathlib, sys
+            args = sys.argv[1:]
+            home = pathlib.Path(args[args.index("--home") + 1])
+            if args[0] == "multi-node":
+                output = pathlib.Path(args[args.index("--output-dir") + 1])
+                for i in range(4):
+                    config = output / f"validator{i}" / "config"
+                    config.mkdir(parents=True)
+                    genesis = {"consensus": {"params": {"block": {}}}, "app_state": {
+                        "bank": {"denom_metadata": []}, "nilchain": {"params": {
+                            "retrieval_v2_activation_height": "0", "unchanged_fee": "17"}}}}
+                    (config / "genesis.json").write_text(json.dumps(genesis))
+                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus_listen_addr = ":26660"\\n')
+                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n')
+                    (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
+                        "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
+                        "priv_key": "NEVER RETAIN THIS SECRET"}))
+            elif args[:2] == ["keys", "show"]:
+                print("nil1" + args[2] + "a" * 35)
+            elif args[:2] == ["comet", "show-node-id"]:
+                print(str(int(home.name[-1]) + 1) * 40)
+            elif args[0] not in ("keys", "genesis"):
+                raise SystemExit("unexpected mock command")
+            '''))
+        self.binary.chmod(0o755)
+        self.library = self.root / "libpolystore_core.so"
+        self.library.write_bytes(b"mock native library")
+        self.runner = artifact.FourValidatorLifecycle(self.binary, self.library, self.root / "run")
+        self.started = []
+        self.http_requests = []
+        self.fault = None
+
+    def response(self, request, timeout):
+        self.http_requests.append(request)
+        url = request.full_url
+        height = request.get_header("X-cosmos-block-height")
+        node = next(n for n in self.runner.nodes if f':{n["rpc"]}/' in url or f':{n["api"]}/' in url)
+        if "/status" in url:
+            value = {"node_info": {"id": node["node_id"], "network": self.runner.chain},
+                     "sync_info": {"latest_block_height": "6" if len(self.started) > 4 else "3"}}
+            if self.fault == "wrong_node":
+                value["node_info"]["id"] = "0" * 40
+        elif "/block?" in url:
+            block_height = url.split("height=")[1]
+            value = {"block": {"header": {"height": block_height, "chain_id": self.runner.chain,
+                       "app_hash": "A" * 64}}, "block_id": {"hash": "B" * 64}}
+            if self.fault == "app_hash" and node is self.runner.nodes[-1]:
+                value["block"]["header"]["app_hash"] = "C" * 64
+            if self.fault == "restart_state" and len(self.started) > 4:
+                value["block"]["header"]["app_hash"] = "C" * 64
+            if self.fault == "block_height":
+                value["block"]["header"]["height"] = str(int(block_height) - 1)
+        elif "/validators?" in url:
+            value = {"block_height": url.split("height=")[1].split("&")[0], "total": "4",
+                     "validators": [{"pub_key": n["validator_key"], "voting_power": "100"} for n in self.runner.nodes]}
+            if self.fault == "voting_keys":
+                value["validators"][-1] = value["validators"][0]
+        else:
+            denom = url.split("denom=")[1]
+            amount = "100000000000" if denom == "stake" else "1000000000000000000"
+            if "/supply/" in url:
+                value = {"amount": {"denom": denom, "amount": str(int(amount) * 4)}}
+            else:
+                value = {"balance": {"denom": denom, "amount": amount}}
+                if self.fault == "balance" and node is self.runner.nodes[-1]:
+                    value["balance"]["amount"] = "1"
+        if height is None:
+            value = {"result": value}
+        if self.fault == "empty":
+            value = {}
+        response = io.BytesIO(json.dumps(value).encode())
+        response.status = 200
+        response.headers = {"x-cosmos-block-height": "999" if self.fault == "economic_height" else height}
+        return response
+
+    def fake_start(self, argv, **kwargs):
+        if argv[1] != "start":
+            return self.real_popen(argv, **kwargs)
+        class Process:
+            returncode = None
+            def poll(self):
+                return self.returncode
+            def terminate(self):
+                self.returncode = 0
+            def kill(self):
+                self.returncode = -9
+            def wait(self, timeout=None):
+                if self.returncode is None:
+                    raise AssertionError("must stop owned node before waiting")
+                return self.returncode
+        process = Process()
+        self.started.append((argv, process))
+        return process
+
+    def run_mock(self):
+        self.real_popen = subprocess.Popen
+        with patch.object(self.runner, "reserve_ports") as reserve, \
+             patch.object(artifact.subprocess, "Popen", side_effect=self.fake_start), \
+             patch.object(artifact.urllib.request, "urlopen", side_effect=self.response):
+            result = self.runner.run()
+        self.assertEqual(reserve.call_count, 2)
+        return result
+
+    def test_mock_cli_four_keys_shared_genesis_and_persistent_restart(self):
+        path = self.run_mock()
+        doc = json.loads(path.read_text())
+        self.assertEqual(doc["status"], "lifecycle_checks_passed")
+        self.assertFalse(doc["qualification"])
+        self.assertEqual(doc["transactions_submitted"], 0)
+        self.assertEqual(len(self.started), 8)
+        self.assertTrue(all(p.poll() == 0 for _, p in self.started))
+        self.assertEqual([a for a, _ in self.started[:4]], [a for a, _ in self.started[4:]])
+        self.assertEqual(doc["before_restart"], doc["after_restart_original_height"])
+        self.assertEqual(doc["before_restart"]["height"], 2)
+        self.assertEqual(doc["before_restart"]["app_hash_block_height"], 3)
+        self.assertEqual(doc["after_restart_later_height"]["height"], 5)
+        self.assertEqual(len(set(doc["signers"].values())), 4)
+        self.assertEqual(self.runner.home.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(len([c for c in doc["commands"] if c[1] == "multi-node"]), 1)
+        self.assertFalse(any("gentx" in c or "in-place-testnet" in c for c in doc["commands"]))
+        self.assertNotIn("NEVER RETAIN THIS SECRET", path.read_text())
+        for node in doc["nodes"]:
+            home = Path(node["home"])
+            self.assertEqual(artifact.sha256(home / "config/genesis.json"), doc["genesis_sha256"])
+            self.assertIn('timeout_commit = "1s"', (home / "config/config.toml").read_text())
+            self.assertTrue((home / "initial.log").exists())
+            self.assertTrue((home / "restart.log").exists())
+        self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
+        self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
+
+    def test_fixed_height_and_voting_evidence_rejects_malformed_or_disagreeing_nodes(self):
+        self.runner.home.mkdir(mode=0o700)
+        self.runner.prepare()
+        for fault in ("economic_height", "block_height", "app_hash", "voting_keys", "balance", "empty"):
+            with self.subTest(fault=fault), patch.object(artifact.urllib.request, "urlopen", side_effect=self.response):
+                self.fault = fault
+                with self.assertRaises((ValueError, KeyError)):
+                    self.runner.snapshot(2)
+        self.fault = "wrong_node"
+        with patch.object(artifact.urllib.request, "urlopen", side_effect=self.response):
+            with self.assertRaisesRegex(ValueError, "different node"):
+                self.runner.wait_height(3)
+
+    def test_failed_check_stops_owned_children_and_retains_failure_evidence(self):
+        self.fault = "voting_keys"
+        with self.assertRaisesRegex(ValueError, "validator set"):
+            self.run_mock()
+        self.assertEqual(len(self.started), 4)
+        self.assertTrue(all(p.poll() == 0 for _, p in self.started))
+        doc = json.loads((self.runner.home / "evidence.json").read_text())
+        self.assertEqual(doc["status"], "failed")
+        self.assertNotIn("after_restart_original_height", doc)
+
+    def test_restart_cannot_replace_historical_state_even_if_all_nodes_agree(self):
+        self.fault = "restart_state"
+        with self.assertRaisesRegex(ValueError, "restart changed"):
+            self.run_mock()
+        self.assertEqual(len(self.started), 8)
+        self.assertTrue(all(p.poll() == 0 for _, p in self.started))
+        doc = json.loads((self.runner.home / "evidence.json").read_text())
+        self.assertEqual(doc["status"], "failed")
+        self.assertNotEqual(doc["before_restart"]["app_hash"], doc["after_restart_original_height"]["app_hash"])
+
+    def test_existing_home_and_symlink_are_rejected_without_removal(self):
+        existing = self.root / "operator"
+        existing.mkdir()
+        (existing / "sentinel").write_text("preserve")
+        link = self.root / "link"
+        link.symlink_to(existing)
+        for home in (existing, link):
+            with self.assertRaisesRegex(ValueError, "must not already exist"):
+                artifact.FourValidatorLifecycle(self.binary, self.library, home)
+        self.assertEqual((existing / "sentinel").read_text(), "preserve")
+        self.assertTrue(link.is_symlink())
+
+    def test_port_conflict_closes_only_own_reservations_before_any_cli(self):
+        reservations = []
+        class Reservation:
+            closed = False
+            def __init__(self):
+                reservations.append(self)
+            def bind(self, address):
+                if len(reservations) == 3:
+                    raise OSError("address already in use")
+            def close(self):
+                self.closed = True
+        with patch.object(artifact.socket, "socket", side_effect=Reservation), \
+             patch.object(self.runner, "cli") as cli:
+            with self.assertRaisesRegex(OSError, "already in use"):
+                self.runner.run()
+        cli.assert_not_called()
+        self.assertTrue(all(r.closed for r in reservations))
+        self.assertEqual(json.loads((self.runner.home / "evidence.json").read_text())["status"], "failed")
+
+    def test_oversized_http_body_is_not_evidence(self):
+        response = io.BytesIO(b"x" * (artifact.MAX_COMMAND_OUTPUT_BYTES + 1))
+        response.status = 200
+        response.headers = {}
+        with patch.object(artifact.urllib.request, "urlopen", return_value=response):
+            with self.assertRaisesRegex(ValueError, "oversized"):
+                self.runner.query(self.runner.nodes[0], "/status")
+
+    def test_runtime_artifact_change_blocks_restart_before_any_process(self):
+        self.runner.doc["provenance"] = {"binary_sha256": "0" * 64}
+        with patch.object(artifact.subprocess, "Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "artifact changed"):
+                self.runner.start("restart")
+        popen.assert_not_called()
+
+    def test_generated_toml_setting_is_section_specific_and_fails_on_drift(self):
+        original = '[rpc]\nladdr = "public"\n[p2p]\nladdr = "peer"\n'
+        self.assertEqual(artifact.set_toml_value(original, "p2p", "laddr", '"local"'),
+                         '[rpc]\nladdr = "public"\n[p2p]\nladdr = "local"\n')
+        for text in ("", '[p2p]\nladdr = "a"\nladdr = "b"\n'):
+            with self.assertRaisesRegex(ValueError, "expected one"):
+                artifact.set_toml_value(text, "p2p", "laddr", '"local"')
+
+    def test_opt_in_help_does_not_require_builds_or_create_homes(self):
+        result = subprocess.run(["bash", str(SCRIPT), "--help"], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("legacy-serial", result.stdout)
+        self.assertIn("four-validator-lifecycle", result.stdout)
+        result = subprocess.run(["bash", str(SCRIPT), "--binary", str(self.binary), "--help"],
+                                env=dict(os.environ, POLYSTORE_BENCH_MODE="four-validator-lifecycle"),
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("26657/26654/26651/26648", result.stdout)
+        self.assertFalse(self.runner.home.exists())
 
 
 class RetrievalArithmeticTest(unittest.TestCase):
