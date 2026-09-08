@@ -315,10 +315,12 @@ def run(lifecycle, fixture_k8, fixture_k2):
         raise
     finally:
         try:
-            lifecycle.stop()
-            for reservation in lifecycle.reservations:
-                reservation.close()
-            lifecycle.save()
+            try:
+                lifecycle.stop()
+            finally:
+                for reservation in lifecycle.reservations:
+                    reservation.close()
+                lifecycle.save()
         finally:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)

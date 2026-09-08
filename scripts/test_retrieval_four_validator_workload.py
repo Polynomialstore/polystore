@@ -8,7 +8,7 @@ import sqlite3
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
 import retrieval_four_validator_workload as workload
@@ -62,6 +62,27 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_stop_failure_still_closes_reservations_saves_evidence_and_restores_signals(self):
+        events = []
+        reservation = Mock()
+        reservation.close.side_effect = lambda: events.append("close")
+        def failed_stop():
+            events.append("stop")
+            raise RuntimeError("validator stop failed")
+        with tempfile.TemporaryDirectory() as tmp:
+            life = SimpleNamespace(home=Path(tmp) / "run", doc={}, reservations=[reservation],
+                stop=failed_stop, save=lambda: events.append("save"))
+            with patch.object(workload, "copy_fixture", side_effect=ValueError("invalid fixture")), \
+                 patch.object(workload.signal, "getsignal", return_value="previous-handler"), \
+                 patch.object(workload.signal, "signal") as set_signal:
+                with self.assertRaisesRegex(RuntimeError, "validator stop failed"):
+                    workload.run(life, "k8", "k2")
+                self.assertEqual(events, ["stop", "close", "save"])
+                self.assertEqual(life.doc["status"], "failed")
+                self.assertEqual(life.doc["error"], "invalid fixture")
+                self.assertEqual([call.args for call in set_signal.call_args_list[-2:]],
+                    [(workload.signal.SIGTERM, "previous-handler"), (workload.signal.SIGINT, "previous-handler")])
+
     def test_two_owner_matrix_pins_intent_and_real_authorities(self):
         life, _, _, operations = fixture_state()
         self.assertEqual(len(operations), 6)
