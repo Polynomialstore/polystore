@@ -479,7 +479,7 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     doc.pop("transactions_submitted", None)  # On failure the retained journal is authoritative.
     doc.update(mode="four-validator-fresh-settlement-smoke", workload="two owner escrows; K8/K2 slot zero; 1/2/8 blobs each",
                limits=["Preparation only; no capacity qualification", "No provider transport or delivered-file verification",
-                       "Only slot zero; nonzero stripe slots remain outstanding", "Zero mint smoke economics; production issuance remains outstanding"],
+                       "Only slot zero; nonzero stripe slots remain outstanding", "Normal SDK mint reconciled; unexpected module issuance rejected"],
                setup_transactions=[])
     try:
         require_retrieval_cli(lifecycle)
