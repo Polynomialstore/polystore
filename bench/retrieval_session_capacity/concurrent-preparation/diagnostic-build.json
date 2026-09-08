@@ -1,0 +1,16 @@
+{
+  "purpose": "diagnostic integration only; 257 CLI with 260 reviewed multi-node configuration; final qualification waits merged product and harness",
+  "chain_tree": "6059f56f606c9d5b193d92ea8c4ed85bc102c4b8",
+  "257_head": "c8b04fbdd1d514cd66c016496d7649725394d0dd",
+  "260_head": "163b4076060a8b89cd7023d602b1dc9013f3acb4",
+  "overlay_files": {
+    "polystorechain/cmd/polystorechaind/cmd/config.go": "26d4019743e1c5b83848a2b3d1999b421e3341eb7650765d1da7faf28a791385",
+    "polystorechain/cmd/polystorechaind/cmd/testnet_multi_node.go": "922fefe9dfdb3080945fa4855d34cc2bd8a19d7672c84d43ca56caa8a6e57820"
+  },
+  "library_sha256": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0",
+  "binary_sha256": "56c380aee9b79840e99fbb2c49f00bb58bf1602864c08805b21a14645ae147ff",
+  "build_command": "GOMAXPROCS=2 GOFLAGS=-p=2 scripts/chain_go.sh build -overlay /tmp/polystore-254-execution/260-integrated-preflight-build/overlay.json -o /tmp/polystore-254-execution/260-integrated-preflight-build/polystorechaind ./cmd/polystorechaind",
+  "evidence_sha256": "dd3b7b9e4462bf58dbbb7ba5332558aedd80299b941d124196a734783c184321",
+  "harness_head": "a024f0e961174edb2b275eca7d42bf7db5ab9256",
+  "retained_evidence_sha256": "cbcf47e288743466efdb770feae7f457e8795c22fc68a4f4b53257e140f0f63a"
+}
