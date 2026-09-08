@@ -9,7 +9,7 @@ const receipt = { transactionHash: hash, blockHash, blockNumber: '0x80', status:
 const block = { hash: blockHash, number: '0x80', gasLimit: '0x1c9c380' }
 
 function mockRpc(replies: Record<string, unknown>) {
-  const calls: Array<{ method: string; params: any[] }> = []
+  const calls: Array<{ method: string; params: [Record<string, string>, string] }> = []
   const request: typeof fetch = async (_url, init) => {
     assert.ok(init?.signal)
     assert.equal(init.method, 'POST')
