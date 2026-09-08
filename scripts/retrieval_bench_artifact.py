@@ -946,7 +946,11 @@ class FourValidatorLifecycle:
             for name in ("rpc", "p2p", "grpc", "api", "metrics"):
                 reservation = socket.socket()
                 self.reservations.append(reservation)
+                # Allow our stopped server's TIME_WAIT connections, while
+                # listen keeps the reservation exclusive (no SO_REUSEPORT).
+                reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 reservation.bind(("127.0.0.1", node[name]))
+                reservation.listen(1)
 
     def prepare(self):
         self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",

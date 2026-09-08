@@ -12,6 +12,7 @@ import json
 from math import comb
 import shutil
 import signal
+import socket
 import sqlite3
 from pathlib import Path
 import subprocess
@@ -1128,6 +1129,11 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             closed = False
             def __init__(self):
                 reservations.append(self)
+            def setsockopt(self, level, option, value):
+                self_option = (level, option, value)
+                assert self_option == (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            def listen(self, backlog):
+                assert backlog == 1
             def bind(self, address):
                 if len(reservations) == 3:
                     raise OSError("address already in use")
@@ -1140,6 +1146,47 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         cli.assert_not_called()
         self.assertTrue(all(r.closed for r in reservations))
         self.assertEqual(json.loads((self.runner.home / "evidence.json").read_text())["status"], "failed")
+
+    def test_restart_reservations_allow_time_wait_but_exclude_live_listeners(self):
+        # Real TCP active close leaves the old server tuple in TIME_WAIT.
+        server = socket.socket()
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", 0))
+        port = server.getsockname()[1]
+        server.listen(1)
+        server.settimeout(2)
+        self.addCleanup(server.close)
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+            accepted, _ = server.accept()
+            with accepted:
+                accepted.settimeout(2)
+                accepted.shutdown(socket.SHUT_WR)
+                self.assertEqual(client.recv(1), b"")
+                client.shutdown(socket.SHUT_WR)
+                self.assertEqual(accepted.recv(1), b"")
+        server.close()
+        with socket.socket() as old_probe:
+            with self.assertRaises(OSError):
+                old_probe.bind(("127.0.0.1", port))
+
+        # Keep the remaining ephemeral ports distinct until the reservation.
+        held = [socket.socket() for _ in range(4)]
+        for sock in held:
+            self.addCleanup(sock.close)
+            sock.bind(("127.0.0.1", 0))
+        ports = [port] + [sock.getsockname()[1] for sock in held]
+        for sock in held:
+            sock.close()
+        self.runner.nodes = [dict(zip(("rpc", "p2p", "grpc", "api", "metrics"), ports))]
+        self.addCleanup(lambda: [sock.close() for sock in self.runner.reservations])
+        self.runner.reserve_ports()
+        self.assertEqual(len(self.runner.reservations), 5)
+        # A second reservation cannot steal the same port, even with REUSEADDR.
+        other = artifact.FourValidatorLifecycle(self.binary, self.library, self.root / "other")
+        other.nodes = self.runner.nodes
+        self.addCleanup(lambda: [sock.close() for sock in other.reservations])
+        with self.assertRaises(OSError):
+            other.reserve_ports()
 
     def test_oversized_http_body_is_not_evidence(self):
         response = io.BytesIO(b"x" * (artifact.MAX_COMMAND_OUTPUT_BYTES + 1))
