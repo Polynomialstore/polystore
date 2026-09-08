@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import path from 'node:path'
 import { parsePinnedGeneration } from '../src/lib/retrieval'
+import { retrievalFailureEvidence } from './utils/retrievalFailureEvidence'
 import { dismissCreateDealDrawer, ensureCreateDealDrawerOpen } from './utils/dashboard'
 
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
@@ -747,6 +748,15 @@ test.describe('mode2 streamed retrieval', () => {
       Object.assign(summary, { success: true, blobs, sessions: settled })
       console.log(`[streamed retrieval] ${size} bytes, ${expectedSessions} completed sessions, ${blobs} blobs, ${summary.retrievalMs}ms`)
     } finally {
+      // Collect before stack teardown, without retrying payment or masking failure.
+      if (summary.success !== true) {
+        try {
+          const failure = await readDownloadFailureBanner(page)
+          const hash = failure.match(/Retrieval transaction reverted \((0x[0-9a-f]{64})\)/i)?.[1]
+          if (hash) summary.failedTransaction = await retrievalFailureEvidence(hash,
+            process.env.VITE_EVM_RPC || `http://localhost:${process.env.EVM_RPC_PORT || '8545'}`)
+        } catch { summary.failedTransactionEvidenceError = 'Failure evidence unavailable' }
+      }
       try {
         await fs.writeFile(testInfo.outputPath('retrieval-summary.json'), JSON.stringify(summary, null, 2))
       } finally { await fs.rm(fixture, { force: true }) }
