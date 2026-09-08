@@ -576,6 +576,24 @@ func CmdOpenRetrievalSession() *cobra.Command {
 				return err
 			}
 
+			version, err := cmd.Flags().GetUint32("challenge-version")
+			if err != nil {
+				return err
+			}
+			payee, err := cmd.Flags().GetString("authorized-proof-provider")
+			if err != nil {
+				return err
+			}
+			if version != 0 && version != 2 {
+				return fmt.Errorf("challenge-version must be 0 (legacy) or 2")
+			}
+			if payee != "" {
+				address, err := sdk.AccAddressFromBech32(payee)
+				if version != 2 || err != nil || len(address) != 20 || address.String() != payee {
+					return fmt.Errorf("authorized-proof-provider requires v2 and a canonical 20-byte provider address")
+				}
+			}
+
 			if strings.TrimSpace(provider) == "" {
 				return fmt.Errorf("provider is required")
 			}
@@ -584,21 +602,25 @@ func CmdOpenRetrievalSession() *cobra.Command {
 			}
 
 			msg := types.MsgOpenRetrievalSession{
-				Creator:        clientCtx.GetFromAddress().String(),
-				DealId:         dealId,
-				Provider:       provider,
-				ManifestRoot:   manifestRoot,
-				StartMduIndex:  startMduIndex,
-				StartBlobIndex: startBlobIndex,
-				BlobCount:      blobCount,
-				Nonce:          nonce,
-				ExpiresAt:      expiresAt,
+				Creator:                 clientCtx.GetFromAddress().String(),
+				DealId:                  dealId,
+				Provider:                provider,
+				ManifestRoot:            manifestRoot,
+				StartMduIndex:           startMduIndex,
+				StartBlobIndex:          startBlobIndex,
+				BlobCount:               blobCount,
+				Nonce:                   nonce,
+				ExpiresAt:               expiresAt,
+				ChallengeVersion:        version,
+				AuthorizedProofProvider: payee,
 			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
 		},
 	}
 
+	cmd.Flags().Uint32("challenge-version", 0, "Challenge version: 2 for secured retrieval, 0 for legacy compatibility")
+	cmd.Flags().String("authorized-proof-provider", "", "Immutable v2 proof payee (default: assigned provider)")
 	cmd.Flags().Uint64("deal-id", 0, "Deal ID")
 	cmd.Flags().String("provider", "", "Assigned provider address")
 	cmd.Flags().String("manifest-root", "", "PolyFS root (32-byte hex)")
