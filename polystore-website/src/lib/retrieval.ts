@@ -95,7 +95,7 @@ export async function readBoundedResponse(response: Response, max: number, signa
   const abort = () => { void reader.cancel(signal?.reason).catch(() => {}) }
   signal?.addEventListener('abort', abort, { once: true })
   try {
-    while (true) {
+    for (;;) {
       signal?.throwIfAborted()
       const { value, done } = await reader.read()
       signal?.throwIfAborted()

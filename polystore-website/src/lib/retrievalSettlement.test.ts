@@ -1,8 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import type { FrozenSession } from './retrieval'
+import type { FrozenSession, PinnedGeneration } from './retrieval'
 import { executeRetrievalWindows } from './retrievalFlow'
+import { recoverRetrievalMdu } from './retrievalRecovery'
 import { confirmAndRequestRetrievalProofs } from './retrievalSettlement'
 
 const gatewayBase = 'http://localhost:8080'
@@ -55,6 +56,32 @@ test('actual wave sequencing never posts before verified writes and flush, inclu
     })
     if (fail) { await assert.rejects(work); assert.ok(!events.includes('POST'), fail) }
     else { await work; assert.deepEqual(events, ['verify', 'write', 'flush', 'ACK', 'POST']) }
+  }
+})
+
+test('recovery submits only after reconstructed output persists and ACK commits', async () => {
+  const pin: PinnedGeneration = { ...session().pin, layout: 2, k: 2, m: 1, rows: 32, leafCount: 96, metadataMdus: 2n, userMdus: 1n,
+    assignments: Array.from({ length: 3 }, (_, i) => ({ provider: address(i + 1), active: true })) }
+  for (const fail of ['', 'reconstruct', 'write', 'flush', 'ACK', 'POST']) {
+    const events: string[] = []
+    const step = (name: string) => { events.push(name); if (fail === name) throw new Error(name) }
+    const work = recoverRetrievalMdu(pin, 0n, {
+      open: async (windows) => windows.map((window, i) => ({ ...session(i + 1), pin, window })),
+      fetchAndVerify: async () => new Uint8Array(pin.rows * 131072),
+      reconstructAndVerify: async () => { step('reconstruct'); return new Uint8Array(8388608) },
+      consumeAndFlush: async () => { step('write'); step('flush') },
+      confirm: async (sessions) => {
+        const outcomes = await confirmAndRequestRetrievalProofs(sessions, { gatewayBase,
+          confirm: async () => { step('ACK') }, fetchFn: async (_, init) => {
+            step('POST'); const s = sessions.find((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)!
+            return json({ ...payload(s), proof_count: pin.rows })
+          },
+        })
+        assert.deepEqual(outcomes.map((o) => o.state), fail === 'POST' ? ['pending', 'pending'] : ['committed', 'committed'])
+      },
+    })
+    if (fail && fail !== 'POST') { await assert.rejects(work); assert.ok(!events.includes('POST'), fail) }
+    else { assert.equal((await work).length, 8388608); assert.deepEqual(events, ['reconstruct', 'write', 'flush', 'ACK', 'POST', 'POST']) }
   }
 })
 

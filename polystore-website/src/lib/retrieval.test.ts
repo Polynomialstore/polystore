@@ -38,7 +38,7 @@ test('secured planner preserves exact 1KiB and 1GiB coverage with bounded per-MD
 test('authority and planner reject malformed, lossy, unavailable and transformed input before funding', () => {
   assert.equal(u64('9007199254740993'), 9007199254740993n)
   for (const invalid of [1, '01', '-1', '1.1', '18446744073709551616', null]) assert.throws(() => u64(invalid))
-  for (const mutation of [ { id: 9007199254740993 }, { total_mdus: '65538' }, { manifest_root: 'bad' }, { mode2_profile: { k: 3, m: 1 } } ]) {
+  for (const mutation of [ { id: Number('9007199254740993') }, { total_mdus: '65538' }, { manifest_root: 'bad' }, { mode2_profile: { k: 3, m: 1 } } ]) {
     assert.throws(() => parsePinnedGeneration({ deal: { ...deal(), ...mutation } }, 'test-1', 10n, 9007199254740993n))
   }
   const generation = pin()

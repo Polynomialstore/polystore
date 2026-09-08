@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Hex } from 'viem'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
@@ -40,7 +40,6 @@ import {
   writeManifestRoot,
   writeSlabMetadata
 } from '../lib/storage/OpfsAdapter'
-import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
 import { polyfsRootHexFromMdu0Root } from '../lib/upload/polyfsRoot'
 import { workerClient } from '../lib/worker-client'
@@ -71,53 +70,6 @@ function formatBytes(bytes: number): string {
   if (Math.abs(gb) < 1024) return `${gb.toFixed(2)} GiB`
   const tb = gb / 1024
   return `${tb.toFixed(2)} TiB`
-}
-
-function decodeGatewayHttpError(status: number, bodyText: string): string {
-  const trimmed = String(bodyText ?? '').trim()
-  if (!trimmed) return `Gateway download failed (${status})`
-  try {
-    const parsed = JSON.parse(trimmed) as Record<string, unknown>
-    const err = typeof parsed.error === 'string' ? parsed.error.trim() : ''
-    const hint = typeof parsed.hint === 'string' ? parsed.hint.trim() : ''
-    const message = typeof parsed.message === 'string' ? parsed.message.trim() : ''
-    if (/missing X-PolyStore-Session-Id/i.test(err)) {
-      return 'Gateway requires an on-chain retrieval session. Use Onchain Retrieval (or Auto source) and approve wallet access.'
-    }
-    if (err && hint) return `${err} (${hint})`
-    if (err) return err
-    if (message) return message
-  } catch {
-    // Ignore and use raw text.
-  }
-  return trimmed
-}
-
-function localGatewayBaseCandidates(rawBase: string): string[] {
-  const trimmed = String(rawBase || '').trim().replace(/\/$/, '')
-  const out: string[] = []
-  const pushTrusted = (candidate: string | null | undefined) => {
-    const clean = String(candidate || '').trim().replace(/\/$/, '')
-    if (!clean) return
-    if (!isTrustedLocalGatewayBase(clean)) return
-    if (!out.includes(clean)) out.push(clean)
-  }
-  pushTrusted(trimmed)
-  try {
-    const parsed = new URL(trimmed)
-    if (parsed.hostname === 'localhost') {
-      parsed.hostname = '127.0.0.1'
-      pushTrusted(parsed.toString().replace(/\/$/, ''))
-    } else if (parsed.hostname === '127.0.0.1') {
-      parsed.hostname = 'localhost'
-      pushTrusted(parsed.toString().replace(/\/$/, ''))
-    }
-  } catch {
-    // Ignore malformed configured base; caller will surface fetch failure.
-  }
-  pushTrusted('http://127.0.0.1:8080')
-  pushTrusted('http://localhost:8080')
-  return out
 }
 
 async function ensureWasmReady(): Promise<void> {
@@ -204,13 +156,11 @@ interface FileRowProps {
   isOpen: boolean
   onToggleMenu: () => void
   onFileActivity?: (activity: FileActivity) => void
-  reconcileLocalMduCache: (dealId: string, chainManifestRoot: string) => Promise<LocalCacheFreshnessResult>
   downloadBlobAsFile: (blob: Blob, filePath: string) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
   fetchFile: (params: FetchInput) => Promise<FetchResult | null>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
-  slab: SlabLayoutData | null
   setBrowserCachedByPath: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setFileActionError: (error: string | null) => void
   setBusyFilePath: (path: string | null) => void
@@ -249,13 +199,11 @@ function FileRow({
   isOpen,
   onToggleMenu,
   onFileActivity,
-  reconcileLocalMduCache,
   downloadBlobAsFile,
   markDownloadPath,
   fetchFile,
   resolveProviderHttpBase,
   sponsoredAuth,
-  slab,
   setBrowserCachedByPath,
   setFileActionError,
   setBusyFilePath,
@@ -513,8 +461,6 @@ export function DealDetail({
     }
   }, [isMode2, serviceHint.rsK, serviceHint.rsM])
   const { address } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient({ chainId: appConfig.chainId })
   const { submitPolicyUpdate, loading: policyUpdating } = useUpdateDealRetrievalPolicy()
   const [policyMode, setPolicyMode] = useState<RetrievalPolicyMode>(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -678,7 +624,6 @@ export function DealDetail({
   )
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan } = useFetch()
-  const gatewayDownloadBases = useMemo(() => localGatewayBaseCandidates(appConfig.gatewayBase), [])
   const {
     slab: fetchSlabLayout,
     manifestInfo: manifestInfoTransport,
@@ -2051,13 +1996,11 @@ export function DealDetail({
                               isOpen={openMenuFilePath === f.path}
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
                               onFileActivity={onFileActivity}
-                              reconcileLocalMduCache={reconcileLocalMduCache}
                               downloadBlobAsFile={downloadBlobAsFile}
                               markDownloadPath={markDownloadPath}
                               fetchFile={fetchFile}
                               resolveProviderHttpBase={resolveProviderHttpBase}
                               sponsoredAuth={sponsoredAuth}
-                              slab={slab}
                               setBrowserCachedByPath={setBrowserCachedByPath}
                               setFileActionError={setFileActionError}
                               setBusyFilePath={setBusyFilePath}

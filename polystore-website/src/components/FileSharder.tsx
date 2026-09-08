@@ -1,7 +1,7 @@
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { CheckCircle2, FileJson, LoaderCircle, UploadCloud, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { gatewayFetchSlabLayout, gatewayListFiles } from '../api/gatewayClient'
 import { lcdFetchDeal } from '../api/lcdClient'
 import { providerFetchRetrievalMetadata } from '../api/providerClient'
@@ -27,6 +27,7 @@ import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../l
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { createRetrievalOutput, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteDealDirectory,
@@ -40,7 +41,7 @@ import {
   writeSlabGenerationAtomically,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
-import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { isGatewayMode2UploadEnabled, isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { createUploadEngine, type UploadTarget, type UploadTaskEvent } from '../lib/upload/engine'
 import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery'
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport'
@@ -687,8 +688,6 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
   const retrievalCleanup = useRef<(() => Promise<void>) | null>(null)
   const retrievalAbort = useRef<AbortController | null>(null)
   useEffect(() => () => { retrievalAbort.current?.abort(); void retrievalCleanup.current?.().catch(() => {}) }, [])
-  const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient({ chainId: appConfig.chainId });
   const { openConnectModal } = useConnectModal();
   const localGateway = useLocalGateway();
   const [wasmStatus, setWasmStatus] = useState<WasmStatus>('idle');
@@ -2057,6 +2056,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     // in one MDU. Preflight all required assignment states before any funding.
     if (pin.userMdus) recoveryWindows(pin, 0n)
     const output = await createRetrievalOutput(pin.userMdus * 8388608n)
+    let unsettled = 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined
     try {
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
         fetch: async (index) => {
@@ -2080,18 +2080,27 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
           },
           reconstructAndVerify: (shards) => workerClient.reconstructRetrievalMdu(pin, shards, commitments),
           consumeAndFlush: async (encoded) => { validateRetrievalMduPacking(pin, records, ordinal, encoded); await output.write(ordinal * 8388608n, encoded); await output.flush() },
-          confirm: (sessions) => retrievalPayment.confirm(sessions, signal),
+          confirm: async (sessions) => {
+            const gatewayBase = localGateway.url || appConfig.gatewayBase
+            const gatewayEnabled = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' })
+            const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+              confirm: (wave) => retrievalPayment.confirm(wave, signal), signal,
+              gatewayBase: gatewayEnabled ? gatewayBase : undefined,
+            })
+            for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
+          },
         }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
       const file = await output.file()
       signal.throwIfAborted()
+      if (firstSettlementIssue) addLog(`> Recovered data verified and acknowledged; ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message}`)
       await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
       const existingMaxEnd = records.reduce((end, r) => r.start_offset + r.size_bytes > end ? r.start_offset + r.size_bytes : end, 0n)
       return { baseMdu0Bytes: mdu0Bytes, existingUserCount: Number(pin.userMdus), existingMaxEnd: Number(existingMaxEnd), appendStartOffset: Number(pin.userMdus) * RAW_MDU_CAPACITY,
         existingUserMdus: Array.from({ length: Number(pin.userMdus) }, (_, index) => ({ index, read: async () => new Uint8Array(await file.slice(index * 8388608, (index + 1) * 8388608).arrayBuffer()) })) }
     } catch (error) { await output.cleanup(); throw error }
-  }, [addLog, baseManifestRoot, dealId, dealOwner, retrievalPayment, retrievalTransport, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

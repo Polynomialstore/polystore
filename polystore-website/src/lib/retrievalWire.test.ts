@@ -85,7 +85,7 @@ test('real native window verifies authoritative C2, fresh openings and every rec
     assert.throws(() => verifyRetrievalWindow(session, swapped, wasm, PolyStoreWasm), /challenge/)
     assert.throws(() => parseFrozenSession(query, 12n, { ...expected, payee: expected.owner }), /request/)
     assert.throws(() => parseFrozenSession(query, 51n, expected), /request/)
-    assert.throws(() => parseFrozenSession({ ...query, session: { ...query.session, deal_id: 9007199254740993 } }, 12n, expected), /uint64/)
+    assert.throws(() => parseFrozenSession({ ...query, session: { ...query.session, deal_id: Number('9007199254740993') } }, 12n, expected), /uint64/)
   } finally { wasm.free() }
 })
 
