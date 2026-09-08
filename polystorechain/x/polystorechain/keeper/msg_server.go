@@ -3341,6 +3341,8 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 
 	var deal types.Deal
 	var stripe stripeParams
+	var contextHash [32]byte
+	var challengeSeed []byte
 	if session.ChallengeVersion == 2 {
 		challenge, err := types.RetrievalChallengeContext(session)
 		if err != nil {
@@ -3353,6 +3355,11 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		if err != nil {
 			return nil, fmt.Errorf("session challenge seed unavailable: %w", err)
 		}
+		contextHash, err = challenge.Hash()
+		if err != nil {
+			return nil, err
+		}
+		challengeSeed = anchor.Seed
 		expected, err := challenge.Challenges(anchor.Seed)
 		if err != nil {
 			return nil, fmt.Errorf("session challenge seed unavailable: %w", err)
@@ -3412,13 +3419,23 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
 		return nil, err
 	}
-	for i := range msg.Proofs {
-		ok, err := verifyPolyFSChainedProof(deal.ManifestRoot, &msg.Proofs[i], stripe.leafCount)
+	if session.ChallengeVersion == 2 {
+		ok, err := crypto_ffi.VerifyPolyFSSessionProofBatch(deal.ManifestRoot, contextHash[:], challengeSeed, stripe.leafCount, msg.Proofs)
 		if err != nil {
-			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("session batch verification error: %s", err)
 		}
 		if !ok {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval proof")
+		}
+	} else {
+		for i := range msg.Proofs {
+			ok, err := verifyPolyFSChainedProof(deal.ManifestRoot, &msg.Proofs[i], stripe.leafCount)
+			if err != nil {
+				return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
+			}
+			if !ok {
+				return nil, sdkerrors.ErrUnauthorized.Wrap("invalid retrieval proof")
+			}
 		}
 	}
 	if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
