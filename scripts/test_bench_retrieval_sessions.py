@@ -21,6 +21,8 @@ import retrieval_bench_artifact as artifact
 
 
 SCRIPT = Path(__file__).with_name("bench_retrieval_sessions.sh")
+# Independent bytes from a real committed CLI TxMsgData response.
+OPEN_RESPONSE_DATA = "12670A412F706F6C7973746F7265636861696E2E706F6C7973746F7265636861696E2E76312E4D73674F70656E52657472696576616C53657373696F6E526573706F6E736512220A20C3393246784994291E73D21C496ECB46D5F3AB119DF54AD0640E978DF87D7FD2"
 
 
 class BenchmarkHomeTest(unittest.TestCase):
@@ -268,8 +270,7 @@ class BenchmarkArtifactTest(unittest.TestCase):
         self.assertTrue(artifact.session_state({"session": session}, "00" * 32, "0", "owner", "provider", "2", "8", "00" * 32, "16")["completed"])
 
     def test_opened_response_requires_exact_single_owning_envelope(self):
-        # Independent bytes from a real committed CLI TxMsgData response.
-        actual = "12670A412F706F6C7973746F7265636861696E2E706F6C7973746F7265636861696E2E76312E4D73674F70656E52657472696576616C53657373696F6E526573706F6E736512220A20C3393246784994291E73D21C496ECB46D5F3AB119DF54AD0640E978DF87D7FD2"
+        actual = OPEN_RESPONSE_DATA
         session_id = "c3393246784994291e73d21c496ecb46d5f3ab119df54ad0640e978df87d7fd2"
         self.assertEqual(artifact.opened_session_id({"data": actual}), session_id)
         for malformed in (actual[:-2], actual + actual, actual + "00", actual.replace("1267", "1266", 1), actual.replace("4D7367", "587367", 1), "00" * 73 + session_id, "xx" + actual[2:]):
@@ -333,6 +334,133 @@ class BenchmarkArtifactTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):
                 artifact.fixture(directory, 1, 1, "zero-filled-v1")
+
+
+class ScheduledTransactionTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.txhash = "AB" * 32
+
+    def job(self, **response):
+        # Real child processes exercise output draining and parsing. The query
+        # includes fields that must never be retained in an in-memory record.
+        committed = {"txhash": self.txhash, "height": "12", "code": 0,
+                     "gas_used": "123", "gas_wanted": "200", "data": OPEN_RESPONSE_DATA,
+                     "tx": {"signed_proof": "do-not-retain" * 10000}, "events": [{"ignored": True}]}
+        committed.update(response)
+        query = self.root / "query.json"
+        query.write_text(json.dumps(committed))
+        submit = self.root / "submit.json"
+        submit.write_text(json.dumps({"code": 0, "txhash": self.txhash}))
+        command = [sys.executable, "-c", "import pathlib,sys; print(pathlib.Path(sys.argv[1]).read_text())"]
+        return {"kind": "open-session", "submit": [*command, str(submit)],
+                "query": [*command, str(query)], "timeout_seconds": 1}
+
+    def test_committed_open_data_is_canonical_and_decodable_without_signed_tx(self):
+        result = artifact.scheduled_transaction(self.job())
+        self.assertEqual(result["outcome"], "committed_success")
+        self.assertEqual((result["height"], result["gas_used"]), (12, 123))
+        self.assertEqual(result["data"], OPEN_RESPONSE_DATA.lower())
+        self.assertEqual(artifact.opened_session_id(result), "c3393246784994291e73d21c496ecb46d5f3ab119df54ad0640e978df87d7fd2")
+        self.assertNotIn("response_error", result)
+        self.assertNotIn("tx", result)
+        self.assertNotIn("events", result)
+        self.assertNotIn("do-not-retain", json.dumps(result))
+        self.assertLess(len(json.dumps(result)), 1024)
+
+    def test_bad_response_data_preserves_commit_evidence_but_cannot_supply_id(self):
+        for data in (None, 1, "x0", "0", OPEN_RESPONSE_DATA + "00", "00" * (artifact.MAX_RESPONSE_DATA_BYTES + 1)):
+            with self.subTest(data=str(data)[:20]):
+                result = artifact.scheduled_transaction(self.job(data=data))
+                self.assertEqual((result["outcome"], result["txhash"], result["height"], result["code"]),
+                                 ("committed_success", self.txhash, 12, 0))
+                self.assertIn("response_error", result)
+                self.assertNotIn("data", result)
+                with self.assertRaises(ValueError):
+                    artifact.opened_session_id(result)
+        failed = artifact.scheduled_transaction(self.job(code=17, data=None))
+        self.assertEqual((failed["outcome"], failed["code"]), ("committed_failure", 17))
+        self.assertIn("response_error", failed)
+
+    def test_generic_response_data_has_an_exact_retention_bound(self):
+        for size in (artifact.MAX_RESPONSE_DATA_BYTES, artifact.MAX_RESPONSE_DATA_BYTES + 1):
+            with self.subTest(size=size):
+                job = self.job(data="AB" * size)
+                job["kind"] = "transaction"
+                result = artifact.scheduled_transaction(job)
+                self.assertEqual(result["outcome"], "committed_success")
+                if size == artifact.MAX_RESPONSE_DATA_BYTES:
+                    self.assertEqual(result["data"], "ab" * size)
+                else:
+                    self.assertNotIn("data", result)
+                    self.assertIn("oversized", result["response_error"])
+
+    def test_submit_and_query_share_absolute_deadline(self):
+        run = artifact.run_bounded_command
+        for submit_ns, query_ns, expected in ((800_000_000, 100_000_000, "committed_success"),
+                                               (800_000_000, 300_000_000, "unknown"),
+                                               (1_000_000_000, 0, "unknown")):
+            with self.subTest(submit_ns=submit_ns, query_ns=query_ns):
+                job = self.job()
+                now, calls = [0], []
+                def command(argv, deadline):
+                    calls.append((now[0], deadline))
+                    result = run(argv, deadline)
+                    # Model actual subprocess work without a timing-sensitive sleep.
+                    now[0] += submit_ns if len(calls) == 1 else query_ns
+                    return result
+                with patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+                     patch.object(artifact, "run_bounded_command", side_effect=command):
+                    result = artifact.scheduled_transaction(job)
+                self.assertEqual(result["outcome"], expected)
+                self.assertEqual(result["checktx_latency_ns"], submit_ns)
+                self.assertEqual(calls, [(0, 1_000_000_000)] +
+                                 ([(submit_ns, 1_000_000_000)] if submit_ns < 1_000_000_000 else []))
+                if expected == "committed_success":
+                    self.assertEqual(result["commit_observation_latency_ns"], 900_000_000)
+                else:
+                    self.assertEqual(result["txhash"], self.txhash)
+                    self.assertNotIn("data", result)
+
+    def test_malformed_query_and_oversized_output_remain_unknown(self):
+        run = artifact.run_bounded_command
+        for scenario in ("malformed-query", "oversized-query", "oversized-submit"):
+            with self.subTest(scenario=scenario):
+                job = self.job()
+                # Cap both pipes together; neither logs nor JSON may grow capture.
+                flood = [sys.executable, "-c", "import os; os.write(1,b'x'*600); os.write(2,b'y'*600)"]
+                if scenario == "malformed-query":
+                    (self.root / "query.json").write_text("{}")
+                elif scenario == "oversized-query":
+                    job["query"] = flood
+                else:
+                    job["submit"] = flood
+                now, calls = [0], []
+                def command(argv, deadline):
+                    calls.append(deadline)
+                    try:
+                        return run(argv, deadline)
+                    finally:
+                        now[0] += 600_000_000
+                with patch.object(artifact, "MAX_COMMAND_OUTPUT_BYTES", 1024), \
+                     patch.object(artifact, "monotonic_ns", side_effect=lambda: now[0]), \
+                     patch.object(artifact, "run_bounded_command", side_effect=command):
+                    result = artifact.scheduled_transaction(job)
+                self.assertEqual(result["outcome"], "unknown")
+                self.assertNotIn("data", result)
+                self.assertEqual(calls, [1_000_000_000] * (1 if scenario == "oversized-submit" else 2))
+                if scenario.startswith("oversized"):
+                    self.assertIn("byte limit", result["error"])
+                if scenario != "oversized-submit":
+                    self.assertEqual(result["txhash"], self.txhash)
+
+    def test_deadline_covers_pipe_drain_and_process_exit(self):
+        for body in ("import time; print('partial', flush=True); time.sleep(10)",
+                     "import os,time; os.close(1); os.close(2); time.sleep(10)"):
+            with self.subTest(body=body), self.assertRaises(subprocess.TimeoutExpired):
+                artifact.run_bounded_command([sys.executable, "-c", body], artifact.monotonic_ns() + 100_000_000)
 
 
 class RetrievalSchedulerTest(unittest.TestCase):

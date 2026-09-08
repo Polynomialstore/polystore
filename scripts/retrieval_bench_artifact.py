@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import selectors
 import subprocess
 import sys
 import time
@@ -31,6 +32,10 @@ BLOBS_PER_MDU = 64
 DEFAULT_K, DEFAULT_M = 8, 4
 # polystorechain/pkg/retrievalchallenge/challenge.go: hard ceiling, not a quota.
 MAX_AUDIT_SAMPLES = 4096
+# Local CLI transport limits, not protocol limits. Keep signed transaction
+# bodies out of scheduler records; only bounded TxMsgData is retained.
+MAX_COMMAND_OUTPUT_BYTES = 4 * 1024 * 1024
+MAX_RESPONSE_DATA_BYTES = 16 * 1024
 
 
 def monotonic_ns():
@@ -181,16 +186,56 @@ def committed_tx(value, expected_hash):
     return value
 
 
+def run_bounded_command(argv, deadline):
+    """Drain both CLI pipes within one absolute deadline and a combined cap."""
+    def remaining():
+        seconds = (deadline - monotonic_ns()) / 1e9
+        if seconds <= 0:
+            raise subprocess.TimeoutExpired(argv, 0)
+        return seconds
+
+    remaining()
+    # Only failure to launch is an OSError to the caller. Once launched, pipe
+    # failures cannot establish that no broadcast took place.
+    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+        try:
+            output = [bytearray(), bytearray()]
+            total = 0
+            with selectors.DefaultSelector() as pipes:
+                for index, stream in enumerate((process.stdout, process.stderr)):
+                    pipes.register(stream, selectors.EVENT_READ, index)
+                while pipes.get_map():
+                    for key, _ in pipes.select(remaining()):
+                        chunk = os.read(key.fd, min(65536, MAX_COMMAND_OUTPUT_BYTES - total + 1))
+                        total += len(chunk)
+                        if total > MAX_COMMAND_OUTPUT_BYTES:
+                            raise ValueError("CLI output exceeds byte limit")
+                        if chunk:
+                            output[key.data].extend(chunk)
+                        else:
+                            pipes.unregister(key.fileobj)
+            process.wait(timeout=remaining())
+            remaining()
+            return subprocess.CompletedProcess(argv, process.returncode,
+                                               output[0].decode("utf-8"), output[1].decode("utf-8", errors="replace"))
+        except OSError as error:
+            raise ValueError("CLI output unavailable: " + str(error)) from error
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+
 def scheduled_transaction(job):
     """CLI submit/query adapter; callers must supply a resolved signer address.
 
     No retries or local sequence cache. The coordinator exclusively owns each
     signer until a committed result, explicit rejection or launch failure; an
     ambiguous broadcast permanently quarantines that signer for this run.
+    A committed result can have unusable response data: response_error does not
+    change its outcome. Open-session consumers must call opened_session_id on
+    the result before preparing a dependent transaction.
     """
-    def run(argv, timeout):
-        return subprocess.run(argv, text=True, capture_output=True, timeout=timeout)
-
     def last_object(output):
         for line in reversed(output.splitlines()):
             try:
@@ -203,12 +248,15 @@ def scheduled_transaction(job):
         return json.loads(output)
 
     started = monotonic_ns()
+    deadline = started + job["timeout_seconds"] * 1000000000
     try:
-        submitted = run(job["submit"], job["timeout_seconds"])
+        submitted = run_bounded_command(job["submit"], deadline)
     except OSError as error:
         return {"outcome": "not_submitted", "error": str(error)[-8192:]}
     except subprocess.TimeoutExpired:
         return {"outcome": "unknown", "error": "submit timeout"}
+    except ValueError as error:
+        return {"outcome": "unknown", "error": str(error)[-8192:]}
     checktx_ns = monotonic_ns()
     result = {"outcome": "unknown", "checktx_latency_ns": checktx_ns - started,
               "error": (submitted.stderr + submitted.stdout)[-8192:]}
@@ -223,18 +271,31 @@ def scheduled_transaction(job):
         result["txhash"] = txhash.upper()
     except (ValueError, KeyError, TypeError):
         return result
-    deadline = monotonic_ns() + job["timeout_seconds"] * 1000000000
     while monotonic_ns() < deadline:
         try:
-            queried = run([*job["query"], txhash], max(0.001, (deadline - monotonic_ns()) / 1e9))
+            queried = run_bounded_command([*job["query"], txhash], deadline)
             committed = committed_tx(last_object(queried.stdout), txhash)
-            return dict(result, outcome="committed_success" if int(committed["code"]) == 0 else "committed_failure",
-                        code=int(committed["code"]), height=int(committed["height"]),
-                        gas_used=int(committed["gas_used"]), gas_wanted=int(committed["gas_wanted"]),
-                        commit_observation_latency_ns=monotonic_ns() - started,
-                        error=str(committed.get("raw_log", ""))[-8192:])
-        except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError):
-            pass
+            observed = monotonic_ns()
+            if observed >= deadline:
+                break
+            result.update(outcome="committed_success" if int(committed["code"]) == 0 else "committed_failure",
+                          code=int(committed["code"]), height=int(committed["height"]),
+                          gas_used=int(committed["gas_used"]), gas_wanted=int(committed["gas_wanted"]),
+                          commit_observation_latency_ns=observed - started,
+                          error=str(committed.get("raw_log", ""))[-8192:])
+            try:
+                data = committed.get("data", "")
+                if (not isinstance(data, str) or len(data) > 2 * MAX_RESPONSE_DATA_BYTES
+                        or len(data) % 2 or not re.fullmatch(r"[0-9a-fA-F]*", data)):
+                    raise ValueError("invalid or oversized committed TxMsgData")
+                if job.get("kind") == "open-session" and result["outcome"] == "committed_success":
+                    opened_session_id({"data": data})
+                result["data"] = data.lower()
+            except ValueError as error:
+                result["response_error"] = str(error)
+            return result
+        except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError) as error:
+            result["error"] = str(error)[-8192:]
         time.sleep(min(0.05, max(0, (deadline - monotonic_ns()) / 1e9)))
     return dict(result, error="committed result unavailable: " + result["error"])
 
