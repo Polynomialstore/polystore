@@ -36,6 +36,8 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 	provider := sdk.AccAddress(common.HexToAddress("0xaabb02").Bytes()).String()
 	deal := types.Deal{Id: 1, Owner: sdk.AccAddress(caller.Bytes()).String(), Providers: []string{provider}, ManifestRoot: fixture.Root, TotalMdus: 3, WitnessMdus: 1, Size_: 1 << 20, RedundancyMode: 2, Mode2Profile: &types.StripeReplicaProfile{K: 8, M: 4}, EscrowBalance: sdkmath.NewInt(100), EndBlock: 100}
 	require.NoError(t, a.PolyStoreChainKeeper.Deals.Set(base, deal.Id, deal))
+	activityBefore := types.DealActivityState{BytesServedTotal: 4096, SuccessfulRetrievalsTotal: 7, FailedChallengesTotal: 2, LastUpdateHeight: base.BlockHeight() - 1}
+	require.NoError(t, a.PolyStoreChainKeeper.DealActivityStates.Set(base, deal.Id, activityBefore))
 	method := legacyProofBatchMethod(t)
 	type chunk struct {
 		RangeStart, RangeLen uint64
@@ -106,6 +108,15 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 				require.Empty(t, state.Logs())
 				require.Empty(t, ctx.EventManager().Events())
 			}
+			activity, err := a.PolyStoreChainKeeper.DealActivityStates.Get(ctx, deal.Id)
+			require.NoError(t, err)
+			expectedActivity := activityBefore
+			if success {
+				expectedActivity.BytesServedTotal += 3 * 1024
+				expectedActivity.SuccessfulRetrievalsTotal += 3
+				expectedActivity.LastUpdateHeight = ctx.BlockHeight()
+			}
+			require.Equal(t, expectedActivity, activity, "each accepted chunk counts once; failed batches preserve all activity")
 		})
 	}
 }

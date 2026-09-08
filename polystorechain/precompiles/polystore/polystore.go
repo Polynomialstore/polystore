@@ -1434,8 +1434,11 @@ func (p *Precompile) runProveRetrievalBatch(ctx sdk.Context, evm *vm.EVM, contra
 			return nil, errors.New("proveRetrievalBatch: invalid triple proof")
 		}
 	}
-	if err := p.keeper.RecordDealActivity(ctx, deal.Id, bytesServed, false); err != nil {
-		return nil, err
+	// Preserve legacy per-chunk retrieval counts after the entire batch verifies.
+	for _, c := range chunks {
+		if err := p.keeper.RecordDealActivity(ctx, deal.Id, c.RangeLen, false); err != nil {
+			return nil, err
+		}
 	}
 
 	// Bandwidth payment (devnet): 1 unit per KiB (rounded up), deducted from escrow.
