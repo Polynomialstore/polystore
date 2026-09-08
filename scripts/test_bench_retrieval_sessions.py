@@ -807,8 +807,6 @@ class IncrementalRetrievalLifecycleTest(unittest.TestCase):
         report = self.run_operations([self.operation("bad", scenario="bad-open")])
         self.assertEqual(self.built, [])
         self.assertEqual(len(self.rows("transactions")), 1)
-        empty = next(row for row in self.rows("operations") if row["inventory_depleted"])
-        self.assertEqual((empty["outcome"], empty["error"]), ("not_submitted", "inventory_depleted"))
         self.assertEqual(self.rows("transactions")[0]["outcome"], "committed_success")
         self.assertIn("stage_response_invalid", self.rows("operations")[0]["error"])
         self.assertEqual(report["quarantined_signers"], [])
@@ -1034,6 +1032,8 @@ class PreparedRetrievalProofTest(unittest.TestCase):
         self.assertEqual(report["proof_submitted"], 1)
         self.assertEqual(report["completed_sessions"], 0)
         self.assertEqual(report["inventory_depleted"], 1)
+        empty = next(row for row in self.rows("operations") if row["inventory_depleted"])
+        self.assertEqual((empty["outcome"], empty["error"]), ("not_submitted", "inventory_depleted"))
         self.assertTrue(report["source_exhausted"])
         self.assertFalse(report["qualification"])
         self.assertEqual(report["phases"]["measurement"]["offered_operations"], 2)
@@ -1045,6 +1045,16 @@ class PreparedRetrievalProofTest(unittest.TestCase):
         self.assertEqual(row["post_submission_evidence"]["height"], 104)
         self.assertIn("native proof generation", report["preparation_excluded"])
         self.assertEqual([height for _, height, _ in self.reads], [None, 104])
+
+    def test_depleted_measurement_still_records_warmup_overlap(self):
+        warmup = self.operation()
+        warmup["phase"] = "warmup"
+        empty = self.operation("empty", prepared=False)
+        with patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
+            report = self.run_operations([warmup, empty])
+        self.assertTrue(report["warmup_overlapped_measurement"])
+        self.assertEqual(report["phases"]["measurement"]["offered"], 0)
+        self.assertEqual(report["phases"]["measurement"]["inventory_depleted"], 1)
 
     def test_invalid_preparation_never_reaches_submission(self):
         for fault in ("status", "anchor", "context", "seed", "expiry", "digest", "path", "signer", "confirm"):

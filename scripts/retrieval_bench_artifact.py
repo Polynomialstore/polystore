@@ -848,12 +848,12 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         def enqueue(job):
             nonlocal warmup_overlap, peak_pending, peak_signer_pending
             job["_enqueued_ns"] = monotonic_ns()
-            if _lifecycle is not None and _lifecycle.mode == "prepared-proof-only" and job["_state"]["operation"]["prepared"] is None:
-                record(job, {"outcome": "not_submitted", "error": "inventory_depleted"})
-                return
             # A finished worker can leave an unresolved warmup broadcast.
             warmup_overlap |= job["phase"] == "measurement" and ("warmup" in quarantined.values() or any(
                 item["phase"] == "warmup" for item in pending + followups + [item for item, _ in running.values()]))
+            if _lifecycle is not None and _lifecycle.mode == "prepared-proof-only" and job["_state"]["operation"]["prepared"] is None:
+                record(job, {"outcome": "not_submitted", "error": "inventory_depleted"})
+                return
             signer_queued = sum(item["signer"] == job["signer"] for item in pending)
             if job["signer"] in quarantined:
                 record(job, {"outcome": "not_submitted", "error": "signer_quarantined"})
