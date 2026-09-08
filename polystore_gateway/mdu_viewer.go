@@ -73,6 +73,31 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A v2 session is authority for its historical root and requester. Resolve it
+	// before current-deal owner/root checks, which cannot authorize a deputy or a
+	// sponsored request and must not revoke an already funded generation.
+	var onchainSession *types.RetrievalSession
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") != "" {
+		response, height, queryErr := queryRetrievalSession(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+		if queryErr != nil {
+			status := http.StatusBadGateway
+			if errors.Is(queryErr, ErrSessionNotFound) {
+				status = http.StatusNotFound
+			}
+			writeJSONError(w, status, "failed to load retrieval session", queryErr.Error())
+			return
+		}
+		if response.Session.ChallengeVersion == 2 {
+			serveFrozenRetrievalWindow(w, r, manifestRoot, mduIndex, response, height)
+			return
+		}
+		if response.Session.ChallengeVersion != 0 {
+			writeJSONError(w, http.StatusBadRequest, "unsupported retrieval challenge version", "")
+			return
+		}
+		onchainSession = &response.Session
+	}
+
 	dealID, _, status, err := validateDealOwnerCidQuery(r, manifestRoot)
 	hasDealQuery := strings.TrimSpace(r.URL.Query().Get("deal_id")) != ""
 	if err != nil {
@@ -125,15 +150,7 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "deal_id and owner query parameters are required", "provider retrieval requires session-scoped deal context")
 			return
 		}
-		onchainSession, err := fetchRetrievalSession(sessionID)
-		if err != nil {
-			if errors.Is(err, ErrSessionNotFound) {
-				writeJSONError(w, http.StatusNotFound, "retrieval session not found", "")
-				return
-			}
-			writeJSONError(w, http.StatusBadGateway, "failed to load retrieval session", err.Error())
-			return
-		}
+
 		providerAddr := strings.TrimSpace(cachedProviderAddress(r.Context()))
 		if providerAddr == "" {
 			writeJSONError(w, http.StatusInternalServerError, "provider address unavailable", "")

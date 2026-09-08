@@ -14,9 +14,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -39,19 +41,31 @@ const (
 )
 
 type p2pFetchRequest struct {
-	ManifestRoot    string  `json:"manifest_root"`
-	DealID          *uint64 `json:"deal_id"`
-	Owner           string  `json:"owner"`
-	FilePath        string  `json:"file_path"`
-	RangeStart      uint64  `json:"range_start"`
-	RangeLen        uint64  `json:"range_len"`
-	DownloadSession string  `json:"download_session,omitempty"`
-	OnchainSession  string  `json:"onchain_session,omitempty"`
-	ReqSig          string  `json:"req_sig,omitempty"`
-	ReqNonce        uint64  `json:"req_nonce,omitempty"`
-	ReqExpiresAt    uint64  `json:"req_expires_at,omitempty"`
-	ReqRangeStart   *uint64 `json:"req_range_start,omitempty"`
-	ReqRangeLen     *uint64 `json:"req_range_len,omitempty"`
+	Window          *p2pRetrievalWindowRequest `json:"-"`
+	ManifestRoot    string                     `json:"manifest_root"`
+	DealID          *uint64                    `json:"deal_id"`
+	Owner           string                     `json:"owner"`
+	FilePath        string                     `json:"file_path"`
+	RangeStart      uint64                     `json:"range_start"`
+	RangeLen        uint64                     `json:"range_len"`
+	DownloadSession string                     `json:"download_session,omitempty"`
+	OnchainSession  string                     `json:"onchain_session,omitempty"`
+	ReqSig          string                     `json:"req_sig,omitempty"`
+	ReqNonce        uint64                     `json:"req_nonce,omitempty"`
+	ReqExpiresAt    uint64                     `json:"req_expires_at,omitempty"`
+	ReqRangeStart   *uint64                    `json:"req_range_start,omitempty"`
+	ReqRangeLen     *uint64                    `json:"req_range_len,omitempty"`
+}
+
+type p2pRetrievalWindowRequest struct {
+	Kind         string  `json:"kind"`
+	ManifestRoot string  `json:"manifest_root"`
+	DealID       string  `json:"deal_id"`
+	MDU          string  `json:"mdu_index"`
+	StartBlob    *uint32 `json:"start_blob_index"`
+	BlobCount    string  `json:"blob_count"`
+	Owner        string  `json:"owner"`
+	SessionID    string  `json:"session_id"`
 }
 
 type p2pFetchResponse struct {
@@ -277,6 +291,15 @@ func (s *p2pServer) handleFetchStream(stream network.Stream) {
 	ctx, cancel := context.WithTimeout(context.Background(), p2pDefaultTimeout)
 	defer cancel()
 
+	if req.Window != nil {
+		admitted, release, err := admitRetrievalResponse(ctx)
+		if err != nil {
+			_ = writeP2PFetchResponse(stream, &p2pFetchResponse{Status: http.StatusServiceUnavailable, Error: "provider proof capacity is busy"}, nil)
+			return
+		}
+		defer release()
+		ctx = admitted
+	}
 	resp, body := serveP2PFetch(ctx, req)
 	if err := writeP2PFetchResponse(stream, resp, body); err != nil {
 		log.Printf("p2p fetch response write failed: %v", err)
@@ -284,7 +307,35 @@ func (s *p2pServer) handleFetchStream(stream network.Stream) {
 }
 
 func readP2PFetchRequest(r io.Reader) (*p2pFetchRequest, error) {
-	decoder := json.NewDecoder(io.LimitReader(r, p2pMaxRequestBytes))
+	data, err := io.ReadAll(io.LimitReader(r, p2pMaxRequestBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > p2pMaxRequestBytes || !utf8.Valid(data) || !json.Valid(data) {
+		return nil, fmt.Errorf("invalid bounded P2P request")
+	}
+	var discriminator struct {
+		Kind string `json:"kind"`
+	}
+	if err := json.Unmarshal(data, &discriminator); err != nil {
+		return nil, err
+	}
+	if discriminator.Kind != "" {
+		if discriminator.Kind != "retrieval_window_v2" {
+			return nil, fmt.Errorf("unknown P2P request kind")
+		}
+		var window p2pRetrievalWindowRequest
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&window); err != nil {
+			return nil, err
+		}
+		if err := validateP2PWindowRequest(window); err != nil {
+			return nil, err
+		}
+		return &p2pFetchRequest{Window: &window}, nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	var req p2pFetchRequest
 	if err := decoder.Decode(&req); err != nil {
 		return nil, fmt.Errorf("decode request: %w", err)
@@ -311,6 +362,9 @@ func readP2PFetchRequest(r io.Reader) (*p2pFetchRequest, error) {
 }
 
 func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse, []byte) {
+	if req.Window != nil {
+		return serveP2PRetrievalWindow(ctx, *req.Window)
+	}
 	resp := &p2pFetchResponse{
 		Status:  http.StatusOK,
 		Headers: make(map[string]string),
@@ -389,6 +443,85 @@ func serveP2PFetch(ctx context.Context, req *p2pFetchRequest) (*p2pFetchResponse
 	}
 
 	return resp, body
+}
+
+func validateP2PWindowRequest(r p2pRetrievalWindowRequest) error {
+	for _, raw := range []string{r.DealID, r.MDU, r.BlobCount} {
+		n, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil || strconv.FormatUint(n, 10) != raw {
+			return fmt.Errorf("invalid canonical P2P integer")
+		}
+	}
+	mdu, _ := strconv.ParseUint(r.MDU, 10, 64)
+	count, _ := strconv.ParseUint(r.BlobCount, 10, 64)
+	root, err := parseManifestRoot(r.ManifestRoot)
+	if err != nil || root.Canonical != r.ManifestRoot || mdu == 0 || mdu > 65536 || count == 0 || count > 64 || r.StartBlob == nil || *r.StartBlob >= 16384 || r.Owner == "" {
+		return fmt.Errorf("invalid P2P retrieval window")
+	}
+	id, _, err := parseSessionIDHex(r.SessionID)
+	if err != nil || r.SessionID != id {
+		return fmt.Errorf("invalid canonical P2P session ID")
+	}
+	return nil
+}
+
+// A bounded recorder lets the shared HTTP handler produce the same C5 bytes
+// without an unbounded httptest response buffer on the provider transport path.
+type p2pWindowRecorder struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+	limit  int
+	err    error
+}
+
+func (w *p2pWindowRecorder) Header() http.Header { return w.header }
+func (w *p2pWindowRecorder) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+}
+func (w *p2pWindowRecorder) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	if len(data) > w.limit-w.body.Len() {
+		w.err = fmt.Errorf("P2P response exceeds window limit")
+		return 0, w.err
+	}
+	return w.body.Write(data)
+}
+func serveP2PRetrievalWindow(ctx context.Context, request p2pRetrievalWindowRequest) (*p2pFetchResponse, []byte) {
+	if err := validateP2PWindowRequest(request); err != nil {
+		return &p2pFetchResponse{Status: http.StatusBadRequest, Error: err.Error()}, nil
+	}
+	count, _ := strconv.ParseUint(request.BlobCount, 10, 64)
+	q := url.Values{"deal_id": {request.DealID}, "owner": {request.Owner}}
+	req := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+request.ManifestRoot+"/"+request.MDU+"?"+q.Encode(), nil).WithContext(ctx)
+	req = mux.SetURLVars(req, map[string]string{"cid": request.ManifestRoot, "index": request.MDU})
+	req.Header.Set("Accept", "multipart/form-data; version=2")
+	req.Header.Set("X-PolyStore-Session-Id", request.SessionID)
+	// Optional HTTP window hints are checked against the same authoritative
+	// snapshot; P2P fields cannot silently describe a different range.
+	req.Header.Set("X-PolyStore-Start-Blob-Index", strconv.FormatUint(uint64(*request.StartBlob), 10))
+	req.Header.Set("X-PolyStore-Blob-Count", request.BlobCount)
+	w := &p2pWindowRecorder{header: make(http.Header), limit: int(count)*131072 + maxRetrievalMetadataBytes + 16384}
+	GatewayMdu(w, req)
+	response := &p2pFetchResponse{Status: w.status, Headers: map[string]string{"content-type": w.header.Get("Content-Type")}}
+	if w.err != nil {
+		return &p2pFetchResponse{Status: http.StatusInternalServerError, Error: w.err.Error()}, nil
+	}
+	if response.Status != http.StatusOK {
+		message := w.body.Bytes()
+		if len(message) > 4096 {
+			message = message[:4096]
+		}
+		response.Error = string(message)
+		return response, nil
+	}
+	body := w.body.Bytes()
+	response.BodyLen = uint64(len(body))
+	return response, body
 }
 
 func writeP2PFetchResponse(w io.Writer, resp *p2pFetchResponse, body []byte) error {
