@@ -1,0 +1,62 @@
+{
+  "purpose": "fresh producer arithmetic selection; not network capacity",
+  "source_base": "b37b836b839b4f01272dde70896776228c048e4a",
+  "batch_commit": "4f9ccf0b6f7ea35579b5259a79329c49ce9146df",
+  "serial_commit": "6b33d0b61ab7e9bed1dfffb842ae4619d324b095",
+  "probe_commit": "241eb23118b8204f0b465c9df32045b8a1bec831",
+  "host": "Darwin-25.2.0-arm64-arm-64bit-Mach-O",
+  "processor": "Apple M3",
+  "gomaxprocs": 2,
+  "runs_per_variant": 5,
+  "binary_provenance": {
+    "qualification": false,
+    "purpose": "actual benchmark entrypoint smoke after warmup nonce correction; no retained performance comparison",
+    "fixture_commit": "d2fa788f",
+    "source_version": "8b6e2b69",
+    "benchtime": "1x",
+    "sha256": {
+      "/Users/michaelseiler/dev/polynomialstore/polystore-260-mixed/polystorechain/x/polystorechain/keeper/retrieval_v2_bench_test.go": "63c54fc917602b493ed722cc2c916bc58f1866f8a2e8bb136090eaed71109489",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/keeper-mixed.test": "a0fc699d79460f55493ca9fcd512893bd3bb793fe3004ed2174657bbbc6a4be0",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/overlay.json": "aa3221b219fe97f51e67b81bbc293483168b887952950d0e16c920b20be887c7",
+      "/tmp/polystore-254-execution/260-mixed-fixture-diagnostic/warmup-green.log": "0332ea712e1f8455b31e9101b79003c014aae04d702416d536446fa699f459ad",
+      "/Users/michaelseiler/dev/polynomialstore/polystore-257-metadata/polystore_core/target/release/libpolystore_core.dylib": "6f917d566e7679f04ede2e46887abefbabf268fbd7485089c87ab0d364c02ff0"
+    }
+  },
+  "setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "limitations": [
+    "Shared interactive Mac; application and OS background activity remained; no competing task builds/services during measured window.",
+    "CPU/RSS/thread counts span whole fresh process including setup,warmup,verification; generation-ns/op isolates measured52freshopenings.",
+    "Thread count sampled every0.5s using ps -M; no attribution to generation; existing commitment pool unchanged.",
+    "Baseline library includes271 unrelated coding/WASM changes; compute_proof and native dependencies match base.",
+    "Rust allocator probe excludes stack,direct C allocation,setup,input,allocator metadata and Go.",
+    "Cargo initially reused candidate probe in archived baseline checkout; rejected that run and forced baseline recompilation; retained baseline log shows compilation."
+  ],
+  "artifacts": {
+    "03-batch.log": "9ba77a5a7167c76e40e77e42f3f3e89c40075eecd5f996178238bc11462e5bb5",
+    "summary.json": "9f900792145a71a3870ab29c56f8bab33a9c4ecb59554e6852f7e31c7fd074ff",
+    "candidate-allocations.log": "53bcc42c95b922f7c65ec4e0beb744d298a285f28d320877795d9d8f99c52184",
+    "03-serial.log": "729cef85dc47cd5af1cd4e997557a4b67a0e04cc1bb8ac4e7c29c411566ef07a",
+    "baseline-allocations.log": "94bc5bc2d017b65a0101fc2ba2398718ddb42e2e13ad1eef0444f8673aabb216",
+    "wasm-build-llvm.log": "2281031baab94c96acc205345f45262d1b9f6158a4cfd1cb5a1ad2d288b121ef",
+    "05-batch.log": "7afe8c88ebd67c1b2958172026211719341e38df502ee84f877a21506ec387c5",
+    "02-batch.log": "fcd59eb9d81beb627384d2c9b62795956f5a4e96751e28323730a376dc17d2ff",
+    "03-baseline.log": "63cbc4e1a2925926bc3399342fff5e188a31c256f5692e2ee259c4ec87a57408",
+    "04-baseline.log": "43cb15429efc32ca7e9abdb2e292f88abf36eda60a77ccfeeb0a98417f5325d7",
+    "01-serial.log": "8b587b144c379f285958bf029b02e00d68a4783f21332443858939f5f1091b1d",
+    "05-baseline.log": "c373679ea2c384c7616b88c503c04e4f1beab88422426229394a1afaa909e898",
+    "04-serial.log": "37e53be20ec6f5a96efac24a9570303c5cdee9d43fe502324b3773d41bfcaec8",
+    "02-baseline.log": "48ea5ea003bf5de0bcf8d83c2fb0aba4911d56de2117fb7805999679b99f104c",
+    "04-batch.log": "8683095bad91538ceefa6ec48ca35d20c696c5d58d4e8d3876d3831cd72257b7",
+    "01-batch.log": "5f137b10560982e171045264c326c4639c0ea8a327215977643e0d0adfd1ac90",
+    "observations.json": "f5d7c650c75cba69d8eec1404cfadae7da289257af334655d4d645d6a4d38c33",
+    "01-baseline.log": "0952be5e14d71c60026584bfe2894860b807b549e76ebd18ac648a0b6689ea39",
+    "02-serial.log": "d9c75cd033a380ae527b3b6bf5d97b4d0d9ae68e0fbddd99f2fbd385241140e1",
+    "full-core-tests.log": "0bfa054d0d2ab31804db148f51724c85e7f5960667b71f2297b97f1a528de707",
+    "05-serial.log": "ee17f71ca3f92d55797e6d5af929aa37f1002710f8587ea17e9687e00b02c118",
+    "cpu-profile/summary.json": "0bebe1aa03fafc48b7adac3a16b7e1e1d8e076102f23439580119241aa24f2ed",
+    "cpu-profile/provenance.json": "0eb77d3770d09c8b9d6d49e9d58991b3ed6c123420a49ea90f88e63b17883949",
+    "cpu-profile/summary.md": "c97628924b5b02c7b0a3348bafdc994ec6a9f73407765b28fc78c7487ed735d8",
+    "cpu-profile/benchmark.log": "56c15bddadca6244a6d6a7884401b2968b8d61363fd55cf68c65a9248c1694fd",
+    "cpu-profile/sample.txt": "77b31868eb57ac12b7c5ad60ba54f76f818c5cc137b754b91248e0957aaa6e08"
+  }
+}

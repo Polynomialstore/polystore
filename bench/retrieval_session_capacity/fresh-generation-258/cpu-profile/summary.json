@@ -1,0 +1,18 @@
+{
+  "qualification": false,
+  "profile_scope": "one 10-second macOS sample window in one 1x mixed keeper benchmark process; stack sample shares, not an end-to-end phase time distribution",
+  "native_opening_stack_observations": 6506,
+  "opening_msm_stack_observations": 3819,
+  "opening_inversion_stack_observations": 2659,
+  "opening_other_observations": 28,
+  "opening_msm_percent": 58.69966185059945,
+  "opening_inversion_percent": 40.869966185059944,
+  "setup_initialization_observations": 0,
+  "setup_loader_observations": 0,
+  "native_commit_received_blob_observations": 0,
+  "reported_fresh_generation_ns_per_iteration": 6261000166,
+  "fresh_openings_per_iteration": 52,
+  "reported_mean_generation_ms_per_opening": 120.40384934615383,
+  "interpretation": "The sampled native opening path is dominated by custom Pippenger MSM and scalar inversion. Setup/fixture construction was not observed in this sample window; zero observations do not mean zero startup cost. The reported generation metric excludes keeper acceptance. Sample window can include untimed warmup and measured-iteration preparation; no speedup or capacity claim.",
+  "recommended_next_step": "Profile-grounded serial generation optimization: batch/reuse denominator inverses and evaluate reuse of existing native BLST MSM, with exact fresh-challenge known-answer checks before any performance comparison. No optimization implemented."
+}

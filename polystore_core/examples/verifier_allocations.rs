@@ -1,8 +1,10 @@
-//! Native verifier heap probe. Run with:
+//! Native verifier/producer heap probe. Run with:
 //! cargo run --release --locked --offline -j 2 --example verifier_allocations
 //!
-//! Only this executable installs the counting allocator. Setup, proof generation,
-//! input buffers, validation controls and printing are outside measured regions.
+//! Add -- --generation for fresh opening allocation measurement.
+//! Only this executable installs the counting allocator. Setup, input buffers,
+//! validation controls and printing are outside measured regions. Proof
+//! generation is outside measurement except in the explicit generation mode.
 //! Counts describe Rust allocator requests, not malloc usable sizes, stack, RSS
 //! or direct C allocations. Both reported passes run after fixture validation.
 
@@ -39,7 +41,7 @@ fn allocated(size: usize) {
     }
 }
 
-// This process measures synchronous verification on its sole caller thread.
+// This process measures synchronous native calls on its sole caller thread.
 // Accounting uses no allocations, locks or output from inside allocator hooks.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -347,11 +349,77 @@ fn report(k: usize, m: usize, stage: &str, count: usize, f: impl Fn() -> bool) {
     }
 }
 
+fn report_generation(ctx: &KzgContext) {
+    // The existing fixture's nonconstant canonical cell pattern, reduced to one
+    // atomic blob: RS expansion and a storage profile are not needed here.
+    let mut blob = vec![0u8; BLOB_SIZE];
+    for (i, cell) in blob.chunks_exact_mut(32).enumerate() {
+        cell[31] = (1 + i % 251) as u8;
+    }
+    let commitment = ctx.blob_to_commitment(&blob).unwrap();
+    nonidentity(&commitment);
+    let fresh_z =
+        polystore_core::retrieval_challenge::derive_z(&CONTEXT_HASH, &ANCHOR_SEED, 0, 2, 0)
+            .unwrap();
+    // Prove this deterministic fresh challenge exercises the off-domain branch.
+    let mut le = fresh_z;
+    le.reverse();
+    let scalar = bls12_381::Scalar::from_bytes(&le).unwrap();
+    assert_ne!(
+        scalar.pow_vartime(&[4096, 0, 0, 0]),
+        bls12_381::Scalar::one()
+    );
+    for (stage, z) in [
+        ("generation_off_domain", fresh_z),
+        (
+            "generation_interior_domain",
+            polystore_core::utils::z_for_cell(3),
+        ),
+    ] {
+        let expected = ctx.compute_proof(&blob, &z).unwrap();
+        nonidentity(&expected.0);
+        assert!(
+            ctx.verify_proof(&commitment, &z, &expected.1, &expected.0)
+                .unwrap()
+        );
+        let mut wrong_y = expected.1;
+        wrong_y[31] ^= 1;
+        assert!(
+            !ctx.verify_proof(&commitment, &z, &wrong_y, &expected.0)
+                .unwrap()
+        );
+        let mut first = None;
+        for pass in ["warm_first", "warm_repeat"] {
+            let (opening, stats) =
+                measure(|| ctx.compute_proof(black_box(&blob), black_box(&z)).unwrap());
+            // Pairing, comparisons and output do not enter producer accounting.
+            assert_eq!(opening, expected, "fresh proof/y changed");
+            assert!(
+                ctx.verify_proof(&commitment, &z, &opening.1, &opening.0)
+                    .unwrap()
+            );
+            assert_eq!(stats.retained_bytes, 0, "producer retained Rust heap");
+            if let Some(previous) = &first {
+                assert_eq!(&stats, previous, "repeat allocations changed");
+            }
+            println!(
+                ",,{stage},1,{pass},{},{},{},{},{}",
+                stats.peak_bytes,
+                stats.total_bytes,
+                stats.allocation_calls,
+                stats.realloc_calls,
+                stats.retained_bytes
+            );
+            first = Some(stats);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     assert!(
-        args.is_empty() || args == ["--session-batch"],
-        "usage: verifier_allocations [--session-batch]"
+        args.is_empty() || args == ["--session-batch"] || args == ["--generation"],
+        "usage: verifier_allocations [--session-batch | --generation]"
     );
     check_allocator();
     let setup = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../demos/kzg/trusted_setup.txt");
@@ -361,6 +429,10 @@ fn main() {
     println!(
         "k,m,stage,proofs,pass,peak_requested_bytes,total_requested_bytes,allocation_calls,realloc_calls,retained_bytes"
     );
+    if args == ["--generation"] {
+        report_generation(&ctx);
+        return;
+    }
     if !args.is_empty() {
         for (mdu, leaves, stage) in [
             (2, 0, "session_batch"),
