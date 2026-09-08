@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import init, { WasmMdu0Builder } from './polystoreCoreRuntime.js'
 import { polyfsMetadataFixture } from './polyfsMetadata.fixture'
 import { decodePolyfsFileRecord, parsePolyfsFilesFromMdu0, readPolyfsFatRange } from './polyfsLocal'
+import { POLYFS_FILE_RECORD_CAPACITY } from '../domain/polyfsLayout'
 
 const root = new URL('../../../', import.meta.url)
 const ready = readFile(new URL('polystore-website/public/wasm/polystore_core_bg.wasm', root)).then((binary) => init({ module_or_path: binary }))
@@ -39,6 +40,7 @@ test('real WASM producer rejects numeric wrapping and lossy paths without mutati
   try {
     for (const path of ['replacement�.txt', 'Desktop/📸.png', 'é'.repeat(116), 'a'.repeat(232), '\ufefffile', 'a//./b']) builder.append_file(path, 1n, 0n)
     const before = builder.bytes()
+    assert.throws(() => builder.append_file('Desktop/📸.png', 2n, 31n))
     for (const path of ['', 'x'.repeat(233), ' x', 'x\u0085', '../x', 'x\0y', '\ud800']) assert.throws(() => builder.append_file(path, 1n, 0n))
     for (const flags of [-1, 256, 0.5, NaN, Infinity]) assert.throws(() => builder.append_file_with_flags('x', 1n, 0n, flags))
     for (const value of [-1n, 1n << 64n, (1n << 64n) + 1n, 0 as unknown as bigint, '0' as unknown as bigint]) {
@@ -55,6 +57,19 @@ test('real WASM producer rejects numeric wrapping and lossy paths without mutati
     builder.set_root(0n, new Uint8Array(32).fill(255))
     assert.notDeepEqual(builder.get_root(0n), new Uint8Array(32).fill(255))
   } finally { builder.free() }
+})
+
+test('real WASM rejects independently encoded duplicate active paths', async () => {
+  await ready
+  const duplicate = polyfsMetadataFixture([{ path: 'same', size: 1n }, { path: 'same', start: 31n, size: 1n }])
+  assert.throws(() => WasmMdu0Builder.load(duplicate, 1n, 64n))
+  const tombstones = polyfsMetadataFixture([{ path: '' }, { path: '' }, { path: 'same' }])
+  const builder = WasmMdu0Builder.load(tombstones, 1n, 64n)
+  try { assert.equal(builder.get_record_count(), 3) } finally { builder.free() }
+  // Exercise the native validator's maximum stack index on the WASM target.
+  const full = polyfsMetadataFixture(Array.from({ length: POLYFS_FILE_RECORD_CAPACITY }, (_, index) => ({ path: `entry${index}` })))
+  const loaded = WasmMdu0Builder.load(full, 1n, 64n)
+  try { assert.equal(loaded.get_record_count(), POLYFS_FILE_RECORD_CAPACITY) } finally { loaded.free() }
 })
 
 test('real WASM legacy recovery is explicit, read-only and stages separate v2 bytes', async () => {

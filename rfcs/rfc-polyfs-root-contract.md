@@ -217,6 +217,12 @@ no explicit record path may use the source filename's basename. JavaScript
 producers reject unpaired UTF-16 surrogates before UTF-8 conversion; literal
 U+FFFD and U+FEFF remain distinct valid characters.
 
+Active paths must be unique by exact UTF-8 bytes. Append, update, tombstone
+reuse, ordinary load, and trusted legacy staging reject duplicates before
+publishing any mutation. Updating the same record is allowed; multiple empty
+tombstones are allowed. Read-only legacy inspection preserves ambiguous legacy
+records for recovery, but cannot stage them as valid v2 metadata.
+
 Ordinary readers validate the exact 8 MiB size, all canonical root cells,
 header/version/count, every record, reserved bytes and deterministic tail.
 Unknown versions or any malformed record reject the whole file map. Active

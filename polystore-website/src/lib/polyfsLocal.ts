@@ -83,9 +83,12 @@ export function decodePolyfsFileRecord(bytes: Uint8Array): {
 export function parsePolyfsFilesFromMdu0(mdu0: Uint8Array): PolyfsFileEntry[] {
   const count = validatedRecordCount(mdu0)
   const files: PolyfsFileEntry[] = []
+  const paths = new Set<string>()
   for (let i = 0; i < count; i++) {
     const record = decodePolyfsFileRecord(readPolyfsFatRange(mdu0, FILE_TABLE_HEADER_SIZE + i * FILE_RECORD_SIZE, FILE_RECORD_SIZE))
     if (!record.path) continue
+    if (paths.has(record.path)) throw new Error('duplicate active file path')
+    paths.add(record.path)
     const start = asNonNegativeInteger(Number(record.start_offset), 'start offset')
     const size = asNonNegativeInteger(Number(record.size_bytes), 'file size')
     asNonNegativeInteger(start + size, 'file end')

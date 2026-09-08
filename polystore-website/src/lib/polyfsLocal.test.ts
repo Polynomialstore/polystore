@@ -54,6 +54,14 @@ test('wire integers remain exact and unsupported UI ranges fail before rounding'
   assert.throws(() => parsePolyfsFilesFromMdu0(overflow))
 })
 
+test('active paths are unique while tombstones and byte-distinct names remain valid', () => {
+  assert.throws(() => parsePolyfsFilesFromMdu0(polyfsMetadataFixture([
+    { path: 'dir/é.txt', start: 0n, size: 31n }, { path: 'dir/é.txt', start: 31n, size: 1n },
+  ])), /duplicate active file path/)
+  const paths = ['', '', 'é', 'e\u0301', 'a/b', 'a//b', 'a/./b', 'A/b']
+  assert.deepEqual(parsePolyfsFilesFromMdu0(polyfsMetadataFixture(paths.map((path) => ({ path })))).map((file) => file.path), paths.slice(2))
+})
+
 test('paths preserve exact UTF-8 bytes and reject lossy names', () => {
   for (const path of ['é'.repeat(116), 'a'.repeat(232), 'a//./b', '\ufefffile']) {
     assert.equal(validatePolyfsRecordPath(path), path)

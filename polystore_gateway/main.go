@@ -4435,7 +4435,7 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 	slabStartIdx := uint64(1) + witnessCount
 
 	count := b.GetRecordCount()
-	latest := make(map[string]polyfsFileEntry, count)
+	files := make([]polyfsFileEntry, 0, count)
 	for i := uint32(0); i < count; i++ {
 		rec, err := b.GetRecord(i)
 		if err != nil {
@@ -4463,13 +4463,11 @@ func GatewayListFiles(w http.ResponseWriter, r *http.Request) {
 				entry.ContentEncoding = "zstd"
 			}
 		}
-		latest[name] = entry
+		files = append(files, entry)
 	}
 
-	files := make([]polyfsFileEntry, 0, len(latest))
 	var total uint64
-	for _, entry := range latest {
-		files = append(files, entry)
+	for _, entry := range files {
 		total += entry.SizeBytes
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })

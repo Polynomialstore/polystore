@@ -20,7 +20,7 @@ func BenchmarkMdu0Metadata(b *testing.B) {
 	}
 	defer builder.Free()
 	for i := uint64(0); i < 1000; i++ {
-		if err := builder.AppendFile("entry", 31, i*31); err != nil {
+		if err := builder.AppendFile("entry"+strconv.FormatUint(i, 10), 31, i*31); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -125,7 +125,7 @@ func TestMetadataV2NativeGoldenAndAtomicAdmission(t *testing.T) {
 	if err != nil || !bytes.Equal(root, cell) {
 		t.Fatalf("root cell: %v", err)
 	}
-	for _, name := range []string{"x\x00y", string([]byte{255}), " x", "/x", "a/../b", string(bytes.Repeat([]byte{'x'}, 233))} {
+	for _, name := range []string{golden.Records[0].Path, "x\x00y", string([]byte{255}), " x", "/x", "a/../b", string(bytes.Repeat([]byte{'x'}, 233))} {
 		if err := b.AppendFile(name, 1, 0); err == nil {
 			t.Fatalf("accepted invalid path %q", name)
 		}
@@ -152,6 +152,15 @@ func TestMetadataV2NativeGoldenAndAtomicAdmission(t *testing.T) {
 		t.Fatal("native producer did not reduce digest exactly once")
 	}
 	malformed := append([]byte(nil), wire...)
+	// Forge a duplicate through independent wire offsets, bypassing the producer.
+	for i := 0; i < 232; i++ {
+		first, second := 128+24+i, 128+256+24+i
+		malformed[2097152+second/31*32+1+second%31] = wire[2097152+first/31*32+1+first%31]
+	}
+	if _, err := LoadMdu0Builder(malformed, 1); err == nil {
+		t.Fatal("accepted duplicate active paths")
+	}
+	malformed = append([]byte(nil), wire...)
 	malformed[len(malformed)-1] = 1
 	if _, err := LoadMdu0Builder(malformed, 1); err == nil {
 		t.Fatal("accepted corrupt padding")
