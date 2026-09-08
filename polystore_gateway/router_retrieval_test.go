@@ -93,10 +93,10 @@ func TestGatewayMduFrozenPayeeRouting(t *testing.T) {
 			if got := invoke(nil); got.Code != 200 || got.Body.String() != "frozen response bytes" {
 				t.Fatalf("frozen routing failed: %d %s", got.Code, got.Body.String())
 			}
-			for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {
+			for _, status := range []int{http.StatusNotFound, http.StatusForbidden, http.StatusInternalServerError} {
 				upstreamStatus = status
 				got := invoke(nil)
-				if got.Code == 200 {
+				if got.Code == 200 || (status == http.StatusNotFound && got.Code != http.StatusNotFound) {
 					t.Fatal("failed authorized provider fell back")
 				}
 			}
@@ -147,13 +147,14 @@ func TestGatewayMduPinnedMetadataRouting(t *testing.T) {
 			echo := "9"
 			requestedHeight := ""
 			allUnavailable := false
+			missingStatus := http.StatusInternalServerError
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				attempts++
 				if r.URL.Path != "/sp/retrieval/mdu/"+root.Canonical+"/0" || r.URL.Query().Get("committed_height") != "9" {
 					t.Errorf("unpinned metadata request: %s", r.URL)
 				}
 				if allUnavailable || attempts%2 == 1 {
-					w.WriteHeader(500)
+					w.WriteHeader(missingStatus)
 					return
 				}
 				w.Header().Set(committedHeightHeader, "9")
@@ -193,13 +194,17 @@ func TestGatewayMduPinnedMetadataRouting(t *testing.T) {
 				mode.handler(w, req)
 				return w
 			}
-			for _, height := range []string{"9", ""} {
-				attempts = 0
-				got := invoke(0, height)
-				if got.Code != 200 || got.Body.String() != "historical metadata" || got.Header().Get(committedHeightHeader) != "9" || requestedHeight != height || attempts != 2 {
-					t.Fatalf("metadata pin lost: code=%d body=%s query=%s attempts=%d", got.Code, got.Body.String(), requestedHeight, attempts)
+			for _, status := range []int{http.StatusInternalServerError, http.StatusNotFound} {
+				missingStatus = status
+				for _, height := range []string{"9", ""} {
+					attempts = 0
+					got := invoke(0, height)
+					if got.Code != 200 || got.Body.String() != "historical metadata" || got.Header().Get(committedHeightHeader) != "9" || requestedHeight != height || attempts != 2 {
+						t.Fatalf("metadata pin lost: code=%d body=%s query=%s attempts=%d", got.Code, got.Body.String(), requestedHeight, attempts)
+					}
 				}
 			}
+
 			attempts = 0
 			if got := invoke(2, "9"); got.Code != 400 || attempts != 0 {
 				t.Fatal("unfunded user MDU was proxied")
