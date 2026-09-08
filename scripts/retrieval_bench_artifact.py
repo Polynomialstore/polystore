@@ -192,6 +192,51 @@ def committed_tx(value, expected_hash):
     return value
 
 
+def signal_owned_process_group(pid, sig):
+    """Signal a start_new_session group whose leader has not been reaped."""
+    try:
+        os.killpg(pid, sig)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # Darwin rejects signals to zombie-only groups. Do not infer this from
+        # leader exit: an unreaped leader can still have live descendants.
+        if platform.system() == "Darwin":
+            try:
+                probe = subprocess.run(["ps", "-o", "stat=", "-g", str(pid)],
+                                       capture_output=True, text=True, timeout=2)
+                states = probe.stdout.split()
+                if probe.returncode == 0 and states and all(state.startswith("Z") for state in states):
+                    return
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        raise
+
+
+def stop_owned_process_groups(processes):
+    """Attempt every owned group; keep failed groups' leaders unreaped."""
+    errors = []
+    for process in processes:
+        try:
+            signal_owned_process_group(process.pid, signal.SIGTERM)
+        except OSError as error:
+            errors.append(error)
+    if processes:
+        time.sleep(1)
+    for process in processes:
+        try:
+            signal_owned_process_group(process.pid, signal.SIGKILL)
+        except OSError as error:
+            errors.append(error)
+            continue
+        try:
+            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            errors.append(error)
+    if errors:
+        raise errors[0]
+
+
 def run_bounded_command(argv, deadline, *, env=None):
     """Drain both CLI pipes within one absolute deadline and a combined cap."""
     def remaining():
@@ -203,7 +248,8 @@ def run_bounded_command(argv, deadline, *, env=None):
     remaining()
     # Only failure to launch is an OSError to the caller. Once launched, pipe
     # failures cannot establish that no broadcast took place.
-    with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env=env) as process:
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env=env)
+    try:
         failed = True
         try:
             output = [bytearray(), bytearray()]
@@ -230,14 +276,17 @@ def run_bounded_command(argv, deadline, *, env=None):
         except OSError as error:
             raise ValueError("CLI output unavailable: " + str(error)) from error
         finally:
-            if failed:
-                # Descendants can inherit the pipes after the leader exits.
-                # The new session makes this group exclusively ours to stop.
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            process.wait()
+            if failed and process.returncode is None:
+                # Descendants can inherit pipes after leader exit. Never signal
+                # after wait() has reaped that leader and released its PID.
+                signal_owned_process_group(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+    except OSError as error:
+        # Cleanup failure also follows launch; it cannot prove no broadcast.
+        raise ValueError("CLI cleanup failed: " + str(error)) from error
+    finally:
+        process.stdout.close()
+        process.stderr.close()
 
 
 def scheduled_environment(job):

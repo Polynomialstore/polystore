@@ -300,5 +300,92 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 workload.journal_results(path, [operation])
 
 
+class HealthyAuditViewsTest(unittest.TestCase):
+    def test_healthy_cli_requires_explicit_binaries_and_bounded_timeout(self):
+        common = ["diagnostic", "--mode", "healthy-providers", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra in ([], required + ["--timeout", "601"], required + ["--proof-only"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit) as error:
+                    workload.main()
+                self.assertEqual(error.exception.code, 2)
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required + ["--timeout", "600"]), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source")
+
+    def fixture(self, *, complete=True):
+        deal = dict(id="7", manifest_root=base64.b64encode(bytes([7]) * 32).decode(),
+                    current_gen="1", start_block="5", end_block="1000")
+        providers = dict(enumerate(ADDRESSES[:3]))
+        values = []
+        for slot, count in enumerate((1, 9, 32)):
+            accepted = count if complete else 0
+            snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=2, m=1,
+                            slot=slot, metadata_mdus="2", user_mdus="1", deal_end="1000",
+                            setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode())
+            context = dict(version=2, chain_id="polystore_260-1", setup_digest=producer.SETUP_DIGEST,
+                kind=2, context_id="00"*32, deal_id=7, generation=1, root="07"*32,
+                assigned=producer.account(providers[slot]).hex(), payee=producer.account(providers[slot]).hex(),
+                layout=2, k=2, m=1, slot=slot, metadata_mdus=2, user_mdus=1, start_mdu=0, start_leaf=0,
+                blob_count=0, epoch_id=2, epoch_length=100, sample_count=count, snapshot_height=100,
+                anchor_height=101, first_response_height=102, deadline_height=200, deal_end=1000)
+            values.append(dict(audit=dict(epoch_id="2", sample_count=str(count), accepted_count=str(accepted),
+                coverage=base64.b64encode(((1 << accepted) - 1).to_bytes((count + 7)//8, "little")).decode(),
+                missed_epochs="0", assignment=dict(deal_id="7", deal_start="5", provider=providers[slot],
+                    manifest_root=deal["manifest_root"], snapshot=snapshot, kind=2)),
+                epoch_length="100", seed=base64.b64encode(bytes([8])*32).decode(), finalized=complete,
+                canonical_context=base64.b64encode(producer.context_bytes(context)).decode()))
+        return values, deal, providers
+
+    def check(self, values, deal, providers, *, finalized=True):
+        return workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=finalized)
+
+    def test_all_slots_include_parity_and_use_actual_sample_denominator(self):
+        values, deal, providers = self.fixture()
+        checked = self.check(values, deal, providers)
+        self.assertEqual(set(checked), {0, 1, 2})
+        self.assertEqual(sum(int(v["audit"]["accepted_count"]) for v in checked.values()), 42)
+        self.assertEqual(sum(int(v["audit"]["sample_count"]) for v in checked.values()), 42)
+        # Empty initial coverage is valid inventory, but cannot qualify completion.
+        initial = self.fixture(complete=False)
+        self.assertEqual(set(self.check(*initial, finalized=False)), {0, 1, 2})
+        with self.assertRaises(ValueError):
+            self.check(*initial)
+
+    def test_invalid_epoch_slot_authority_context_and_coverage_fail_closed(self):
+        mutations = {
+            "missing parity": lambda rows: rows.pop(),
+            "duplicate": lambda rows: rows.append(copy.deepcopy(rows[0])),
+            "wrong epoch": lambda rows: rows[2]["audit"].update(epoch_id="1"),
+            "wrong slot": lambda rows: rows[2]["audit"]["assignment"]["snapshot"].update(slot=3),
+            "wrong provider": lambda rows: rows[2]["audit"]["assignment"].update(provider=ADDRESSES[3]),
+            "wrong kind": lambda rows: rows[2]["audit"]["assignment"].update(kind=3),
+            "wrong deal start": lambda rows: rows[2]["audit"]["assignment"].update(deal_start="6"),
+            "wrong root": lambda rows: rows[2]["audit"]["assignment"].update(manifest_root=base64.b64encode(bytes(32)).decode()),
+            "wrong generation": lambda rows: rows[2]["audit"]["assignment"]["snapshot"].update(generation="2"),
+            "wrong epoch length": lambda rows: rows[2].update(epoch_length="99"),
+            "wrong transcript": lambda rows: rows[2].update(canonical_context=rows[0]["canonical_context"]),
+            "wrong seed size": lambda rows: rows[2].update(seed="AA=="),
+            "population exceeded": lambda rows: rows[2]["audit"].update(sample_count="33"),
+            "zero samples": lambda rows: rows[2]["audit"].update(sample_count="0"),
+            "wrong bitmap count": lambda rows: rows[1]["audit"].update(accepted_count="8"),
+            "padding bits": lambda rows: rows[1]["audit"].update(coverage="/wM=", accepted_count="10"),
+            "incomplete": lambda rows: rows[1]["audit"].update(coverage="/wA=", accepted_count="8"),
+            "unfinalized": lambda rows: rows[2].update(finalized=False),
+            "missed": lambda rows: rows[2]["audit"].update(missed_epochs="1"),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                values, deal, providers = self.fixture()
+                mutate(values)
+                with self.assertRaises(ValueError):
+                    self.check(values, deal, providers)
+
+
 if __name__ == "__main__":
     unittest.main()

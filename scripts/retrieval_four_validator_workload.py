@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Bounded four-validator fresh-proof settlement smoke; never capacity qualification.
+"""Bounded four-validator diagnostics; never capacity qualification.
 
-Uses exported nonconstant K8/K2 fixtures at slot zero, two owner escrows and two
-explicit proof authorities. No provider transport or delivered-file verification
-is exercised. This command starts owned validators only when explicitly invoked.
+Settlement smoke uses exported K8/K2 fixtures without provider transport.
+Healthy-providers uses canonical K2 ingest and three provider-daemons to check
+normal storage audits. Neither mode verifies delivered files. Owned services
+start only when this command is explicitly invoked.
 """
 import argparse
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import signal
+import socket
 import sqlite3
+import subprocess
 import sys
+import time
 import urllib.parse
 
 import retrieval_bench_artifact as artifact
@@ -453,16 +459,315 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     return lifecycle.home / "evidence.json"
 
 
+def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized):
+    """Check committed inventory/coverage without treating absent audits as success."""
+    found = {}
+    for view in value:
+        audit = view["audit"]
+        if producer.uint(audit["epoch_id"]) != epoch:
+            continue
+        assignment = audit["assignment"]
+        snapshot = assignment["snapshot"]
+        slot = producer.uint(snapshot.get("slot", 0), 32)
+        if (slot in found or slot not in providers or assignment["provider"] != providers[slot] or
+                producer.uint(assignment.get("deal_id", 0)) != producer.uint(deal.get("id", 0)) or
+                producer.uint(assignment.get("deal_start", 0)) != producer.uint(deal.get("start_block", 0)) or
+                assignment["manifest_root"] != deal["manifest_root"] or producer.uint(assignment["kind"]) != 2 or
+                snapshot["chain_id"] != chain or producer.uint(snapshot["generation"]) != producer.uint(deal["current_gen"]) or
+                [producer.uint(snapshot[n]) for n in ("layout", "k", "m", "metadata_mdus", "user_mdus")] != [2, 2, 1, 2, 1] or
+                snapshot["setup_digest"] != base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode() or
+                producer.uint(snapshot["deal_end"]) != producer.uint(deal["end_block"])):
+            raise ValueError("audit differs from the committed K2 assignment")
+        count = producer.uint(audit["sample_count"])
+        if not 1 <= count <= 32:  # One K2 user MDU has 32 distinct rows per slot.
+            raise ValueError("invalid audit sample count")
+        coverage = producer.b64(audit["coverage"], (count + 7) // 8)
+        accepted = producer.uint(audit.get("accepted_count", 0))
+        if (sum(bin(byte).count("1") for byte in coverage) != accepted or accepted > count or
+                (count % 8 and coverage[-1] >> (count % 8))):
+            raise ValueError("audit coverage count or padding mismatch")
+        producer.b64(view["seed"], 32)
+        snapshot_height = (epoch - 1) * epoch_length
+        expected = dict(version=2, chain_id=chain, setup_digest=producer.SETUP_DIGEST, kind=2,
+            context_id="00" * 32, deal_id=producer.uint(deal["id"]), generation=producer.uint(deal["current_gen"]),
+            root=producer.b64(deal["manifest_root"], 32).hex(), assigned=producer.account(providers[slot]).hex(),
+            payee=producer.account(providers[slot]).hex(), layout=2, k=2, m=1, slot=slot, metadata_mdus=2,
+            user_mdus=1, start_mdu=0, start_leaf=0, blob_count=0, epoch_id=epoch, epoch_length=epoch_length,
+            sample_count=count, snapshot_height=snapshot_height, anchor_height=snapshot_height + 1,
+            first_response_height=snapshot_height + 2, deadline_height=min(epoch * epoch_length, producer.uint(deal["end_block"]) - 1),
+            deal_end=producer.uint(deal["end_block"]))
+        context = producer.context_bytes(expected)
+        if (producer.uint(view["epoch_length"]) != epoch_length or
+                producer.b64(view["canonical_context"], len(context)) != context):
+            raise ValueError("invalid canonical audit context")
+        if finalized and (view.get("finalized") is not True or accepted != count or producer.uint(audit.get("missed_epochs", 0)) != 0):
+            raise ValueError("normal audit did not finalize with complete coverage")
+        found[slot] = view
+    if set(found) != set(providers) or len(found) != 3:
+        raise ValueError("missing or duplicate all-slot audit evidence")
+    return found
+
+
+def run_healthy(lifecycle, gateway_binary, cli_binary, product_source):
+    """Real canonical ingest and normal audit diagnostic; no retrieval/capacity claim."""
+    gateway = Path(gateway_binary).resolve(strict=True)
+    cli = Path(cli_binary).resolve(strict=True)
+    source = Path(product_source).resolve(strict=True)
+    for binary in (gateway, cli):
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise ValueError("gateway and native CLI binaries must be executable")
+    if not (source / "polystore_cli/src/main.rs").is_file():
+        raise ValueError("product-source must identify the supplied product source checkout")
+    curl = shutil.which("curl")
+    if not curl:
+        raise ValueError("curl is required for bounded multipart upload")
+    lifecycle.home.mkdir(mode=0o700)
+    processes, reservations = [], []
+    previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt(f"interrupted by signal {signum}")
+    for sig in previous:
+        signal.signal(sig, interrupted)
+    doc = lifecycle.doc
+    doc.pop("transactions_submitted", None)
+    doc.update(mode="four-validator-healthy-provider-diagnostic", setup_transactions=[], providers=[],
+        workload="one real K2 deal; three assigned provider-daemons; one normal audit epoch",
+        qualification=False, limits=["No capacity or delivered retrieval qualification", "No deputy retrieval yet",
+            "Normal mint and audit parameters retained; no economic conservation assertion", "No restart qualification"])
+    def command(args, timeout=60):
+        lifecycle.remaining()
+        result = artifact.run_bounded_command(args, min(lifecycle.deadline, artifact.monotonic_ns() + timeout * 10**9), env=lifecycle.env)
+        if result.returncode:
+            raise ValueError("owned diagnostic command failed: " + (result.stderr + result.stdout)[-8192:])
+        return result.stdout
+    def send(name, args):
+        job = transaction_job(lifecycle, lifecycle.signers[name], args)
+        result = artifact.scheduled_transaction(job)
+        doc["setup_transactions"].append(dict(result, signer=job["signer"], submit=job["submit"]))
+        lifecycle.save()
+        if result["outcome"] != "committed_success":
+            raise ValueError("setup transaction failed or ambiguous; no signer retry")
+        return result
+    def check_providers():
+        # Keep leaders unreaped until group cleanup, so their PIDs cannot be
+        # reused while a CLI descendant still needs termination. Health/audit
+        # requests below detect service failure within the shared deadline.
+        for process in processes:
+            os.kill(process.pid, 0)
+    def wait(height):
+        # Keep provider failures visible while the validators advance.
+        while True:
+            check_providers()
+            current = lifecycle.wait_height(1)
+            if current >= height:
+                return current
+            time.sleep(min(0.2, lifecycle.remaining()))
+    try:
+        require_retrieval_cli(lifecycle)
+        lifecycle.reserve_ports()
+        for i in range(3):
+            reservation = socket.socket()
+            reservations.append(reservation)
+            reservation.bind(("127.0.0.1", 19091 + i))
+            reservation.listen(1)
+        doc["provenance"] = dict(source_checkout=command(["git", "-C", str(lifecycle.root), "rev-parse", "HEAD"]).strip(),
+            binary=str(lifecycle.binary), native_library=str(lifecycle.library),
+            binary_sha256=artifact.sha256(lifecycle.binary), native_library_sha256=artifact.sha256(lifecycle.library),
+            trusted_setup_sha256=artifact.sha256(lifecycle.env["POLYSTORE_TRUSTED_SETUP"]), gateway_binary=str(gateway),
+            gateway_sha256=artifact.sha256(gateway), driver_sha256=artifact.sha256(__file__),
+            cli_binary=str(cli), cli_sha256=artifact.sha256(cli), product_source=str(source),
+            product_source_commit=command(["git", "-C", str(source), "rev-parse", "HEAD"]).strip(),
+            product_source_status=command(["git", "-C", str(source), "status", "--porcelain", "--",
+                "polystore_cli", "polystore_core", "polystore_gateway", "polystorechain"]),
+            cli_source_sha256=artifact.sha256(source / "polystore_cli/src/main.rs"),
+            curl_binary=curl, curl_sha256=artifact.sha256(curl),
+            artifact_source_match="supplied binaries/library; build correspondence not attested")
+        if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
+            raise ValueError("diagnostic requires the maintained trusted setup")
+        lifecycle.prepare()  # Do not call smoke_genesis: normal mint/audit defaults remain intact.
+        genesis = json.loads((Path(lifecycle.nodes[0]["home"]) / "config/genesis.json").read_text())
+        doc["normal_mint_profile"] = genesis["app_state"]["mint"]
+        epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
+        if epoch_length < 2:
+            raise ValueError("normal storage audits require epochs")
+        lifecycle.save()
+        lifecycle.start("initial")
+        lifecycle.wait_height(3)
+        for i in range(3):
+            send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", f"/ip4/127.0.0.1/tcp/{19091+i}/http"])
+            directory = lifecycle.home / f"provider{i}"
+            directory.mkdir(mode=0o700)
+            env = dict({key: value for key, value in lifecycle.env.items() if not key.startswith("POLYSTORE_")},
+                POLYSTORE_RUNTIME_PERSONA="provider-daemon", POLYSTORE_GATEWAY_ROUTER="0",
+                POLYSTORE_TRUSTED_SETUP=lifecycle.env["POLYSTORE_TRUSTED_SETUP"],
+                POLYSTORE_HOME=lifecycle.nodes[0]["home"], POLYSTORE_CHAIN_ID=lifecycle.chain,
+                POLYSTORE_NODE=f'http://127.0.0.1:{lifecycle.nodes[0]["rpc"]}',
+                POLYSTORE_LCD_BASE=f'http://127.0.0.1:{lifecycle.nodes[0]["api"]}',
+                POLYSTORECHAIND_BIN=str(lifecycle.binary), POLYSTORE_PROVIDER_KEY=f"provider{i}",
+                POLYSTORE_CLI_BIN=str(cli), POLYSTORE_ROOT_DIR=str(source), POLYSTORE_GAS_PRICES="0.001aatom",
+                POLYSTORE_PROVIDER_ADDRESS=lifecycle.signers[f"provider{i}"], POLYSTORE_UPLOAD_DIR=str(directory),
+                POLYSTORE_SESSION_DB_PATH=str(directory / "sessions.db"), POLYSTORE_LISTEN_ADDR=f"127.0.0.1:{19091+i}",
+                POLYSTORE_P2P_ENABLED="0", POLYSTORE_DISABLE_SYSTEM_LIVENESS="0", POLYSTORE_SYSTEM_LIVENESS="1",
+                POLYSTORE_SYSTEM_LIVENESS_INTERVAL_SECONDS="10", POLYSTORE_POLYCE="0", POLYSTORE_FAKE_INGEST="0",
+                POLYSTORE_FAST_INGEST="0", POLYSTORE_FAST_SHARD="0", POLYSTORE_MODE2_ENCODE_PARALLELISM="1", POLYSTORE_MODE2_UPLOAD_PARALLELISM="2",
+                POLYSTORE_GATEWAY_UPLOAD_TIMEOUT_SECONDS="180", POLYSTORE_CMD_TIMEOUT_SECONDS="30",
+                POLYSTORE_SHARD_TIMEOUT_SECONDS="180", POLYSTORE_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS="60",
+                POLYSTORE_GATEWAY_SP_AUTH="healthy-diagnostic-owned-local-stack")
+            reservations[i].close()
+            if (artifact.sha256(gateway) != doc["provenance"]["gateway_sha256"] or
+                    artifact.sha256(cli) != doc["provenance"]["cli_sha256"]):
+                raise ValueError("gateway or native CLI binary changed before startup")
+            with (directory / "provider.log").open("xb") as log:
+                process = subprocess.Popen([str(gateway)], cwd=directory, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            processes.append(process)
+            doc["providers"].append(dict(pid=process.pid, address=lifecycle.signers[f"provider{i}"], port=19091+i, directory=str(directory),
+                signer_key=f"provider{i}", home=lifecycle.nodes[0]["home"], system_liveness_interval_seconds=10,
+                environment={key: value for key, value in env.items() if key.startswith("POLYSTORE_") and key != "POLYSTORE_GATEWAY_SP_AUTH"}))
+            lifecycle.save()
+        for i in range(3):
+            while True:
+                check_providers()
+                try:
+                    command([curl, "--silent", "--show-error", "--fail", "--max-time", "2", f"http://127.0.0.1:{19091+i}/health"], 3)
+                    break
+                except ValueError:
+                    time.sleep(min(0.2, lifecycle.remaining()))
+        created = send("owner0", ["create-deal", "100000", "100000000", "10000000", "--service-hint", "General:rs=2+1"])
+        wait(created["height"] + 1)
+        owned = [d for d in lifecycle.query(lifecycle.nodes[0], API + "/deals", created["height"])["deals"]
+                 if d["owner"] == lifecycle.signers["owner0"]]
+        if len(owned) != 1:
+            raise ValueError("expected exactly one owner deal")
+        identity = str(owned[0].get("id", "0"))
+        payload = lifecycle.home / "payload.bin"
+        block = bytes((i * 37 + i // 97) % 256 for i in range(4096))
+        with payload.open("xb") as output:
+            for _ in range(8126464 // len(block)):
+                output.write(block)
+        doc["payload"] = dict(path=str(payload), bytes=payload.stat().st_size, sha256=artifact.sha256(payload))
+        uploaded = json.loads(command([curl, "--silent", "--show-error", "--fail", "--max-time", "180",
+            "--form-string", "owner=" + lifecycle.signers["owner0"], "--form-string", "file_path=payload.bin",
+            "--form", "file=@" + str(payload), f"http://127.0.0.1:19091/sp/retrieval/upload?deal_id={identity}"], 185))
+        root = uploaded["manifest_root"]
+        if (not isinstance(root, str) or len(root) != 66 or root != "0x" + bytes.fromhex(root[2:]).hex() or
+                [producer.uint(uploaded[n]) for n in ("size_bytes", "file_size_bytes", "logical_size_bytes", "total_mdus", "witness_mdus")] != [8126464, 8126464, 8126464, 3, 1] or
+                uploaded.get("content_encoding") != "none"):
+            raise ValueError("canonical K2 ingest returned unexpected content")
+        doc["ingest"] = uploaded
+        updated = send("owner0", ["update-deal-content", "--deal-id", identity, "--cid", root,
+            "--size", "8126464", "--total-mdus", "3", "--witness-mdus", "1"])
+        height = updated["height"]
+        wait(height + 1)
+        deal = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, height)["deal"]
+        deal["id"] = identity
+        if producer.b64(deal["manifest_root"], 32).hex() != root[2:]:
+            raise ValueError("committed root differs from ingest")
+        providers = {}
+        for slot in deal["mode2_slots"]:
+            index = producer.uint(slot.get("slot", 0))
+            if index in providers or slot["status"] != "SLOT_STATUS_ACTIVE" or slot.get("pending_provider"):
+                raise ValueError("K2 slots must be distinct and ACTIVE")
+            providers[index] = slot["provider"]
+        if set(providers) != {0, 1, 2} or set(providers.values()) != {lifecycle.signers[f"provider{i}"] for i in range(3)}:
+            raise ValueError("K2 placement differs from the three owned providers")
+        doc["deal"] = deal
+        doc["canonical_artifacts"] = []
+        for slot, address in providers.items():
+            provider = next(row for row in doc["providers"] if row["address"] == address)
+            directory = Path(provider["directory"]) / "deals" / identity / root[2:]
+            for filename, size in (("mdu_0.bin", 8388608), ("mdu_1.bin", 8388608),
+                                   (f"mdu_2_slot_{slot}.bin", 4194304)):
+                path = directory / filename
+                if path.stat().st_size != size:
+                    raise ValueError("provider canonical artifact has wrong size")
+                doc["canonical_artifacts"].append(dict(slot=slot, provider=address, path=str(path),
+                    bytes=size, sha256=artifact.sha256(path)))
+        epoch = (height - 1) // epoch_length + 2
+        def audits(at, finalized):
+            rows = []
+            for node in lifecycle.nodes:
+                values = []
+                for address in providers.values():
+                    values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
+                checked = healthy_audit_views(values, deal, providers, epoch, epoch_length, lifecycle.chain, finalized=finalized)
+                anchor_height = (epoch - 1) * epoch_length + 1
+                anchor = lifecycle.query(node, f"/block?height={anchor_height}")
+                if (producer.uint(anchor["block"]["header"]["height"]) != anchor_height or
+                        anchor["block"]["header"]["chain_id"] != lifecycle.chain or
+                        any(producer.b64(view["seed"], 32).hex() != anchor["block_id"]["hash"].lower() for view in checked.values())):
+                    raise ValueError("audit seed differs from committed epoch anchor")
+                rows.append(checked)
+            if any(row != rows[0] for row in rows[1:]):
+                raise ValueError("four validators disagree on pinned audit evidence")
+            return rows[0]
+        first = (epoch - 1) * epoch_length + 2
+        wait(first + 1)
+        doc["audit_before"] = dict(height=first, audits=audits(first, False))
+        lifecycle.save()
+        final = epoch * epoch_length + 1
+        wait(final + 1)
+        complete = audits(final, True)
+        for slot, view in complete.items():
+            before = doc["audit_before"]["audits"][slot]
+            if any(view[name] != before[name] for name in ("canonical_context", "seed", "epoch_length")):
+                raise ValueError("frozen audit authority changed during epoch")
+        doc["audit_after"] = dict(height=final, audits=complete,
+            accepted_samples=sum(producer.uint(view["audit"].get("accepted_count", 0)) for view in complete.values()),
+            required_samples=sum(producer.uint(view["audit"]["sample_count"]) for view in complete.values()))
+        doc["same_height_state"] = lifecycle.snapshot(final)
+        for node in lifecycle.nodes:
+            current = lifecycle.query(node, API + "/deals/" + identity, final)["deal"]
+            if current["mode2_slots"] != deal["mode2_slots"] or current["manifest_root"] != deal["manifest_root"]:
+                raise ValueError("healthy audit changed active placement/content")
+        check_providers()
+        doc.update(status="healthy_provider_audit_diagnostic_passed", audit_coverage_verified=True)
+    except BaseException as error:
+        doc.update(status="failed", error=str(error)[-8192:])
+        raise
+    finally:
+        try:
+            try:
+                artifact.stop_owned_process_groups(processes)
+            finally:
+                try:
+                    lifecycle.stop()
+                finally:
+                    for reservation in reservations + lifecycle.reservations:
+                        reservation.close()
+        except BaseException as error:
+            doc.update(status="failed", cleanup_error=str(error)[-8192:])
+            raise
+        finally:
+            try:
+                lifecycle.save()
+            finally:
+                for sig, handler in previous.items():
+                    signal.signal(sig, handler)
+    return lifecycle.home / "evidence.json"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for flag in ("binary", "library", "home", "fixture-k8", "fixture-k2"):
+    for flag in ("binary", "library", "home"):
         parser.add_argument("--" + flag, required=True)
+    for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source"):
+        parser.add_argument("--" + flag)
+    parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--proof-only", action="store_true", help="Prepare the six smoke sessions before timing proof submission")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
-    print(run(artifact.FourValidatorLifecycle(**options), k8, k2, proof_only=proof_only))
+    mode, gateway = options.pop("mode"), options.pop("gateway_binary")
+    cli, source = options.pop("cli_binary"), options.pop("product_source")
+    if mode == "healthy-providers":
+        if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
+            parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")
+        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source))
+    else:
+        if not k8 or not k2 or gateway or cli or source:
+            parser.error("settlement-smoke requires both fixtures and excludes --gateway-binary")
+        print(run(artifact.FourValidatorLifecycle(**options), k8, k2, proof_only=proof_only))
 
 
 if __name__ == "__main__":
