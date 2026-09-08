@@ -302,6 +302,15 @@ chain state cause a clear failure; the client must not substitute current metada
 or invent a later challenge seed. Keep retained data and the proof database needed
 by outstanding sessions; do not delete them to resolve a pending submission.
 
+Retention maintenance advances one directory cursor by at most 64 deals per
+minute with a ten-second query deadline. It retains current roots, complete
+chain references and locally active reads/ingests, and revalidates deletion
+candidates under the publication lock. Unavailable or inconsistent authority
+preserves artifacts. Missing/corrupt generation sidecars, including direct
+uploads without enough local admission metadata, also preserve artifacts for
+operator diagnosis; age alone cannot authorize their deletion. Retention can
+therefore use extra disk space while authority or metadata remains unavailable.
+
 #### Native CLI: several sessions, one transaction
 
 The existing command accepts an explicit ordered list:
@@ -425,7 +434,7 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `polystore_gat
 2.  **Triple Proof Generation:**
     *   Session‑proof submission uses on‑disk PolyFS slabs to build `ChainedProof` objects for the requested blob range.
     *   **Target (PolyFS SSoT):** Proof inputs are derived from the deal-scoped on-disk slab (`uploads/deals/<deal_id>/<polyfs_root_key>/mdu_0.bin` + `mdu_*.bin`) plus on-chain deal state — with **no dependency** on per-upload shard JSON, `manifest_blob_hex`, legacy `manifest.bin`, or `uploads/index.json`. Any such artifacts may exist for debugging but are non-normative.
-    *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
+    *   **Secured consumer:** the browser verifies received bytes, canonical metadata and fresh proofs locally with WASM before acknowledgement. Provider generation and trusted user-gateway transaction relay remain separate roles. See §3.3 for the v2 path and its deployment requirements.
 
 3.  **Local Storage:**
     *   The Gateway can act as a Storage Provider for local devnet flows, but it is **not** required to be the sole provider.
