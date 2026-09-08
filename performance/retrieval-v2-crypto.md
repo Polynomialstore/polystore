@@ -98,7 +98,14 @@ timeout. Output must contain actual `/K8/proofs1,2,8` or `/K2/proofs1,2,8,32`
 rows and `PASS`; exit status alone does not establish the selected layout.
 
 ```sh
-(cd polystorechain/x/polystorechain/keeper &&   GOMAXPROCS=2   DYLD_LIBRARY_PATH="$PWD/../../../../polystore_core/target/release"   LD_LIBRARY_PATH="$PWD/../../../../polystore_core/target/release"   POLYSTORE_BENCH_FIXTURE_SERVICE_HINT='General:rs=8+4'   ../../../../keeper-v2.test -test.run='^$'     -test.bench='^BenchmarkSubmitRetrievalSessionProofV2$'     -test.benchtime=3x -test.count=1)
+(cd polystorechain/x/polystorechain/keeper && \
+  GOMAXPROCS=2 \
+  DYLD_LIBRARY_PATH="$PWD/../../../../polystore_core/target/release" \
+  LD_LIBRARY_PATH="$PWD/../../../../polystore_core/target/release" \
+  POLYSTORE_BENCH_FIXTURE_SERVICE_HINT='General:rs=8+4' \
+  ../../../../keeper-v2.test -test.run='^$' \
+    -test.bench='^BenchmarkSubmitRetrievalSessionProofV2$' \
+    -test.benchtime=3x -test.count=1)
 ```
 
 The benchmark opens distinct sessions in discarded cache contexts, captures the
@@ -107,3 +114,19 @@ acceptance. Cache isolation prevents duration from changing live-session caps or
 history; the measured call uses a fresh finite gas meter and asserts the resulting
 `PROOF_SUBMITTED` state. Legal public slot/MDU limits are unchanged. Core 64-proof
 and maximum-path samples remain separately labelled API boundary tests.
+
+## Integrated node compatibility smoke
+
+The integrated daemon at `147549585fd8bd32e85b6e81021e6569f64aa568`
+completed the M0 harness with one two-proof nonconstant session: all eight
+registration/deal/open/proof/confirm transactions committed successfully, and the
+exact session `b5bfce6963e99f75519a26901da381d25419f59e1dcb0c6f65bd5f3649b1f97c`
+was queried as `COMPLETED` at height 9. The load used 1,339,732 gas. The native
+library SHA-256 matched the candidate recorded above; the only working-tree
+change was formatting this document's reproduction command.
+
+Reproduce with `POLYSTORE_BENCH_SESSIONS=1 POLYSTORE_BENCH_PROOFS_PER_SESSION=2
+bash scripts/bench_retrieval_sessions.sh` (on one shell line). This harness defaults
+to nonconstant data and remains a legacy fixed-z compatibility smoke. It does
+not exercise the v2 batch path; the actual v2 keeper integration and repeated
+measurements above cover that path. Full live v2 delivery remains #257/#260 work.
