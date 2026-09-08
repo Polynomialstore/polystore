@@ -1,15 +1,27 @@
 package app
 
 import (
+	"os"
 	"testing"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRetrievalConsensusProfile(t *testing.T) {
+	raw, err := os.ReadFile("../../scripts/retrieval_consensus_profile.json")
+	require.NoError(t, err)
+	params := cmttypes.DefaultConsensusParams()
+	require.NoError(t, cmtjson.Unmarshal(raw, params))
+	require.NoError(t, params.ValidateBasic())
+	require.Positive(t, params.Block.MaxGas)
+	require.Greater(t, params.Block.MaxBytes, int64(MaxTransactionBytes))
+}
 
 func TestTransactionBoundsBeforeDecode(t *testing.T) {
 	calls := 0

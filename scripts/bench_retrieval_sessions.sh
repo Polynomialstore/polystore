@@ -47,7 +47,7 @@ if [ "$PROOFS_PER_SESSION" -gt 0 ] && [ "$PROOFS_PER_SESSION" -gt 32 ]; then
   fail "POLYSTORE_BENCH_PROOFS_PER_SESSION must be 1..32 for the explicit General:rs=2+1 fixture (or 0 to skip proofs)"
 fi
 if [ "$PROOFS_PER_SESSION" -gt 0 ]; then
-  DEFAULT_GAS=$((250000 + PROOFS_PER_SESSION * 50000))
+  DEFAULT_GAS=$((1000000 + PROOFS_PER_SESSION * 500000))
 else
   DEFAULT_GAS=auto
 fi
@@ -210,10 +210,11 @@ for addr in "${PROVIDER_ADDRS[@]}"; do
 done
 "$BIN" genesis gentx "$USER_NAME" "50000000000$DENOM" --chain-id "$CHAIN_ID" "${KEYRING_ARGS[@]}" >/dev/null
 "$BIN" genesis collect-gentxs --home "$CHAIN_HOME" >/dev/null
-python3 - "$CHAIN_HOME/config/genesis.json" <<'PY'
+python3 - "$CHAIN_HOME/config/genesis.json" "$ROOT_DIR/scripts/retrieval_consensus_profile.json" <<'PY'
 import json, sys
 path = sys.argv[1]
 data = json.load(open(path))
+data["consensus"]["params"]["block"].update(json.load(open(sys.argv[2]))["block"])
 bank = data["app_state"]["bank"]
 metadata = bank.get("denom_metadata", [])
 if not any(item.get("base") == "aatom" for item in metadata):
@@ -348,12 +349,13 @@ send_tx() { # send_tx <kind> <index> <from> <module-cli-args...>
   [ "$rc" -eq 0 ] && [ -n "$txjson" ] && [ "$code" -eq 0 ]
 }
 
-python3 - "$OUTPUT" "$SESSIONS" "$TARGET_SESSIONS_PER_SEC" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" "$GAS_LIMIT" <<'PY'
+python3 - "$OUTPUT" "$SESSIONS" "$TARGET_SESSIONS_PER_SEC" "$PROOFS_PER_SESSION" "$CHAIN_ID" "$RPC_ADDR" "$MODULE_CLI" "$GAS_LIMIT" "$ROOT_DIR/scripts/retrieval_consensus_profile.json" <<'PY'
 import json, sys, time
 json.dump({"config": {
   "sessions": int(sys.argv[2]), "target_sessions_per_sec": int(sys.argv[3]),
   "proofs_per_session": int(sys.argv[4]), "chain_id": sys.argv[5],
   "rpc": sys.argv[6], "module_cli": sys.argv[7], "gas_limit": sys.argv[8],
+  "consensus_profile": json.load(open(sys.argv[9])),
   "serial_driver": True,
   "saturation": False,
   "driver_note": "single-client paced path; sessions/block ceiling comes from gas/time arithmetic and in-process benchmarks, not arbitrary parallel saturation",
