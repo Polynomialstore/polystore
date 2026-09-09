@@ -134,3 +134,9 @@ progress. A 600-second no-progress watchdog aborts pending scheduler work; the
 overall deadline remains the shorter authority. Setup and the single bounded
 exporter subprocess remain visible through their existing phase and log artifacts;
 they do not yet emit periodic heartbeat records or make extra LCD queries.
+
+The [Linux high-load diagnostic 002](linux-highload-30s-002/README.md) reconciles 842 successful K8
+proof-submission transactions (6,736 openings) with normal audits. At the final
+16/s offered step, 88 offers hit the bounded queue; its consensus-header-time
+window recorded 8.8 bundles/s. This is a single-host, 30-second-per-step result,
+not a production-capacity or byte-delivery qualification.

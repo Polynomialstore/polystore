@@ -1,0 +1,75 @@
+{
+  "artifacts": {
+    "$ARTIFACT_ROOT/bin/polystore_cli": "46864fd4f12fee3d470a4fcebbf326aab88b2c6e39b9012610278cea6417b28a",
+    "$ARTIFACT_ROOT/bin/polystore_gateway": "7fcfbb428e1c1ad0ed33c059ed8118c1868b56fd4bc9cf7bdde092cb1272778c",
+    "$ARTIFACT_ROOT/bin/polystorechaind": "433de9e70274b057bebd24dd3fd29f7089074f96f919e3658daf32944137c34a",
+    "$ARTIFACT_ROOT/bin/retrieval-exporter.test": "394f064ac6aea84c2e98f89921677483989a207092979c230b8e51284b3068a9",
+    "$PRODUCT_SOURCE/polystore_core/target/release/libpolystore_core.so": "d50bf0a1bf1f79a2ad1b7ace17a91951ed0e9dcb5a405bdd1125723fabff9c27"
+  },
+  "builds": [
+    {
+      "command": "cargo build --release -j2",
+      "component": "core"
+    },
+    {
+      "command": "GOMAXPROCS=2 ../scripts/chain_go.sh build -p2 -o $ARTIFACT_ROOT/bin/polystorechaind ./cmd/polystorechaind",
+      "component": "chain",
+      "tracked_vendor_aggregate_sha256": "3d7c2c1e942561891678309f991eb9318b47db69f699bff469d184e489c3460e",
+      "tracked_vendor_file_count": 8,
+      "vendor_marker": [
+        "95f585d11945153c8e22c737684f58975640c2be",
+        "2ca9b5fd8541bc9b40893aa6e66b5c6a9578ce5a"
+      ]
+    },
+    {
+      "command": "GOFLAGS=-mod=mod GOMAXPROCS=2 go build -p2 -o $ARTIFACT_ROOT/bin/polystore_gateway .",
+      "component": "gateway"
+    },
+    {
+      "command": "GOFLAGS=-mod=mod GOMAXPROCS=2 go test -c -p2 -o $ARTIFACT_ROOT/bin/retrieval-exporter.test",
+      "component": "exporter"
+    },
+    {
+      "command": "cargo build --release -j2",
+      "component": "cli"
+    }
+  ],
+  "host": {
+    "cpu": "AMD Ryzen 7 9700X",
+    "kernel": "7.0.0-30-generic",
+    "logical_cpus": 16,
+    "platform": "Linux x86_64"
+  },
+  "recorded_at_utc": "2026-09-09T07:29:27.136485+00:00",
+  "runtime": {
+    "LD_LIBRARY_PATH_prepend": "$PRODUCT_SOURCE/polystore_core/target/release",
+    "smokes": [
+      "chain version --long",
+      "CLI --help",
+      "exporter test listing",
+      "process group TERM/wait"
+    ]
+  },
+  "schema": "polystore.issue290.linux-build-provenance.v1",
+  "source": {
+    "agents_sha256": "74243cf59c52bc6ad3c38b4e9b39f6f43ea5acec5080036fd8999096639cf023",
+    "checkout": "$PRODUCT_SOURCE",
+    "component_trees": {
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+      "polystore_gateway": "6d0c3bfc9147565180931347ef979113d5983b8a",
+      "polystorechain": "d002c6f58a35d9cfa80f104b413ef5a7b478c764"
+    },
+    "head": "a6e130af3accb3ab9634d6ae04959e612653193a",
+    "tracked_status": "clean",
+    "transport": "public GitHub clone",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "status": "BUILD_COMPLETE_SMOKES_PASSED_REUSED_FOR_ONE_DIAGNOSTIC",
+  "toolchains": {
+    "cargo": "1.98.1 (797e8a9bc 2026-08-05)",
+    "go": "go1.25.5 linux/amd64",
+    "python": "3.14.4",
+    "rustc": "1.98.1 (48a229cea 2026-09-01)"
+  }
+}
