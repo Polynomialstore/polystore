@@ -1,3 +1,4 @@
+import { retrievalDiagnostic, timeRetrieval } from '../lib/retrievalDiagnostics'
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
 import type { Hex } from 'viem'
@@ -50,7 +51,7 @@ export function useRetrievalSessions() {
       const key = 'open:' + await retrievalIntentKey([scope(), recoveryKey, pin.dealId, pin.root, pin.generation, windows.map((w) => [w.mduIndex, w.startBlobIndex, w.blobCount, w.provider, w.slot]), deputy, auth])
       return withRetrievalLock(key, async () => {
         let gas = 0n
-        const transaction = await settleBrowserTransaction({
+        const transaction = await timeRetrieval('open_transaction', () => settleBrowserTransaction({
           key, store: browserRetrievalStore(), signal: deadline,
           prepare: async () => {
             const expiry = current.height + 512n < pin.endHeight ? current.height + 512n : pin.endHeight
@@ -77,16 +78,17 @@ export function useRetrievalSessions() {
             gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data }))
             return { data, intent: { ids: ids.sessionIds, pin } }
           },
-          send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas }),
-          receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
+          send: (data) => timeRetrieval('open_send', () => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas })),
+          receipt: (hash) => timeRetrieval('open_inclusion', () => client.waitForTransactionReceipt({ hash, timeout: 120_000 })),
           reconcile: async (tx) => {
             const signal = AbortSignal.timeout(15_000)
             for (let i = 0; i < windows.length; i++) await fetchFrozenSession(appConfig.lcdBase, { sessionId: tx.intent.ids[i], pin: tx.intent.pin, window: windows[i], owner, payee: deputy ?? windows[i].provider, funding: owner === pin.owner ? 1 : 2 }, signal)
             return true
           },
-        })
+        }))
         const result: FrozenSession[] = []
-        for (let i = 0; i < windows.length; i++) result.push(await waitForRetrievalChallenge(appConfig.lcdBase, { sessionId: transaction.intent.ids[i], pin: transaction.intent.pin, window: windows[i], owner, payee: deputy ?? windows[i].provider, funding: owner === pin.owner ? 1 : 2 }, deadline))
+        for (let i = 0; i < windows.length; i++) result.push(await timeRetrieval('challenge_ready', () => waitForRetrievalChallenge(appConfig.lcdBase, { sessionId: transaction.intent.ids[i], pin: transaction.intent.pin, window: windows[i], owner, payee: deputy ?? windows[i].provider, funding: owner === pin.owner ? 1 : 2 }, deadline), transaction.intent.ids[i]))
+        for (const session of result) retrievalDiagnostic({ phase: 'challenge_height', sessionId: session.sessionId, height: String(session.height) })
         return result.map((session) => ({ ...session, browserTransactionKey: key }))
       })
     },
@@ -102,8 +104,8 @@ export function useRetrievalSessions() {
           gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data }))
           return { data, intent: sessions.map((s) => s.sessionId) }
         },
-        send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas }),
-        receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
+        send: (data) => timeRetrieval('ack_send', () => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas })),
+        receipt: (hash) => timeRetrieval('ack_inclusion', () => client.waitForTransactionReceipt({ hash, timeout: 120_000 })),
         reconcile: async () => {
           const deadline = AbortSignal.timeout(15_000)
           for (const session of sessions) { const fresh = await observed(session, deadline); if (fresh.status !== 3 && fresh.status !== 4) return false }

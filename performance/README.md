@@ -183,10 +183,42 @@ This uses two raw MDUs (16,252,928 bytes), 128 blobs and 16 sessions. Select
 `E2E_MODE2_STREAMED_BYTES=1073741824` for exactly 1 GiB: 133 MDUs, 8,457 blobs and
 1,064 sessions. `E2E_MODE2_STREAMED_ROUTE=provider` selects direct provider fetch;
 the default uses the user-gateway. The existing heavy workflow's
-`run_mode2_large` manual input selects the 1 GiB gateway run. Large runs require
+`streamed_size=small` manual input selects the 15.5 MiB diagnosis;
+`intermediate` selects 130,023,424 bytes (124 MiB, 16 MDUs, 128 sessions,
+1,024 blobs), and `large` selects 1 GiB. The legacy `run_mode2_large` input
+remains compatible, but conflicting selections fail before stack startup. Large runs require
 at least 12 GiB available scratch space after builds and before funding; all runs
 stop if available space falls below 2 GiB while downloading. A failed storage
 check is unavailable infrastructure, not successful delivery.
+
+
+Start with the small fixture. Only advance to the intermediate after measured
+phase costs predict a useful result; only advance to 1 GiB after measured
+scaling fits a 30-minute retrieval execution budget. This is a run-cost guardrail,
+not a product SLA. Keep normal audits enabled. No automatic larger retry.
+
+The harness emits a monotonic heartbeat every 60 seconds and atomically updates
+`retrieval-progress.json` before its final `retrieval-summary.json`. It reports
+unique verified logical output bytes, flushed bytes, verified windows, unique
+ACKed sessions and chain-confirmed COMPLETED sessions separately. COMPLETED is
+unknown until the terminal census checks chain state. Only new output coverage
+or a new terminal session resets the ten-minute retrieval stall deadline;
+requests, retries, ACKs and duplicate observations do not. Other phases have
+their own ten-minute no-progress deadline and the existing overall bounds.
+The independent Node watchdog also covers waiting for the browser download
+event, final stream and hash. Failure closes the task-owned browser context;
+it never issues a payment retry. Normal test profile cleanup remains in effect.
+
+Browser events distinguish open transaction/reconciliation, challenge readiness,
+window transport (including server work), Worker verification, decode/write,
+flush, owner ACK and ACK-plus-provider-settlement. These nested timings overlap
+and must not be summed as critical-path wall time. Worker verification still
+includes both proof validation and received-byte commitment checks; provider
+logs isolate response generation/persistence/write costs. Provider submission
+and inclusion remain combined in proof-request HTTP durations. The OPFS
+preflight separately retains `opfs-progress.json` with flushed and hash-checked
+chunk progress. None of these diagnostics establish acceptable performance
+without an actual retained, equivalent-security measurement.
 
 [The retained two-MDU diagnostic](../bench/retrieval_session_capacity/browser-streamed/two-mdu-diagnostic.json)
 compares serial and four-payee proof submission on reset local stacks. Both runs

@@ -1,3 +1,5 @@
+import { RetrievalProgress, startRetrievalWatchdog } from './utils/retrievalProgress'
+import type { RetrievalDiagnostic } from '../src/lib/retrievalDiagnostics'
 import { test, expect, type Download, type Locator, type Page } from '@playwright/test'
 import { persistentTest } from './utils/persistentBrowser'
 import crypto from 'node:crypto'
@@ -558,7 +560,7 @@ async function ensureWalletConnected(page: Page): Promise<void> {
   expect(await isConnected()).toBe(true)
 }
 
-async function hashCheckedDownload(download: Pick<Download, 'createReadStream' | 'cancel'>, checkDisk: () => Promise<void>) {
+async function hashCheckedDownload(download: Pick<Download, 'createReadStream' | 'cancel'>, checkDisk: () => Promise<void>, onBytes: (bytes: number) => void = () => {}) {
   let failure: unknown, checking: Promise<void> | undefined
   let stream: Readable | null = null
   const check = () => {
@@ -580,7 +582,7 @@ async function hashCheckedDownload(download: Pick<Download, 'createReadStream' |
     if (!stream) throw new Error('download stream unavailable')
     const hash = crypto.createHash('sha256')
     let bytes = 0
-    for await (const chunk of stream) { bytes += chunk.length; hash.update(chunk) }
+    for await (const chunk of stream) { bytes += chunk.length; hash.update(chunk); onBytes(bytes) }
     await check()
     if (failure) throw failure
     return { bytes, digest: hash.digest('hex') }
@@ -620,13 +622,13 @@ test.describe('mode2 streamed retrieval', () => {
 
   persistentTest('mode2 streamed authenticated retrieval', async ({ page }, testInfo) => {
     const size = Number(process.env.E2E_MODE2_STREAMED_BYTES || 16_252_928)
-    expect([16_252_928, 1_073_741_824]).toContain(size)
+    expect([16_252_928, 130_023_424, 1_073_741_824]).toContain(size)
     const large = size === 1_073_741_824
     const route = process.env.E2E_MODE2_STREAMED_ROUTE || 'gateway'
     expect(['gateway', 'provider']).toContain(route)
-    const downloadTimeout = large ? 3 * 60 * 60_000 : 15 * 60_000
-    test.setTimeout(large ? 4 * 60 * 60_000 : 30 * 60_000)
-    const expectedMdus = large ? 133 : 2, expectedSessions = large ? 1064 : 16, expectedBlobs = large ? 8457 : 128
+    const downloadTimeout = large ? 30 * 60_000 : 15 * 60_000
+    test.setTimeout(large ? 75 * 60_000 : 40 * 60_000)
+    const expectedMdus = large ? 133 : size === 130_023_424 ? 16 : 2, expectedSessions = expectedMdus * 8, expectedBlobs = large ? 8457 : expectedMdus * 64
     const fileName = 'mode2-streamed.bin', fixture = testInfo.outputPath(fileName)
     await fs.mkdir(testInfo.outputDir, { recursive: true })
     const diskPaths = [process.cwd(), testInfo.outputDir, tmpdir(), process.env.POLYSTORE_HOME || path.resolve('../_artifacts')]
@@ -642,12 +644,43 @@ test.describe('mode2 streamed retrieval', () => {
     async function* source() {
       for (let offset = 0; offset < size; offset += zeros.length) {
         const chunk = cipher.update(zeros.subarray(0, Math.min(zeros.length, size - offset)))
-        hash.update(chunk); yield chunk
+        hash.update(chunk); progress.advance(offset + chunk.length); yield chunk
       }
       const last = cipher.final(); hash.update(last); yield last
     }
-    const summary: Record<string, unknown> = { size, route, expectedMdus, expectedSessions, expectedBlobs, browserStorage: 'fresh persistent profile' }
+    const progress = new RetrievalProgress()
+    const summary: Record<string, unknown> = { size, route, expectedMdus, expectedSessions, expectedBlobs, browserStorage: 'fresh persistent profile', timingClocks: { phaseEvents: 'browser performance.now milliseconds', requestEvents: 'Node performance.now milliseconds', phases: 'Node elapsed since harness start milliseconds' }, phaseEvents: progress.events, phases: progress.phases }
+    let failure: Error | undefined, saved: Promise<void> = Promise.resolve()
+    const removeListeners: Array<() => void> = []
+    const persist = () => {
+      summary.progress = progress.snapshot()
+      summary.inFlightWindowRequests = ((summary.windows as Array<{ id: string; startMs: number; endMs?: number }> | undefined) ?? []).filter((r) => r.endMs === undefined).slice(-64).map((r) => ({ id: r.id, ageMs: performance.now() - r.startMs }))
+      summary.inFlightProofRequests = ((summary.proofRequests as Array<{ id: string; startMs: number; endMs?: number }> | undefined) ?? []).filter((r) => r.endMs === undefined).slice(-64).map((r) => ({ id: r.id, ageMs: performance.now() - r.startMs }))
+      const json = JSON.stringify(summary, null, 2)
+      saved = saved.then(() => fs.writeFile(testInfo.outputPath('retrieval-progress.json.tmp'), json))
+        .then(() => fs.rename(testInfo.outputPath('retrieval-progress.json.tmp'), testInfo.outputPath('retrieval-progress.json')))
+      void saved.catch(() => {})
+    }
+    const fail = (error: Error) => {
+      failure ??= error; summary.watchdogError = failure.message; persist()
+      // Stop this owned browser context; no payment retry or checkpoint deletion.
+      void page.context().close().catch(() => {})
+    }
+    const stopWatchdog = startRetrievalWatchdog(progress, () => {
+      console.log('[retrieval heartbeat]', JSON.stringify({ ...progress.snapshot(), totalLogicalBytes: size, expectedSessions }))
+      persist()
+    }, fail)
     try {
+      await page.exposeFunction('__polystoreRetrievalEvent'  , (event: RetrievalDiagnostic) => {
+        try {
+          progress.event(event)
+          if (progress.writtenBytes === size) summary.fullVerifiedOutputMs ??= performance.now() - progress.started
+        } catch (error) { fail(error as Error) }
+      })
+      await page.addInitScript(() => {
+        const scope = window as unknown as { __polystoreRetrievalDiagnostic: (event: unknown) => void; __polystoreRetrievalEvent: (event: unknown) => Promise<void> }
+        scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__polystoreRetrievalEvent(event).catch(() => {}) }
+      })
       await pipeline(Readable.from(source()), createWriteStream(fixture, { flags: 'wx' }))
       const expectedHash = hash.digest('hex')
       summary.expectedHash = expectedHash
@@ -661,6 +694,7 @@ test.describe('mode2 streamed retrieval', () => {
           return original.call(this)
         }
       }, fileName)
+      progress.enter('wallet_and_deal')
       await page.setViewportSize({ width: 1280, height: 720 })
       await page.goto(dashboardPath, { waitUntil: 'networkidle' })
       await ensureWalletConnected(page)
@@ -677,10 +711,12 @@ test.describe('mode2 streamed retrieval', () => {
       summary.dealId = dealId
       await page.getByTestId(`deal-row-${dealId}`).click()
       await expect(page.getByTestId('mdu-file-input')).toHaveCount(1, { timeout: 180_000 })
-      const uploadStarted = Date.now()
+      progress.enter('upload_commit')
+      const uploadStarted = performance.now()
       await page.getByTestId('mdu-file-input').setInputFiles(fixture)
       await completeUploadAndCommit(page.getByTestId('mdu-upload'), page.getByTestId('mdu-commit'), fileName, dealId!, 30 * 60_000)
-      summary.uploadMs = Date.now() - uploadStarted
+      summary.uploadMs = performance.now() - uploadStarted
+      progress.enter('committed_metadata')
       await waitForDealFileRow(page, dealId!, fileName)
       const lcd = process.env.VITE_LCD_BASE || `http://localhost:${process.env.LCD_PORT || 1317}`
       const dealResponse = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/deals/${dealId}`, { timeout: 15_000 })
@@ -692,23 +728,32 @@ test.describe('mode2 streamed retrieval', () => {
       const { files } = await listing.json()
       expect(files).toEqual([expect.objectContaining({ path: fileName, size_bytes: size, flags: 0, start_offset: 0 })])
 
-      const windows: Array<{ id: string; gateway: boolean }> = []
+      const windows: Array<{ id: string; gateway: boolean; startMs: number; endMs?: number }> = []
+      const pendingWindows = new Map<import('@playwright/test').Request, typeof windows[number]>()
       const proofRequests: Array<{ id: string; startMs: number; endMs?: number }> = []
       const pendingProofs = new Map<import('@playwright/test').Request, typeof proofRequests[number]>()
-      page.on('request', (request) => {
+      const onRequest = (request: import('@playwright/test').Request) => {
         const url = new URL(request.url()), id = request.headers()['x-polystore-session-id']
-        if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) windows.push({ id, gateway: isGatewayOrigin(url.origin) })
+        if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) { const entry = { id, gateway: isGatewayOrigin(url.origin), startMs: performance.now() }; windows.push(entry); pendingWindows.set(request, entry) }
         if (url.pathname === '/gateway/session-proof' && request.method() === 'POST') {
-          const entry = { id: request.postDataJSON().session_id as string, startMs: Date.now() }
+          const entry = { id: request.postDataJSON().session_id as string, startMs: performance.now() }
           proofRequests.push(entry); pendingProofs.set(request, entry)
         }
-      })
-      page.on('requestfinished', (request) => { const entry = pendingProofs.get(request); if (entry) { entry.endMs = Date.now(); pendingProofs.delete(request) } })
+      }
+      page.on('request', onRequest)
+      removeListeners.push(() => { page.off('request', onRequest) })
+      const onFinished = (request: import('@playwright/test').Request) => { const window = pendingWindows.get(request); if (window) { window.endMs = performance.now(); pendingWindows.delete(request) }
+        const entry = pendingProofs.get(request); if (entry) { entry.endMs = performance.now(); pendingProofs.delete(request) } }
+      page.on('requestfinished', onFinished)
+      page.on('requestfailed', onFinished)
+      removeListeners.push(() => { page.off('requestfinished', onFinished); page.off('requestfailed', onFinished) })
       summary.proofRequests = proofRequests
       summary.windows = windows
       await checkDisk(2)
       const button = await openFileActionMenuItem(page, fileName, route === 'gateway' ? 'deal-detail-download-gateway-provider' : 'deal-detail-download-sp')
-      const retrievalStarted = Date.now()
+      progress.enter('retrieval')
+      const retrievalStarted = performance.now()
+      summary.retrievalStartOffsetMs = retrievalStarted - progress.started
       let checkedAt = 0
       const [download] = await Promise.all([
         waitForDownloadEventOrFailure(page, downloadTimeout, await readDownloadFailureBanner(page), async () => {
@@ -717,8 +762,9 @@ test.describe('mode2 streamed retrieval', () => {
       ])
       if (!download) throw new Error(`streamed download event missing: ${await captureDownloadDiagnostics(page)}`)
       try {
-        const { bytes, digest } = await hashCheckedDownload(download, () => checkDisk(2))
-        summary.retrievalMs = Date.now() - retrievalStarted
+        progress.enter('final_download_hash')
+        const { bytes, digest } = await hashCheckedDownload(download, async () => { progress.check(); await checkDisk(2) }, (bytes) => progress.advance(bytes))
+        summary.retrievalMs = performance.now() - retrievalStarted
         summary.actualBytes = bytes; summary.actualHash = digest
         expect(bytes).toBe(size); expect(digest).toBe(expectedHash)
       } finally { await download.delete() }
@@ -727,6 +773,7 @@ test.describe('mode2 streamed retrieval', () => {
       expect(ids).toHaveLength(expectedSessions)
       expect(windows.every((window) => window.gateway === (route === 'gateway'))).toBe(true)
       await expect(page.getByRole('status').filter({ hasText: /unsettled provider payment/ })).toHaveCount(0)
+      progress.enter('terminal_census')
       let blobs = 0
       const mdus = new Set<string>()
       const settled = []
@@ -742,14 +789,21 @@ test.describe('mode2 streamed retrieval', () => {
           expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_COMPLETED')
           expect(String(session.deal_id ?? 0)).toBe(dealId)
           expect(Buffer.from(session.manifest_root, 'base64').toString('hex')).toBe(pin.root.slice(2))
+          progress.completed(id, response.headers()['x-cosmos-block-height'])
           return { id, mdu: String(session.start_mdu_index), blobs: Number(session.blob_count), payee: session.authorized_proof_provider, updatedHeight: session.updated_height }
         }))
         for (const entry of batch) { blobs += entry.blobs; mdus.add(entry.mdu); settled.push(entry) }
       }
       expect(blobs).toBe(expectedBlobs); expect(mdus.size).toBe(expectedMdus)
+      if (failure) throw failure
+      progress.enter('done')
       Object.assign(summary, { success: true, blobs, sessions: settled })
       console.log(`[streamed retrieval] ${size} bytes, ${expectedSessions} completed sessions, ${blobs} blobs, ${summary.retrievalMs}ms`)
     } finally {
+      stopWatchdog()
+      removeListeners.forEach((remove) => remove())
+      summary.progress = progress.snapshot()
+      await saved.catch(() => { summary.partialPersistenceError = 'Unable to persist partial progress' })
       // Collect before stack teardown, without retrying payment or masking failure.
       if (summary.success !== true) {
         try {
