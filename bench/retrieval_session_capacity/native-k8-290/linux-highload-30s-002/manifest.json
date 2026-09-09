@@ -2,8 +2,8 @@
   "schema": "polystore.retained-publication.v1",
   "published_files": {
     "summary.json": {
-      "sha256": "d9c38d2adb3c161e9b7317f14414d6aeb983d9d0098b325c6c0ca8cf70c591aa",
-      "bytes": 9562
+      "sha256": "33bf37040a2197fbcf29f8d3f26e1743bf07ac44096a924b52e1b4f5d889d3cf",
+      "bytes": 10646
     },
     "plan.json": {
       "sha256": "a7b52025a5293e4c7bcb7ba113ec7959d3ce76e33aeac29a28e31304af4c9e9a",
@@ -14,8 +14,8 @@
       "bytes": 2954
     },
     "README.md": {
-      "sha256": "e1cc216e31bae46870eb733ff8d54fe4d43f37811b56d73f3fd13e38d600e933",
-      "bytes": 5061
+      "sha256": "e896a2073d2e24eb4752177051a02d0d021e1424e5fd1253dc8bbea62a825b52",
+      "bytes": 5528
     }
   },
   "private_source_artifacts": {

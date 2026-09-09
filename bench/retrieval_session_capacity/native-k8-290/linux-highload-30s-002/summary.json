@@ -63,6 +63,8 @@
       "interpretation": "Windows contain carryover across offered cohorts and are keyed by consensus header.Time, not actual Commit completion.",
       "thirty_second_windows": [
         {
+          "gas_used": 119856991,
+          "gas_wanted": 145000000,
           "header_time_rate_bundles_per_s": 0.967,
           "header_time_rate_openings_per_s": 7.733,
           "offered_rate_bundles_per_s": 1,
@@ -70,6 +72,8 @@
           "reconciled_transactions": 29
         },
         {
+          "gas_used": 247988704,
+          "gas_wanted": 300000000,
           "header_time_rate_bundles_per_s": 2.0,
           "header_time_rate_openings_per_s": 16.0,
           "offered_rate_bundles_per_s": 2,
@@ -77,6 +81,8 @@
           "reconciled_transactions": 60
         },
         {
+          "gas_used": 524918308,
+          "gas_wanted": 635000000,
           "header_time_rate_bundles_per_s": 4.233,
           "header_time_rate_openings_per_s": 33.867,
           "offered_rate_bundles_per_s": 4,
@@ -84,6 +90,8 @@
           "reconciled_transactions": 127
         },
         {
+          "gas_used": 917565637,
+          "gas_wanted": 1110000000,
           "header_time_rate_bundles_per_s": 7.4,
           "header_time_rate_openings_per_s": 59.2,
           "offered_rate_bundles_per_s": 8,
@@ -91,6 +99,8 @@
           "reconciled_transactions": 222
         },
         {
+          "gas_used": 1091165320,
+          "gas_wanted": 1320000000,
           "header_time_rate_bundles_per_s": 8.8,
           "header_time_rate_openings_per_s": 70.4,
           "offered_rate_bundles_per_s": 16,
@@ -130,12 +140,16 @@
     "client_completion_observations_after_150s": 156,
     "committed_valid_bundles": 842,
     "committed_valid_openings": 6736,
+    "fence_backlog_definition": "At each scheduled 30-second end fence: offered but not terminal; queued has not started, in-flight has started. Terminal queue_full offers are excluded. These are client scheduler states, not chain mempool counts.",
     "offered_bundles": 930,
     "offered_openings": 7440,
     "queue_full_not_submitted": 88,
     "steps": [
       {
         "all_client_completion_observations_during_step": 29,
+        "end_fence_in_flight": 1,
+        "end_fence_pending": 1,
+        "end_fence_queued": 0,
         "eventual_committed_valid_bundles": 30,
         "offered_bundles": 30,
         "offered_rate_bundles_per_s": 1,
@@ -150,6 +164,9 @@
       },
       {
         "all_client_completion_observations_during_step": 58,
+        "end_fence_in_flight": 3,
+        "end_fence_pending": 3,
+        "end_fence_queued": 0,
         "eventual_committed_valid_bundles": 60,
         "offered_bundles": 60,
         "offered_rate_bundles_per_s": 2,
@@ -164,6 +181,9 @@
       },
       {
         "all_client_completion_observations_during_step": 116,
+        "end_fence_in_flight": 7,
+        "end_fence_pending": 7,
+        "end_fence_queued": 0,
         "eventual_committed_valid_bundles": 120,
         "offered_bundles": 120,
         "offered_rate_bundles_per_s": 4,
@@ -178,6 +198,9 @@
       },
       {
         "all_client_completion_observations_during_step": 224,
+        "end_fence_in_flight": 23,
+        "end_fence_pending": 23,
+        "end_fence_queued": 0,
         "eventual_committed_valid_bundles": 240,
         "offered_bundles": 240,
         "offered_rate_bundles_per_s": 8,
@@ -192,6 +215,9 @@
       },
       {
         "all_client_completion_observations_during_step": 259,
+        "end_fence_in_flight": 32,
+        "end_fence_pending": 156,
+        "end_fence_queued": 124,
         "eventual_committed_valid_bundles": 392,
         "offered_bundles": 480,
         "offered_rate_bundles_per_s": 16,
