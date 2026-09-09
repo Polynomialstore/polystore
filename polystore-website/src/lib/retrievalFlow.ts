@@ -73,8 +73,9 @@ export interface RetrievalFlow {
   confirm(sessions: readonly FrozenSession[]): Promise<void>
   progress?(windows: number, encodedBytes: bigint): void
 }
-// At most waveLimit contexts (default 16, maximum 64) plus one encoded
-// window are live. Output is consumed immediately; neither grows with the file.
+// At most waveLimit contexts (default 16, maximum 64) plus two encoded
+// windows are live. Fetch/verification overlaps; consumption stays ordered.
+// No new wave or receipt starts until this wave is consumed and flushed.
 export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>, flow: RetrievalFlow, signal?: AbortSignal, waveLimit = 16): Promise<void> {
   if (!Number.isSafeInteger(waveLimit) || waveLimit < 1 || waveLimit > 64) throw new Error('invalid wave bound')
   const iterator = windows[Symbol.iterator]()
@@ -86,13 +87,34 @@ export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>
     signal?.throwIfAborted()
     const sessions = await flow.open(wave)
     if (sessions.length !== wave.length || sessions.some((s, i) => s.window.mduIndex !== wave[i].mduIndex || s.window.startBlobIndex !== wave[i].startBlobIndex || s.window.blobCount !== wave[i].blobCount || s.window.provider !== wave[i].provider)) throw new Error('opened windows do not match requested order')
-    for (let i = 0; i < sessions.length; i++) {
-      signal?.throwIfAborted()
-      const bytes = await flow.fetchAndVerify(sessions[i])
-      signal?.throwIfAborted()
-      await flow.consume(wave[i], bytes)
-      completed++; encodedBytes += BigInt(bytes.length)
-      flow.progress?.(completed, encodedBytes)
+    // Observe rejections immediately, even when the preceding window is slow.
+    // Drain before returning so recovery cannot race a prior fetch/verifier.
+    type Result = { ok: true; bytes: Uint8Array } | { ok: false; error: unknown }
+    const pending: Promise<Result>[] = []
+    let next = 0
+    const state: { failure?: { error: unknown } } = {}
+    const throwIfFailed = () => { if (state.failure) throw state.failure.error }
+    try {
+      for (let i = 0; i < sessions.length; i++) {
+        signal?.throwIfAborted()
+        throwIfFailed()
+        while (pending.length < 2 && next < sessions.length) {
+          const session = sessions[next++]
+          pending.push(Promise.resolve().then(() => { signal?.throwIfAborted(); return flow.fetchAndVerify(session) }).then(
+            (bytes): Result => ({ ok: true, bytes }),
+            (error): Result => { state.failure ??= { error }; return { ok: false, error } },
+          ))
+        }
+        const result = await pending.shift()!
+        if (!result.ok) throw result.error
+        signal?.throwIfAborted()
+        throwIfFailed()
+        await flow.consume(wave[i], result.bytes)
+        completed++; encodedBytes += BigInt(result.bytes.length)
+        flow.progress?.(completed, encodedBytes)
+      }
+    } finally {
+      await Promise.all(pending)
     }
     await flow.flush()
     signal?.throwIfAborted()

@@ -159,12 +159,12 @@ test('1GiB planner/decoder reassembles exact nonconstant payload with bounded co
   await executeRetrievalWindows(planRetrievalWindows(pin, file, 0n, file.size_bytes), {
     open: async (windows) => { contexts = windows.length; peak = Math.max(peak, contexts); return windows.map((window) => ({ window }) as FrozenSession) },
     fetchAndVerify: async (s) => {
-      assert.equal(liveBytes, 0); liveBytes = s.window.blobCount * 131072; blobs += s.window.blobCount
-      assert.ok(liveBytes <= 8 * 131072)
+      liveBytes += s.window.blobCount * 131072; blobs += s.window.blobCount
+      assert.ok(liveBytes <= 2 * 8 * 131072)
       return encodedProviderWindow(file, s.window)
     },
     consume: async (window, bytes) => {
-      assert.equal(bytes.length, liveBytes)
+      assert.ok(bytes.length <= liveBytes)
       for (const part of decodeRetrievalOutput(pin, file, window, bytes)) {
         const position = Number(part.offset)
         if (position >= mduBase + rawMduBytes) flushMdu()
@@ -173,7 +173,7 @@ test('1GiB planner/decoder reassembles exact nonconstant payload with bounded co
         mdu.set(part.bytes, relative); spans.push([relative, relative + part.bytes.length]); total += part.bytes.length
         assert.ok(spans.length <= 64)
       }
-      liveBytes = 0
+      liveBytes -= bytes.length
     },
     flush: async () => { assert.equal(liveBytes, 0) },
     confirm: async (sessions) => { assert.equal(sessions.length, contexts); ack += sessions.length; contexts = 0 },
@@ -269,3 +269,47 @@ test('worker output writes in place, flushes before ACK and rejects partial pers
     else Reflect.deleteProperty(globalThis, 'navigator')
   }
 })
+
+test('prefetch is bounded to two windows and consumption stays ordered', async () => {
+  const selected = Array.from(windows()).slice(0, 4)
+  const gates = selected.map(() => deferredBytes())
+  const h = harness(), started: number[] = [], consumed: number[] = []
+  h.flow.fetchAndVerify = (s) => { const i = selected.indexOf(s.window); started.push(i); return gates[i].promise }
+  h.flow.consume = async (w) => { consumed.push(selected.indexOf(w)) }
+  const work = executeRetrievalWindows(selected, h.flow)
+  const tick = () => new Promise<void>((resolve) => setImmediate(resolve))
+  await tick(); assert.deepEqual(started, [0, 1])
+  gates[1].resolve(new Uint8Array(1)); await tick()
+  assert.deepEqual(consumed, []); assert.deepEqual(started, [0, 1])
+  gates[0].resolve(new Uint8Array(1)); await tick()
+  assert.deepEqual(consumed, [0, 1]); assert.deepEqual(started, [0, 1, 2, 3])
+  gates[3].resolve(new Uint8Array(1)); await tick(); assert.deepEqual(consumed, [0, 1])
+  gates[2].resolve(new Uint8Array(1)); await work
+  assert.deepEqual(consumed, [0, 1, 2, 3]); assert.deepEqual(h.events, ['open:4', 'flush', 'ack:4'])
+})
+
+for (const failure of ['fetch', 'ahead', 'consume', 'cancel']) test(`overlap drains outstanding work on ${failure} before recovery`, async () => {
+  const selected = Array.from(windows()).slice(0, 3)
+  const gates = selected.map(() => deferredBytes())
+  const h = harness()
+  let started = 0, returned = false, consumed = 0
+  h.flow.fetchAndVerify = () => gates[started++].promise
+  h.flow.consume = async () => { consumed++; if (failure === 'consume') throw new Error('consume failed') }
+  const checked = assert.rejects(executeRetrievalWindows(selected, h.flow, h.controller.signal), failure === 'ahead' ? /ahead failed/ : /failed|abort/i).then(() => { returned = true })
+  const tick = () => new Promise<void>((resolve) => setImmediate(resolve))
+  await tick()
+  if (failure === 'ahead') gates[1].reject(new Error('ahead failed'))
+  else if (failure === 'fetch') gates[0].reject(new Error('fetch failed'))
+  else { if (failure === 'cancel') h.controller.abort(); gates[0].resolve(new Uint8Array(1)) }
+  await tick(); assert.equal(returned, false); assert.equal(started, 2)
+  if (failure === 'ahead') gates[0].resolve(new Uint8Array(1))
+  else gates[1].reject(new Error('late sibling failure'))
+  await checked
+  assert.equal(returned, true); assert.equal(started, 2); assert.equal(consumed, failure === 'consume' ? 1 : 0); assert.deepEqual(h.events, ['open:3'])
+})
+
+function deferredBytes() {
+  let resolve!: (bytes: Uint8Array) => void, reject!: (error: unknown) => void
+  const promise = new Promise<Uint8Array>((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}

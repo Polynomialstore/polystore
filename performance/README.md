@@ -258,3 +258,22 @@ a disk guard interrupted a later audit wait after measurement and drain.
 The artifact separates that interruption and supplementary recovery from the
 measured window. These are prepared-proof acceptance results, not delivery or
 paid lifecycle throughput.
+
+### Bounded retrieval transport overlap (#260)
+
+The browser normal retrieval loop permits two fetch-and-verify calls within the
+already opened wave. The existing single crypto worker still verifies each
+window; network delivery can overlap that work. Consumption stays in requested
+order, followed by durable flush and the existing ACK/settlement path. No next
+MDU or payment wave is opened early. There are at most two encoded window
+results (2 MiB at the current K=8 window size), in addition to existing transport,
+worker, decoder and context allocations. This is a bound on window results, not
+a claim that the entire browser uses only 2 MiB.
+
+On fetch, verification, consume or cancellation failure, all started fetches
+are observed and drained before the caller can enter recovery. Draining relies
+on the existing fetch deadlines and cancellation signal; no new worker or
+independent timeout is introduced. Local order/boundedness/failure tests do not
+establish a throughput improvement. Compare the existing 15.5 MiB public-path
+fixture before advancing to larger measurements. This change alone cannot
+establish the 30-minute 1 GiB qualification budget.
