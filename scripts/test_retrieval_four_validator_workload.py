@@ -17,6 +17,14 @@ import retrieval_fresh_proof as producer
 
 ADDRESSES = ["nil1qyqszqgpqyqszqgpqyqszqgpqyqszqgpdqqjtx", "nil1qgpqyqszqgpqyqszqgpqyqszqgpqyqszuyxhqs",
              "nil1xycnzvf3xycnzvf3xycnzvf3xycnzvf3ner3g8", "nil1xgeryv3jxgeryv3jxgeryv3jxgeryv3jza95r3"]
+AUDIT_ADDRESSES = [
+    "nil102e0z53k4ks07fffg4f5g9mm2ke0ppry6hldnq", "nil10489zrpfztul0avxgd0va5f0ru5wae2cjmhdtp",
+    "nil10y7kv0jqy2e7fnwuv39yga53u59j3e4tw4vdqc", "nil10yrlgscjqs3m5g4nd8uxfgde064ks347uzcvc7",
+    "nil12hdzex4uscgph556tlczw2lztdhgnlxvu4rm3s", "nil12lqej2x9de9t8mgk5e98huk7k2k6gagsr27awn",
+    "nil12nfaymvwcdhwka2jdcsl5ml2y6e76lkgsje38k", "nil12ueq7u6uqxjd35mc704sjamwwxydsgsytw9lfu",
+    "nil12v3u485sazwmfcnfah7dlvrtgkqlf5xkh5rthd", "nil137glcssk75ttt280qwyx4f3k8h5lgeu5s6rduh",
+    "nil139mxr38p09rxk56a0dej5asy3d2ww397fttud7", "nil140pc0w3z6x6f6dkme8eux8naw5wd6rmxm5gfh8",
+]
 
 
 def fixture_state():
@@ -318,20 +326,35 @@ class HealthyAuditViewsTest(unittest.TestCase):
             workload.main()
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source", audit_profile="normal")
 
-    def fixture(self, *, complete=True, counts=(1, 9, 32)):
+    def test_sustained_cli_defaults_k2_and_forwards_explicit_k8(self):
+        common = ["diagnostic", "--mode", "sustained-providers", "--binary", "/chain", "--library", "/lib",
+                  "--home", "/new-home", "--gateway-binary", "/gateway", "--cli-binary", "/native-cli",
+                  "--product-source", "/source", "--proof-exporter", "/exporter", "--proof-gas", "20000000",
+                  "--step-seconds", "4"]
+        for extra, k in (([], 2), (["--sustained-k", "8"], 8)):
+            with self.subTest(k=k), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+                workload.main()
+                run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                    sustained=dict(exporter="/exporter", step_seconds=4, proof_gas=20000000, k=k), audit_profile="normal")
+
+    def fixture(self, *, complete=True, counts=None, k=2):
+        layout = workload.mode2_layout(k)
+        counts = (1, 9, 32) if counts is None and k == 2 else counts or (1,) * layout["assignments"]
         deal = dict(id="7", manifest_root=base64.b64encode(bytes([7]) * 32).decode(),
                     current_gen="1", start_block="5", end_block="1000")
-        providers = dict(enumerate(ADDRESSES[:3]))
+        providers = dict(enumerate(AUDIT_ADDRESSES[:layout["assignments"]]))
         values = []
         for slot, count in enumerate(counts):
             accepted = count if complete else 0
-            snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=2, m=1,
+            snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=k, m=layout["m"],
                             slot=slot, metadata_mdus="2", user_mdus="1", deal_end="1000",
                             setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode())
             context = dict(version=2, chain_id="polystore_260-1", setup_digest=producer.SETUP_DIGEST,
                 kind=2, context_id="00"*32, deal_id=7, generation=1, root="07"*32,
                 assigned=producer.account(providers[slot]).hex(), payee=producer.account(providers[slot]).hex(),
-                layout=2, k=2, m=1, slot=slot, metadata_mdus=2, user_mdus=1, start_mdu=0, start_leaf=0,
+                layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2, user_mdus=1, start_mdu=0, start_leaf=0,
                 blob_count=0, epoch_id=2, epoch_length=100, sample_count=count, snapshot_height=100,
                 anchor_height=101, first_response_height=102, deadline_height=200, deal_end=1000)
             values.append(dict(audit=dict(epoch_id="2", sample_count=str(count), accepted_count=str(accepted),
@@ -352,6 +375,16 @@ class HealthyAuditViewsTest(unittest.TestCase):
         values, deal, providers = self.fixture()
         with self.assertRaisesRegex(ValueError, "sample count"):
             workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=True, expected_samples=32)
+
+    def test_k8_audit_uses_twelve_assignments_and_eight_row_population(self):
+        values, deal, providers = self.fixture(k=8, counts=(8,) * 12)
+        checked = workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1",
+                                               finalized=True, expected_samples=8, k=8)
+        self.assertEqual(set(checked), set(range(12)))
+        self.assertEqual(sum(int(v["audit"]["sample_count"]) for v in checked.values()), 96)
+        values[0]["audit"]["sample_count"] = "9"
+        with self.assertRaisesRegex(ValueError, "sample count"):
+            workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=True, k=8)
 
     def test_all_slots_include_parity_and_use_actual_sample_denominator(self):
         values, deal, providers = self.fixture()

@@ -3,7 +3,8 @@
 
 Settlement smoke uses exported K8/K2 fixtures without provider transport.
 Healthy-providers uses canonical K2 ingest and three provider-daemons to check
-normal storage audits. Sustained-providers adds finite real-artifact proof load.
+normal storage audits. Sustained-providers adds finite K2 or K8 real-artifact
+proof load.
 No mode verifies delivered files. Owned services
 start only when this command is explicitly invoked.
 """
@@ -30,6 +31,49 @@ import retrieval_fresh_proof as producer
 API = "/polystorechain/polystorechain/v1"
 ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 COUNTS = (1, 2, 8)
+SUSTAINED_RATES = (0.25, 0.5, 1, 2, 4)
+
+
+def mode2_layout(k):
+    """Return the complete supported full-row geometry for one Mode 2 MDU."""
+    if type(k) is not int or k not in (2, 8):
+        raise ValueError("sustained retrieval requires native K2 or K8")
+    m = 1 if k == 2 else 4
+    openings = artifact.BLOBS_PER_MDU // k
+    assignments = k + m
+    return dict(k=k, m=m, assignments=assignments,
+                deputy_indices=list(range(assignments, assignments + 8)), openings_per_bundle=openings,
+                bytes_per_opening=artifact.ENCODED_BLOB_BYTES,
+                bytes_per_bundle=openings * artifact.ENCODED_BLOB_BYTES)
+
+
+def sustained_profile(k, step_seconds, offsets, proof_gas):
+    """Describe rates with explicit transaction-bundle and opening denominators."""
+    layout = mode2_layout(k)
+    rates = list(SUSTAINED_RATES)
+    inventory = len(offsets) + 8
+    openings = layout["openings_per_bundle"]
+    return dict(step_seconds=step_seconds, measurement_seconds=step_seconds * len(rates), rates=rates,
+        rate_unit="offered proof-submission transactions per second",
+        offered_openings_per_second=[rate * openings for rate in rates],
+        bundle_unit="one MsgSubmitRetrievalSessionProof transaction for one retrieval session",
+        inventory=inventory, warmup_sessions=8, measured_sessions=len(offsets),
+        proofs_per_session=openings, openings_per_bundle=openings,
+        proofs_per_session_unit="individual chained openings (legacy field name)",
+        warmup_openings=8 * openings, measured_openings=len(offsets) * openings,
+        bundle_opening_distribution={str(openings): inventory},
+        native_message_batching=dict(open_session_messages_per_preparation_transaction_max=64,
+            proof_sessions_per_submission_transaction=1, cross_provider_crypto_aggregation=False),
+        k=k, m=layout["m"], assignment_count=layout["assignments"],
+        provider_daemon_count=layout["assignments"],
+        deputy_signer_indices=layout["deputy_indices"],
+        provisioned_provider_signers=max(12, layout["assignments"] + len(layout["deputy_indices"])),
+        max_in_flight=8, max_queued=128, max_queued_per_signer=16,
+        proof_gas=proof_gas,
+        proof_gas_limit_per_submission_transaction=proof_gas,
+        proof_gas_limit_per_opening=dict(gas=proof_gas, openings=openings),
+        proof_gas_limit_note="declared transaction limit, not committed gas used",
+        qualification=False)
 
 
 def capture_workload_metrics(lifecycle, phase, *, fenced=False):
@@ -189,20 +233,108 @@ def build_operations(lifecycle, fixtures, deals, minimum_height):
     return operations
 
 
-def journal_results(path, operations, *, proof_only=False):
+def journal_results(path, operations, *, proof_only=False, require_all_committed=True):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         rows = {identity: json.loads(result) if result else None for identity, result in db.execute("SELECT id, result FROM operations")}
         transactions = [json.loads(row[0]) for row in db.execute("SELECT result FROM transactions ORDER BY rowid")]
-    if set(rows) != {op["operation_id"] for op in operations} or any(not row or row.get("all_transactions_committed") is not True for row in rows.values()):
+    expected = [op["operation_id"] for op in operations]
+    if len(set(expected)) != len(expected) or set(rows) != set(expected) or any(not row for row in rows.values()):
+        raise ValueError("incomplete lifecycle journal")
+    if require_all_committed and any(row.get("all_transactions_committed") is not True for row in rows.values()):
         raise ValueError("lifecycle did not commit every open/proof/confirmation; inspect retained journal")
-    if (len(transactions) != (1 if proof_only else 3) * len(operations) or
-            any(row["outcome"] != "committed_success" for row in transactions) or
+    if len(transactions) != (1 if proof_only else 3) * len(operations):
+        raise ValueError("unexpected transaction outcomes")
+    if proof_only:
+        outcomes = {"committed_success", "committed_failure", "checktx_rejected", "unknown",
+                    "not_submitted", "skipped", "duplicate"}
+        mapped = {}
+        hashes = set()
+        for transaction in transactions:
+            identity = transaction.get("operation_id")
+            if identity not in rows or identity in mapped or transaction.get("outcome") not in outcomes:
+                raise ValueError("unexpected transaction outcomes")
+            txhash = transaction.get("txhash")
+            if transaction["outcome"] == "duplicate":
+                if not txhash or txhash not in hashes:
+                    raise ValueError("inconsistent duplicate transaction outcome")
+            elif txhash:
+                if txhash in hashes:
+                    raise ValueError("duplicate transaction hash was counted twice")
+                hashes.add(txhash)
+            mapped[identity] = transaction
+        if set(mapped) != set(expected):
+            raise ValueError("unexpected transaction outcomes")
+        for identity, transaction in mapped.items():
+            valid = (transaction["outcome"] == "committed_success" and
+                     transaction.get("proof_state_verified") is True)
+            if (rows[identity].get("operation_id") != identity or
+                rows[identity].get("outcome") != transaction["outcome"] or
+                rows[identity].get("proof_submitted") is not valid):
+                raise ValueError("inconsistent proof lifecycle outcome")
+    if require_all_committed and (any(row["outcome"] != "committed_success" for row in transactions) or
             (proof_only and any(row.get("proof_submitted") is not True for row in rows.values()))):
         raise ValueError("unexpected transaction outcomes")
     ids = [row["session_id"] for row in rows.values()]
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate committed session")
     return rows, transactions
+
+
+def assignment_submission_counts(operations, transactions):
+    """Report bundle and opening outcomes per native storage assignment."""
+    expected = {operation["operation_id"]: operation for operation in operations}
+    counts = {}
+    for operation in operations:
+        slot = str(operation["proof_expectation"]["snapshot"]["slot"])
+        openings = producer.uint(operation["proof_expectation"]["session"]["blob_count"])
+        row = counts.setdefault(slot, dict(offered_bundles=0, offered_openings=0,
+            submitted_bundles=0, submitted_openings=0, committed_valid_bundles=0,
+            committed_valid_openings=0))
+        row["offered_bundles"] += 1
+        row["offered_openings"] += openings
+    seen = set()
+    hashes = set()
+    for transaction in transactions:
+        identity = transaction.get("operation_id")
+        if identity not in expected or identity in seen:
+            raise ValueError("assignment accounting requires one transaction per operation")
+        seen.add(identity)
+        txhash = transaction.get("txhash")
+        if transaction.get("outcome") == "duplicate":
+            if not txhash or txhash not in hashes:
+                raise ValueError("assignment accounting has inconsistent duplicate transaction")
+        elif txhash:
+            if txhash in hashes:
+                raise ValueError("assignment accounting counted a transaction hash twice")
+            hashes.add(txhash)
+        operation = expected[identity]
+        slot = str(operation["proof_expectation"]["snapshot"]["slot"])
+        openings = producer.uint(operation["proof_expectation"]["session"]["blob_count"])
+        row = counts[slot]
+        if transaction.get("outcome") not in ("not_submitted", "skipped"):
+            row["submitted_bundles"] += 1
+            row["submitted_openings"] += openings
+        if (transaction.get("outcome") == "committed_success" and
+                transaction.get("proof_state_verified") is True):
+            row["committed_valid_bundles"] += 1
+            row["committed_valid_openings"] += openings
+    if seen != set(expected):
+        raise ValueError("assignment accounting is missing transaction outcomes")
+    return counts
+
+
+def export_inventory_request(operation, session_id, evidence, output_path, directories):
+    """Bind an exported proof request to its assigned provider artifact."""
+    expectation = operation["proof_expectation"]
+    session, snapshot = expectation["session"], expectation["snapshot"]
+    rows = artifact.BLOBS_PER_MDU // producer.uint(snapshot["k"])
+    if producer.uint(session["start_blob_index"]) != producer.uint(snapshot["slot"]) * rows:
+        raise ValueError("full-row exporter request does not start at its assignment")
+    assigned = session["provider"]
+    if assigned not in directories:
+        raise ValueError("missing artifact directory for assigned provider")
+    return dict(artifact_directory=str(directories[assigned]), evidence=evidence,
+                expected=expectation, session_id=session_id, output_path=output_path)
 
 
 def retrieval_snapshot(lifecycle, height, deals, session_ids):
@@ -626,8 +758,9 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     return lifecycle.home / "evidence.json"
 
 
-def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized, expected_samples=None):
+def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized, expected_samples=None, k=2):
     """Check committed inventory/coverage without treating absent audits as success."""
+    layout = mode2_layout(k)
     found = {}
     for view in value:
         audit = view["audit"]
@@ -641,12 +774,12 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
                 producer.uint(assignment.get("deal_start", 0)) != producer.uint(deal.get("start_block", 0)) or
                 assignment["manifest_root"] != deal["manifest_root"] or producer.uint(assignment["kind"]) != 2 or
                 snapshot["chain_id"] != chain or producer.uint(snapshot["generation"]) != producer.uint(deal["current_gen"]) or
-                [producer.uint(snapshot[n]) for n in ("layout", "k", "m", "metadata_mdus", "user_mdus")] != [2, 2, 1, 2, 1] or
+                [producer.uint(snapshot[n]) for n in ("layout", "k", "m", "metadata_mdus", "user_mdus")] != [2, k, layout["m"], 2, 1] or
                 snapshot["setup_digest"] != base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode() or
                 producer.uint(snapshot["deal_end"]) != producer.uint(deal["end_block"])):
-            raise ValueError("audit differs from the committed K2 assignment")
+            raise ValueError(f"audit differs from the committed K{k} assignment")
         count = producer.uint(audit["sample_count"])
-        if not 1 <= count <= 32 or (expected_samples is not None and count != expected_samples):  # One K2 user MDU has 32 distinct rows per slot.
+        if not 1 <= count <= layout["openings_per_bundle"] or (expected_samples is not None and count != expected_samples):
             raise ValueError("invalid audit sample count")
         coverage = producer.b64(audit["coverage"], (count + 7) // 8)
         accepted = producer.uint(audit.get("accepted_count", 0))
@@ -658,7 +791,7 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
         expected = dict(version=2, chain_id=chain, setup_digest=producer.SETUP_DIGEST, kind=2,
             context_id="00" * 32, deal_id=producer.uint(deal["id"]), generation=producer.uint(deal["current_gen"]),
             root=producer.b64(deal["manifest_root"], 32).hex(), assigned=producer.account(providers[slot]).hex(),
-            payee=producer.account(providers[slot]).hex(), layout=2, k=2, m=1, slot=slot, metadata_mdus=2,
+            payee=producer.account(providers[slot]).hex(), layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2,
             user_mdus=1, start_mdu=0, start_leaf=0, blob_count=0, epoch_id=epoch, epoch_length=epoch_length,
             sample_count=count, snapshot_height=snapshot_height, anchor_height=snapshot_height + 1,
             first_response_height=snapshot_height + 2, deadline_height=min(epoch * epoch_length, producer.uint(deal["end_block"]) - 1),
@@ -670,7 +803,7 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
         if finalized and (view.get("finalized") is not True or accepted != count or producer.uint(audit.get("missed_epochs", 0)) != 0):
             raise ValueError("normal audit did not finalize with complete coverage")
         found[slot] = view
-    if set(found) != set(providers) or len(found) != 3:
+    if set(found) != set(providers) or len(found) != layout["assignments"]:
         raise ValueError("missing or duplicate all-slot audit evidence")
     return found
 
@@ -679,7 +812,8 @@ def sustained_offsets(step_seconds):
     """Five fixed offered-rate steps; pilot scales duration, never the rates."""
     artifact.integer(step_seconds, "step seconds", 4, 180)
     return [(step * step_seconds * 10**9 + index * interval)
-            for step, interval in enumerate((4_000_000_000, 2_000_000_000, 1_000_000_000, 500_000_000, 250_000_000))
+            for step, rate in enumerate(SUSTAINED_RATES)
+            for interval in (int(10**9 / rate),)
             for index in range((step_seconds * 10**9 + interval - 1) // interval)]
 
 
@@ -834,25 +968,61 @@ def summarize_commit_streams(lifecycle, processes):
             raise ValueError("Commit samples do not cover the fenced workload blocks")
 
 
-def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas):
-    """Real slot-zero inventory and bounded existing scheduler; no client ACK claim."""
+def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, minimum, expiry, price, proof_gas, k):
+    """Build one native full-row submission bundle per prepared session."""
+    layout = mode2_layout(k)
+    openings = layout["openings_per_bundle"]
+    slots = sorted(providers)
+    if slots != list(range(layout["assignments"])):
+        raise ValueError("providers must cover every native assignment exactly once")
+    owner = lifecycle.signers["owner0"]
+    root = producer.b64(deal["manifest_root"], 32).hex()
+    operations = []
+    for index, offset in enumerate([0] * 8 + offsets):
+        slot = slots[index % len(slots)]
+        assigned = providers[slot]
+        start_blob_index = slot * openings
+        payee, end = deputies[index % len(deputies)], expiry + index // 128
+        opening = transaction_job(lifecycle, owner, ["open-retrieval-session", "--deal-id", deal["id"],
+            "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", str(start_blob_index),
+            "--blob-count", str(openings), "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
+            "--authorized-proof-provider", payee], kind="open-session", gas="300000")
+        proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
+        operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < 8 else "measurement",
+            offered_offset_ns=offset, **{"open-session": opening, "submit-proof": proof},
+            proof_expectation=dict(minimum_opened_height=minimum,
+                session=dict(deal_id=deal["id"], owner=owner, provider=assigned, authorized_proof_provider=payee,
+                    manifest_root=root, nonce=index + 1, expires_at=end, start_mdu_index=2, start_blob_index=start_blob_index,
+                    blob_count=openings, total_bytes=layout["bytes_per_bundle"], funding=1,
+                    locked_fee=str(price * openings)),
+                snapshot=dict(chain_id=lifecycle.chain, setup_digest=producer.SETUP_DIGEST,
+                    generation=deal.get("current_gen", "0"), layout=2, k=k, m=layout["m"], slot=slot,
+                    metadata_mdus=2, user_mdus=1, deal_end=deal["end_block"]))))
+    return operations
+
+
+def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas, k=2):
+    """Real per-assignment inventory and bounded scheduler; no client ACK claim."""
     import threading
+    layout = mode2_layout(k)
     offsets = sustained_offsets(step_seconds)
     duration = step_seconds * 5
     exporter = Path(exporter).resolve(strict=True)
     if not exporter.is_file() or not os.access(exporter, os.X_OK):
         raise ValueError("proof exporter must be executable")
     artifact.integer(proof_gas, "proof gas", 1, 64000000)
-    for i in range(3, 11):  # Registration follows content placement; these own no storage slots.
+    for i in layout["deputy_indices"]:
         send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", "/ip4/127.0.0.1/tcp/1/http"])
-    deputies = [lifecycle.signers[f"provider{i}"] for i in range(3, 11)]
+    deputies = [lifecycle.signers[f"provider{i}"] for i in layout["deputy_indices"]]
     doc = lifecycle.doc
-    doc.update(mode="four-validator-sustained-retrieval", workload="real K2 slot-zero, 32 fresh openings/session; eight deputy signers",
-        sustained_profile=dict(step_seconds=step_seconds, measurement_seconds=duration, rates=[0.25, 0.5, 1, 2, 4],
-            inventory=len(offsets) + 8, warmup_sessions=8, measured_sessions=len(offsets), proofs_per_session=32, max_in_flight=8, max_queued=128,
-            max_queued_per_signer=16, proof_gas=proof_gas, qualification=False),
+    profile = sustained_profile(k, step_seconds, offsets, proof_gas)
+    openings = profile["openings_per_bundle"]
+    doc.update(mode="four-validator-sustained-retrieval",
+        workload=f"real K{k} assignment round-robin, {openings} fresh openings/submission transaction; eight deputy signers",
+        sustained_profile=profile,
         limits=["Proof acceptance capacity only; no delivered bytes or client ACKs",
                 "Normal mint retained; raw economics are not a conservation assertion",
+                "Assignment round-robin binds each proof to its provider artifact and snapshot slot",
                 "Four local processes do not establish WAN capacity", "No restart qualification"])
     epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
     monitor_stop, failures = threading.Event(), []
@@ -891,25 +1061,11 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         if expiry + (len(offsets) + 7) // 128 >= producer.uint(deal["end_block"]):
             raise ValueError("insufficient deal lifetime for inventory")
         price = producer.uint(doc["frozen_module_params"]["retrieval_price_per_blob"]["amount"], 256)
-        owner, assigned = lifecycle.signers["owner0"], providers[0]
         root = producer.b64(deal["manifest_root"], 32).hex()
-        directory = next(Path(row["directory"]) for row in doc["providers"] if row["address"] == assigned) / "deals" / str(deal["id"]) / root
-        operations = []
-        for index, offset in enumerate([0] * 8 + offsets):
-            payee, end = deputies[index % len(deputies)], expiry + index // 128
-            opening = transaction_job(lifecycle, owner, ["open-retrieval-session", "--deal-id", deal["id"],
-                "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", "0",
-                "--blob-count", "32", "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
-                "--authorized-proof-provider", payee], kind="open-session", gas="300000")
-            proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
-            operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < 8 else "measurement", offered_offset_ns=offset,
-                **{"open-session": opening, "submit-proof": proof},
-                proof_expectation=dict(minimum_opened_height=minimum,
-                    session=dict(deal_id=deal["id"], owner=owner, provider=assigned, authorized_proof_provider=payee,
-                        manifest_root=root, nonce=index + 1, expires_at=end, start_mdu_index=2, start_blob_index=0,
-                        blob_count=32, total_bytes=4194304, funding=1, locked_fee=str(price * 32)),
-                    snapshot=dict(chain_id=lifecycle.chain, setup_digest=producer.SETUP_DIGEST, generation=deal.get("current_gen", "0"),
-                        layout=2, k=2, m=1, slot=0, metadata_mdus=2, user_mdus=1, deal_end=deal["end_block"]))))
+        directories = {row["address"]: Path(row["directory"]) / "deals" / str(deal["id"]) / root
+                       for row in doc["providers"]}
+        operations = build_sustained_operations(lifecycle, deal, providers, deputies, offsets, minimum, expiry,
+                                                price, proof_gas, k)
         inventory = lifecycle.home / "inventory"
         inventory.mkdir(mode=0o700)
         requests = []
@@ -926,8 +1082,7 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 evidence = read_session_evidence(lifecycle, operation, sid, None, lifecycle.deadline)
                 operation["prepared"] = dict(session_id=sid, proof_path=path, evidence=evidence)
                 artifact.prepared_session_pin(operation, evidence)
-                requests.append(dict(artifact_directory=str(directory), evidence=evidence, expected=operation["proof_expectation"],
-                                     session_id=sid, output_path=path))
+                requests.append(export_inventory_request(operation, sid, evidence, path, directories))
         manifest = inventory / "manifest.json"
         manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain, trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"],
             deadline_unix_ms=int(time.time() * 1000 + (lifecycle.deadline - artifact.monotonic_ns()) / 1e6), sessions=requests)))
@@ -957,7 +1112,8 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
             max_queued_per_signer=1, mode="prepared-proof-only",
             read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
         _, warmup_transactions = journal_results(warmup_journal, warmup, proof_only=True)
-        doc["warmup"] = dict(journal=str(warmup_journal), sessions=8, proofs=256,
+        doc["warmup"] = dict(journal=str(warmup_journal), sessions=8, submission_transactions=8,
+                             proofs=profile["warmup_openings"], proof_unit="individual chained openings",
                              committed_transactions=warmup_transactions, all_committed=True)
         # One-second minimum local block time gives a conservative remaining-height floor.
         current = lifecycle.wait_height(3)
@@ -972,10 +1128,21 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         started = artifact.monotonic_ns()
         for operation in operations:
             operation["submit-proof"]["_deadline_ns"] = min(lifecycle.deadline, started + (duration + 120) * 10**9)
+        progress_path = lifecycle.home / "sustained-progress.jsonl"
+        def progress(row):
+            with progress_path.open("a") as output:
+                output.write(json.dumps(row, sort_keys=True) + "\n")
         doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations,
             journal_path=lifecycle.home / "sustained.sqlite", signers=deputies,
             max_in_flight=8, max_queued=128, max_queued_per_signer=16, mode="prepared-proof-only",
-            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
+            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline),
+            progress_callback=progress, heartbeat_seconds=60, stall_timeout_seconds=600)
+        doc["progress"] = dict(path=str(progress_path), sha256=artifact.sha256(progress_path),
+                               heartbeat_seconds=60, no_progress_timeout_seconds=600,
+                               source="scheduler in-memory counters; no additional chain query")
+        _, sustained_transactions = journal_results(lifecycle.home / "sustained.sqlite", operations,
+                                                     proof_only=True, require_all_committed=False)
+        doc["assignment_submission_counts"] = assignment_submission_counts(operations, sustained_transactions)
         # The last offered operation precedes the declared end by one interval.
         while artifact.monotonic_ns() < started + duration * 10**9:
             time.sleep(min(0.2, lifecycle.remaining()))
@@ -1002,7 +1169,8 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
             artifact.stop_owned_process_groups(owned)
         finally:
             monitor_stop.set()
-            # A capture can have twelve bounded LCD reads plus four anchor reads.
+            # A capture can query every selected provider on each validator,
+            # plus four bounded anchor reads.
             stop_deadline = artifact.monotonic_ns() + 90 * 10**9
             while worker.is_alive() and artifact.monotonic_ns() < stop_deadline:
                 worker.join(timeout=1)
@@ -1014,6 +1182,8 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
 
 def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None, audit_profile="normal"):
     """Real canonical ingest and normal audits; optional bounded retrieval workload."""
+    k = sustained.get("k", 2) if sustained is not None else 2
+    layout = mode2_layout(k)
     gateway = Path(gateway_binary).resolve(strict=True)
     cli = Path(cli_binary).resolve(strict=True)
     source = Path(product_source).resolve(strict=True)
@@ -1041,7 +1211,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
     doc = lifecycle.doc
     doc.pop("transactions_submitted", None)
     doc.update(mode="four-validator-healthy-provider-diagnostic", setup_transactions=[], providers=[],
-        workload="one real K2 deal; three assigned provider-daemons; one normal audit epoch",
+        workload=f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch",
         qualification=False, limits=["No capacity or delivered retrieval qualification", "No deputy retrieval yet",
             "Normal mint and audit parameters retained; no economic conservation assertion", "No restart qualification"])
     def command(args, timeout=60):
@@ -1077,7 +1247,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if sustained is not None and "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
             raise ValueError("sustained workload requires SDK sign-batch --append")
         lifecycle.reserve_ports()
-        for i in range(3):
+        for i in range(layout["assignments"]):
             reservation = socket.socket()
             reservations.append(reservation)
             reservation.bind(("127.0.0.1", 19091 + i))
@@ -1096,16 +1266,19 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             artifact_source_match="supplied binaries/library; build correspondence not attested")
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
-        lifecycle.prepare(audit_profile=audit_profile)  # Normal mint retained for both explicit audit profiles.
-        quotas = {min(32, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
+        lifecycle.prepare(audit_profile=audit_profile,
+                          provider_count=max(12, layout["assignments"] + len(layout["deputy_indices"])))
+        # Normal mint is retained for both explicit audit profiles.
+        population = layout["openings_per_bundle"]
+        quotas = {min(population, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
                       max(producer.uint(doc["frozen_module_params"]["quota_min_blobs"]),
-                          (32 * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
+                          (population * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
                   for key in ("quota_bps_per_epoch_hot", "quota_bps_per_epoch_cold")}
-        if len(quotas) != 1 or not 1 <= next(iter(quotas)) <= 32:
-            raise ValueError("K2 diagnostic requires an unambiguous nonzero frozen audit quota")
+        if len(quotas) != 1 or not 1 <= next(iter(quotas)) <= population:
+            raise ValueError(f"K{k} diagnostic requires an unambiguous nonzero frozen audit quota")
         expected_samples = quotas.pop()
-        doc["audit_sampling_profile"] = dict(name=audit_profile, population_per_slot=32, samples_per_slot=expected_samples,
-            samples_per_epoch=3 * expected_samples, qualification=False)
+        doc["audit_sampling_profile"] = dict(name=audit_profile, population_per_slot=population, samples_per_slot=expected_samples,
+            samples_per_epoch=layout["assignments"] * expected_samples, qualification=False)
         genesis = json.loads((Path(lifecycle.nodes[0]["home"]) / "config/genesis.json").read_text())
         doc["normal_mint_profile"] = genesis["app_state"]["mint"]
         epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
@@ -1114,7 +1287,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         lifecycle.save()
         lifecycle.start("initial")
         lifecycle.wait_height(3)
-        for i in range(3):
+        for i in range(layout["assignments"]):
             send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", f"/ip4/127.0.0.1/tcp/{19091+i}/http"])
             directory = lifecycle.home / f"provider{i}"
             directory.mkdir(mode=0o700)
@@ -1145,7 +1318,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 signer_key=f"provider{i}", home=lifecycle.nodes[0]["home"], system_liveness_interval_seconds=10,
                 environment={key: value for key, value in env.items() if key.startswith("POLYSTORE_") and key != "POLYSTORE_GATEWAY_SP_AUTH"}))
             lifecycle.save()
-        for i in range(3):
+        for i in range(layout["assignments"]):
             while True:
                 check_providers()
                 try:
@@ -1153,7 +1326,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                     break
                 except ValueError:
                     time.sleep(min(0.2, lifecycle.remaining()))
-        created = send("owner0", ["create-deal", "100000", "100000000", "10000000", "--service-hint", "General:rs=2+1"])
+        created = send("owner0", ["create-deal", "100000", "100000000", "10000000", "--service-hint", f"General:rs={k}+{layout['m']}"])
         wait(created["height"] + 1)
         owned = [d for d in lifecycle.query(lifecycle.nodes[0], API + "/deals", created["height"])["deals"]
                  if d["owner"] == lifecycle.signers["owner0"]]
@@ -1173,7 +1346,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if (not isinstance(root, str) or len(root) != 66 or root != "0x" + bytes.fromhex(root[2:]).hex() or
                 [producer.uint(uploaded[n]) for n in ("size_bytes", "file_size_bytes", "logical_size_bytes", "total_mdus", "witness_mdus")] != [8126464, 8126464, 8126464, 3, 1] or
                 uploaded.get("content_encoding") != "none"):
-            raise ValueError("canonical K2 ingest returned unexpected content")
+            raise ValueError(f"canonical K{k} ingest returned unexpected content")
         doc["ingest"] = uploaded
         updated = send("owner0", ["update-deal-content", "--deal-id", identity, "--cid", root,
             "--size", "8126464", "--total-mdus", "3", "--witness-mdus", "1"])
@@ -1187,17 +1360,18 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         for slot in deal["mode2_slots"]:
             index = producer.uint(slot.get("slot", 0))
             if index in providers or slot["status"] != "SLOT_STATUS_ACTIVE" or slot.get("pending_provider"):
-                raise ValueError("K2 slots must be distinct and ACTIVE")
+                raise ValueError(f"K{k} slots must be distinct and ACTIVE")
             providers[index] = slot["provider"]
-        if set(providers) != {0, 1, 2} or set(providers.values()) != {lifecycle.signers[f"provider{i}"] for i in range(3)}:
-            raise ValueError("K2 placement differs from the three owned providers")
+        if (set(providers) != set(range(layout["assignments"])) or
+                set(providers.values()) != {lifecycle.signers[f"provider{i}"] for i in range(layout["assignments"])}):
+            raise ValueError(f"K{k} placement differs from the owned providers")
         doc["deal"] = deal
         doc["canonical_artifacts"] = []
         for slot, address in providers.items():
             provider = next(row for row in doc["providers"] if row["address"] == address)
             directory = Path(provider["directory"]) / "deals" / identity / root[2:]
             for filename, size in (("mdu_0.bin", 8388608), ("mdu_1.bin", 8388608),
-                                   (f"mdu_2_slot_{slot}.bin", 4194304)):
+                                   (f"mdu_2_slot_{slot}.bin", layout["bytes_per_bundle"])):
                 path = directory / filename
                 if path.stat().st_size != size:
                     raise ValueError("provider canonical artifact has wrong size")
@@ -1211,7 +1385,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 values = []
                 for address in providers.values():
                     values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
-                checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain, finalized=finalized, expected_samples=expected_samples)
+                checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain,
+                                              finalized=finalized, expected_samples=expected_samples, k=k)
                 anchor_height = (selected_epoch - 1) * epoch_length + 1
                 anchor = lifecycle.query(node, f"/block?height={anchor_height}")
                 if (producer.uint(anchor["block"]["header"]["height"]) != anchor_height or
@@ -1280,7 +1455,9 @@ def main():
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
-    parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per32proof transaction")
+    parser.add_argument("--sustained-k", type=int, choices=(2, 8), default=2,
+                        help="Native Mode 2 data width; full-row bundles contain 64/K openings")
+    parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
@@ -1290,13 +1467,14 @@ def main():
     cli, source = options.pop("cli_binary"), options.pop("product_source")
     exporter = options.pop("proof_exporter")
     step_seconds, proof_gas = options.pop("step_seconds"), options.pop("proof_gas")
+    sustained_k = options.pop("sustained_k")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
-            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas), audit_profile=audit_profile))
-    elif exporter or proof_gas is not None or step_seconds != 180:
-        parser.error("exporter, proof gas and pilot duration require sustained-providers")
+            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas, k=sustained_k), audit_profile=audit_profile))
+    elif exporter or proof_gas is not None or step_seconds != 180 or sustained_k != 2:
+        parser.error("exporter, proof gas, sustained K and pilot duration require sustained-providers")
     elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
             parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")

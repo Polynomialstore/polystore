@@ -3,7 +3,8 @@
 
 This module never signs or broadcasts. The scheduler invokes its child through
 run_bounded_command, which also bounds native initialization and HTTP draining.
-Only the Go exporter's nonconstant, slot-zero K8/K2 fixture is supported.
+The Go exporter supports nonconstant native K8/K2 assignment artifacts. The
+small Python known-answer fixture remains slot zero only.
 """
 import base64
 import copy
@@ -147,10 +148,14 @@ def frozen_context(view, expected, session_id, height):
     if not 1 <= uint(expected["minimum_opened_height"]) <= opened <= height <= expiry <= uint(x["deal_end"]) < 1 << 63 or opened + 2 > expiry or not opened <= updated <= height:
         raise ValueError("invalid committed response window")
     k, m, slot = uint(x["k"]), uint(x["m"]), uint(x.get("slot", 0))
-    if uint(x["layout"]) != 2 or (k, m) not in ((8, 4), (2, 1)) or slot != 0:
-        raise ValueError("fixture supports only slot-zero K8/K2")
+    if uint(x["layout"]) != 2 or (k, m) not in ((8, 4), (2, 1)) or slot >= k + m:
+        raise ValueError("unsupported native K8/K2 assignment")
     start, count = uint(s.get("start_blob_index", 0)), uint(s["blob_count"])
-    if uint(x["metadata_mdus"]) != 2 or uint(x["user_mdus"]) != 1 or uint(s["start_mdu_index"]) != 2 or not 1 <= count <= 64 // k - start or uint(s["total_bytes"]) != count * BLOB_BYTES:
+    rows = 64 // k
+    if (uint(x["metadata_mdus"]) != 2 or uint(x["user_mdus"]) != 1 or
+            uint(s["start_mdu_index"]) != 2 or not 1 <= count or
+            not slot * rows <= start < start + count <= (slot + 1) * rows or
+            uint(s["total_bytes"]) != count * BLOB_BYTES):
         raise ValueError("fixture range mismatch")
     c = dict(version=2, chain_id=chain, setup_digest=setup.hex(), kind=1, context_id=session_id,
              deal_id=uint(s.get("deal_id", 0)), generation=uint(x.get("generation", 0)), root=root.hex(),
@@ -186,6 +191,8 @@ def read_json(path):
 
 
 def native_proofs(config, c, digest, seed):
+    if uint(c.get("slot", 0), 32) != 0:
+        raise ValueError("Python known-answer fixture supports slot zero only")
     meta, _ = read_json(Path(config["fixture"]) / "fixture.json")
     payload, raw = read_json(Path(config["fixture"]) / "1.json")
     for name, expected in dict(schema_version=1, challenge_kind="legacy-fixed-z", data_pattern="be-fr-last-byte-cycle-1-through-251-v1",
