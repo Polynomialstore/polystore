@@ -159,7 +159,7 @@ nor claims to repair it.
 
 Existing FAT v1/v2 generations have no integrity root. They remain eligible only
 for their existing retrieval versions. An owner may create a new FAT v3 generation
-and obtain fresh acceptances; no gateway may synthesize a v3 root at read time.
+and obtain fresh acceptances; no user-gateway may synthesize a v3 root at read time.
 
 ## 3. Frozen logical range and provider plan
 
