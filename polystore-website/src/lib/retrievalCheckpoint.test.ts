@@ -71,7 +71,7 @@ test('a lost proof POST preserves the pending wave; retry repeats only the same 
     prepare: async () => ({ data: '0x1234', intent: [hash] }), send: async () => { sends++; return hash },
     receipt: async () => ({ status: 'success', transactionHash: hash, blockNumber: 9n }), reconcile: async () => false,
   }) }
-  const options = { gatewayBase: 'http://localhost:8080', confirm,
+  const options = { resolveProviderBase: async () => 'https://provider.example', confirm,
     fetchFn: async (_: unknown, init?: RequestInit) => {
       posts++; assert.equal(JSON.parse(String(init?.body)).session_id, hash)
       if (posts === 1) throw new Error('response lost after broadcast')
@@ -172,7 +172,7 @@ test('two gateway-free MDUs survive reload and settle the same IDs without anoth
   cursor = retrievalCheckpointCursor(storage, 'file', storage.get<RetrievalCheckpointState>('file')!)
   const posted: string[] = [], forgotten: string[][] = []
   await cursor.reconcile((wave) => confirmAndRequestRetrievalProofs(wave, {
-    confirm: async () => {}, gatewayBase: 'http://localhost:8080',
+    confirm: async () => {}, resolveProviderBase: async () => 'https://provider.example',
     fetchFn: async (_, init) => {
       const id = JSON.parse(String(init?.body)).session_id
       posted.push(id)

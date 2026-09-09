@@ -901,6 +901,10 @@ func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Req
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
+	}
 
 	body, env, _, err := readSessionProofRequest(r.Body)
 	if err != nil {

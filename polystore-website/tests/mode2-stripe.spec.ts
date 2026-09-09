@@ -751,7 +751,7 @@ test.describe('mode2 streamed retrieval', () => {
       const onRequest = (request: import('@playwright/test').Request) => {
         const url = new URL(request.url()), id = request.headers()['x-polystore-session-id']
         if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) { const entry = { id, gateway: isGatewayOrigin(url.origin), startMs: performance.now() }; windows.push(entry); pendingWindows.set(request, entry) }
-        if (url.pathname === '/gateway/session-proof' && request.method() === 'POST') {
+        if (url.pathname === '/sp/session-proof/continue' && request.method() === 'POST') {
           const entry = { id: request.postDataJSON().session_id as string, startMs: performance.now() }
           proofRequests.push(entry); pendingProofs.set(request, entry)
         }
@@ -968,19 +968,18 @@ test.describe('mode2 streamed retrieval', () => {
       }
       await route.continue()
     })
-    await page.route('**/gateway/session-proof?*', async (route) => {
+    await page.route('**/sp/session-proof/continue', async (route) => {
       const request = route.request()
       if (request.method() !== 'POST') return route.continue()
       const input = request.postDataJSON()
       const { body: { session }, height: ackHeight } = await query(sessionPath(input.session_id))
       expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_USER_CONFIRMED')
-      expect(session.authorized_proof_provider).toBe(input.provider)
       const response = await route.fetch({ timeout: 100_000 })
       const result = await response.json()
       expect(response.status()).toBe(200)
       expect(result.session_id).toBe(input.session_id)
       expect(result.tx_hash).toMatch(/^[0-9a-fA-F]{64}$/)
-      proofOutcomes.set(input.session_id, { tx_hash: result.tx_hash, provider: input.provider, ackHeight })
+      proofOutcomes.set(input.session_id, { tx_hash: result.tx_hash, provider: session.authorized_proof_provider, ackHeight })
       await route.fulfill({ response })
     })
     const assertSettled = async () => {

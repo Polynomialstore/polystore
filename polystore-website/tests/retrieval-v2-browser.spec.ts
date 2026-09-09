@@ -127,10 +127,10 @@ test('real OPFS successful download retains unavailable settlement across reload
   expect(length).toBe(16 * 2 ** 20); expect(actualHash.digest('hex')).toBe(digest)
   await download.delete()
   await page.reload()
-  await page.route('http://localhost:8080/gateway/session-proof?*', async (route) => {
+  await page.route('http://localhost:8082/sp/session-proof/continue', async (route) => {
     if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST', 'access-control-allow-headers': 'content-type' } }); return }
     const body = route.request().postDataJSON()
-    expect(body.provider).toBe(payee); posted.push(body.session_id)
+    expect(Object.keys(body)).toEqual(['session_id']); posted.push(body.session_id)
     await route.fulfill({ headers: { 'access-control-allow-origin': '*' }, json: { status: 'reconciled', session_id: body.session_id, proof_count: 1, tx_hash: '' } })
   })
   const result = await page.evaluate(async () => {
@@ -139,7 +139,7 @@ test('real OPFS successful download retains unavailable settlement across reload
     const { browserRetrievalStore } = await import(/* @vite-ignore */ transactionPath) as typeof import('../src/lib/retrievalTransactions')
     const { confirmAndRequestRetrievalProofs } = await import(/* @vite-ignore */ settlementPath) as typeof import('../src/lib/retrievalSettlement')
     const job = await openRetrievalCheckpoint(['unavailable-download'], 16n << 20n), store = browserRetrievalStore()
-    await job.reconcile((wave) => confirmAndRequestRetrievalProofs(wave, { confirm: async () => {}, gatewayBase: 'http://localhost:8080' }), async (wave) => {
+    await job.reconcile((wave) => confirmAndRequestRetrievalProofs(wave, { confirm: async () => {}, resolveProviderBase: async () => 'http://localhost:8082' }), async (wave) => {
       for (const kind of ['open', 'ack']) {
         const key = `${kind}:${wave[0].sessionId.slice(2)}`
         const transaction = store.get<{ state: string; intent: string[] }>(key)

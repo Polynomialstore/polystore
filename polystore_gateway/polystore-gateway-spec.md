@@ -140,7 +140,8 @@ remains disabled by default and requires integrated qualification.
 | --- | --- | --- |
 | Plan file coverage | `GET /gateway/plan-retrieval-session/{polyfs_root}` | `GET /sp/retrieval/plan/{polyfs_root}` |
 | Committed metadata or funded encoded window | `GET /gateway/mdu/{polyfs_root}/{mdu_index}` | `GET /sp/retrieval/mdu/{polyfs_root}/{mdu_index}` |
-| Submit stored session proofs | `POST /gateway/session-proof` | `POST /sp/session-proof` |
+| Submit stored session proofs (privileged) | `POST /gateway/session-proof` | `POST /sp/session-proof` |
+| Continue one owner-confirmed v2 session | — | `POST /sp/session-proof/continue` |
 
 Planning accepts `deal_id`, `owner`, `file_path` and optional `range_start` /
 `range_len`. Treat the result as a proposal: authenticate committed MDU #0 and
@@ -260,16 +261,17 @@ defines the strict received-byte and PSB1 verifier boundaries.
    validate decoded packing, then flush and ACK the accepted sessions. Fetch,
    crypto, reconstruction, output-write or cancellation failure must not ACK
    the failed wave. Previously acknowledged waves remain acknowledged.
-7. After successful owner confirmation, the browser asks an available trusted
-   local user-gateway to submit each session's provider proof through
-   `POST /gateway/session-proof`, using a singular `session_id` and its frozen
-   authorized payee as `provider`. The gateway retains provider authentication;
-   the browser adds no provider secret or wallet action. This shared callback
-   also covers direct HTTP, P2P and reconstructed downloads. Each request has a
+7. After successful owner confirmation, the browser resolves the frozen proof
+   payee's registered HTTP endpoint and asks that provider to continue the exact
+   session through `POST /sp/session-proof/continue`. The request contains only
+   a singular `session_id`; chain state and the provider's retained proof supply
+   all authority. The provider rejects sessions without a committed owner ACK,
+   another authorized signer, or a mismatched frozen context. This callback also
+   covers direct HTTP, P2P and reconstructed downloads. Each request has a
    95-second deadline and a 16 KiB structured response bound. Only HTTP 200
    `success`/`reconciled` marks provider settlement submitted; HTTP 202 remains
    pending, including an unknown outcome without a hash. Failed requests and an
-   unavailable/disabled gateway leave verified downloads and successful ACKs
+   unavailable provider endpoint leaves verified downloads and successful ACKs
    intact, with settlement status visible. There are no automatic retries or
    browser proof batches; reconcile the original session IDs through the
    provider API below. A confirmed delivery alone does not pay the provider:
@@ -394,9 +396,12 @@ Do not send both ID fields. The provider accepts 1–64 unique IDs in at most
 16 KiB of request JSON; it applies separate stored-proof, unsigned transaction,
 signed transaction and gas bounds. HTTP fields are `session_id` or `session_ids`,
 optional `provider`, and the accepted legacy `deal_id` hint. Neither hint replaces
-chain authority. For the user-gateway relay, send the same body to
-`/gateway/session-proof` and include `provider` so it can route to that signer.
-Authorization headers follow the deployment's existing shared-token policy.
+chain authority. The public `/sp/session-proof/continue` endpoint instead
+accepts exactly one `session_id`, only after its owner ACK is committed, and
+never accepts routing or proof material. The privileged provider and
+user-gateway relay endpoints require the deployment's shared-token
+authorization; relay requests include `provider` so the user-gateway can route
+to that signer.
 
 | HTTP result | Meaning | Next action |
 | --- | --- | --- |

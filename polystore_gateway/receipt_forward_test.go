@@ -88,7 +88,14 @@ func TestGatewaySessionProof_UsesProviderAddressRouting(t *testing.T) {
 	defer func() { providerBase = oldBase }()
 
 	payload := fmt.Sprintf(`{"session_id":"0x%s","provider":"%s"}`, strings.Repeat("1", 64), providerAddr)
+	unauthorized := httptest.NewRequest(http.MethodPost, gatewaySrv.URL+"/gateway/session-proof", strings.NewReader(payload))
+	unauthorizedResult := httptest.NewRecorder()
+	r.ServeHTTP(unauthorizedResult, unauthorized)
+	if unauthorizedResult.Code != http.StatusForbidden || gotPath != "" {
+		t.Fatalf("unauthorized session proof was forwarded: status=%d path=%q", unauthorizedResult.Code, gotPath)
+	}
 	req := httptest.NewRequest(http.MethodPost, gatewaySrv.URL+"/gateway/session-proof", strings.NewReader(payload))
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

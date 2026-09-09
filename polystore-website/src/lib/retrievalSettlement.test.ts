@@ -6,7 +6,7 @@ import { executeRetrievalWindows } from './retrievalFlow'
 import { recoverRetrievalMdu } from './retrievalRecovery'
 import { confirmAndRequestRetrievalProofs } from './retrievalSettlement'
 
-const gatewayBase = 'http://localhost:8080'
+const providerBase = 'https://provider.example'
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 const session = (n = 1): FrozenSession => ({ sessionId: `0x${n.toString(16).padStart(64, '0')}`, payee: address(n + 1), owner: address(99),
   pin: { dealId: 9007199254740993n + BigInt(n) }, window: { mduIndex: 2n, startBlobIndex: 0, blobCount: 1, provider: address(90), slices: [] } }) as unknown as FrozenSession
@@ -15,13 +15,14 @@ const txHash = 'A1'.repeat(32)
 const payload = (s: FrozenSession, status = 'success', hash = txHash) => ({ status, session_id: s.sessionId, proof_count: 1, tx_hash: hash, cleanup_status: 'complete' })
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } })
 const confirm = async () => {}
+const resolveProviderBase = async () => providerBase
 
 test('four independent payees submit concurrently with bounded work and ordered outcomes', async () => {
   const sessions = Array.from({ length: 8 }, (_, i) => session(i + 1))
   const release: Array<() => void> = [], started: number[] = [], completed: number[] = []
   const gates = sessions.map((_, i) => new Promise<void>((resolve) => { release[i] = resolve }))
   let active = 0, peak = 0
-  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+  const work = confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase, confirm,
     fetchFn: async (_, init) => {
       const index = sessions.findIndex((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)
       started.push(index); peak = Math.max(peak, ++active)
@@ -50,7 +51,7 @@ test('sessions sharing a frozen deputy remain serial while distinct payees make 
   let releaseFirst!: () => void
   const first = new Promise<void>((resolve) => { releaseFirst = resolve })
   const started: string[] = [], active = new Set<string>()
-  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+  const work = confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase, confirm,
     fetchFn: async (_, init) => {
       const s = sessions.find((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)!
       assert.equal(active.has(s.payee), false)
@@ -74,14 +75,15 @@ test('sessions sharing a frozen deputy remain serial while distinct payees make 
 test('ACK commits before singular requests, preserving each immutable deputy and exact deal ID', async () => {
   const sessions = [session(1), session(2)], events: string[] = []
   const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
-    gatewayBase, confirm: async (wave) => { assert.equal(wave, sessions); events.push('ACK') }, onConfirmed: () => events.push('confirmed'),
+    resolveProviderBase: async (provider) => { assert.ok(sessions.some((session) => session.payee === provider)); return providerBase },
+    confirm: async (wave) => { assert.equal(wave, sessions); events.push('ACK') }, onConfirmed: () => events.push('confirmed'),
     fetchFn: async (url, init) => {
-      const s = sessions[events.filter((e) => e === 'POST').length]
+      const s = sessions.find((session) => session.sessionId === JSON.parse(String(init?.body)).session_id)!
       assert.deepEqual(events.slice(0, 2), ['ACK', 'confirmed'])
-      assert.equal(String(url), `${gatewayBase}/gateway/session-proof?deal_id=${s.pin.dealId}`)
+      assert.equal(String(url), `${providerBase}/sp/session-proof/continue`)
       assert.equal(init?.method, 'POST'); assert.equal(init?.redirect, 'error'); assert.ok(init?.signal)
       assert.deepEqual(init?.headers, { 'Content-Type': 'application/json' })
-      assert.deepEqual(JSON.parse(String(init?.body)), { session_id: s.sessionId, provider: s.payee })
+      assert.deepEqual(JSON.parse(String(init?.body)), { session_id: s.sessionId })
       assert.notEqual(s.payee, s.window.provider)
       events.push('POST'); return json(payload(s))
     },
@@ -93,7 +95,7 @@ test('ACK commits before singular requests, preserving each immutable deputy and
 test('failed ACK never submits a proof request', async () => {
   let posts = 0
   await assert.rejects(confirmAndRequestRetrievalProofs([session()], {
-    gatewayBase, confirm: async () => { throw new Error('ACK failed') },
+    resolveProviderBase, confirm: async () => { throw new Error('ACK failed') },
     fetchFn: async () => { posts++; throw new Error('unexpected POST') },
   }), /ACK failed/)
   assert.equal(posts, 0)
@@ -106,7 +108,7 @@ test('actual wave sequencing never posts before verified writes and flush, inclu
     const work = executeRetrievalWindows([s.window], {
       open: async () => [s], fetchAndVerify: async () => { step('verify'); return new Uint8Array([1]) },
       consume: async () => { step('write') }, flush: async () => { step('flush') },
-      confirm: async (wave) => { await confirmAndRequestRetrievalProofs(wave, { gatewayBase,
+      confirm: async (wave) => { await confirmAndRequestRetrievalProofs(wave, { resolveProviderBase,
         confirm: async () => { step('ACK') }, fetchFn: async () => { step('POST'); return json(payload(s)) },
       }) },
     })
@@ -127,7 +129,7 @@ test('recovery submits only after reconstructed output persists and ACK commits'
       reconstructAndVerify: async () => { step('reconstruct'); return new Uint8Array(8388608) },
       consumeAndFlush: async () => { step('write'); step('flush') },
       confirm: async (sessions) => {
-        const outcomes = await confirmAndRequestRetrievalProofs(sessions, { gatewayBase,
+        const outcomes = await confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase,
           confirm: async () => { step('ACK') }, fetchFn: async (_, init) => {
             step('POST'); const s = sessions.find((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)!
             return json({ ...payload(s), proof_count: pin.rows })
@@ -147,20 +149,20 @@ test('committed, reconciled, pending known/unknown and explicit failure remain d
     ['success', txHash, 200, 'committed'], ['reconciled', '', 200, 'committed'],
     ['pending', txHash, 202, 'pending'], ['pending', '', 202, 'pending'], ['failed', txHash, 409, 'failed'],
   ] as const) {
-    const [outcome] = await confirmAndRequestRetrievalProofs([s], { gatewayBase, confirm, fetchFn: async () => json(payload(s, status, hash), code) })
+    const [outcome] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => json(payload(s, status, hash), code) })
     assert.equal(outcome.state, state); assert.equal(outcome.txHash, hash || undefined)
     if (state === 'pending') { assert.match(outcome.message!, /Reconcile this same session/); assert.match(outcome.message!, hash ? /A1A1/ : /outcome unknown/) }
   }
-  const [rejected] = await confirmAndRequestRetrievalProofs([s], { gatewayBase, confirm, fetchFn: async () => json({ error: 'forbidden', hint: 'missing gateway auth' }, 403) })
+  const [rejected] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => json({ error: 'forbidden' }, 403) })
   assert.equal(rejected.state, 'failed'); assert.match(rejected.message!, /403.*forbidden/)
-  const [lost] = await confirmAndRequestRetrievalProofs([s], { gatewayBase, confirm, fetchFn: async () => json({ error: 'upstream response lost' }, 502) })
+  const [lost] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => json({ error: 'upstream response lost' }, 502) })
   assert.equal(lost.state, 'pending')
 })
 
-test('unavailable/untrusted gateway preserves ACK and never contacts a provider directly', async () => {
-  for (const base of [undefined, 'https://provider.example', 'ftp://localhost:8080']) {
+test('missing, failed or non-HTTP provider resolution preserves ACK without a POST', async () => {
+  for (const resolve of [undefined, async () => { throw new Error('lookup failed') }, async () => 'ftp://provider.example']) {
     let acks = 0, posts = 0
-    const [outcome] = await confirmAndRequestRetrievalProofs([session()], { gatewayBase: base, confirm: async () => { acks++ }, fetchFn: async () => { posts++; throw new Error('unexpected') } })
+    const [outcome] = await confirmAndRequestRetrievalProofs([session()], { resolveProviderBase: resolve, confirm: async () => { acks++ }, fetchFn: async () => { posts++; throw new Error('unexpected') } })
     assert.equal(acks, 1); assert.equal(posts, 0); assert.equal(outcome.state, 'unavailable'); assert.match(outcome.message!, /Verified output and owner confirmation are preserved/)
   }
 })
@@ -182,23 +184,23 @@ test('malformed or mismatched final responses are unknown, never settled or retr
   ]
   for (const response of bad) {
     let calls = 0
-    const [outcome] = await confirmAndRequestRetrievalProofs([s], { gatewayBase, confirm, fetchFn: async () => { calls++; return response() } })
+    const [outcome] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => { calls++; return response() } })
     assert.equal(calls, 1); assert.equal(outcome.state, 'pending'); assert.match(outcome.message!, /No valid final response/)
   }
   let calls = 0
-  const [outcome] = await confirmAndRequestRetrievalProofs([s], { gatewayBase, confirm, fetchFn: async () => { calls++; throw new DOMException('HTTP deadline', 'TimeoutError') } })
+  const [outcome] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => { calls++; throw new DOMException('HTTP deadline', 'TimeoutError') } })
   assert.equal(calls, 1); assert.equal(outcome.state, 'pending')
 })
 
 test('bounded chunked reader cancels oversized outcomes and settlement waves reject invalid IDs', async () => {
   let canceled = false
-  const [outcome] = await confirmAndRequestRetrievalProofs([session()], { gatewayBase, confirm, fetchFn: async () => new Response(new ReadableStream({
+  const [outcome] = await confirmAndRequestRetrievalProofs([session()], { resolveProviderBase, confirm, fetchFn: async () => new Response(new ReadableStream({
     pull(controller) { controller.enqueue(new Uint8Array(16385)) }, cancel() { canceled = true },
   }), { headers: { 'content-type': 'application/json' } }) })
   assert.equal(outcome.state, 'pending'); assert.equal(canceled, true)
   let acks = 0
   for (const sessions of [[], [session(), session()], Array.from({ length: 65 }, (_, i) => session(i + 1)), [{ ...session(), payee: 'invalid' }]]) {
-    await assert.rejects(confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm: async () => { acks++ } }))
+    await assert.rejects(confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase, confirm: async () => { acks++ } }))
   }
   assert.equal(acks, 0)
 })
@@ -207,7 +209,7 @@ test('cancellation during an ACK receipt wait does not suppress proof requests a
   const controller = new AbortController(), s = session()
   let posts = 0
   const outcomes = await confirmAndRequestRetrievalProofs([s], {
-    gatewayBase, signal: controller.signal,
+    resolveProviderBase, signal: controller.signal,
     confirm: async () => { controller.abort() },
     fetchFn: async (_, init) => { assert.equal(init?.signal?.aborted, false); posts++; return json(payload(s)) },
   })
@@ -222,7 +224,7 @@ test('one post-ACK deadline bounds the whole wave and prevents dispatch after ex
   })
   let posts = 0
   const outcomes = await confirmAndRequestRetrievalProofs([session(1), session(2), session(3)], {
-    gatewayBase, confirm,
+    resolveProviderBase, confirm,
     fetchFn: async (_, init) => {
       posts++; deadlines[0].abort(new Error('whole wave expired'))
       assert.equal(init?.signal?.aborted, true)
@@ -234,6 +236,32 @@ test('one post-ACK deadline bounds the whole wave and prevents dispatch after ex
   assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
 })
 
+test('a stalled provider lookup consumes the wave deadline without starting later lookups', async (t) => {
+  const deadline = new AbortController()
+  t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 95_000)
+    return deadline.signal
+  })
+  const first = session(1)
+  const sessions = [first, { ...session(2), payee: first.payee }]
+  let lookups = 0, posts = 0
+  const work = confirmAndRequestRetrievalProofs(sessions, {
+    confirm,
+    resolveProviderBase: async () => {
+      lookups++
+      return new Promise<string>(() => {})
+    },
+    fetchFn: async () => { posts++; throw new Error('unexpected POST') },
+  })
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  assert.equal(lookups, 1)
+  deadline.abort(new Error('wave expired during discovery'))
+  const outcomes = await work
+  assert.equal(lookups, 1)
+  assert.equal(posts, 0)
+  assert.deepEqual(outcomes.map((outcome) => outcome.state), ['unavailable', 'unavailable'])
+})
+
 test('shared deadline cancels all four active workers without dispatching queued sessions', async (t) => {
   const deadlines: AbortController[] = []
   t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
@@ -242,7 +270,7 @@ test('shared deadline cancels all four active workers without dispatching queued
   })
   const sessions = Array.from({ length: 64 }, (_, i) => session(i + 1))
   let posts = 0
-  const work = confirmAndRequestRetrievalProofs(sessions, { gatewayBase, confirm,
+  const work = confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase, confirm,
     fetchFn: async (_, init) => {
       posts++
       return new Promise<Response>((_, reject) => {
@@ -255,5 +283,6 @@ test('shared deadline cancels all four active workers without dispatching queued
   const outcomes = await work
   assert.equal(posts, 4)
   assert.deepEqual(outcomes.map((o) => o.sessionId), sessions.map((s) => s.sessionId))
-  assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
+  assert.ok(outcomes.slice(0, 4).every((o) => o.responseUnknown && o.state === 'pending'))
+  assert.ok(outcomes.slice(4).every((o) => o.state === 'unavailable'))
 })

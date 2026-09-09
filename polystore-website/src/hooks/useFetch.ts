@@ -8,9 +8,7 @@ import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/
 import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
-import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
-import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
@@ -174,10 +172,10 @@ export function useFetch() {
       let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
       let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
       const job = checkpoint, sink = job.output
-      const availableProofBase = () => isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
-      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+      const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
+      await job.reconcile((sessions) => confirmAndRequestRetrievalProofs(sessions, {
         // Durable settlement rows are written only after the original ACK commits.
-        confirm: async () => {}, gatewayBase: availableProofBase() ?? previousBase, signal,
+        confirm: async () => {}, resolveProviderBase: resolveProofBase, signal,
       }), (sessions) => payment.forget(sessions, job.key), signal)
       unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
@@ -191,11 +189,10 @@ export function useFetch() {
       }
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
-        const gatewayBase = job.state.pending?.proofBase ?? availableProofBase()
-        job.prepare(currentOrdinal, sessions, gatewayBase)
+        job.prepare(currentOrdinal, sessions)
         const outcomes = await timeRetrieval('ack_and_provider_settlement', () => confirmAndRequestRetrievalProofs(sessions, {
           confirm: (wave) => timeRetrieval('owner_ack', () => payment.confirm(wave, signal, job.key)), signal,
-          gatewayBase,
+          resolveProviderBase: resolveProofBase,
           onConfirmed: () => { retrievalDiagnostic({ phase: 'acked', sessionIds: sessions.map((s) => s.sessionId) }); confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
         }))
         if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
@@ -288,7 +285,7 @@ export function useFetch() {
       // The same output is needed to retry settlement without another download.
       // A retained checkpoint owns its bytes across URL replacement and unmount.
       saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpoint = null
-      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file when the trusted local gateway is available to settle the saved sessions without another payment or download.` : undefined
+      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Use the file menu's provider download action to retry settlement using the saved bytes, without another payment or download.` : undefined
       setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
       setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
       return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
