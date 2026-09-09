@@ -2,9 +2,11 @@ pub mod builder;
 pub mod coding;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
+pub mod integrity_v3;
 pub mod kzg;
 pub mod layout;
 pub mod retrieval_challenge;
+pub mod retrieval_v3;
 pub mod utils;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;

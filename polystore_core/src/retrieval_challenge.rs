@@ -44,7 +44,7 @@ impl<'a> Reader<'a> {
     pub fn u64(&mut self) -> Result<u64, KzgError> {
         Ok(u64::from_be_bytes(self.array()?))
     }
-    fn lp(&mut self) -> Result<&'a [u8], KzgError> {
+    pub(crate) fn lp(&mut self) -> Result<&'a [u8], KzgError> {
         let n = self.u32()? as usize;
         self.take(n)
     }
@@ -271,11 +271,34 @@ pub fn derive_z(
     mdu: u64,
     leaf: u32,
 ) -> Result<[u8; 32], KzgError> {
+    derive_z_with_domain(
+        b"polystore/blob-challenge/v2",
+        hash,
+        seed,
+        ordinal,
+        None,
+        mdu,
+        leaf,
+    )
+}
+
+pub(crate) fn derive_z_with_domain(
+    domain: &[u8],
+    hash: &[u8; 32],
+    seed: &[u8; 32],
+    ordinal: u64,
+    t: Option<u64>,
+    mdu: u64,
+    leaf: u32,
+) -> Result<[u8; 32], KzgError> {
     let mut transcript = Vec::with_capacity(128);
-    append_lp(&mut transcript, b"polystore/blob-challenge/v2");
+    append_lp(&mut transcript, domain);
     transcript.extend(hash);
     transcript.extend(seed);
     transcript.extend(ordinal.to_be_bytes());
+    if let Some(t) = t {
+        transcript.extend(t.to_be_bytes());
+    }
     transcript.extend(mdu.to_be_bytes());
     transcript.extend(leaf.to_be_bytes());
     hash_to_point(|retry| {
@@ -302,13 +325,31 @@ pub fn sample(
     population: u64,
     count: u64,
 ) -> Result<Vec<u64>, KzgError> {
-    if count > population || count > MAX_SAMPLES {
+    sample_with_domain(
+        b"polystore/audit-position/v2",
+        hash,
+        seed,
+        population,
+        count,
+        MAX_SAMPLES,
+    )
+}
+
+pub(crate) fn sample_with_domain(
+    domain: &[u8],
+    hash: &[u8; 32],
+    seed: &[u8; 32],
+    population: u64,
+    count: u64,
+    max_count: u64,
+) -> Result<Vec<u64>, KzgError> {
+    if count > population || count > max_count {
         return Err(invalid());
     }
     let mut positions = Vec::with_capacity(count as usize);
     let mut swaps = BTreeMap::new();
     let mut transcript = Vec::with_capacity(128);
-    append_lp(&mut transcript, b"polystore/audit-position/v2");
+    append_lp(&mut transcript, domain);
     transcript.extend(hash);
     transcript.extend(seed);
     for i in 0..count {
