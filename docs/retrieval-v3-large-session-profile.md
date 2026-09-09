@@ -90,8 +90,9 @@ The owner builds KZG commitments and this tree from the same canonical encoded
 blob vector in one proposed generation. Before that generation becomes eligible
 for v3, every one of the 12 frozen assigned providers MUST check each blob in its
 slot against both its existing KZG commitment path and the proposed integrity
-path, then submit this digest through the existing authenticated native/EVM
-provider action (no new detached-signature scheme):
+path, then submit this digest through a new generation-acceptance action that
+reuses the existing native signer/EVM caller authentication machinery (no new
+detached-signature scheme):
 
 ```text
 SHA256(
