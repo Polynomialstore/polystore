@@ -42,6 +42,11 @@ across more than one assignment before making that claim.
 
 ## Candidate pilot after review
 
+Retained performance collection must wait until this harness/schema has focused
+review and lands. After landing, freeze the product runtime and harness to exact
+commits and component hashes before collection; any relevant product or harness
+change requires another review, freeze, and collection.
+
 Before starting a new home, verify free space, the 600-second total budget, fixed
 ports, and exact source/binary hashes. K8 setup starts twelve provider-daemons and
 may not fit 600 seconds; a timeout is a failed pilot with retained diagnostics,

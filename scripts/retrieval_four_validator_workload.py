@@ -36,7 +36,7 @@ SUSTAINED_RATES = (0.25, 0.5, 1, 2, 4)
 
 def mode2_layout(k):
     """Return the complete supported full-row geometry for one Mode 2 MDU."""
-    if isinstance(k, bool) or k not in (2, 8):
+    if type(k) is not int or k not in (2, 8):
         raise ValueError("sustained retrieval requires native K2 or K8")
     m = 1 if k == 2 else 4
     openings = artifact.BLOBS_PER_MDU // k

@@ -49,7 +49,7 @@ class SustainedTest(unittest.TestCase):
                                  dict(gas=20_000_000, openings=want["openings"]))
                 self.assertEqual(profile["native_message_batching"]["proof_sessions_per_submission_transaction"], 1)
                 self.assertFalse(profile["native_message_batching"]["cross_provider_crypto_aggregation"])
-        for k in (0, 4, 16, True, "8"):
+        for k in (0, 2.0, 4, 16, True, "8"):
             with self.subTest(k=k), self.assertRaises(ValueError):
                 workload.mode2_layout(k)
 
