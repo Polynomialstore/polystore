@@ -23,8 +23,8 @@
   },
   "published_files": {
     "summary.json": {
-      "sha256": "768e2b2adab5bf1205fecc9832eab30f7b564e3f9f0a030fcaaffc07b43e0340",
-      "bytes": 9515
+      "sha256": "60e865a76cb50945d31e84f87ceb300f050b594f5d7d138df103a827b1e8d1fa",
+      "bytes": 9641
     },
     "plan.json": {
       "sha256": "b74545e34a4f77bbb6872995938da995dd0bc67ae546442a9a617f067951d0f1",
@@ -61,6 +61,10 @@
       {
         "original": "private driver log path and hash in local summary",
         "published": "excluded_private_sources label only"
+      },
+      {
+        "original": "summary resources commit_cpu_limit, commit_step_cpu_wide_scrape, and one_core_percent mislabeled elapsed Commit-step time as CPU usage",
+        "published": "commit_elapsed_time_limit, commit_step_elapsed_wide_scrape, and wall_time_occupancy_percent; elapsed-time semantics clarified, numeric measurements unchanged"
       }
     ]
   },

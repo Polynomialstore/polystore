@@ -197,30 +197,30 @@
   },
   "qualification": false,
   "resources": {
-    "commit_cpu_limit": "Two wide scrapes do not establish p95 or reconcile workload block boundaries; trailing observations may be missing",
-    "commit_step_cpu_wide_scrape": [
+    "commit_elapsed_time_limit": "Two wide scrapes do not establish p95 or reconcile workload block boundaries; trailing observations may be missing; elapsed Commit time may include waiting and is not process CPU time",
+    "commit_step_elapsed_wide_scrape": [
       {
         "commit_step_sum_seconds_delta": 14.754940786,
         "node_id": "d55ddc4f7844069eb3e5e9a52702250a30566732",
-        "one_core_percent": 4.893,
+        "wall_time_occupancy_percent": 4.893,
         "wide_scrape_wall_seconds": 301.562276
       },
       {
         "commit_step_sum_seconds_delta": 15.18994379,
         "node_id": "950a80af5ef62b96f42256d033bf9b449596a575",
-        "one_core_percent": 5.037,
+        "wall_time_occupancy_percent": 5.037,
         "wide_scrape_wall_seconds": 301.563285
       },
       {
         "commit_step_sum_seconds_delta": 14.957921707,
         "node_id": "18319fb99d7d5e66dbde4f2356aab541ea0cf507",
-        "one_core_percent": 4.96,
+        "wall_time_occupancy_percent": 4.96,
         "wide_scrape_wall_seconds": 301.566726
       },
       {
         "commit_step_sum_seconds_delta": 15.044792756,
         "node_id": "547583d7cf158578863ee0b7afdb5e7a9fa89e4c",
-        "one_core_percent": 4.989,
+        "wall_time_occupancy_percent": 4.989,
         "wide_scrape_wall_seconds": 301.567686
       }
     ],

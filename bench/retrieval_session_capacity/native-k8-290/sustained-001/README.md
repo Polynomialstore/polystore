@@ -54,9 +54,10 @@ measure the chain limit.
 
 Continuous Commit-step streams covered 226 blocks on each validator and reported
 conservative p95 upper bounds of 155.971–160.498 ms, within the fixed 700 ms
-budget. The separate two-scrape CPU bounds accumulated 14.755–15.190 CPU-seconds
-per validator over about 301.6 seconds, or 4.89–5.04% of one core. They do not
-establish CPU p95 or reconcile exact workload block boundaries. Validator
+budget. The separate two-scrape deltas accumulated 14.755–15.190 seconds of Commit-step
+elapsed time per validator over about 301.6 seconds, or 4.89–5.04% wall-time
+occupancy. This elapsed time may include waiting; it is not measured process
+CPU usage. These wide scrapes do not reconcile exact workload block boundaries. Validator
 lifetime peak RSS was 295,223,296–309,968,896 bytes.
 
 The final normal audit observation at height 701 recorded one accepted sample
