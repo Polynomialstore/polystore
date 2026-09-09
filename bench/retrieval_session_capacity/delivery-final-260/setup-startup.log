@@ -1,0 +1,22 @@
+PASS approved setup: startup admission
+PASS missing: start
+PASS missing: in-place-testnet
+PASS malformed: start
+PASS malformed: in-place-testnet
+PASS truncated: start
+PASS truncated: in-place-testnet
+PASS substituted: start
+PASS substituted: in-place-testnet
+PASS identity: start
+PASS identity: in-place-testnet
+PASS missing default setup: start
+PASS archive-root: default setup admission
+PASS archive-symlink: default setup admission
+PASS source-tree: default setup admission
+PASS explicit-missing: no bundled fallback
+PASS explicit-substituted: no bundled fallback
+PASS source-substituted: no bundled fallback
+PASS archive-substituted: default setup rejected
+PASS without setup: --help
+PASS without setup: version
+PASS without setup: query block reached RPC

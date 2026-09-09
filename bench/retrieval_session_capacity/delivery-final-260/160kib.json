@@ -1,0 +1,141 @@
+{
+  "scope": "160 KiB live browser retrieval and explicit deputy; no capacity claim",
+  "provenanceScope": "checkout source and harness files only; running executable, native library and WASM identities are not recorded",
+  "sourceRevision": "1a10ea5cb5287717bcb1681e21bae2360aee34bf",
+  "sourceTrees": {
+    "polystorechain": "cd8ccc3f183ce383ccfa9c08f90057ac47bcbf29",
+    "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "polystore_gateway": "1a9bf50ee6f02ef2b746d2ba5fd82554ec3b5fdd",
+    "polystore-website/src": "b16e08594cbcf59ebd973804f434ad82436a2973",
+    "scripts": "01201ecc86756b78bac3559a4b3cd4b04a383587"
+  },
+  "sourceDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "harnessSha256": [
+    {
+      "file": "tests/mode2-stripe.spec.ts",
+      "sha256": "a2beb93cf6d415239c7a79267ef52bbfb8254d9303ff849424a27bda6cef954c"
+    },
+    {
+      "file": "tests/utils/deputyRetrieval.tsx",
+      "sha256": "e4afaeda076dcb8e55fc6674bef08dcbb4a7920837eb0d2e3d3f22aadcb2cee7"
+    }
+  ],
+  "fixtureBytes": 163840,
+  "fixtureSha256": "21bc90721f89869432c09d4f5a20d308de7f4180d48ac070905f19dc3e8b1bf8",
+  "gatewaySha256": "21bc90721f89869432c09d4f5a20d308de7f4180d48ac070905f19dc3e8b1bf8",
+  "deputy": {
+    "bytes": 163840,
+    "sha256": "21bc90721f89869432c09d4f5a20d308de7f4180d48ac070905f19dc3e8b1bf8"
+  },
+  "rejectedWindow": {
+    "session": "0xba6a0f8ee69c35cdf146e365a7c5e3f27c1db76d219074b7775cf17d50ddeaee",
+    "status": 400,
+    "error": "window hint does not match frozen session"
+  },
+  "sessions": [
+    {
+      "id": "0xba6a0f8ee69c35cdf146e365a7c5e3f27c1db76d219074b7775cf17d50ddeaee",
+      "payee": "nil1wuy4mz8r449wzankhz4gguqlvmxdv3s0znap9f",
+      "assigned": "nil1wuy4mz8r449wzankhz4gguqlvmxdv3s0znap9f",
+      "root": "FPZIPL54GjGPVXGfuWMpue2gftrUFtSaRzVp58371fg=",
+      "height": "33",
+      "locked": "17",
+      "mdu": "2",
+      "startBlob": 0,
+      "blobs": 1,
+      "contextHash": "53NQXYYCksn3+092D7Ay5coWmF3Jfj9AKhYR33zZNEI=",
+      "stake": "999999800",
+      "txHash": "72B2088950CCCC9EE938056AC8EF2CC3E6CF1F045173BA98A9CF5BE456131E48",
+      "ackHeight": "34",
+      "settledHeight": "35",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "burn": "1",
+      "payout": "16",
+      "transfer": {
+        "recipient": "nil1wuy4mz8r449wzankhz4gguqlvmxdv3s0znap9f",
+        "sender": "nil1r23ygxmk5pd2kq75xv6fn092amukw7anwscpnx",
+        "amount": "16stake",
+        "msg_index": "0"
+      },
+      "stakeAfter": "999999816"
+    },
+    {
+      "id": "0x8a0721822bd1570a24a16fcfad4c4b22a0c47779286377f598479f50fb878c67",
+      "payee": "nil10wlt7mvwchprvjjgcm2a3dn522zfkwkusg47ga",
+      "assigned": "nil10wlt7mvwchprvjjgcm2a3dn522zfkwkusg47ga",
+      "root": "FPZIPL54GjGPVXGfuWMpue2gftrUFtSaRzVp58371fg=",
+      "height": "33",
+      "locked": "17",
+      "mdu": "2",
+      "startBlob": 32,
+      "blobs": 1,
+      "contextHash": "uKgwVFqB0S7DwZ4X70W8DTsZACKs1pV/7zbRNiV5SeU=",
+      "stake": "999999832",
+      "txHash": "B5CA8CFDC7F38E0C7BEA8AA51D38C8E5CA5A61D010C18E6C9893D8F0D5B90DC8",
+      "ackHeight": "34",
+      "settledHeight": "35",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "burn": "1",
+      "payout": "16",
+      "transfer": {
+        "recipient": "nil10wlt7mvwchprvjjgcm2a3dn522zfkwkusg47ga",
+        "sender": "nil1r23ygxmk5pd2kq75xv6fn092amukw7anwscpnx",
+        "amount": "16stake",
+        "msg_index": "0"
+      },
+      "stakeAfter": "999999848"
+    },
+    {
+      "id": "0x5fa42e1d2f84eda2b22e684d4a5178388b199f60781fcde20f7f8a50364eb030",
+      "payee": "nil16n5gcj8j0e8t3uvqfu664mdd4z5nw3wva8hyc8",
+      "assigned": "nil1wuy4mz8r449wzankhz4gguqlvmxdv3s0znap9f",
+      "root": "FPZIPL54GjGPVXGfuWMpue2gftrUFtSaRzVp58371fg=",
+      "height": "38",
+      "locked": "17",
+      "mdu": "2",
+      "startBlob": 0,
+      "blobs": 1,
+      "contextHash": "lxp0hNMLD62w8z84pddQ0Dnb1pQtxsKvb3MWQ7rPgcs=",
+      "stake": "999999816",
+      "txHash": "3D8662F41E6C8DE747F5A6A1F5E5B07D18EEC9E76FD511602296B2A4DB408186",
+      "ackHeight": "39",
+      "settledHeight": "40",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "burn": "1",
+      "payout": "16",
+      "transfer": {
+        "recipient": "nil16n5gcj8j0e8t3uvqfu664mdd4z5nw3wva8hyc8",
+        "sender": "nil1r23ygxmk5pd2kq75xv6fn092amukw7anwscpnx",
+        "amount": "16stake",
+        "msg_index": "0"
+      },
+      "stakeAfter": "999999832"
+    },
+    {
+      "id": "0x9b316aefc732318517b5ddca6e24f58777a095cfa723fc8bfa38cd77b2de3f6f",
+      "payee": "nil16n5gcj8j0e8t3uvqfu664mdd4z5nw3wva8hyc8",
+      "assigned": "nil10wlt7mvwchprvjjgcm2a3dn522zfkwkusg47ga",
+      "root": "FPZIPL54GjGPVXGfuWMpue2gftrUFtSaRzVp58371fg=",
+      "height": "38",
+      "locked": "17",
+      "mdu": "2",
+      "startBlob": 32,
+      "blobs": 1,
+      "contextHash": "weBZBWY4ldnV/P+k4cld9zSe+jpFQsxjvFTtIDddedY=",
+      "stake": "999999816",
+      "txHash": "AE20BA633545E78C930CFE08D8FE15AAC85F6352E3E34C2398822EB28A0B3528",
+      "ackHeight": "40",
+      "settledHeight": "41",
+      "status": "RETRIEVAL_SESSION_STATUS_COMPLETED",
+      "burn": "1",
+      "payout": "16",
+      "transfer": {
+        "recipient": "nil16n5gcj8j0e8t3uvqfu664mdd4z5nw3wva8hyc8",
+        "sender": "nil1r23ygxmk5pd2kq75xv6fn092amukw7anwscpnx",
+        "amount": "16stake",
+        "msg_index": "0"
+      },
+      "stakeAfter": "999999848"
+    }
+  ]
+}

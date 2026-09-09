@@ -1,0 +1,11 @@
+{
+  "source": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+  "unchanged_runtime_since": "0bac7796",
+  "binary_sha256": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba",
+  "library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+  "log": "setup-startup.log",
+  "checks_passed": 22,
+  "scope": "22 fresh-process setup checks: 19 admission checks plus help/version/query without setup. Approved setup proceeds to deliberately invalid pruning configuration; valid proof execution is separately evidenced.",
+  "reproduction": "DYLD_LIBRARY_PATH=<library-directory> python3 scripts/test_validator_setup_startup.py <pinned-chain-binary> polystorechain/trusted_setup.txt",
+  "log_sha256": "d76b2e0c4f1cf8b6aa073864ebe4f743cb3bce177b0253ef0417e7ad06dee5ed"
+}

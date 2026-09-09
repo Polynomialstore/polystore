@@ -1,0 +1,87 @@
+diff --git a/polystore_core/src/kzg.rs b/polystore_core/src/kzg.rs
+index 548a1088..27ed7801 100644
+--- a/polystore_core/src/kzg.rs
++++ b/polystore_core/src/kzg.rs
+@@ -167,7 +167,17 @@ impl rs_merkle::Hasher for Blake2s256Hasher {
+     }
+ }
+ 
++#[cfg(target_arch = "wasm32")]
++struct FixedBaseExperiment {
++    bits: usize,
++    table: Vec<blst_p1_affine>,
++    scratch: Vec<limb_t>,
++    scalars: Vec<u8>,
++}
++
+ pub struct KzgContext {
++    #[cfg(target_arch = "wasm32")]
++    fixed_base_experiment: RefCell<Option<FixedBaseExperiment>>,
+     g1_points: Vec<G1Affine>,
+     #[cfg(target_arch = "wasm32")]
+     #[allow(dead_code)]
+@@ -287,6 +297,8 @@ impl KzgContext {
+             g1_points.iter().map(|p| G1Projective::from(*p)).collect();
+ 
+         Ok(Self {
++            #[cfg(target_arch = "wasm32")]
++            fixed_base_experiment: RefCell::new(None),
+             prepared_h: G2Prepared::from(g2_points[0]),
+             prepared_tau: G2Prepared::from(g2_points[1]),
+             g1_points,
+@@ -316,6 +328,38 @@ impl KzgContext {
+         self.blob_to_commitment(blob)
+     }
+ 
++    // Temporary bounded experiment; production received-byte verification is unchanged.
++    #[cfg(target_arch = "wasm32")]
++    pub fn experiment_fixed_base(&self, blob: &[u8], bits: usize) -> Result<KzgCommitment, KzgError> {
++        use blst::{blst_p1s_mult_wbits, blst_p1s_mult_wbits_precompute,
++            blst_p1s_mult_wbits_precompute_sizeof, blst_p1s_mult_wbits_scratch_sizeof};
++        if blob.len() != BLOB_SIZE || !(4..=6).contains(&bits) || self.g1_points_are_monomial || self.g1_points_blst.len() != SCALARS_PER_BLOB {
++            return Err(KzgError::InvalidDataLength);
++        }
++        for cell in blob.chunks_exact(32) { parse_scalar(cell)?; }
++        let mut saved = self.fixed_base_experiment.borrow_mut();
++        if saved.as_ref().is_none_or(|state| state.bits != bits) {
++            // Drop any previous experiment before allocating its replacement.
++            saved.take();
++            let n = SCALARS_PER_BLOB;
++            let table_bytes = unsafe { blst_p1s_mult_wbits_precompute_sizeof(bits, n) };
++            let scratch_bytes = unsafe { blst_p1s_mult_wbits_scratch_sizeof(n) };
++            let mut table = vec![blst_p1_affine::default(); table_bytes / std::mem::size_of::<blst_p1_affine>()];
++            let point_refs = [self.g1_points_blst.as_ptr(), std::ptr::null()];
++            unsafe { blst_p1s_mult_wbits_precompute(table.as_mut_ptr(), bits, point_refs.as_ptr(), n); }
++            *saved = Some(FixedBaseExperiment { bits, table,
++                scratch: vec![0; scratch_bytes / std::mem::size_of::<limb_t>()], scalars: vec![0; BLOB_SIZE] });
++        }
++        let state = saved.as_mut().unwrap();
++        reverse_blob_scalars_into(&mut state.scalars, blob, SCALARS_PER_BLOB);
++        let refs = [state.scalars.as_ptr(), std::ptr::null()];
++        let mut out = blst_p1::default();
++        unsafe { blst_p1s_mult_wbits(&mut out, state.table.as_ptr(), bits, SCALARS_PER_BLOB, refs.as_ptr(), 256, state.scratch.as_mut_ptr()); }
++        let mut commitment = [0; 48];
++        unsafe { blst_p1_compress(commitment.as_mut_ptr(), &out); }
++        Ok(commitment)
++    }
++
+     pub fn blob_to_commitment_profiled(
+         &self,
+         blob_bytes: &[u8],
+diff --git a/polystore_core/src/wasm.rs b/polystore_core/src/wasm.rs
+index f8ddc891..abdb1d91 100644
+--- a/polystore_core/src/wasm.rs
++++ b/polystore_core/src/wasm.rs
+@@ -69,6 +69,12 @@ impl PolyStoreWasm {
+         crate::kzg::validate_trusted_setup(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
+     }
+ 
++    pub fn experiment_fixed_base(&self, blob: &[u8], bits: usize) -> Result<Uint8Array, JsValue> {
++        let commitment = self.kzg_ctx.experiment_fixed_base(blob, bits)
++            .map_err(|e| JsValue::from_str(&e.to_string()))?;
++        Ok(Uint8Array::from(commitment.as_slice()))
++    }
++
+     pub fn commit_received_blob(&self, blob: &[u8]) -> Result<Uint8Array, JsValue> {
+         let commitment = self
+             .kzg_ctx

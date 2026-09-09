@@ -1,0 +1,30 @@
+{
+  "head": "5b1d77d11432cf83c8c1e1abe57d09c139605e9c",
+  "run": 34296651542,
+  "fixtureBytes": 16252928,
+  "retrievalBudgetMs": 900000,
+  "normalAudits": true,
+  "sourceTrees": {
+    "polystorechain": "d002c6f58a35d9cfa80f104b413ef5a7b478c764",
+    "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "polystore_gateway": "6d0c3bfc9147565180931347ef979113d5983b8a",
+    "polystore-website/src": "fd86a26cc29297bf41b48a828d8cc9dd0855b0a0",
+    "scripts": "22b37548ec4045b0aaccebc6f16d5f5d25f5b639"
+  },
+  "harnessSha256": {
+    ".github/workflows/e2e_heavy_nightly.yml": "678a8749ffe5219a36afcc8b9410667baeca52e012876da70866baf633c41cb0",
+    "scripts/e2e_mode2_stripe_multi_sp.sh": "4cf7727a0d46dfa503a6a1b547fa856acd0b5956e20bf118cd5fd0ef26d9e8b4",
+    "polystore-website/tests/mode2-stripe.spec.ts": "ebe03935d1b0058546de9a48afc4d48226ac68a9a29b695436e9f8ec7ec3ba9d",
+    "polystore-website/tests/utils/retrievalProgress.ts": "4b94b870903d3e282ce711d7eaf86ba819be9fd9506509ce1d249dc6c882b5a1",
+    "polystore-website/tests/utils/persistentBrowser.ts": "bf690895f0163229ed6d32ec42c7e2d55f1643b6417a963462add183ccb73e0c"
+  },
+  "infrastructure": "GitHub-hosted ubuntu-latest; repository has zero self-hosted runners; workflow caches only",
+  "runtimeProvenance": "new harness records artifact hashes and Node/browser versions in summary",
+  "status": "completed",
+  "conclusion": "success",
+  "url": "https://github.com/Polynomialstore/polystore/actions/runs/34296651542",
+  "summarySha256": "4ef9a703e74f59f787a308db2c8322d7f4fb5cf089c03e9be99b5277389431a6",
+  "artifactId": 10083596174,
+  "artifactArchiveSha256": "14a3c31b62ca6d85c588ccfdbb79e2b63256f5193ea5da30affe4efc1a884226",
+  "artifactDigestVerifiedLocally": true
+}

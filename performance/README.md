@@ -2,8 +2,14 @@
 
 Secured v2 native transaction measurements and the maintained CLI-to-node smoke
 are documented in [the #257 artifact](../bench/retrieval_session_capacity/native-multimessage-e259d573/README.md).
-They demonstrate local transaction amortization; sustained capacity and the
-deployment operating envelope remain qualification work in #260.
+They demonstrate local transaction amortization. The [retrieval v2 qualification
+report](retrieval-v2-qualification.md) links retained correctness, generation,
+settlement, capacity and delivery evidence and states each deployment limit.
+#254/#260 are closed with serial large-file delivery retained as correctness
+evidence rather than a representative performance target. [#290](https://github.com/Polynomialstore/polystore/issues/290)
+owns the current native K8 chain-throughput gap; [#291](https://github.com/Polynomialstore/polystore/issues/291)
+owns the desired sampled large-session protocol and implementation, which do
+not yet exist or qualify production delivery.
 
 ## Objective
 To benchmark the `polystorechain` implementation under varying loads to assess stability, transaction throughput (TPS), and resource consumption. This ensures the Phase 3 implementation is robust enough for Phase 4 (Testnet).
@@ -160,13 +166,12 @@ startup/restart check alone. The fresh settlement workload requires the compatib
 
 The concurrent smoke retains committed/unknown outcomes, exact economic checks,
 Commit-step metric captures and per-process kernel peak RSS. It remains explicitly
-unqualified. Remaining #260 work includes actual 1 GiB delivery, production and
-adversarial traffic, warmed repeated comparisons, sustained offered-load steps
-that demonstrate saturation and a safe load meeting the fixed execution/memory
-budgets. Final collection waits for #257 and the reviewed harness to merge.
+unqualified and is retained as preparation for the later final C6 measurement.
+The final evidence and its revised disposition are summarized below and in the
+[qualification report](retrieval-v2-qualification.md).
 
 
-## Streamed browser retrieval gate (#260)
+## Historical streamed browser retrieval (#260)
 
 The existing twelve-provider browser harness has an opt-in untransformed payload
 check. It streams file creation and downloaded-byte hashing, verifies the exact
@@ -192,10 +197,10 @@ stop if available space falls below 2 GiB while downloading. A failed storage
 check is unavailable infrastructure, not successful delivery.
 
 
-Start with the small fixture. Only advance to the intermediate after measured
-phase costs predict a useful result; only advance to 1 GiB after measured
-scaling fits a 30-minute retrieval execution budget. This is a run-cost guardrail,
-not a product SLA. Keep normal audits enabled. No automatic larger retry.
+These size controls are retained to reproduce the historical evidence. The
+serial-session workload is retired as a representative performance target; do
+not launch new intermediate or 1 GiB qualification runs from this recipe. Keep
+normal audits enabled when reproducing an existing artifact.
 
 The harness emits a monotonic heartbeat every 60 seconds and atomically updates
 `retrieval-progress.json` before its final `retrieval-summary.json`. It reports
@@ -250,11 +255,13 @@ or 1 GiB qualification. The current local machine lacks the 1 GiB scratch budget
 ## Final C6 prepared-proof measurement (#260)
 
 The [retained 900-second offered-load window](../bench/retrieval_session_capacity/capacity-final-260/README.md)
-reconciles 1,203 committed proofs on all four validators. The highest stable
-tested offered rate was 2 sessions/s over its 180-second step; 4/s saturated the
-queue. All measurement epochs achieved 96/96 audit samples, and fixed Commit
+offered 1,395 session transactions and committed 1,071 inside the window; drain
+reached 1,203 eventual commits. Each transaction carried 32 fresh openings on
+all four validators. The highest stable tested offered rate was 2 session
+transactions/s over its 180-second step, and 4/s saturated the queue. All
+measurement epochs achieved 96/96 audit samples, and fixed Commit
 and RSS budgets passed. The original whole-run status remains failed because
 a disk guard interrupted a later audit wait after measurement and drain.
 The artifact separates that interruption and supplementary recovery from the
-measured window. These are prepared-proof acceptance results, not delivery or
-paid lifecycle throughput.
+measured window. These are prepared-proof transaction acceptance results, not
+generation, delivery or paid lifecycle throughput.
