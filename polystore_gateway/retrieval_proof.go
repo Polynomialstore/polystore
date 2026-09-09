@@ -42,14 +42,15 @@ func admitRetrievalResponse(ctx context.Context) (context.Context, func(), error
 
 type retrievalGenerationKey struct {
 	Chain                             string
-	Setup, Root                       [32]byte
+	Setup, Root, Integrity            [32]byte
 	Deal, Generation, Metadata, Users uint64
 	Layout                            uint8
 	K, M                              uint32
+	Version                           uint32
 }
 
 func retrievalGeneration(c retrievalchallenge.Context) retrievalGenerationKey {
-	return retrievalGenerationKey{c.ChainID, c.SetupDigest, c.Root, c.DealID, c.Generation, c.MetadataMDUs, c.UserMDUs, c.Layout, c.K, c.M}
+	return retrievalGenerationKey{Chain: c.ChainID, Setup: c.SetupDigest, Root: c.Root, Deal: c.DealID, Generation: c.Generation, Metadata: c.MetadataMDUs, Users: c.UserMDUs, Layout: c.Layout, K: c.K, M: c.M, Version: 2}
 }
 
 type authenticatedGeneration struct {
@@ -79,7 +80,14 @@ var retrievalMetadataCache = struct {
 }{entries: make(map[retrievalGenerationKey]generationCacheEntry)}
 
 func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrievalchallenge.Context) (*authenticatedGeneration, error) {
+	if _, err := c.Bytes(); err != nil {
+		return nil, err
+	}
 	key := retrievalGeneration(c)
+	return authenticatedRetrievalMetadataFor(ctx, dir, key)
+}
+
+func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retrievalGenerationKey) (*authenticatedGeneration, error) {
 	retrievalMetadataCache.Lock()
 	entry, found := retrievalMetadataCache.entries[key]
 	if found {
@@ -100,7 +108,7 @@ func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrieval
 		if ok {
 			return cached.value, nil
 		}
-		prepared, err := prepareRetrievalMetadata(ctx, dir, c)
+		prepared, err := prepareRetrievalMetadata(ctx, dir, key)
 		if err != nil {
 			return nil, err
 		}
@@ -152,19 +160,28 @@ func readExactArtifactRange(path string, size, offset, length uint64) ([]byte, e
 	return data, nil
 }
 
-func prepareRetrievalMetadata(ctx context.Context, dir string, c retrievalchallenge.Context) (*authenticatedGeneration, error) {
-	if _, err := c.Bytes(); err != nil {
-		return nil, err
-	}
+func prepareRetrievalMetadata(ctx context.Context, dir string, key retrievalGenerationKey) (*authenticatedGeneration, error) {
 	wire, err := readExactArtifactRange(filepath.Join(dir, "mdu_0.bin"), types.MDU_SIZE, 0, types.MDU_SIZE)
 	if err != nil {
 		return nil, err
 	}
-	builder, err := crypto_ffi.LoadMdu0Builder(wire, c.UserMDUs)
-	if err != nil {
-		return nil, fmt.Errorf("noncanonical MDU #0: %w", err)
+	switch key.Version {
+	case 2:
+		builder, err := crypto_ffi.LoadMdu0Builder(wire, key.Users)
+		if err != nil {
+			if err := validateFATV3Metadata(wire, key, false); err != nil {
+				return nil, fmt.Errorf("noncanonical MDU #0: %w", err)
+			}
+		} else {
+			builder.Free()
+		}
+	case 3:
+		if err := validateFATV3Metadata(wire, key, true); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported retrieval generation version")
 	}
-	builder.Free()
 	commitments := make([][]byte, 64)
 	leaves := make([][32]byte, 64)
 	for i := range commitments {
@@ -178,15 +195,66 @@ func prepareRetrievalMetadata(ctx context.Context, dir string, c retrievalchalle
 		leaves[i] = blake2s.Sum256(commitments[i])
 	}
 	tree := buildProofMerkleTree(leaves)
-	if tree[len(tree)-1][0] != c.Root {
+	if tree[len(tree)-1][0] != key.Root {
 		return nil, fmt.Errorf("MDU #0 does not match frozen manifest root")
 	}
 	return &authenticatedGeneration{rootTable: bytes.Clone(wire[:16*types.BLOB_SIZE]), commitments: commitments, tree: tree}, nil
 }
 
+func fatV3HeaderFromEncodedMDU0(wire []byte) ([retrievalchallenge.FATV3HeaderBytes]byte, error) {
+	var raw [retrievalchallenge.FATV3HeaderBytes]byte
+	if len(wire) != types.MDU_SIZE {
+		return raw, fmt.Errorf("invalid MDU #0 size")
+	}
+	start := 16 * types.BLOB_SIZE
+	for i := range raw {
+		scalar := i / 31
+		if wire[start+scalar*32] != 0 {
+			return raw, fmt.Errorf("nonzero FAT scalar prefix")
+		}
+		raw[i] = wire[start+scalar*32+1+i%31]
+	}
+	return raw, nil
+}
+
+// validateFATV3Metadata uses the existing full FAT v2 validator after replacing
+// only the authenticated v3 header in a bounded copy with its canonical v2
+// equivalent. Commitments below are always computed over the original bytes.
+func validateFATV3Metadata(wire []byte, key retrievalGenerationKey, requireIntegrity bool) error {
+	raw, err := fatV3HeaderFromEncodedMDU0(wire)
+	if err != nil {
+		return err
+	}
+	header, err := retrievalchallenge.ParseFATV3Header(raw[:])
+	if err != nil || key.Users > retrievalchallenge.MaxIntegrityLeaves/retrievalchallenge.IntegrityLeavesPerUserMDU || header.LeafCount != key.Users*retrievalchallenge.IntegrityLeavesPerUserMDU || (requireIntegrity && header.IntegrityRoot != key.Integrity) {
+		return fmt.Errorf("noncanonical or mismatched FAT v3 header")
+	}
+	normalized := bytes.Clone(wire)
+	var v2 [retrievalchallenge.FATV3HeaderBytes]byte
+	copy(v2[:4], "NILF")
+	v2[4] = 2
+	v2[6] = 0
+	v2[7] = 1
+	copy(v2[8:12], raw[8:12])
+	start := 16 * types.BLOB_SIZE
+	for i, value := range v2 {
+		normalized[start+(i/31)*32+1+i%31] = value
+	}
+	builder, err := crypto_ffi.LoadMdu0Builder(normalized, key.Users)
+	if err != nil {
+		return fmt.Errorf("noncanonical FAT v3 records: %w", err)
+	}
+	builder.Free()
+	return nil
+}
+
 // Authenticate exactly the complete ordered commitment list for this user MDU.
 // The enclosing witness packaging is not cached or claimed to be authenticated.
 func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c retrievalchallenge.Context, mduIndex uint64) (*authenticatedUserMDU, error) {
+	return g.userMDUFor(ctx, dir, retrievalGeneration(c), mduIndex)
+}
+
+func (g *authenticatedGeneration) userMDUFor(ctx context.Context, dir string, key retrievalGenerationKey, mduIndex uint64) (*authenticatedUserMDU, error) {
 	// ponytail: one prepared user MDU per generation; a measured working-set miss
 	// rate can justify a larger cache, while every caller remains memory-bounded.
 	g.mu.Lock()
@@ -194,17 +262,14 @@ func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c ret
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if _, err := c.Bytes(); err != nil {
-		return nil, err
-	}
-	if mduIndex < c.MetadataMDUs || mduIndex-c.MetadataMDUs >= c.UserMDUs {
+	if mduIndex < key.Metadata || mduIndex-key.Metadata >= key.Users {
 		return nil, fmt.Errorf("user MDU outside frozen allocation")
 	}
 	if g.lastProof != nil && g.lastMDU == mduIndex {
 		return g.lastProof, nil
 	}
-	leafCount := uint64(64/c.K) * uint64(c.K+c.M)
-	raw, err := readFrozenWitnessCommitments(dir, c, mduIndex, leafCount)
+	leafCount := uint64(64/key.K) * uint64(key.K+key.M)
+	raw, err := readFrozenWitnessCommitmentsFor(dir, key, mduIndex, leafCount)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +291,7 @@ func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c ret
 	}
 	path := proofMerklePath(g.tree, int(du))
 	flat, _ := flattenMerkleProof32(path)
-	valid, err := crypto_ffi.VerifyMdu0RootTableProof(c.Root[:], mduIndex, root[:], g.commitments[du], flat, opening)
+	valid, err := crypto_ffi.VerifyMdu0RootTableProof(key.Root[:], mduIndex, root[:], g.commitments[du], flat, opening)
 	if err != nil {
 		return nil, err
 	}
@@ -242,15 +307,19 @@ func readFrozenWitnessCommitments(dir string, c retrievalchallenge.Context, mduI
 	if _, err := c.Bytes(); err != nil {
 		return nil, err
 	}
-	if leaves == 0 || leaves > 16384 || c.MetadataMDUs < 2 || mduIndex < c.MetadataMDUs || mduIndex-c.MetadataMDUs >= c.UserMDUs {
+	return readFrozenWitnessCommitmentsFor(dir, retrievalGeneration(c), mduIndex, leaves)
+}
+
+func readFrozenWitnessCommitmentsFor(dir string, key retrievalGenerationKey, mduIndex, leaves uint64) ([]byte, error) {
+	if leaves == 0 || leaves > 16384 || key.Metadata < 2 || mduIndex < key.Metadata || mduIndex-key.Metadata >= key.Users {
 		return nil, fmt.Errorf("invalid witness geometry")
 	}
 	span := leaves * 48
-	total := c.UserMDUs * span // C2 bounds Users <= 65536 and leaves <= 16384.
-	if total > (c.MetadataMDUs-1)*RawMduCapacity {
+	total := key.Users * span // C2/v3 bounds Users <= 65536 and leaves <= 16384.
+	if total > (key.Metadata-1)*RawMduCapacity {
 		return nil, fmt.Errorf("witness allocation is too small")
 	}
-	start := (mduIndex - c.MetadataMDUs) * span
+	start := (mduIndex - key.Metadata) * span
 	out := make([]byte, 0, int(span))
 	for pos := start; pos < start+span; {
 		index, offset := pos/RawMduCapacity, pos%RawMduCapacity

@@ -28,7 +28,7 @@ const maxCommittedTxResponseBytes = 4 << 20
 // Only these CLI commands implement the explicit phase contract. Each attempt
 // gets its own empty private file, so retry can never reuse an earlier marker.
 func execTrackedSubmission(ctx context.Context, args ...string) ([]byte, error) {
-	if len(args) < 3 || args[0] != "tx" || (args[2] != "submit-retrieval-proof" && args[2] != "prove-liveness-system") {
+	if len(args) < 3 || args[0] != "tx" || (args[2] != "submit-retrieval-proof" && args[2] != "prove-liveness-system" && args[2] != "accept-deal-generation-v3") {
 		return execPolystorechaind(ctx, args...)
 	}
 	file, err := os.CreateTemp("", "polystore-submission-phase-*")

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"hash"
+	"io"
 )
 
 const (
@@ -106,6 +107,58 @@ func IntegrityRootV3(leaves [][32]byte) ([32]byte, error) {
 		level = level[:write]
 	}
 	return level[0], nil
+}
+
+// IntegrityRootV3Reader verifies the canonical raw leaf-vector sidecar without
+// retaining it in memory. The reader must contain exactly leafCount consecutive
+// 32-byte hashes. Odd rightmost subtrees are duplicated at every missing level.
+func IntegrityRootV3Reader(r io.Reader, leafCount uint64) ([32]byte, error) {
+	if leafCount == 0 || leafCount > MaxIntegrityLeaves {
+		return [32]byte{}, errors.New("invalid integrity leaf count")
+	}
+	var peaks [24][32]byte
+	var occupied [24]bool
+	for i := uint64(0); i < leafCount; i++ {
+		var node [32]byte
+		if _, err := io.ReadFull(r, node[:]); err != nil {
+			return [32]byte{}, errors.New("truncated integrity leaf vector")
+		}
+		for level := 0; ; level++ {
+			if !occupied[level] {
+				peaks[level], occupied[level] = node, true
+				break
+			}
+			node = integrityParentV3(peaks[level], node)
+			occupied[level] = false
+		}
+	}
+	var extra [1]byte
+	if n, err := r.Read(extra[:]); n != 0 || err != io.EOF {
+		return [32]byte{}, errors.New("extended integrity leaf vector")
+	}
+	highest := len(peaks) - 1
+	for !occupied[highest] {
+		highest--
+	}
+	lowest := 0
+	for !occupied[lowest] {
+		lowest++
+	}
+	root, rootLevel := peaks[lowest], lowest
+	for level := lowest + 1; level <= highest; level++ {
+		if !occupied[level] {
+			root = integrityParentV3(root, root)
+			rootLevel++
+			continue
+		}
+		for rootLevel < level {
+			root = integrityParentV3(root, root)
+			rootLevel++
+		}
+		root = integrityParentV3(peaks[level], root)
+		rootLevel++
+	}
+	return root, nil
 }
 
 func VerifyIntegrityPathV3(value [32]byte, position, leafCount uint64, siblings [][32]byte, expected [32]byte) bool {

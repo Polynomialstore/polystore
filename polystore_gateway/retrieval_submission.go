@@ -150,7 +150,7 @@ func decodePendingSigner(raw []byte, out *pendingSignerOperation) error {
 	if err := d.Decode(out); err != nil {
 		return err
 	}
-	if (out.Kind != "retrieval" && out.Kind != "audit") || len(out.IDs) == 0 || len(out.IDs) > 64 {
+	if (out.Kind != "retrieval" && out.Kind != "audit" && out.Kind != "generation-v3") || len(out.IDs) == 0 || len(out.IDs) > 64 {
 		return fmt.Errorf("invalid pending signer identity")
 	}
 	seen := make(map[string]bool, len(out.IDs))
