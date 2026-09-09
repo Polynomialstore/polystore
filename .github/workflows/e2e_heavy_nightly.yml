@@ -121,7 +121,7 @@ jobs:
             _artifacts/devnet_alpha_multi_sp/*.log
             polystore-website/test-results/**/retrieval-summary.json
             polystore-website/test-results/**/retrieval-progress.json
-            polystore-website/test-results/**/opfs-progress.json
+            _artifacts/devnet_alpha_multi_sp/opfs-preflight/**/opfs-progress.json
             polystore-website/test-results/**/retrieval-delivery-accounting.json
             polystore-website/test-results/**/error-context.md
             ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/test-results/**/*.png' || '' }}

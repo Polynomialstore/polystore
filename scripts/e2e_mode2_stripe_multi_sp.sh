@@ -119,7 +119,7 @@ if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
 fi
 if [ "${E2E_MODE2_STREAMED:-0}" = "1" ] && [ "${E2E_MODE2_STREAMED_BYTES:-0}" = "1073741824" ]; then
   # Prove the browser can persist the full output before funding a long retrieval.
-  (cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/retrieval-v2-browser.spec.ts --grep '1GiB OPFS' --retries=0 --workers=1)
+  (cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/retrieval-v2-browser.spec.ts --grep '1GiB OPFS' --retries=0 --workers=1 --output="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp/opfs-preflight")
 fi
 playwright_args=("$E2E_MODE2_SPEC")
 if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then
