@@ -6,7 +6,9 @@ import (
 
 	"cosmossdk.io/core/address"
 	corestore "cosmossdk.io/core/store"
+	"cosmossdk.io/store"
 	storetypes "cosmossdk.io/store/types"
+	dbm "github.com/cosmos/cosmos-db"
 	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/testutil"
@@ -24,6 +26,9 @@ type fixture struct {
 	keeper       keeper.Keeper
 	addressCodec address.Codec
 	storeService corestore.KVStoreService
+	db           dbm.DB
+	cms          store.CommitMultiStore
+	storeKey     *storetypes.KVStoreKey
 }
 
 func initFixture(t *testing.T) *fixture {
@@ -34,7 +39,8 @@ func initFixture(t *testing.T) *fixture {
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
 
 	storeService := runtime.NewKVStoreService(storeKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	testCtx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test"))
+	ctx := testCtx.Ctx
 
 	// Ensure we have a non-empty ChainID for tests that rely on it.
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
@@ -62,5 +68,8 @@ func initFixture(t *testing.T) *fixture {
 		keeper:       k,
 		addressCodec: addressCodec,
 		storeService: storeService,
+		db:           testCtx.DB,
+		cms:          testCtx.CMS,
+		storeKey:     storeKey,
 	}
 }

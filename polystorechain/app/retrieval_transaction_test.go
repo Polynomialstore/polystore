@@ -119,6 +119,33 @@ func TestRetrievalSessionSignedTransactionRollback(t *testing.T) {
 	}))
 }
 
+func TestGenerationV3SignedOwnerAuthority(t *testing.T) {
+	if runGenesisTestInFreshProcess(t) {
+		return
+	}
+	ownerKey := secp256k1.GenPrivKeyFromSecret([]byte("generation v3 owner"))
+	attackerKey := secp256k1.GenPrivKeyFromSecret([]byte("generation v3 attacker"))
+	a := newRetrievalTransactionApp(t, ownerKey)
+	defer func() { require.NoError(t, a.Close()) }()
+	owner := sdk.AccAddress(ownerKey.PubKey().Address())
+	attacker := sdk.AccAddress(attackerKey.PubKey().Address())
+	setup := a.NewContextLegacy(false, cmtproto.Header{Height: 1, ChainID: SimAppChainID})
+	account := a.AuthKeeper.NewAccountWithAddress(setup, attacker)
+	a.AuthKeeper.SetAccount(setup, account)
+	require.NoError(t, a.BankKeeper.SendCoins(setup, owner, attacker, sdk.NewCoins(sdk.NewInt64Coin("aatom", 100000))))
+	retrievalNativeFinalize(t, a, 1)
+
+	msg := &types.MsgProposeDealGenerationV3{Creator: owner.String(), DealId: 1}
+	wrongSigner := retrievalNativeFinalize(t, a, 2, retrievalNativeSign(t, a, attackerKey, 0, msg)).TxResults[0]
+	require.NotZero(t, wrongSigner.Code, wrongSigner.Log)
+	require.Contains(t, wrongSigner.Log, "pubKey does not match signer address")
+	require.NotContains(t, wrongSigner.Log, "retrieval v3 is not active", "wrong signer must fail before the message handler")
+
+	ownerSigned := retrievalNativeFinalize(t, a, 3, retrievalNativeSign(t, a, ownerKey, 0, msg)).TxResults[0]
+	require.NotZero(t, ownerSigned.Code, ownerSigned.Log)
+	require.Contains(t, ownerSigned.Log, "retrieval v3 is not active", "authenticated owner reaches the disabled handler")
+}
+
 // Pinned cosmos/evm seals process-global coin configuration at InitGenesis.
 // Keep production configuration intact and give each full-genesis test its own
 // process; the other app tests intentionally initialize only individual modules.

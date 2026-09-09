@@ -44,6 +44,27 @@ func (k Keeper) RetrievalV2Active(ctx sdk.Context) (bool, error) {
 	return false, nil
 }
 
+// RetrievalV3Active fails closed unless BeginBlock latched the configured
+// boundary. V3 additionally requires the irreversible v2 latch.
+func (k Keeper) RetrievalV3Active(ctx sdk.Context) (bool, error) {
+	h, err := optionalSessionCount(k.RetrievalV3ActivatedHeight.Get(ctx))
+	if err != nil {
+		return false, err
+	}
+	if h != 0 {
+		activeV2, err := k.RetrievalV2Active(ctx)
+		return activeV2, err
+	}
+	params, err := k.Params.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	if params.RetrievalV3ActivationHeight != 0 && ctx.BlockHeight() >= 0 && uint64(ctx.BlockHeight()) >= params.RetrievalV3ActivationHeight {
+		return false, fmt.Errorf("retrieval v3 activation must execute in BeginBlock before transaction admission")
+	}
+	return false, nil
+}
+
 // RequireLegacyRetrieval quarantines every ordinary receipt payout route once
 // fresh session challenges are active, including the legacy EVM batch selector.
 func (k Keeper) RequireLegacyRetrieval(ctx sdk.Context) error {
@@ -85,12 +106,44 @@ func (k Keeper) activateRetrievalV2(ctx sdk.Context) error {
 	return k.RetrievalV2ActivatedHeight.Set(ctx, params.RetrievalV2ActivationHeight)
 }
 
+func (k Keeper) activateRetrievalV3(ctx sdk.Context) error {
+	h, err := optionalSessionCount(k.RetrievalV3ActivatedHeight.Get(ctx))
+	if err != nil || h != 0 {
+		return err
+	}
+	params, err := k.Params.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if params.RetrievalV3ActivationHeight == 0 || ctx.BlockHeight() < 0 || uint64(ctx.BlockHeight()) < params.RetrievalV3ActivationHeight {
+		return nil
+	}
+	if uint64(ctx.BlockHeight()) != params.RetrievalV3ActivationHeight {
+		return fmt.Errorf("missed retrieval v3 activation boundary")
+	}
+	activeV2, err := k.RetrievalV2Active(ctx)
+	if err != nil || !activeV2 {
+		return fmt.Errorf("retrieval v3 activation requires active v2")
+	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
+	block := ctx.ConsensusParams().Block
+	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalV2BlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
+		return fmt.Errorf("retrieval v3 activation requires bounded consensus gas and bytes within the qualified candidate profile")
+	}
+	return k.RetrievalV3ActivatedHeight.Set(ctx, params.RetrievalV3ActivationHeight)
+}
+
 // processRetrievalChallengeState does at most 128 expiry-reference releases and
 // freezes/prunes at most 64 audit records per epoch boundary, and captures one
 // height anchor. It never scans sessions or changes their
 // economic/status records. Admission reserves these finite future operations.
 func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 	if err := k.activateRetrievalV2(ctx); err != nil {
+		return err
+	}
+	if err := k.activateRetrievalV3(ctx); err != nil {
 		return err
 	}
 	active, err := k.RetrievalV2Active(ctx)

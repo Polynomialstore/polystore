@@ -43,5 +43,15 @@ func (k Keeper) SetParams(ctx context.Context, params types.Params) error {
 	if current.RetrievalV2ActivationHeight != params.RetrievalV2ActivationHeight && params.RetrievalV2ActivationHeight != 0 && height >= 0 && params.RetrievalV2ActivationHeight <= uint64(height) {
 		return fmt.Errorf("retrieval v2 activation must be scheduled in the future")
 	}
+	activeV3, err := optionalSessionCount(k.RetrievalV3ActivatedHeight.Get(ctx))
+	if err != nil {
+		return err
+	}
+	if activeV3 != 0 && params.RetrievalV3ActivationHeight != activeV3 {
+		return fmt.Errorf("retrieval v3 activation is irreversible")
+	}
+	if current.RetrievalV3ActivationHeight != params.RetrievalV3ActivationHeight && params.RetrievalV3ActivationHeight != 0 && height >= 0 && params.RetrievalV3ActivationHeight <= uint64(height) {
+		return fmt.Errorf("retrieval v3 activation must be scheduled in the future")
+	}
 	return k.Params.Set(ctx, params)
 }

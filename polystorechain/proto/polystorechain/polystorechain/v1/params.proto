@@ -179,4 +179,8 @@ message Params {
   // Do not schedule until #255-#257 integration and #260 qualification pass.
   uint64 retrieval_v2_activation_height = 49;
 
+  // 0 disables v3. Nonzero schedules an irreversible activation after v2.
+  // Keep disabled until the full native large-session path is qualified.
+  uint64 retrieval_v3_activation_height = 50;
+
 }
