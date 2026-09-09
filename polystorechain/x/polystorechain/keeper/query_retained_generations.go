@@ -3,6 +3,7 @@ package keeper
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -50,23 +51,23 @@ func (k Keeper) retainedGenerations(ctx sdk.Context) ([]types.RetainedGeneration
 	sessionPerDeal := make(map[uint64]uint64)
 	expiryCounts := make(map[uint64]uint64)
 	anchors := make(map[uint64]types.ChallengeAnchor)
-	add := func(c retrievalchallenge.Context, session bool) error {
-		if c.ChainID != ctx.ChainID() {
+	addFields := func(chainID string, dealID, generation uint64, root [32]byte, anchor uint64, session bool) error {
+		if chainID != ctx.ChainID() {
 			return fmt.Errorf("retained context chain mismatch")
 		}
-		key := retainedGenerationKey{c.DealID, c.Generation}
-		if root, exists := roots[key]; exists && root != c.Root {
+		key := retainedGenerationKey{dealID, generation}
+		if existing, exists := roots[key]; exists && existing != root {
 			return fmt.Errorf("conflicting retained roots for one deal generation")
 		}
-		roots[key] = c.Root
+		roots[key] = root
 		if uint64(len(roots)) > maxRetainedGenerationTuples {
 			return fmt.Errorf("retained generation union exceeds bound")
 		}
-		a := anchors[c.Window.Anchor]
+		a := anchors[anchor]
 		if session {
 			if sessionGenerations[key] == 0 {
-				sessionPerDeal[c.DealID]++
-				if sessionPerDeal[c.DealID] > types.MaxRetrievalSessionGenerationsPerDeal {
+				sessionPerDeal[dealID]++
+				if sessionPerDeal[dealID] > types.MaxRetrievalSessionGenerationsPerDeal {
 					return fmt.Errorf("retained session generations per deal exceed bound")
 				}
 			}
@@ -79,8 +80,11 @@ func (k Keeper) retainedGenerations(ctx sdk.Context) ([]types.RetainedGeneration
 			auditGenerations[key]++
 			a.AuditReferences++
 		}
-		anchors[c.Window.Anchor] = a
+		anchors[anchor] = a
 		return nil
+	}
+	add := func(c retrievalchallenge.Context, session bool) error {
+		return addFields(c.ChainID, c.DealID, c.Generation, c.Root, c.Window.Anchor, session)
 	}
 	live, err := optionalSessionCount(k.RetrievalSessionLiveCount.Get(ctx))
 	if err != nil {
@@ -98,22 +102,37 @@ func (k Keeper) retainedGenerations(ctx sdk.Context) ([]types.RetainedGeneration
 		if !present || len(key.K2()) != 32 {
 			return true, fmt.Errorf("malformed session expiry reference")
 		}
+		var chainID string
+		var dealID, generation, anchor uint64
+		var root [32]byte
 		s, err := k.RetrievalSessions.Get(ctx, key.K2())
-		if err != nil {
+		if err == nil {
+			c, err := types.RetrievalChallengeContext(s)
+			if err != nil {
+				return true, err
+			}
+			if !bytes.Equal(s.SessionId, key.K2()) || c.Window.Deadline != key.K1() {
+				return true, fmt.Errorf("session expiry reference/context mismatch")
+			}
+			chainID, dealID, generation, root, anchor = c.ChainID, c.DealID, c.Generation, c.Root, c.Window.Anchor
+		} else if errors.Is(err, collections.ErrNotFound) {
+			v3, v3err := k.retrievalSessionV3(ctx, key.K2())
+			if v3err != nil {
+				return true, v3err
+			}
+			if v3.DeadlineHeight != key.K1() || v3.Expired {
+				return true, fmt.Errorf("v3 session expiry reference/context mismatch")
+			}
+			copy(root[:], v3.PolyfsRoot)
+			chainID, dealID, generation, anchor = v3.ChainId, v3.DealId, v3.Generation, v3.AnchorHeight
+		} else {
 			return true, err
-		}
-		c, err := types.RetrievalChallengeContext(s)
-		if err != nil {
-			return true, err
-		}
-		if !bytes.Equal(s.SessionId, key.K2()) || c.Window.Deadline != key.K1() {
-			return true, fmt.Errorf("session expiry reference/context mismatch")
 		}
 		expiryCounts[key.K1()]++
 		if expiryCounts[key.K1()] > types.MaxRetrievalSessionExpiryRefsPerBlock {
 			return true, fmt.Errorf("session expiry bucket exceeds bound")
 		}
-		return false, add(c, true)
+		return false, addFields(chainID, dealID, generation, root, anchor, true)
 	})
 	if err != nil {
 		return nil, err

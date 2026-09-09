@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"math/rand"
 	"os"
@@ -144,6 +145,81 @@ func TestGenerationV3SignedOwnerAuthority(t *testing.T) {
 	ownerSigned := retrievalNativeFinalize(t, a, 3, retrievalNativeSign(t, a, ownerKey, 0, msg)).TxResults[0]
 	require.NotZero(t, ownerSigned.Code, ownerSigned.Log)
 	require.Contains(t, ownerSigned.Log, "retrieval v3 is not active", "authenticated owner reaches the disabled handler")
+}
+
+func TestRetrievalSessionV3SignedNativeAuthorityAndRollback(t *testing.T) {
+	if runGenesisTestInFreshProcess(t) {
+		return
+	}
+	ownerKey := secp256k1.GenPrivKeyFromSecret([]byte("retrieval v3 native owner"))
+	attackerKey := secp256k1.GenPrivKeyFromSecret([]byte("retrieval v3 native attacker"))
+	a := newRetrievalTransactionApp(t, ownerKey)
+	defer func() { require.NoError(t, a.Close()) }()
+	owner := sdk.AccAddress(ownerKey.PubKey().Address())
+	attacker := sdk.AccAddress(attackerKey.PubKey().Address())
+	setup := a.NewContextLegacy(false, cmtproto.Header{Height: 1, ChainID: SimAppChainID})
+	a.AuthKeeper.SetAccount(setup, a.AuthKeeper.NewAccountWithAddress(setup, attacker))
+	require.NoError(t, a.BankKeeper.SendCoins(setup, owner, attacker, sdk.NewCoins(sdk.NewInt64Coin("aatom", 100000))))
+
+	providers := make([]string, 12)
+	slots := make([]*types.DealSlot, 12)
+	for i := range providers {
+		provider := sdk.AccAddress(bytes.Repeat([]byte{byte(0x40 + i)}, 20)).String()
+		providers[i] = provider
+		slots[i] = &types.DealSlot{Slot: uint32(i), Provider: provider, Status: types.SlotStatus_SLOT_STATUS_ACTIVE}
+		require.NoError(t, a.PolyStoreChainKeeper.Providers.Set(setup, provider, types.Provider{Address: provider, Status: "Active"}))
+	}
+	root := bytes.Repeat([]byte{0x61}, 32)
+	deal := types.Deal{Id: 1, Owner: owner.String(), ManifestRoot: root, Size_: 64 * 126976,
+		EscrowBalance: sdkmath.NewInt(100), StartBlock: 1, EndBlock: 100, CurrentGen: 1,
+		TotalMdus: 3, WitnessMdus: 1, RedundancyMode: 2,
+		Mode2Profile: &types.StripeReplicaProfile{K: 8, M: 4}, Mode2Slots: slots,
+		MaxMonthlySpend: sdkmath.ZeroInt(), SpendWindowSpent: sdkmath.ZeroInt()}
+	require.NoError(t, a.PolyStoreChainKeeper.Deals.Set(setup, deal.Id, deal))
+	setupDigest, err := hex.DecodeString(types.RetrievalSetupDigest)
+	require.NoError(t, err)
+	require.NoError(t, a.PolyStoreChainKeeper.AdmittedDealGenerationsV3.Set(setup, deal.Id, types.DealGenerationAdmissionV3{
+		DealId: deal.Id, Owner: deal.Owner, Generation: deal.CurrentGen,
+		PreviousPolyfsRoot: bytes.Repeat([]byte{0x60}, 32), PolyfsRoot: root, IntegrityRoot: bytes.Repeat([]byte{0x62}, 32),
+		Size_: deal.Size_, TotalMdus: deal.TotalMdus, WitnessMdus: deal.WitnessMdus, MetadataMdus: 2, UserMdus: 1,
+		IntegrityLeafCount: 96, SetupDigest: setupDigest, Providers: providers, AcceptedSlotsMask: (1 << 12) - 1,
+		ChainId: SimAppChainID,
+	}))
+	require.NoError(t, a.PolyStoreChainKeeper.RetrievalV3ActivatedHeight.Set(setup, 1))
+	retrievalNativeFinalize(t, a, 1)
+
+	open := &types.MsgOpenRetrievalSessionV3{Creator: owner.String(), DealId: deal.Id, Generation: deal.CurrentGen,
+		Range: types.RetrievalRangeV3{FileRecordIndex: 1, FileLength: 1024, RangeLength: 1024}, Nonce: 1, DeadlineHeight: 20}
+	wrongSigner := retrievalNativeFinalize(t, a, 2, retrievalNativeSign(t, a, attackerKey, 0, open)).TxResults[0]
+	require.NotZero(t, wrongSigner.Code, wrongSigner.Log)
+	require.Contains(t, wrongSigner.Log, "pubKey does not match signer address")
+
+	accepted := retrievalNativeFinalize(t, a, 3, retrievalNativeSign(t, a, ownerKey, 0, open)).TxResults[0]
+	require.Zero(t, accepted.Code, accepted.Log)
+	ctx := retrievalNativeQuery(t, a)
+	updated, err := a.PolyStoreChainKeeper.Deals.Get(ctx, deal.Id)
+	require.NoError(t, err)
+	require.Equal(t, sdkmath.NewInt(90), updated.EscrowBalance)
+	count := 0
+	require.NoError(t, a.PolyStoreChainKeeper.RetrievalSessionsV3.Walk(ctx, nil, func(_ []byte, _ types.RetrievalSessionV3) (bool, error) { count++; return false, nil }))
+	require.Equal(t, 1, count)
+
+	rollbackOpen := *open
+	rollbackOpen.Nonce = 2
+	laterFailure := &banktypes.MsgSend{FromAddress: owner.String(), ToAddress: providers[0], Amount: sdk.NewCoins(sdk.NewInt64Coin("stake", 2000000))}
+	failed := retrievalNativeFinalize(t, a, 4, retrievalNativeSign(t, a, ownerKey, 1, &rollbackOpen, laterFailure)).TxResults[0]
+	require.NotZero(t, failed.Code, failed.Log)
+	require.Contains(t, failed.Log, "insufficient funds")
+	ctx = retrievalNativeQuery(t, a)
+	updated, err = a.PolyStoreChainKeeper.Deals.Get(ctx, deal.Id)
+	require.NoError(t, err)
+	require.Equal(t, sdkmath.NewInt(90), updated.EscrowBalance)
+	count = 0
+	require.NoError(t, a.PolyStoreChainKeeper.RetrievalSessionsV3.Walk(ctx, nil, func(_ []byte, _ types.RetrievalSessionV3) (bool, error) { count++; return false, nil }))
+	require.Equal(t, 1, count)
+	present, err := a.PolyStoreChainKeeper.RetrievalSessionV3NonceIDs.Has(ctx, collections.Join(collections.Join(owner.String(), deal.Id), uint64(2)))
+	require.NoError(t, err)
+	require.False(t, present)
 }
 
 // Pinned cosmos/evm seals process-global coin configuration at InitGenesis.

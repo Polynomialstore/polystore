@@ -100,6 +100,14 @@ service Msg {
   // MsgSubmitRetrievalSessionProof submits proof-of-retrieval for a session (provider action).
   rpc SubmitRetrievalSessionProof(MsgSubmitRetrievalSessionProof) returns (MsgSubmitRetrievalSessionProofResponse);
 
+  // Native-only FAT v3 large logical retrieval lifecycle. Disabled until the
+  // coordinated v3 activation boundary.
+  rpc OpenRetrievalSessionV3(MsgOpenRetrievalSessionV3) returns (MsgOpenRetrievalSessionV3Response);
+  rpc OpenRetrievalSessionV3Sponsored(MsgOpenRetrievalSessionV3Sponsored) returns (MsgOpenRetrievalSessionV3Response);
+  rpc SubmitRetrievalSessionProofV3(MsgSubmitRetrievalSessionProofV3) returns (MsgSubmitRetrievalSessionProofV3Response);
+  rpc AcknowledgeRetrievalObligationV3(MsgAcknowledgeRetrievalObligationV3) returns (MsgAcknowledgeRetrievalObligationV3Response);
+  rpc RefundRetrievalSessionV3(MsgRefundRetrievalSessionV3) returns (MsgRefundRetrievalSessionV3Response);
+
   // MsgProveLiveness allows a Storage Provider to submit a proof of data liveness.
   rpc ProveLiveness(MsgProveLiveness) returns (MsgProveLivenessResponse);
 
@@ -764,3 +772,78 @@ message MsgFinalizeDealGenerationV3 {
 message MsgFinalizeDealGenerationV3Response {
   bool success = 1;
 }
+
+message RetrievalRangeV3 {
+  uint32 file_record_index = 1;
+  uint64 file_start_offset = 2;
+  uint64 file_length = 3;
+  uint64 range_start = 4;
+  uint64 range_length = 5;
+}
+
+message MsgOpenRetrievalSessionV3 {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgOpenRetrievalSessionV3";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  uint64 generation = 3;
+  RetrievalRangeV3 range = 4 [(gogoproto.nullable) = false];
+  uint64 nonce = 5;
+  uint64 deadline_height = 6;
+}
+
+message MsgOpenRetrievalSessionV3Sponsored {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgOpenRetrievalSessionV3Sponsored";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  uint64 generation = 3;
+  RetrievalRangeV3 range = 4 [(gogoproto.nullable) = false];
+  uint64 nonce = 5;
+  uint64 deadline_height = 6;
+  string max_total_fee = 7 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
+  oneof auth {
+    AllowlistProof allowlist_proof = 8;
+    VoucherAuth voucher = 9;
+  }
+}
+
+message MsgOpenRetrievalSessionV3Response {
+  bytes session_id = 1;
+  uint64 logical_requested_bytes = 2;
+  uint64 billed_encoded_bytes = 3;
+  uint64 sample_count = 4;
+}
+
+message RetrievalSampleProofV3 {
+  uint64 ordinal = 1;
+  ChainedProof proof = 2 [(gogoproto.nullable) = false];
+}
+
+message MsgSubmitRetrievalSessionProofV3 {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgSubmitRetrievalSessionProofV3";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes session_id = 2;
+  uint32 slot = 3;
+  repeated RetrievalSampleProofV3 proofs = 4 [(gogoproto.nullable) = false];
+}
+message MsgSubmitRetrievalSessionProofV3Response { uint32 newly_accepted = 1; bool settled = 2; }
+
+message MsgAcknowledgeRetrievalObligationV3 {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgAcknowledgeRetrievalObligationV3";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes session_id = 2;
+  uint32 slot = 3;
+  bytes ack_digest = 4;
+}
+message MsgAcknowledgeRetrievalObligationV3Response { bool settled = 1; }
+
+message MsgRefundRetrievalSessionV3 {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgRefundRetrievalSessionV3";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes session_id = 2;
+}
+message MsgRefundRetrievalSessionV3Response { bool refunded = 1; }

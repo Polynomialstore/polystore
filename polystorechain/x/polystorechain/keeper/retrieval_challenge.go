@@ -211,18 +211,40 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		return fmt.Errorf("session expiry index/count mismatch")
 	}
 	for _, key := range keys {
+		var dealID, generation, anchorHeight uint64
+		legacy := false
 		session, err := k.RetrievalSessions.Get(ctx, key.K2())
-		if err != nil {
+		if err == nil {
+			legacy = true
+			c, err := types.RetrievalChallengeContext(session)
+			if err != nil {
+				return err
+			}
+			dealID, generation, anchorHeight = session.DealId, c.Generation, c.Window.Anchor
+			if c.Window.Deadline != expiry {
+				return fmt.Errorf("session expiry index/context mismatch")
+			}
+		} else if errors.Is(err, collections.ErrNotFound) {
+			v3, v3err := k.retrievalSessionV3(ctx, key.K2())
+			if v3err != nil {
+				return v3err
+			}
+			if v3.DeadlineHeight != expiry || v3.Expired {
+				return fmt.Errorf("v3 session expiry index/context mismatch")
+			}
+			dealID, generation, anchorHeight = v3.DealId, v3.Generation, v3.AnchorHeight
+			v3.Expired = true
+			v3.UpdatedHeight = ctx.BlockHeight()
+			if err := k.RetrievalSessionsV3.Set(ctx, key.K2(), v3); err != nil {
+				return err
+			}
+		} else {
 			return err
 		}
-		c, err := types.RetrievalChallengeContext(session)
-		if err != nil {
-			return err
-		}
-		if c.Window.Deadline != expiry {
+		if anchorHeight == 0 {
 			return fmt.Errorf("session expiry index/context mismatch")
 		}
-		anchor, err := k.ChallengeAnchors.Get(ctx, c.Window.Anchor)
+		anchor, err := k.ChallengeAnchors.Get(ctx, anchorHeight)
 		if err != nil {
 			return err
 		}
@@ -231,13 +253,13 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		}
 		anchor.SessionReferences--
 		if anchor.SessionReferences == 0 && anchor.AuditReferences == 0 {
-			if err := k.ChallengeAnchors.Remove(ctx, c.Window.Anchor); err != nil {
+			if err := k.ChallengeAnchors.Remove(ctx, anchorHeight); err != nil {
 				return err
 			}
-		} else if err := k.ChallengeAnchors.Set(ctx, c.Window.Anchor, anchor); err != nil {
+		} else if err := k.ChallengeAnchors.Set(ctx, anchorHeight, anchor); err != nil {
 			return err
 		}
-		generationKey := collections.Join(session.DealId, c.Generation)
+		generationKey := collections.Join(dealID, generation)
 		refs, err := k.RetrievalSessionGenerationRefs.Get(ctx, generationKey)
 		if err != nil {
 			return err
@@ -246,7 +268,7 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 			return fmt.Errorf("session generation reference underflow")
 		}
 		if refs == 1 {
-			dealCount, err := k.RetrievalSessionGenerationCounts.Get(ctx, session.DealId)
+			dealCount, err := k.RetrievalSessionGenerationCounts.Get(ctx, dealID)
 			if err != nil {
 				return err
 			}
@@ -261,10 +283,10 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 				return err
 			}
 			if dealCount == 1 {
-				if err := k.RetrievalSessionGenerationCounts.Remove(ctx, session.DealId); err != nil {
+				if err := k.RetrievalSessionGenerationCounts.Remove(ctx, dealID); err != nil {
 					return err
 				}
-			} else if err := k.RetrievalSessionGenerationCounts.Set(ctx, session.DealId, dealCount-1); err != nil {
+			} else if err := k.RetrievalSessionGenerationCounts.Set(ctx, dealID, dealCount-1); err != nil {
 				return err
 			}
 			if err := k.RetrievalSessionGenerationCount.Set(ctx, globalCount-1); err != nil {
@@ -273,8 +295,10 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		} else if err := k.RetrievalSessionGenerationRefs.Set(ctx, generationKey, refs-1); err != nil {
 			return err
 		}
-		if err := k.RetrievalSessionProofProvider.Remove(ctx, key.K2()); err != nil {
-			return err
+		if legacy {
+			if err := k.RetrievalSessionProofProvider.Remove(ctx, key.K2()); err != nil {
+				return err
+			}
 		}
 		if err := k.RetrievalSessionExpiryRefs.Remove(ctx, key); err != nil {
 			return err
@@ -385,27 +409,31 @@ func (k Keeper) prepareRetrievalSession(ctx sdk.Context, deal types.Deal, owner,
 }
 
 func (k Keeper) checkSessionChallengeCapacity(ctx context.Context, s types.RetrievalSession) error {
+	return k.checkSessionChallengeCapacityFields(ctx, uint64(s.OpenedHeight), s.ExpiresAt, s.DealId, s.ChallengeSnapshot.Generation)
+}
+
+func (k Keeper) checkSessionChallengeCapacityFields(ctx context.Context, opened, expires, dealID, generation uint64) error {
 	live, err := optionalSessionCount(k.RetrievalSessionLiveCount.Get(ctx))
 	if err != nil {
 		return err
 	}
-	opens, err := optionalSessionCount(k.RetrievalSessionOpenCounts.Get(ctx, uint64(s.OpenedHeight)))
+	opens, err := optionalSessionCount(k.RetrievalSessionOpenCounts.Get(ctx, opened))
 	if err != nil {
 		return err
 	}
-	expiring, err := optionalSessionCount(k.RetrievalSessionExpiryCounts.Get(ctx, s.ExpiresAt))
+	expiring, err := optionalSessionCount(k.RetrievalSessionExpiryCounts.Get(ctx, expires))
 	if err != nil {
 		return err
 	}
 	if live >= types.MaxLiveRetrievalSessionContexts || opens >= types.MaxRetrievalSessionOpensPerBlock || expiring >= types.MaxRetrievalSessionExpiryRefsPerBlock {
 		return sdkerrors.ErrInvalidRequest.Wrap("retrieval session challenge capacity exhausted")
 	}
-	refs, err := optionalSessionCount(k.RetrievalSessionGenerationRefs.Get(ctx, collections.Join(s.DealId, s.ChallengeSnapshot.Generation)))
+	refs, err := optionalSessionCount(k.RetrievalSessionGenerationRefs.Get(ctx, collections.Join(dealID, generation)))
 	if err != nil {
 		return err
 	}
 	if refs == 0 {
-		perDeal, err := optionalSessionCount(k.RetrievalSessionGenerationCounts.Get(ctx, s.DealId))
+		perDeal, err := optionalSessionCount(k.RetrievalSessionGenerationCounts.Get(ctx, dealID))
 		if err != nil {
 			return err
 		}
@@ -424,22 +452,26 @@ func (k Keeper) retainSessionChallenge(ctx sdk.Context, s types.RetrievalSession
 	if s.ChallengeVersion != retrievalchallenge.Version {
 		return nil
 	}
-	if err := k.checkSessionChallengeCapacity(ctx, s); err != nil {
-		return err
-	}
 	c, err := types.RetrievalChallengeContext(s)
 	if err != nil {
+		return err
+	}
+	return k.retainSessionChallengeFields(ctx, uint64(s.OpenedHeight), s.ExpiresAt, s.DealId, c.Generation, c.Window.Anchor, s.SessionId)
+}
+
+func (k Keeper) retainSessionChallengeFields(ctx sdk.Context, opened, expires, dealID, generation, anchorHeight uint64, sessionID []byte) error {
+	if err := k.checkSessionChallengeCapacityFields(ctx, opened, expires, dealID, generation); err != nil {
 		return err
 	}
 	// Up-front charge reserves bounded future activation and expiry KV work. This
 	// is a deterministic devnet reservation, not measured crypto gas.
 	ctx.GasMeter().ConsumeGas(RetrievalSessionRetentionGas, "retrieval challenge activation/retention reservation")
-	anchor, err := k.ChallengeAnchors.Get(ctx, c.Window.Anchor)
+	anchor, err := k.ChallengeAnchors.Get(ctx, anchorHeight)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
 		return err
 	}
 	if errors.Is(err, collections.ErrNotFound) {
-		if err := k.ChallengePendingAnchors.Set(ctx, c.Window.Anchor, true); err != nil {
+		if err := k.ChallengePendingAnchors.Set(ctx, anchorHeight, true); err != nil {
 			return err
 		}
 	}
@@ -447,10 +479,10 @@ func (k Keeper) retainSessionChallenge(ctx sdk.Context, s types.RetrievalSession
 		return fmt.Errorf("session anchor reference capacity exhausted")
 	}
 	anchor.SessionReferences++
-	if err := k.ChallengeAnchors.Set(ctx, c.Window.Anchor, anchor); err != nil {
+	if err := k.ChallengeAnchors.Set(ctx, anchorHeight, anchor); err != nil {
 		return err
 	}
-	if err := k.RetrievalSessionExpiryRefs.Set(ctx, collections.Join(s.ExpiresAt, s.SessionId), true); err != nil {
+	if err := k.RetrievalSessionExpiryRefs.Set(ctx, collections.Join(expires, sessionID), true); err != nil {
 		return err
 	}
 	live, err := optionalSessionCount(k.RetrievalSessionLiveCount.Get(ctx))
@@ -460,31 +492,31 @@ func (k Keeper) retainSessionChallenge(ctx sdk.Context, s types.RetrievalSession
 	if err := k.RetrievalSessionLiveCount.Set(ctx, live+1); err != nil {
 		return err
 	}
-	opens, err := optionalSessionCount(k.RetrievalSessionOpenCounts.Get(ctx, uint64(s.OpenedHeight)))
+	opens, err := optionalSessionCount(k.RetrievalSessionOpenCounts.Get(ctx, opened))
 	if err != nil {
 		return err
 	}
-	if err := k.RetrievalSessionOpenCounts.Set(ctx, uint64(s.OpenedHeight), opens+1); err != nil {
+	if err := k.RetrievalSessionOpenCounts.Set(ctx, opened, opens+1); err != nil {
 		return err
 	}
-	expiring, err := optionalSessionCount(k.RetrievalSessionExpiryCounts.Get(ctx, s.ExpiresAt))
+	expiring, err := optionalSessionCount(k.RetrievalSessionExpiryCounts.Get(ctx, expires))
 	if err != nil {
 		return err
 	}
-	if err := k.RetrievalSessionExpiryCounts.Set(ctx, s.ExpiresAt, expiring+1); err != nil {
+	if err := k.RetrievalSessionExpiryCounts.Set(ctx, expires, expiring+1); err != nil {
 		return err
 	}
-	genKey := collections.Join(s.DealId, c.Generation)
+	genKey := collections.Join(dealID, generation)
 	refs, err := optionalSessionCount(k.RetrievalSessionGenerationRefs.Get(ctx, genKey))
 	if err != nil {
 		return err
 	}
 	if refs == 0 {
-		perDeal, err := optionalSessionCount(k.RetrievalSessionGenerationCounts.Get(ctx, s.DealId))
+		perDeal, err := optionalSessionCount(k.RetrievalSessionGenerationCounts.Get(ctx, dealID))
 		if err != nil {
 			return err
 		}
-		if err := k.RetrievalSessionGenerationCounts.Set(ctx, s.DealId, perDeal+1); err != nil {
+		if err := k.RetrievalSessionGenerationCounts.Set(ctx, dealID, perDeal+1); err != nil {
 			return err
 		}
 		global, err := optionalSessionCount(k.RetrievalSessionGenerationCount.Get(ctx))

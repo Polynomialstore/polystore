@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -336,6 +337,19 @@ func TestV3FATAndIntegrityGolden(t *testing.T) {
 	}
 	if _, e := IntegrityLeafV3(10, 0, pattern("zero")[:1]); e == nil {
 		t.Fatal("truncated blob")
+	}
+}
+
+func TestSystematicCoordinateV3Bounds(t *testing.T) {
+	mdu, leaf, slot, err := SystematicCoordinateV3(63, 2, 1)
+	if err != nil || mdu != 2 || leaf != 63 || slot != 7 {
+		t.Fatalf("last coordinate = (%d,%d,%d,%v)", mdu, leaf, slot, err)
+	}
+	if _, _, _, err := SystematicCoordinateV3(64, 2, 1); err == nil {
+		t.Fatal("accepted coordinate past generation")
+	}
+	if _, _, _, err := SystematicCoordinateV3(64, math.MaxUint64, 2); err == nil {
+		t.Fatal("accepted overflowing MDU coordinate")
 	}
 }
 

@@ -118,6 +118,29 @@ func (q queryServer) GetRetrievalSession(goCtx context.Context, req *types.Query
 	return response, nil
 }
 
+func (q queryServer) GetRetrievalSessionV3(goCtx context.Context, req *types.QueryGetRetrievalSessionV3Request) (*types.QueryGetRetrievalSessionV3Response, error) {
+	if req == nil || len(req.SessionId) != 32 {
+		return nil, status.Error(codes.InvalidArgument, "session_id must be 32 bytes")
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	session, err := q.k.retrievalSessionV3(ctx, req.SessionId)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "v3 retrieval session not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	response := &types.QueryGetRetrievalSessionV3Response{Session: session}
+	anchor, err := q.k.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err == nil && len(anchor.Seed) == 32 {
+		response.AnchorSeed = append([]byte(nil), anchor.Seed...)
+	}
+	return response, nil
+}
+
 func (q queryServer) ListRetrievalSessionsByOwner(goCtx context.Context, req *types.QueryListRetrievalSessionsByOwnerRequest) (*types.QueryListRetrievalSessionsByOwnerResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")

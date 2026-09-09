@@ -54,6 +54,9 @@ type Keeper struct {
 	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
 	RetrievalSessions                collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsV3              collections.Map[[]byte, types.RetrievalSessionV3]
+	RetrievalSessionV3Nonces         collections.Map[collections.Pair[string, uint64], uint64]
+	RetrievalSessionV3NonceIDs       collections.Map[collections.Pair[collections.Pair[string, uint64], uint64], []byte]
 	RetrievalSessionsByOwner         collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionsByProvider      collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
@@ -173,6 +176,9 @@ func NewKeeper(
 		),
 
 		RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
+		RetrievalSessionsV3:         collections.NewMap(sb, types.RetrievalSessionsV3Key, "retrieval_sessions_v3", collections.BytesKey, codec.CollValue[types.RetrievalSessionV3](cdc)),
+		RetrievalSessionV3Nonces:    collections.NewMap(sb, types.RetrievalSessionV3NonceKey, "retrieval_session_v3_nonces", collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Value),
+		RetrievalSessionV3NonceIDs:  collections.NewMap(sb, types.RetrievalSessionV3NonceIDKey, "retrieval_session_v3_nonce_ids", collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Key), collections.BytesValue),
 		RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
 		RetrievalSessionsByProvider: collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
 		RetrievalSessionNonces: collections.NewMap(
