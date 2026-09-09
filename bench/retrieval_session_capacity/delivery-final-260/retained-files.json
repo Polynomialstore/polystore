@@ -1,12 +1,16 @@
 {
   "160kib.json": "970a19d2f33e4bcd51209785be2336be2cc826996162af706dc7743d10b072b0",
   "1kib.json": "8dff415a528808b1782a69a0781b6d3fb4604bfd755f2f62e03442158046c31b",
-  "README.md": "3207e44db16251af4d64afbe3b39afa184a2e081335a49160610ca691f1be623",
+  "README.md": "002a415441a8089e23b401bd6831ea63c2440bb84e9a9e3e02c52f4c6d9c2b8c",
   "large-incognito-failed-run.json": "6abf37bc1de3976891a15b5e7172ff9c48dd032fd72e30141b3d0467402e2978",
   "large-incognito-failed.json.gz": "8ebaa63aeec83f9865eee8f2db154f61b4f0725f05b6cb30a932dda076c1803e",
   "large-persistent-success-run.json": "da9c37ae7e05433d15c177e05db2aef5613e1886493d5fd05c18dabdc1dea718",
   "large-persistent-success.json.gz": "df2fe22c986512579648ed7f10f662132d1b87f67f0995553426a97214a0e791",
   "setup-startup-provenance.json": "0624bf34aef8cbf5bb147595fc8731ac58757dd5abd02138a2b36928d03d30a5",
   "setup-startup.log": "d76b2e0c4f1cf8b6aa073864ebe4f743cb3bce177b0253ef0417e7ad06dee5ed",
+  "small-instrumented-phases.json": "f8134de99e44cfebca8eef8abedf74fc322c1a23bdf79cb051d7d00caa92aaa3",
+  "small-instrumented-provider-timings.log": "6563900c319a9cf7f4bc8c997e1254bccecc8cb14d0e15f3e13abb9754cbab8c",
+  "small-instrumented-run.json": "edf1875f897b79c8e281911f4fdbd6b3cd4b569146d3a1cce50deb4cd38b28e5",
+  "small-instrumented.json.gz": "3eef32db0f2af61908b5fbcb0af74315658eaf3c2fc736033ecd91409fe6acaa",
   "small-run.json": "baf47a9cf618d3bc6b0f8aeaa5befbf22c70da987076a8c515e7936004751456"
 }

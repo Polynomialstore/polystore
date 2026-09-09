@@ -22,8 +22,9 @@ remain separately recorded. This establishes neither four-host/WAN capacity nor
 a validator hardware minimum, and is not paid delivery throughput.
 
 Hosted 1 GiB byte delivery completed with the expected hash and 1,064 terminal
-sessions, but retrieval took 2h 37m 55s. Instrumented phase measurements and
-report review remain pending. A complete 1 GiB hash check alone does not
+sessions, but retrieval took 2h 37m 55s. The instrumented 15.5 MiB baseline
+passed in 143.875s and identifies browser verification as the largest measured
+phase. Performance correction and final report review remain pending. A complete 1 GiB hash check alone does not
 qualify download performance. #260 M2b requires a small instrumented public-path
 measurement before another large run; #254/#260 remain open until those gates
 complete.

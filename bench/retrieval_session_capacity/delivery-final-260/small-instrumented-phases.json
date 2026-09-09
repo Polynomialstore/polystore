@@ -1,0 +1,140 @@
+{
+  "success": true,
+  "size": 16252928,
+  "retrievalMs": 143874.595909,
+  "uploadMs": 14690.976240000002,
+  "phaseDurations": {
+    "open_send": {
+      "count": 2,
+      "sumMs": 27.229999999981374,
+      "unionMs": 27.229999999981374,
+      "medianMs": 13.614999999990687,
+      "maxMs": 13.940000000002328
+    },
+    "open_inclusion": {
+      "count": 2,
+      "sumMs": 8697.909999999974,
+      "unionMs": 8697.909999999974,
+      "medianMs": 4348.954999999987,
+      "maxMs": 5565.509999999951
+    },
+    "open_transaction": {
+      "count": 2,
+      "sumMs": 8885.270000000019,
+      "unionMs": 8885.270000000019,
+      "medianMs": 4442.635000000009,
+      "maxMs": 5660.619999999995
+    },
+    "challenge_ready": {
+      "count": 16,
+      "sumMs": 19658.390000000014,
+      "unionMs": 19658.390000000014,
+      "medianMs": 2.9400000000023283,
+      "maxMs": 10557.23999999999
+    },
+    "window_transport": {
+      "count": 16,
+      "sumMs": 18492.490000000107,
+      "unionMs": 18492.490000000107,
+      "medianMs": 1150.8475000000326,
+      "maxMs": 1191.1549999999697
+    },
+    "browser_verify": {
+      "count": 16,
+      "sumMs": 61051.79500000004,
+      "unionMs": 61051.79500000004,
+      "medianMs": 3828.607500000013,
+      "maxMs": 4196.264999999956
+    },
+    "decode_write": {
+      "count": 16,
+      "sumMs": 272.1850000001723,
+      "unionMs": 272.1850000001723,
+      "medianMs": 15.805000000051223,
+      "maxMs": 23.55999999999767
+    },
+    "flush": {
+      "count": 2,
+      "sumMs": 3.8999999999650754,
+      "unionMs": 3.8999999999650754,
+      "medianMs": 1.9499999999825377,
+      "maxMs": 2.480000000039581
+    },
+    "ack_send": {
+      "count": 2,
+      "sumMs": 25.779999999969732,
+      "unionMs": 25.779999999969732,
+      "medianMs": 12.889999999984866,
+      "maxMs": 13.96999999997206
+    },
+    "ack_inclusion": {
+      "count": 2,
+      "sumMs": 11132.655000000028,
+      "unionMs": 11132.655000000028,
+      "medianMs": 5566.327500000014,
+      "maxMs": 5566.535000000033
+    },
+    "owner_ack": {
+      "count": 2,
+      "sumMs": 11195.835000000021,
+      "unionMs": 11195.835000000021,
+      "medianMs": 5597.9175000000105,
+      "maxMs": 5600.130000000005
+    },
+    "ack_and_provider_settlement": {
+      "count": 2,
+      "sumMs": 30142.814999999886,
+      "unionMs": 30142.814999999886,
+      "medianMs": 15071.407499999943,
+      "maxMs": 15276.129999999888
+    }
+  },
+  "unclosed": {},
+  "clocks": {
+    "phaseEvents": "browser performance.now milliseconds",
+    "requestEvents": "Node performance.now milliseconds",
+    "phases": "Node elapsed since harness start milliseconds"
+  },
+  "harnessPhases": [
+    {
+      "phase": "fixture",
+      "startMs": 0,
+      "endMs": 1311.4744650000002
+    },
+    {
+      "phase": "wallet_and_deal",
+      "startMs": 1311.4854759999998,
+      "endMs": 9500.890527000001
+    },
+    {
+      "phase": "upload_commit",
+      "startMs": 9500.893353000001,
+      "endMs": 24191.900491
+    },
+    {
+      "phase": "committed_metadata",
+      "startMs": 24191.902835999997,
+      "endMs": 25390.420952
+    },
+    {
+      "phase": "retrieval",
+      "startMs": 25390.423216,
+      "endMs": 169171.3059
+    },
+    {
+      "phase": "final_download_hash",
+      "startMs": 169171.30867600002,
+      "endMs": 169275.483193
+    },
+    {
+      "phase": "terminal_census",
+      "startMs": 169275.485878,
+      "endMs": 169754.227387
+    }
+  ],
+  "logicalKiBPerSecond": 110.31829420420381,
+  "firstToLastVerifiedWriteMs": 104823.29999999999,
+  "firstDiagnosticToFirstVerifiedWriteMs": 18483.869999999995,
+  "retrievalToFullVerifiedOutputMs": 128493.17383100001,
+  "note": "Overlapping phase sums are not additive critical-path time; browser and Node clocks are not subtracted."
+}
