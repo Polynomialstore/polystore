@@ -67,3 +67,15 @@ Retrieval through final hash took 143,874.596 ms (110.32 KiB/s); upload took 14,
 [Phase analysis](small-instrumented-phases.json): browser verification 61,051.795 ms; window transport including provider response work 18,492.490 ms; challenge readiness 19,658.390 ms; open transaction 8,885.270 ms; ACK plus provider settlement 30,142.815 ms, including owner ACK 11,195.835 ms. Decode/write plus flush totaled 276.085 ms. Nested/overlapping durations must not be added. These are wall times, not CPU samples. Browser verification is the largest measured phase; output-copy optimization cannot materially improve this baseline.
 
 At the observed aggregate rate, 1 GiB projects to about 158.4 minutes, consistent with the earlier 157.9-minute actual run. This projection is not new large-file evidence. Intermediate and large reruns remain blocked while the measured bottleneck is profiled and corrected; the 30-minute guardrail is not waived.
+
+### Local verification component profile
+
+A [portable component probe](verification-components.mts) invokes the actual existing WASM on the nonconstant two-blob retrieval fixture. It manually encodes the existing proof fixture and checks proof and byte-commitment results; it is not the full browser wrapper. [Three warmed repeats](verification-components.json) give median received commitments 499.032 ms, batch verification 18.333 ms, total 517.498 ms (96.4% commitments). Existing producer instrumentation attributes that work to the 4,096-point MSM. Local Node/hardware timings are not substituted for hosted browser timings. The WASM and setup hashes match the hosted baseline; exact source-to-WASM build provenance is unestablished for the checked-in asset.
+
+From the repository root, after installing website dependencies:
+
+```sh
+polystore-website/node_modules/.bin/tsx bench/retrieval_session_capacity/delivery-final-260/verification-components.mts .
+```
+
+The next bounded experiment is existing blst fixed-base precomputation, preserving exact individual commitments and canonical-input checks. Its speedup and initialization/memory tradeoff are unproven; no production switch or larger run follows merely from this proposal.
