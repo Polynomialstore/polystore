@@ -1,0 +1,40 @@
+{
+  "decision": "reject all bounded fixed-base candidates; no production changes",
+  "base": "5b1d77d11432cf83c8c1e1abe57d09c139605e9c",
+  "results": [
+    {
+      "run": "4",
+      "baselineMedianMs": 248.0335829999999,
+      "fixedMedianMs": 353.1439169999999,
+      "ratio": 1.4237746063604622,
+      "coldMs": 545.9762089999999,
+      "highWaterBytes": 7667712
+    },
+    {
+      "run": "5",
+      "baselineMedianMs": 251.59183299999995,
+      "fixedMedianMs": 321.1444160000001,
+      "ratio": 1.2764500825430218,
+      "coldMs": 507.56608299999994,
+      "highWaterBytes": 10813440
+    },
+    {
+      "run": "6",
+      "baselineMedianMs": 258.78837499999963,
+      "fixedMedianMs": 269.4534169999997,
+      "ratio": 1.041211441588132,
+      "coldMs": 651.9467499999998,
+      "highWaterBytes": 17104896
+    },
+    {
+      "run": "6-five",
+      "baselineMedianMs": 241.93820899999992,
+      "fixedMedianMs": 234.5882499999998,
+      "ratio": 0.9696205116571722,
+      "coldMs": 694.6330830000002,
+      "highWaterBytes": 17104896
+    }
+  ],
+  "scope": "local Node actual experimental WASM; no hosted or browser public-path claim",
+  "freeBytesAfter": 1752182784
+}

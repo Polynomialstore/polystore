@@ -1,0 +1,28 @@
+{
+  "bits": 4,
+  "tableMiB": 3,
+  "node": "v25.2.1",
+  "wasmSHA256": "bbaba13c061af65832d198944a8fa5b02c7d995fa6a136c7b12f2052eb034127",
+  "setupSHA256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+  "fixtureSHA256": "87e097602b5c5b598fb68d532dd4809f2db0fa947ce81fe80e8cbcb5d427c85e",
+  "initMs": 2395.013083,
+  "coldMs": 545.9762089999999,
+  "pairs": [
+    {
+      "baselineMs": 248.0335829999999,
+      "fixedMs": 353.1439169999999
+    },
+    {
+      "baselineMs": 262.73775000000023,
+      "fixedMs": 350.1700830000009
+    },
+    {
+      "baselineMs": 245.8117919999995,
+      "fixedMs": 366.590416
+    }
+  ],
+  "initialMemory": 4456448,
+  "finalMemory": 7667712,
+  "maxRSSKiB": 67008,
+  "parity": "nonconstant,zero,sparse,all r-1; invalid length and r at last cell rejected"
+}

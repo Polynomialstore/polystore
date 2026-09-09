@@ -79,3 +79,5 @@ polystore-website/node_modules/.bin/tsx bench/retrieval_session_capacity/deliver
 ```
 
 The next bounded experiment is existing blst fixed-base precomputation, preserving exact individual commitments and canonical-input checks. Its speedup and initialization/memory tradeoff are unproven; no production switch or larger run follows merely from this proposal.
+
+The [bounded fixed-base experiment](rejected-fixed-base/README.md) was rejected: smaller tables regressed and the 12 MiB table gave inconsistent gains too small to justify its memory and startup cost. Experimental production edits were removed.
