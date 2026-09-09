@@ -85,6 +85,9 @@ class SustainedTest(unittest.TestCase):
                                  dict(gas=20_000_000, openings=want["openings"]))
                 self.assertEqual(profile["native_message_batching"]["proof_sessions_per_submission_transaction"], 1)
                 self.assertFalse(profile["native_message_batching"]["cross_provider_crypto_aggregation"])
+                self.assertEqual(profile["native_message_batching"]["open_session_gas_limit_per_message"], 400_000)
+                self.assertEqual(profile["native_message_batching"]["open_session_batch_gas_limit_max"], 25_600_000)
+                self.assertIn("not measured", profile["native_message_batching"]["open_session_gas_limit_note"])
         for k in (0, 2.0, 4, 16, True, "8"):
             with self.subTest(k=k), self.assertRaises(ValueError):
                 workload.mode2_layout(k)
@@ -126,6 +129,7 @@ class SustainedTest(unittest.TestCase):
             self.assertEqual(submit[submit.index("--provider") + 1], providers[slot])
             self.assertEqual(submit[submit.index("--start-blob-index") + 1], str(slot * 8))
             self.assertEqual(submit[submit.index("--blob-count") + 1], "8")
+            self.assertEqual(submit[submit.index("--gas") + 1], "400000")
             self.assertEqual(operation["submit-proof"]["submit"][
                 operation["submit-proof"]["submit"].index("--gas") + 1], "9000000")
         self.assertEqual([row["phase"] for row in operations], ["warmup"] * 8 + ["measurement"] * 2)
@@ -229,7 +233,7 @@ class SustainedTest(unittest.TestCase):
             artifact.opened_session_ids(dict(data=OPEN_RESPONSE_DATA), 65)
 
     def test_batch_pins_unsigned_signed_and_committed_order_before_proofs(self):
-        for corruption in (None, 'generated_nonce', 'signed_order', 'unknown'):
+        for corruption in (None, 'generated_nonce', 'generated_gas', 'signed_order', 'signed_gas', 'unknown'):
             life, _, _, operations = fixture_state()
             operations = operations[:2]
             life.doc, life.save = {}, Mock()
@@ -244,14 +248,19 @@ class SustainedTest(unittest.TestCase):
                         **{'@type': '/polystorechain.polystorechain.v1.MsgOpenRetrievalSession'})
                     if corruption == 'generated_nonce':
                         message['nonce'] = '999'
-                    tx = dict(body=dict(messages=[message]))
+                    gas = 400001 if corruption == 'generated_gas' else 400000
+                    tx = dict(body=dict(messages=[message]), auth_info=dict(fee=dict(gas_limit=str(gas))))
                     generated.append(tx)
                     return json.dumps(tx)
                 self.assertIn('--append', args)
                 messages = [copy.deepcopy(tx['body']['messages'][0]) for tx in generated]
                 if corruption == 'signed_order':
                     messages.reverse()
-                Path(args[args.index('--output-document') + 1]).write_text(json.dumps(dict(body=dict(messages=messages), signatures=['signed'])))
+                gas = sum(int(tx['auth_info']['fee']['gas_limit']) for tx in generated)
+                if corruption == 'signed_gas':
+                    gas -= 1
+                Path(args[args.index('--output-document') + 1]).write_text(json.dumps(dict(
+                    body=dict(messages=messages), auth_info=dict(fee=dict(gas_limit=str(gas))), signatures=['signed'])))
                 return ''
             response = dict(outcome='unknown' if corruption == 'unknown' else 'committed_success', height=12,
                             data=OPEN_RESPONSE_DATA + OPEN_RESPONSE_DATA[:-64] + '31' * 32)
@@ -260,6 +269,8 @@ class SustainedTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         workload.open_session_batch(life, operations, Path(home) / 'batch', command)
                     self.assertEqual(submit.call_count, int(corruption == 'unknown'))
+                    if corruption == 'signed_gas':
+                        submit.assert_not_called()
                 else:
                     ids, height = workload.open_session_batch(life, operations, Path(home) / 'batch', command)
                     self.assertEqual((len(ids), height), (2, 12))
