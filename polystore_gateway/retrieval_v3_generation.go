@@ -149,6 +149,20 @@ func generationAcceptanceDigestV3(generation retrievalGenerationKey, slot uint32
 	return (retrievalchallenge.GenerationAcceptanceV3{ChainID: generation.Chain, SetupDigest: generation.Setup, DealID: generation.Deal, Generation: generation.Generation, PolyFSRoot: generation.Root, IntegrityRoot: generation.Integrity, MetadataMDUs: generation.Metadata, UserMDUs: generation.Users, Slot: slot, Provider: provider}).Hash()
 }
 
+func writeGenerationAcceptanceV3Outcome(w http.ResponseWriter, status, hash string, slot int, cleanup string, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	if status == "pending" {
+		w.WriteHeader(http.StatusAccepted)
+	} else if status == "failed" {
+		w.WriteHeader(http.StatusConflict)
+	}
+	errorText := ""
+	if err != nil {
+		errorText = err.Error()
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": status, "tx_hash": hash, "slot": slot, "cleanup_status": cleanup, "error": errorText})
+}
+
 func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -328,10 +342,5 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 			status = "failed"
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	errorText := ""
-	if err != nil {
-		errorText = err.Error()
-	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"status": status, "tx_hash": hash, "slot": slot, "cleanup_status": cleanup, "error": errorText})
+	writeGenerationAcceptanceV3Outcome(w, status, hash, slot, cleanup, err)
 }
