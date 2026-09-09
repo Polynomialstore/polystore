@@ -9,6 +9,7 @@ import (
 
 const (
 	FATV3HeaderBytes          = 128
+	FATV3MaxRecords           = uint32(23807)
 	IntegrityLeavesPerUserMDU = uint64(96)
 	MaxIntegrityLeaves        = uint64(65536 * 96)
 )
@@ -21,8 +22,8 @@ type FATV3Header struct {
 
 func (h FATV3Header) Bytes() ([FATV3HeaderBytes]byte, error) {
 	var b [FATV3HeaderBytes]byte
-	if h.LeafCount == 0 || h.LeafCount > MaxIntegrityLeaves || h.LeafCount%IntegrityLeavesPerUserMDU != 0 {
-		return b, errors.New("invalid FAT v3 integrity leaf count")
+	if h.RecordCount > FATV3MaxRecords || h.LeafCount == 0 || h.LeafCount > MaxIntegrityLeaves || h.LeafCount%IntegrityLeavesPerUserMDU != 0 {
+		return b, errors.New("invalid FAT v3 header bounds")
 	}
 	copy(b[:4], "NILF")
 	binary.LittleEndian.PutUint16(b[4:6], 3)
@@ -49,8 +50,8 @@ func ParseFATV3Header(b []byte) (FATV3Header, error) {
 	h.RecordCount = binary.LittleEndian.Uint32(b[8:12])
 	h.LeafCount = binary.LittleEndian.Uint64(b[20:28])
 	copy(h.IntegrityRoot[:], b[28:60])
-	if h.LeafCount == 0 || h.LeafCount > MaxIntegrityLeaves || h.LeafCount%IntegrityLeavesPerUserMDU != 0 {
-		return FATV3Header{}, errors.New("invalid FAT v3 integrity leaf count")
+	if h.RecordCount > FATV3MaxRecords || h.LeafCount == 0 || h.LeafCount > MaxIntegrityLeaves || h.LeafCount%IntegrityLeavesPerUserMDU != 0 {
+		return FATV3Header{}, errors.New("invalid FAT v3 header bounds")
 	}
 	return h, nil
 }

@@ -282,6 +282,22 @@ func TestV3FATAndIntegrityGolden(t *testing.T) {
 	if got, e := ParseFATV3Header(b[:]); e != nil || got != h {
 		t.Fatalf("parse: %+v %v", got, e)
 	}
+	maxHeader := FATV3Header{FATV3MaxRecords, 96, root}
+	maxBytes, e := maxHeader.Bytes()
+	if e != nil {
+		t.Fatal("maximum record count rejected", e)
+	}
+	if got, e := ParseFATV3Header(maxBytes[:]); e != nil || got != maxHeader {
+		t.Fatalf("maximum record count parse: %+v %v", got, e)
+	}
+	tooMany := FATV3Header{FATV3MaxRecords + 1, 96, root}
+	if _, e := tooMany.Bytes(); e == nil {
+		t.Fatal("record 23808 encoded")
+	}
+	binary.LittleEndian.PutUint32(maxBytes[8:12], FATV3MaxRecords+1)
+	if _, e := ParseFATV3Header(maxBytes[:]); e == nil {
+		t.Fatal("record 23808 parsed")
+	}
 	names := []string{"zero", "valid_incrementing", "valid_ff"}
 	leaves := make([][32]byte, 3)
 	for i, n := range names {

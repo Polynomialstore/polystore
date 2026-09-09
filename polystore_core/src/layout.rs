@@ -2,6 +2,7 @@ pub const MAGIC_NILF: [u8; 4] = [0x4E, 0x49, 0x4C, 0x46]; // "NILF"
 pub const FILE_RECORD_SIZE: usize = 256;
 pub const FILE_RECORD_PATH_BYTES: usize = FILE_RECORD_SIZE - 24;
 pub const FAT_V3_INTEGRITY_LEAVES_PER_USER_MDU: u64 = 96;
+pub const FAT_V3_MAX_RECORDS: u32 = 23_807;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileTableHeaderV3 {
@@ -12,11 +13,12 @@ pub struct FileTableHeaderV3 {
 impl FileTableHeaderV3 {
     pub const SIZE: usize = 128;
     pub fn to_bytes(&self) -> Result<[u8; 128], String> {
-        if self.integrity_leaf_count == 0
+        if self.record_count > FAT_V3_MAX_RECORDS
+            || self.integrity_leaf_count == 0
             || self.integrity_leaf_count > crate::integrity_v3::MAX_LEAVES
             || self.integrity_leaf_count % FAT_V3_INTEGRITY_LEAVES_PER_USER_MDU != 0
         {
-            return Err("invalid FAT v3 integrity leaf count".into());
+            return Err("invalid FAT v3 header bounds".into());
         }
         let mut b = [0; 128];
         b[..4].copy_from_slice(&MAGIC_NILF);

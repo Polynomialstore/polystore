@@ -1,4 +1,8 @@
-use polystore_core::{integrity_v3, layout::FileTableHeaderV3, retrieval_v3};
+use polystore_core::{
+    integrity_v3,
+    layout::{FAT_V3_MAX_RECORDS, FileTableHeaderV3},
+    retrieval_v3,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -271,6 +275,25 @@ fn fat_and_integrity_match_merged_vectors_and_reject_bad_paths() {
         f["fat_header"]["header_hex"].as_str().unwrap()
     );
     assert_eq!(FileTableHeaderV3::from_bytes(&bytes).unwrap(), header);
+    let max_header = FileTableHeaderV3 {
+        record_count: FAT_V3_MAX_RECORDS,
+        ..header
+    };
+    let mut max_bytes = max_header.to_bytes().unwrap();
+    assert_eq!(
+        FileTableHeaderV3::from_bytes(&max_bytes).unwrap(),
+        max_header
+    );
+    assert!(
+        FileTableHeaderV3 {
+            record_count: FAT_V3_MAX_RECORDS + 1,
+            ..header
+        }
+        .to_bytes()
+        .is_err()
+    );
+    max_bytes[8..12].copy_from_slice(&(FAT_V3_MAX_RECORDS + 1).to_le_bytes());
+    assert!(FileTableHeaderV3::from_bytes(&max_bytes).is_err());
     let names = ["zero", "valid_incrementing", "valid_ff"];
     let leaves: Vec<_> = names
         .iter()
