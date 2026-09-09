@@ -26,8 +26,8 @@
       "bytes": 4475
     },
     "plan.json": {
-      "sha256": "73e76bf314b1c7d503bdffef33a426fe8999908a0f1e29c06ea1969478be4b11",
-      "bytes": 4975
+      "sha256": "432b88ab67b84ad3794167093f24b6d010bc0d9758a925cef0de19af1c8ba74e",
+      "bytes": 4988
     },
     "runtime-provenance.json": {
       "sha256": "f83c7af3118c07c93781f05ae52c4b67791a5b5c6c1b115414e2de6bcc61645c",
@@ -35,7 +35,7 @@
     }
   },
   "sanitization": {
-    "method": "JSON parse plus exact string replacement; numeric results, hashes, commits, Git objects, commands, workload geometry, and toolchain versions retained",
+    "method": "JSON parse plus documented string replacement and one unit-label correction; numeric results, hashes, commits, Git objects, commands, workload geometry, and toolchain versions retained",
     "replacements": [
       {
         "original": "K8 harness checkout absolute path",
@@ -56,6 +56,10 @@
       {
         "original": "summary links to local plan and provenance",
         "published": "sibling plan.json and runtime-provenance.json"
+      },
+      {
+        "original": "400000 preparation gas per opening",
+        "published": "400000 preparation gas per session-open message"
       }
     ]
   },

@@ -131,7 +131,7 @@
   },
   "interpretation_limits": [
     "Four validator processes and twelve provider daemons on one local Apple workstation do not represent a realistic deployment.",
-    "The 20000000 proof gas setting and 400000 preparation gas per opening are conservative pilot ceilings, not measured requirements or capacity denominators.",
+    "The 20000000 proof gas setting and 400000 preparation gas per session-open message are conservative pilot ceilings, not measured requirements or capacity denominators.",
     "This pilot cannot qualify production capacity, download targets, hardware minimums, WAN behavior, or client delivery and acknowledgement."
   ]
 }
