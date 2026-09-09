@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/gogoproto/jsonpb"
@@ -20,6 +21,50 @@ import (
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
 )
+
+func TestGenerationVerificationV3UsesBoundedWorkScaledDeadline(t *testing.T) {
+	maxUsers := retrievalchallenge.MaxIntegrityLeaves / retrievalchallenge.IntegrityLeavesPerUserMDU
+	for _, tc := range []struct {
+		users uint64
+		want  time.Duration
+	}{
+		{1, generationVerificationBaseTimeoutV3 + generationVerificationPerUserMDUV3},
+		{maxUsers, generationVerificationBaseTimeoutV3 + time.Duration(maxUsers)*generationVerificationPerUserMDUV3},
+	} {
+		got, err := generationVerificationTimeoutV3(tc.users)
+		if err != nil || got != tc.want {
+			t.Fatalf("timeout(%d)=%s,%v want %s", tc.users, got, err, tc.want)
+		}
+	}
+	for _, users := range []uint64{0, maxUsers + 1} {
+		if _, err := generationVerificationTimeoutV3(users); err == nil {
+			t.Fatalf("accepted invalid user MDU count %d", users)
+		}
+	}
+}
+
+func TestGenerationVerificationV3BoundsScansWithoutHoldingSigner(t *testing.T) {
+	signer := sdk.AccAddress(bytes.Repeat([]byte{7}, 20)).String()
+	release, err := claimGenerationVerificationV3(701, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if other, err := claimGenerationVerificationV3(702, signer); err == nil {
+		other()
+		t.Fatal("same provider started a second generation scan")
+	}
+	otherSigner := sdk.AccAddress(bytes.Repeat([]byte{8}, 20)).String()
+	if other, err := claimGenerationVerificationV3(701, otherSigner); err == nil {
+		other()
+		t.Fatal("same generation started a second scan")
+	}
+	sign, err := claimRetrievalOperations(nil, signer)
+	if err != nil {
+		t.Fatalf("generation scan held shared signer lock: %v", err)
+	}
+	sign()
+}
 
 func writePackedFATHeaderV3(t *testing.T, wire []byte, header retrievalchallenge.FATV3Header) {
 	t.Helper()
@@ -31,6 +76,23 @@ func writePackedFATHeaderV3(t *testing.T, wire []byte, header retrievalchallenge
 	for i, value := range raw {
 		wire[start+(i/31)*32] = 0
 		wire[start+(i/31)*32+1+i%31] = value
+	}
+}
+
+func providerGenerationCandidateV3(t *testing.T, key retrievalGenerationKey, signer string) *types.DealGenerationAdmissionV3 {
+	t.Helper()
+	providers := make([]string, 12)
+	providers[0] = signer
+	for i := 1; i < 12; i++ {
+		raw := make([]byte, 20)
+		raw[19] = byte(i + 1)
+		providers[i] = sdk.AccAddress(raw).String()
+	}
+	return &types.DealGenerationAdmissionV3{
+		DealId: key.Deal, Generation: key.Generation, PolyfsRoot: bytes.Clone(key.Root[:]), IntegrityRoot: bytes.Clone(key.Integrity[:]),
+		SetupDigest: bytes.Clone(key.Setup[:]), WitnessMdus: key.Metadata - 1, MetadataMdus: key.Metadata, UserMdus: key.Users,
+		TotalMdus: key.Metadata + key.Users, IntegrityLeafCount: key.Users * retrievalchallenge.IntegrityLeavesPerUserMDU,
+		Providers: providers, ProposedHeight: 10, ChainId: key.Chain,
 	}
 }
 
@@ -181,6 +243,173 @@ func TestGenerationAcceptanceV3ReconcilesPersistedHashBeforeReplacementQuery(t *
 	}
 	if marker, err := loadPendingSigner(signer); err != nil || marker != nil {
 		t.Fatalf("committed acceptance retained signer quarantine: %+v %v", marker, err)
+	}
+}
+
+func TestGenerationAcceptanceV3ClearsMatchingAcceptedNoHashMarker(t *testing.T) {
+	submissionTestDB(t)
+	oldChain := chainID
+	chainID = "polystore-test-1"
+	t.Cleanup(func() { chainID = oldChain })
+	signerRaw := bytes.Repeat([]byte{9}, 20)
+	signer := sdk.AccAddress(signerRaw).String()
+	setup, err := hex.DecodeString(types.RetrievalSetupDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers := make([]string, 12)
+	providers[0] = signer
+	for i := 1; i < 12; i++ {
+		raw := make([]byte, 20)
+		raw[19] = byte(i + 1)
+		providers[i] = sdk.AccAddress(raw).String()
+	}
+	candidate := &types.DealGenerationAdmissionV3{
+		DealId: 77, Generation: 3, PolyfsRoot: bytes.Repeat([]byte{1}, 32), IntegrityRoot: bytes.Repeat([]byte{2}, 32),
+		SetupDigest: setup, WitnessMdus: 1, MetadataMdus: 2, UserMdus: 1, TotalMdus: 3,
+		IntegrityLeafCount: 96, Providers: providers, ProposedHeight: 10, ChainId: chainID, AcceptedSlotsMask: 1,
+	}
+	body, err := (&jsonpb.Marshaler{OrigName: true}).MarshalToString(&types.QueryGetDealGenerationV3Response{Pending: candidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation, _, err := validateGenerationAdmissionV3(candidate, candidate.DealId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var provider [20]byte
+	copy(provider[:], signerRaw)
+	digest, err := generationAcceptanceDigestV3(generation, 0, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := pendingSignerOperation{Kind: "generation-v3", IDs: []string{hex.EncodeToString(digest[:])}}
+	if err := updatePendingSignerV3(signer, op, false); err != nil {
+		t.Fatal(err)
+	}
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/deals/77/generation-v3") {
+			t.Fatalf("unexpected LCD request %s", r.URL.Path)
+		}
+		w.Header().Set(committedHeightHeader, "12")
+		_, _ = w.Write([]byte(body))
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "keys" {
+			return []byte(signer), nil
+		}
+		return nil, fmt.Errorf("unexpected command")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/sp/generation-v3/accept", strings.NewReader(`{"deal_id":77,"provider":`+fmt.Sprintf("%q", signer)+`}`))
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	w := httptest.NewRecorder()
+	SpAcceptDealGenerationV3(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"status":"already_accepted"`) {
+		t.Fatalf("matching accepted marker did not reconcile: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if marker, err := loadPendingSigner(signer); err != nil || marker != nil {
+		t.Fatalf("matching accepted marker remained: %+v %v", marker, err)
+	}
+	mismatch := pendingSignerOperation{Kind: "generation-v3", IDs: []string{strings.Repeat("f", 64)}}
+	if err := updatePendingSignerV3(signer, mismatch, false); err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/sp/generation-v3/accept", strings.NewReader(`{"deal_id":77,"provider":`+fmt.Sprintf("%q", signer)+`}`))
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	w = httptest.NewRecorder()
+	SpAcceptDealGenerationV3(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("mismatched accepted marker was not quarantined: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if marker, err := loadPendingSigner(signer); err != nil || marker == nil || !reflect.DeepEqual(marker.IDs, mismatch.IDs) {
+		t.Fatalf("mismatched accepted marker changed: %+v %v", marker, err)
+	}
+}
+
+func TestGenerationAcceptanceV3RevalidatesAfterScanBeforeSigning(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		injectMarker bool
+	}{
+		{name: "candidate_changed"},
+		{name: "pending_signer_appeared", injectMarker: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			submissionTestDB(t)
+			frozen, key, _ := buildProviderV3ArtifactFixture(t)
+			signer := frozen.Session.Obligations[0].AssignedProvider
+			t.Setenv("POLYSTORE_PROVIDER_KEY", "faucet")
+			t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+			candidate := providerGenerationCandidateV3(t, key, signer)
+			changed := *candidate
+			changed.Generation++
+			firstBody, err := (&jsonpb.Marshaler{OrigName: true}).MarshalToString(&types.QueryGetDealGenerationV3Response{Pending: candidate})
+			if err != nil {
+				t.Fatal(err)
+			}
+			changedBody, err := (&jsonpb.Marshaler{OrigName: true}).MarshalToString(&types.QueryGetDealGenerationV3Response{Pending: &changed})
+			if err != nil {
+				t.Fatal(err)
+			}
+			injected := pendingSignerOperation{Kind: "audit", IDs: []string{"epoch:77"}}
+			queries := 0
+			lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.Contains(r.URL.Path, "/generation-v3") {
+					t.Fatalf("unexpected LCD request %s", r.URL.Path)
+				}
+				queries++
+				w.Header().Set(committedHeightHeader, "13")
+				if queries == 1 {
+					_, _ = w.Write([]byte(firstBody))
+					if tc.injectMarker {
+						if err := updatePendingSignerV3(signer, injected, false); err != nil {
+							t.Errorf("inject pending signer marker: %v", err)
+						}
+					}
+					return
+				}
+				_, _ = w.Write([]byte(changedBody))
+			}))
+			defer lcd.Close()
+			oldLCD := lcdBase
+			lcdBase = lcd.URL
+			t.Cleanup(func() { lcdBase = oldLCD })
+			txCalls := 0
+			setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if len(args) > 0 && args[0] == "keys" {
+					return []byte(signer), nil
+				}
+				txCalls++
+				return nil, fmt.Errorf("unexpected transaction")
+			})
+			req := httptest.NewRequest(http.MethodPost, "/sp/generation-v3/accept", strings.NewReader(`{"deal_id":0,"provider":`+fmt.Sprintf("%q", signer)+`}`))
+			req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+			w := httptest.NewRecorder()
+			SpAcceptDealGenerationV3(w, req)
+			if w.Code != http.StatusConflict || txCalls != 0 {
+				t.Fatalf("changed state reached signing: code=%d tx=%d body=%s", w.Code, txCalls, w.Body.String())
+			}
+			marker, err := loadPendingSigner(signer)
+			if tc.injectMarker {
+				if queries != 1 || !strings.Contains(w.Body.String(), "provider signer has unresolved operation") {
+					t.Fatalf("concurrent marker did not stop before fresh query: queries=%d body=%s", queries, w.Body.String())
+				}
+				if err != nil || marker == nil || marker.Kind != injected.Kind || !reflect.DeepEqual(marker.IDs, injected.IDs) {
+					t.Fatalf("concurrent marker changed: %+v %v", marker, err)
+				}
+			} else {
+				if queries != 2 || !strings.Contains(w.Body.String(), "candidate changed during verification") {
+					t.Fatalf("candidate change did not reach fresh revalidation: queries=%d body=%s", queries, w.Body.String())
+				}
+				if err != nil || marker != nil {
+					t.Fatalf("candidate change created marker: %+v %v", marker, err)
+				}
+			}
+		})
 	}
 }
 

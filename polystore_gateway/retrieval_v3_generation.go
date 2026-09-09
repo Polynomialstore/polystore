@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,6 +25,15 @@ import (
 )
 
 const integrityLeavesV3File = "integrity_leaves_v3.bin"
+
+const (
+	generationVerificationBaseTimeoutV3   = 5 * time.Minute
+	generationVerificationPerUserMDUV3    = 250 * time.Millisecond
+	generationVerificationProgressEveryV3 = 60 * time.Second
+	generationSubmissionTimeoutV3         = 2 * time.Minute
+)
+
+var errProviderNotAssignedV3 = errors.New("provider is not assigned to the generation")
 
 type generationAcceptanceV3Request struct {
 	DealID   uint64 `json:"deal_id"`
@@ -99,6 +109,8 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 	if err != nil || root != key.Integrity {
 		return fmt.Errorf("integrity leaf vector does not match authenticated header")
 	}
+	started := time.Now()
+	nextProgress := started.Add(generationVerificationProgressEveryV3)
 	for user := uint64(0); user < key.Users; user++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -113,6 +125,9 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 			return err
 		}
 		for row := uint32(0); row < 8; row++ {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			leaf := slot*8 + row
 			blob := shard[uint64(row)*types.BLOB_SIZE : uint64(row+1)*types.BLOB_SIZE]
 			commitment, err := crypto_ffi.CommitReceivedBlob(blob)
@@ -129,8 +144,94 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 				return fmt.Errorf("slot blob %d/%d does not match integrity vector", mdu, leaf)
 			}
 		}
+		if now := time.Now(); !now.Before(nextProgress) {
+			log.Printf("v3 generation verification progress deal=%d generation=%d slot=%d user_mdus=%d/%d elapsed=%s", key.Deal, key.Generation, slot, user+1, key.Users, now.Sub(started).Round(time.Second))
+			nextProgress = now.Add(generationVerificationProgressEveryV3)
+		}
 	}
 	return nil
+}
+
+func generationVerificationTimeoutV3(users uint64) (time.Duration, error) {
+	maxUsers := retrievalchallenge.MaxIntegrityLeaves / retrievalchallenge.IntegrityLeavesPerUserMDU
+	if users == 0 || users > maxUsers {
+		return 0, fmt.Errorf("invalid v3 generation user MDU count")
+	}
+	return generationVerificationBaseTimeoutV3 + time.Duration(users)*generationVerificationPerUserMDUV3, nil
+}
+
+func claimGenerationVerificationV3(deal uint64, signer string) (func(), error) {
+	return claimRetrievalOperations([]string{
+		"generation-v3:" + strconv.FormatUint(deal, 10),
+		"generation-verification-v3:" + signer,
+	}, "")
+}
+
+type generationAcceptanceViewV3 struct {
+	response   *types.QueryGetDealGenerationV3Response
+	candidate  *types.DealGenerationAdmissionV3
+	generation retrievalGenerationKey
+	providers  [12][20]byte
+	provider   [20]byte
+	slot       int
+	digest     [32]byte
+	id         string
+	root       ManifestRoot
+}
+
+func queryGenerationAcceptanceViewV3(ctx context.Context, deal uint64, signer string) (*generationAcceptanceViewV3, error) {
+	response, height, err := queryDealGenerationV3(ctx, deal)
+	if err != nil {
+		return nil, err
+	}
+	candidate := response.Pending
+	if candidate == nil {
+		candidate = response.Admitted
+	}
+	generation, providers, err := validateGenerationAdmissionV3(candidate, deal)
+	if err != nil || height == 0 || candidate == nil || uint64(candidate.ProposedHeight) > height {
+		if err == nil {
+			err = fmt.Errorf("v3 generation query lacks a committed proposal height")
+		}
+		return nil, err
+	}
+	provider, err := rawProviderV3(signer)
+	if err != nil {
+		return nil, err
+	}
+	slot := -1
+	for i := range providers {
+		if providers[i] == provider {
+			if slot != -1 {
+				return nil, fmt.Errorf("provider occupies multiple frozen slots")
+			}
+			slot = i
+		}
+	}
+	if slot < 0 {
+		return nil, errProviderNotAssignedV3
+	}
+	digest, err := generationAcceptanceDigestV3(generation, uint32(slot), provider)
+	if err != nil {
+		return nil, err
+	}
+	root, err := parseManifestRoot("0x" + hex.EncodeToString(candidate.PolyfsRoot))
+	if err != nil {
+		return nil, err
+	}
+	return &generationAcceptanceViewV3{
+		response: response, candidate: candidate, generation: generation, providers: providers,
+		provider: provider, slot: slot, digest: digest, id: hex.EncodeToString(digest[:]), root: root,
+	}, nil
+}
+
+func (v *generationAcceptanceViewV3) accepted() bool {
+	return v.response.Pending == nil || v.candidate.AcceptedSlotsMask&(1<<uint(v.slot)) != 0
+}
+
+func (v *generationAcceptanceViewV3) sameFrozenCandidate(other *generationAcceptanceViewV3) bool {
+	return other != nil && v.generation == other.generation && v.providers == other.providers &&
+		v.provider == other.provider && v.slot == other.slot && v.digest == other.digest && v.root == other.root
 }
 
 func updatePendingSignerV3(signer string, op pendingSignerOperation, clear bool) error {
@@ -173,8 +274,6 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
-	defer cancel()
 	var request generationAcceptanceV3Request
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxSessionProofRequestBytes+1))
 	if err != nil || len(body) > maxSessionProofRequestBytes || validateJSONObject(body) != nil {
@@ -187,7 +286,7 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid v3 generation acceptance request", "")
 		return
 	}
-	keyName, signer, err := retrievalSigner(ctx)
+	keyName, signer, err := retrievalSigner(r.Context())
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "provider signing key unavailable", err.Error())
 		return
@@ -196,13 +295,22 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "routing provider differs from actual signing key", "")
 		return
 	}
-	lockID := "generation-v3:" + strconv.FormatUint(request.DealID, 10)
-	release, err := claimRetrievalOperations([]string{lockID}, signer)
+	releaseDeal, err := claimGenerationVerificationV3(request.DealID, signer)
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "generation verification busy", err.Error())
+		return
+	}
+	defer releaseDeal()
+	releaseSigner, err := claimRetrievalOperations(nil, signer)
 	if err != nil {
 		writeJSONError(w, http.StatusTooManyRequests, "provider signer busy", err.Error())
 		return
 	}
-	defer release()
+	defer func() {
+		if releaseSigner != nil {
+			releaseSigner()
+		}
+	}()
 	pending, err := loadPendingSigner(signer)
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "generation acceptance cleanup state unavailable", err.Error())
@@ -213,7 +321,7 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if pending != nil && pending.TxHash != "" {
-		hash, waitErr := waitForCommittedTx(ctx, pending.TxHash)
+		hash, waitErr := waitForCommittedTx(r.Context(), pending.TxHash)
 		if waitErr == nil || errors.Is(waitErr, errTxFailed) {
 			if clearErr := updatePendingSignerV3(signer, *pending, true); clearErr != nil {
 				writeJSONError(w, http.StatusConflict, "generation acceptance cleanup pending", clearErr.Error())
@@ -232,97 +340,114 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "reconciled", "tx_hash": hash, "cleanup_status": "complete"})
 		return
 	}
-	response, height, err := queryDealGenerationV3(ctx, request.DealID)
+	view, err := queryGenerationAcceptanceViewV3(r.Context(), request.DealID, signer)
 	if err != nil {
-		writeJSONError(w, http.StatusConflict, "v3 generation admission unavailable", err.Error())
-		return
-	}
-	candidate := response.Pending
-	if candidate == nil {
-		candidate = response.Admitted
-	}
-	generation, providers, err := validateGenerationAdmissionV3(candidate, request.DealID)
-	if err != nil || height == 0 || uint64(candidate.ProposedHeight) > height {
-		if err == nil {
-			err = fmt.Errorf("v3 generation query lacks a committed proposal height")
+		if errors.Is(err, errProviderNotAssignedV3) {
+			writeJSONError(w, http.StatusForbidden, err.Error(), "")
+			return
 		}
 		writeJSONError(w, http.StatusConflict, "invalid v3 generation admission", err.Error())
 		return
 	}
-	var providerRaw [20]byte
-	providerAddress, _ := sdk.AccAddressFromBech32(signer)
-	copy(providerRaw[:], providerAddress)
-	slot := -1
-	for i := range providers {
-		if providers[i] == providerRaw {
-			if slot != -1 {
-				writeJSONError(w, http.StatusConflict, "provider occupies multiple frozen slots", "")
-				return
-			}
-			slot = i
-		}
-	}
-	if slot < 0 {
-		writeJSONError(w, http.StatusForbidden, "provider is not assigned to the generation", "")
-		return
-	}
-	digest, err := generationAcceptanceDigestV3(generation, uint32(slot), providerRaw)
-	if err != nil {
-		writeJSONError(w, http.StatusConflict, "invalid v3 generation acceptance digest", err.Error())
-		return
-	}
-	id := hex.EncodeToString(digest[:])
-	op := pendingSignerOperation{Kind: "generation-v3", IDs: []string{id}}
-	if candidate.AcceptedSlotsMask&(1<<uint(slot)) != 0 || response.Pending == nil {
-		if pending != nil && len(pending.IDs) == 1 && pending.IDs[0] == id {
-			if err := updatePendingSignerV3(signer, op, true); err != nil {
+	op := pendingSignerOperation{Kind: "generation-v3", IDs: []string{view.id}}
+	if view.accepted() {
+		if pending != nil && len(pending.IDs) == 1 && pending.IDs[0] == view.id {
+			if err := updatePendingSignerV3(signer, *pending, true); err != nil {
 				writeJSONError(w, http.StatusConflict, "generation acceptance cleanup pending", err.Error())
 				return
 			}
+			pending = nil
 		}
 		if pending != nil {
 			writeJSONError(w, http.StatusConflict, "provider signer has unresolved generation acceptance", "stored acceptance identity differs from current generation")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "already_accepted", "slot": slot})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "already_accepted", "slot": view.slot})
 		return
 	}
 	if pending != nil {
-		if len(pending.IDs) != 1 || pending.IDs[0] != id {
+		if len(pending.IDs) != 1 || pending.IDs[0] != view.id {
 			writeJSONError(w, http.StatusConflict, "provider signer has unresolved generation acceptance", "stored acceptance identity differs from current generation")
 			return
 		}
 		writeJSONError(w, http.StatusAccepted, "generation acceptance outcome unknown", "broadcast hash was not persisted")
 		return
 	}
-	root, err := parseManifestRoot("0x" + hex.EncodeToString(candidate.PolyfsRoot))
-	if err != nil {
-		writeJSONError(w, http.StatusConflict, "invalid frozen generation root", err.Error())
-		return
-	}
-	dir, releaseGeneration, err := openFrozenGeneration(candidate.DealId, root)
+	// The durable signer marker is clear. Release the shared signer while the
+	// deal-specific verification lock and immutable generation lease bound the
+	// expensive scan; audits and retrieval proofs can continue signing.
+	releaseSigner()
+	releaseSigner = nil
+	dir, releaseGeneration, err := openFrozenGeneration(view.candidate.DealId, view.root)
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "frozen generation artifacts unavailable", err.Error())
 		return
 	}
 	defer releaseGeneration()
-	metadata, err := authenticatedRetrievalMetadataFor(ctx, dir, generation)
+	verificationTimeout, err := generationVerificationTimeoutV3(view.generation.Users)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "invalid v3 generation verification bound", err.Error())
+		return
+	}
+	verificationCtx, cancelVerification := context.WithTimeout(r.Context(), verificationTimeout)
+	defer cancelVerification()
+	metadata, err := authenticatedRetrievalMetadataFor(verificationCtx, dir, view.generation)
 	if err == nil {
-		err = verifyIntegrityVectorV3(ctx, dir, generation, uint32(slot), metadata)
+		err = verifyIntegrityVectorV3(verificationCtx, dir, view.generation, uint32(view.slot), metadata)
 	}
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "v3 generation ingest verification failed", err.Error())
 		return
 	}
+	cancelVerification()
+
+	releaseSigner, err = claimRetrievalOperations(nil, signer)
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "provider signer busy after generation verification", err.Error())
+		return
+	}
+	pending, err = loadPendingSigner(signer)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "generation acceptance cleanup state unavailable", err.Error())
+		return
+	}
+	if pending != nil {
+		writeJSONError(w, http.StatusConflict, "provider signer has unresolved operation", fmt.Sprintf("actual signer awaits %s reconciliation", pending.Kind))
+		return
+	}
+	submissionCtx, cancelSubmission := context.WithTimeout(r.Context(), generationSubmissionTimeoutV3)
+	defer cancelSubmission()
+	fresh, err := queryGenerationAcceptanceViewV3(submissionCtx, request.DealID, signer)
+	if err != nil || !view.sameFrozenCandidate(fresh) {
+		if err == nil {
+			err = fmt.Errorf("v3 generation candidate changed during verification")
+		}
+		writeJSONError(w, http.StatusConflict, "v3 generation revalidation failed", err.Error())
+		return
+	}
+	if freshDir, lookupErr := lookupDealGeneration(fresh.candidate.DealId, fresh.root, fresh.root.Canonical); lookupErr != nil || filepath.Clean(freshDir) != filepath.Clean(dir) {
+		if lookupErr == nil {
+			lookupErr = fmt.Errorf("frozen generation artifact identity changed")
+		}
+		writeJSONError(w, http.StatusConflict, "v3 generation artifact revalidation failed", lookupErr.Error())
+		return
+	}
+	if fresh.accepted() {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "already_accepted", "slot": fresh.slot})
+		return
+	}
+	view = fresh
+	op = pendingSignerOperation{Kind: "generation-v3", IDs: []string{view.id}}
 	if err := updatePendingSignerV3(signer, op, false); err != nil {
 		writeJSONError(w, http.StatusConflict, "cannot persist generation acceptance intent", err.Error())
 		return
 	}
-	hash, err := submitTxAndRecord(ctx, func(hash string) error {
+	hash, err := submitTxAndRecord(submissionCtx, func(hash string) error {
 		op.TxHash = hash
 		return updatePendingSignerV3(signer, op, false)
-	}, "tx", "polystorechain", "accept-deal-generation-v3", "--deal-id", strconv.FormatUint(candidate.DealId, 10), "--slot", strconv.Itoa(slot), "--acceptance-digest", hex.EncodeToString(digest[:]), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
+	}, "tx", "polystorechain", "accept-deal-generation-v3", "--deal-id", strconv.FormatUint(view.candidate.DealId, 10), "--slot", strconv.Itoa(view.slot), "--acceptance-digest", hex.EncodeToString(view.digest[:]), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
 	cleanup := "retained"
 	if err == nil || errors.Is(err, errTxFailed) || errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
 		if clearErr := updatePendingSignerV3(signer, op, true); clearErr != nil {
@@ -342,5 +467,5 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 			status = "failed"
 		}
 	}
-	writeGenerationAcceptanceV3Outcome(w, status, hash, slot, cleanup, err)
+	writeGenerationAcceptanceV3Outcome(w, status, hash, view.slot, cleanup, err)
 }
