@@ -2,7 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,5 +133,50 @@ func TestValidateGenerationAdmissionV3BoundsAndProviderIdentity(t *testing.T) {
 	a.SetupDigest[0] ^= 1
 	if _, _, err := validateGenerationAdmissionV3(a, 0); err == nil {
 		t.Fatal("accepted mismatched setup digest")
+	}
+}
+
+func TestGenerationAcceptanceV3ReconcilesPersistedHashBeforeReplacementQuery(t *testing.T) {
+	path := submissionTestDB(t)
+	signer := sdk.AccAddress(bytes.Repeat([]byte{9}, 20)).String()
+	hash := strings.Repeat("A", 64)
+	op := pendingSignerOperation{Kind: "generation-v3", IDs: []string{strings.Repeat("b", 64)}, TxHash: hash}
+	if err := updatePendingSignerV3(signer, op, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := closeSessionDB(); err != nil {
+		t.Fatal(err)
+	}
+	if err := initSessionDB(path); err != nil {
+		t.Fatal(err)
+	}
+	queriedCandidate := false
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/cosmos/tx/v1beta1/txs/") {
+			fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"12","code":0}}`, hash)
+			return
+		}
+		queriedCandidate = true
+		http.Error(w, "replacement proposal must not affect old reconciliation", http.StatusInternalServerError)
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcdBase = oldLCD }()
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "keys" {
+			return []byte(signer), nil
+		}
+		return nil, fmt.Errorf("unexpected command")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/sp/generation-v3/accept", strings.NewReader(`{"deal_id":99,"provider":`+fmt.Sprintf("%q", signer)+`}`))
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	w := httptest.NewRecorder()
+	SpAcceptDealGenerationV3(w, req)
+	if w.Code != http.StatusOK || queriedCandidate || !strings.Contains(w.Body.String(), `"status":"reconciled"`) {
+		t.Fatalf("persisted acceptance was not reconciled independently: code=%d query=%t body=%s", w.Code, queriedCandidate, w.Body.String())
+	}
+	if marker, err := loadPendingSigner(signer); err != nil || marker != nil {
+		t.Fatalf("committed acceptance retained signer quarantine: %+v %v", marker, err)
 	}
 }

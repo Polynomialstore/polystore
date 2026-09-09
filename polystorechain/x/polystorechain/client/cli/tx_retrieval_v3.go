@@ -31,7 +31,9 @@ The v3 protocol must be activated on the chain. Proofs and ACK digests must
 match the frozen session and its committed anchor; this command does not
 generate proofs or acknowledge downloaded bytes automatically.`,
 		Args: cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			phase := beginSubmissionPhase(cmd)
+			defer phase.finish(&err)
 			var msg sdk.Msg
 			switch args[0] {
 			case "open":
@@ -62,9 +64,14 @@ generate proofs or acknowledge downloaded bytes automatically.`,
 			if creator == "" || creator != clientCtx.GetFromAddress().String() {
 				return fmt.Errorf("message creator must equal --from")
 			}
+			clientCtx, err = phase.track(clientCtx)
+			if err != nil {
+				return err
+			}
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), msg)
 		},
 	}
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(submissionPhaseFlag, "", "Write a final pre-broadcast failure marker for the invoking gateway")
 	return cmd
 }

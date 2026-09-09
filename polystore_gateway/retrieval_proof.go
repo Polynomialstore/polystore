@@ -165,6 +165,27 @@ func prepareRetrievalMetadata(ctx context.Context, dir string, key retrievalGene
 	if err != nil {
 		return nil, err
 	}
+	var commitments [][]byte
+	var tree [][][32]byte
+	authenticate := func() error {
+		commitments = make([][]byte, 64)
+		leaves := make([][32]byte, 64)
+		for i := range commitments {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			commitments[i], err = crypto_ffi.CommitReceivedBlob(wire[i*types.BLOB_SIZE : (i+1)*types.BLOB_SIZE])
+			if err != nil {
+				return err
+			}
+			leaves[i] = blake2s.Sum256(commitments[i])
+		}
+		tree = buildProofMerkleTree(leaves)
+		if tree[len(tree)-1][0] != key.Root {
+			return fmt.Errorf("MDU #0 does not match frozen manifest root")
+		}
+		return nil
+	}
 	switch key.Version {
 	case 2:
 		builder, err := crypto_ffi.LoadMdu0Builder(wire, key.Users)
@@ -176,27 +197,21 @@ func prepareRetrievalMetadata(ctx context.Context, dir string, key retrievalGene
 			builder.Free()
 		}
 	case 3:
+		// V3 header fields are untrusted until the original encoded MDU #0 is
+		// authenticated against the frozen PolyFS root.
+		if err := authenticate(); err != nil {
+			return nil, err
+		}
 		if err := validateFATV3Metadata(wire, key, true); err != nil {
 			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("unsupported retrieval generation version")
 	}
-	commitments := make([][]byte, 64)
-	leaves := make([][32]byte, 64)
-	for i := range commitments {
-		if err := ctx.Err(); err != nil {
+	if commitments == nil {
+		if err := authenticate(); err != nil {
 			return nil, err
 		}
-		commitments[i], err = crypto_ffi.CommitReceivedBlob(wire[i*types.BLOB_SIZE : (i+1)*types.BLOB_SIZE])
-		if err != nil {
-			return nil, err
-		}
-		leaves[i] = blake2s.Sum256(commitments[i])
-	}
-	tree := buildProofMerkleTree(leaves)
-	if tree[len(tree)-1][0] != key.Root {
-		return nil, fmt.Errorf("MDU #0 does not match frozen manifest root")
 	}
 	return &authenticatedGeneration{rootTable: bytes.Clone(wire[:16*types.BLOB_SIZE]), commitments: commitments, tree: tree}, nil
 }
@@ -435,24 +450,28 @@ func generateFrozenSessionProof(ctx context.Context, dir string, f *frozenRetrie
 // and prepares this exact MDU. Sessions and audits share byte/proof construction,
 // while their distinct challenge and admission semantics remain with the caller.
 func buildFrozenBlobProof(ctx context.Context, ch retrievalchallenge.Challenge, user *authenticatedUserMDU, blob []byte) (types.ChainedProof, error) {
+	return buildFrozenBlobProofAt(ctx, ch.MDUIndex, ch.LeafIndex, ch.Z, user, blob)
+}
+
+func buildFrozenBlobProofAt(ctx context.Context, mduIndex uint64, leafIndex uint32, z [32]byte, user *authenticatedUserMDU, blob []byte) (types.ChainedProof, error) {
 	if err := ctx.Err(); err != nil {
 		return types.ChainedProof{}, err
 	}
-	if uint64(ch.LeafIndex) >= uint64(len(user.commitments)/48) {
+	if uint64(leafIndex) >= uint64(len(user.commitments)/48) {
 		return types.ChainedProof{}, fmt.Errorf("leaf outside authenticated MDU")
 	}
 	commitment, err := crypto_ffi.CommitReceivedBlob(blob)
 	if err != nil {
 		return types.ChainedProof{}, err
 	}
-	expected := user.commitments[int(ch.LeafIndex)*48 : (int(ch.LeafIndex)+1)*48]
+	expected := user.commitments[int(leafIndex)*48 : (int(leafIndex)+1)*48]
 	if !bytes.Equal(commitment, expected) {
 		return types.ChainedProof{}, fmt.Errorf("stored response blob does not match authenticated commitment")
 	}
-	opening, y, err := crypto_ffi.ComputeBlobProof(blob, ch.Z[:])
+	opening, y, err := crypto_ffi.ComputeBlobProof(blob, z[:])
 	if err != nil {
 		return types.ChainedProof{}, err
 	}
 	root := user.tree[len(user.tree)-1][0]
-	return types.ChainedProof{MduIndex: ch.MDUIndex, BlobIndex: ch.LeafIndex, MduRootFr: root[:], RootTableDuCommitment: user.rootCommitment, RootTableDuMerklePath: user.rootPath, ManifestOpening: user.rootOpening, BlobCommitment: commitment, MerklePath: proofMerklePath(user.tree, int(ch.LeafIndex)), ZValue: ch.Z[:], YValue: y, KzgOpeningProof: opening}, nil
+	return types.ChainedProof{MduIndex: mduIndex, BlobIndex: leafIndex, MduRootFr: root[:], RootTableDuCommitment: user.rootCommitment, RootTableDuMerklePath: user.rootPath, ManifestOpening: user.rootOpening, BlobCommitment: commitment, MerklePath: proofMerklePath(user.tree, int(leafIndex)), ZValue: z[:], YValue: y, KzgOpeningProof: opening}, nil
 }

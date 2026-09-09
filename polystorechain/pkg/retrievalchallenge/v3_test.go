@@ -372,6 +372,24 @@ func TestIntegrityRootV3Reader(t *testing.T) {
 	}
 }
 
+func BenchmarkIntegrityRootV3Reader(b *testing.B) {
+	for _, leafCount := range []int{96, 288, 133 * 96} {
+		wire := make([]byte, leafCount*sha256.Size)
+		for i := 0; i < leafCount; i++ {
+			leaf := sha256.Sum256([]byte(fmt.Sprintf("leaf-%d", i)))
+			copy(wire[i*sha256.Size:], leaf[:])
+		}
+		b.Run(fmt.Sprintf("leaves_%d", leafCount), func(b *testing.B) {
+			b.SetBytes(int64(len(wire)))
+			for i := 0; i < b.N; i++ {
+				if _, err := IntegrityRootV3Reader(bytes.NewReader(wire), uint64(leafCount)); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func TestSystematicCoordinateV3Bounds(t *testing.T) {
 	mdu, leaf, slot, err := SystematicCoordinateV3(63, 2, 1)
 	if err != nil || mdu != 2 || leaf != 63 || slot != 7 {
