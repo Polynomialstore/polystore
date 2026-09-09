@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,6 +160,9 @@ func mode2BuildArtifactsWithOptions(ctx context.Context, filePath string, dealID
 		return nil, "", err
 	}
 	fileSize := uint64(fi.Size())
+	if opts.fatVersion == 3 && (!fi.Mode().IsRegular() || fileSize == 0 || fileSize > types.MAX_DEAL_BYTES) {
+		return nil, "", fmt.Errorf("invalid FAT v3 file size or type")
+	}
 	userMdus := uint64(1)
 	if fileSize > 0 {
 		userMdus = 1 + (fileSize-1)/RawMduCapacity
@@ -179,7 +183,7 @@ func mode2BuildArtifactsWithOptions(ctx context.Context, filePath string, dealID
 	}
 	defer builder.Free()
 	witnessCount := builder.GetWitnessCount()
-	if opts.fatVersion == 3 && (witnessCount > 65536 || userMdus > 65536-witnessCount) {
+	if opts.fatVersion == 3 && (witnessCount >= 65536 || userMdus > 65535-witnessCount) {
 		return nil, "", fmt.Errorf("FAT v3 generation exceeds root-table capacity")
 	}
 	totalSteps := userMdus + witnessCount + 2
@@ -516,8 +520,14 @@ func mode2BuildArtifactsWithOptions(ctx context.Context, filePath string, dealID
 		UserMdus:    &userMdus,
 	})
 	if err != nil {
+		if opts.fatVersion == 3 {
+			return nil, "", err
+		}
 		log.Printf("mode2BuildArtifacts: warning: failed to build slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
 	} else if err := writeSlabMetadataFile(stagingDir, meta); err != nil {
+		if opts.fatVersion == 3 {
+			return nil, "", err
+		}
 		log.Printf("mode2BuildArtifacts: warning: failed to write slab metadata deal_id=%d manifest_root=%s: %v", dealID, parsedRoot.Canonical, err)
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, mode2SlabCompleteMarker), []byte("ok\n"), 0o644); err != nil {
@@ -1239,7 +1249,8 @@ func mode2UploadArtifactsToProviders(
 }
 
 type mode2UploadOptions struct {
-	strictV3 bool
+	strictV3        bool
+	expectedV3Slots []mode2SlotAssignment
 }
 
 func mode2UploadArtifactsToProvidersWithOptions(
@@ -1278,7 +1289,14 @@ func mode2UploadArtifactsToProvidersWithOptions(
 	resolveSlotsStarted := time.Now()
 	var slots []mode2SlotAssignment
 	if opts.strictV3 {
-		slots, err = fetchDealMode2SlotsFromLCD(ctx, dealID)
+		deal, height, queryErr := queryRetrievalDeal(ctx, dealID, 0)
+		if queryErr != nil {
+			return queryErr
+		}
+		slots, err = validateUploadDealV3(deal, height)
+		if err == nil && !slices.Equal(slots, opts.expectedV3Slots) {
+			return fmt.Errorf("provider assignments changed before FAT v3 fanout")
+		}
 	} else {
 		slots, err = resolveDealMode2Slots(ctx, dealID)
 	}
@@ -1286,23 +1304,10 @@ func mode2UploadArtifactsToProvidersWithOptions(
 		return err
 	}
 	if len(slots) < int(stripe.slotCount) {
-		return fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
+		return fmt.Errorf("not enough Mode 2 slots")
 	}
-	if opts.strictV3 {
-		if stripe.k != 8 || stripe.m != 4 || stripe.rows != 8 || stripe.slotCount != 12 || len(slots) != 12 {
-			return fmt.Errorf("FAT v3 requires the fixed Mode 2 K=8,M=4 profile with 12 slots")
-		}
-		seen := make(map[string]struct{}, len(slots))
-		for slot, assignment := range slots {
-			provider := strings.TrimSpace(assignment.Provider)
-			if assignment.Status != 1 || strings.TrimSpace(assignment.PendingProvider) != "" || provider == "" {
-				return fmt.Errorf("FAT v3 slot %d must be active, stable, and assigned", slot)
-			}
-			if _, exists := seen[provider]; exists {
-				return fmt.Errorf("FAT v3 slot providers must be distinct")
-			}
-			seen[provider] = struct{}{}
-		}
+	if opts.strictV3 && (stripe.k != 8 || stripe.m != 4 || stripe.slotCount != 12) {
+		return fmt.Errorf("invalid FAT v3 stripe profile")
 	}
 	if profile != nil {
 		profile.addDuration("mode2_resolve_slots_ms", time.Since(resolveSlotsStarted))
@@ -1334,7 +1339,7 @@ func mode2UploadArtifactsToProvidersWithOptions(
 			// unavailable for uploads (reads should route around repairing slots).
 			continue
 		}
-		if localProviderAddr != "" && provider == localProviderAddr {
+		if !opts.strictV3 && localProviderAddr != "" && provider == localProviderAddr {
 			continue
 		}
 		targets = append(targets, slotTarget{slot: slot, provider: provider})
@@ -1781,11 +1786,11 @@ func mode2UploadArtifactsToProvidersWithOptions(
 	}
 	if opts.strictV3 {
 		integrityPath := filepath.Join(finalDir, integrityLeavesV3File)
-		integritySizes, err := statSizes(integrityPath, int64(retrievalchallenge.MaxIntegrityLeaves*32))
+		integrityInfo, err := os.Stat(integrityPath)
 		if err != nil {
 			return err
 		}
-		if integritySizes.full != int64(userMdus*retrievalchallenge.IntegrityLeavesPerUserMDU*32) || integritySizes.send != integritySizes.full {
+		if !integrityInfo.Mode().IsRegular() || integrityInfo.Size() != int64(userMdus*retrievalchallenge.IntegrityLeavesPerUserMDU*32) {
 			return fmt.Errorf("FAT v3 integrity leaf vector has invalid size or sparse encoding")
 		}
 		group := make([]uploadTask, 0, len(metadataProviders))
@@ -1798,8 +1803,8 @@ func mode2UploadArtifactsToProvidersWithOptions(
 				kind:         spUploadBundleKindIntegrity,
 				providerBase: base,
 				path:         integrityPath,
-				sizeBytes:    integritySizes.full,
-				sendBytes:    integritySizes.full,
+				sizeBytes:    integrityInfo.Size(),
+				sendBytes:    integrityInfo.Size(),
 				maxBytes:     int64(retrievalchallenge.MaxIntegrityLeaves * 32),
 			})
 		}

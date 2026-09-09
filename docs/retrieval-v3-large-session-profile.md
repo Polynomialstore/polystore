@@ -599,6 +599,72 @@ before anchor capture and after reference release. The CLI does not generate
 proofs, authenticate downloaded bytes, or create ACK digests; those require the
 frozen context and provider/client integration specified above.
 
+## Production upload of an initial v3 generation
+
+`POST /gateway/upload?deal_id=0&fat_version=3` opts into the native v3
+producer. Send one multipart `file`; optional fields are `owner`, `file_path`
+and `file_size_bytes`. Query `upload_id` enables the existing asynchronous
+upload/status flow. The `(deal_id, upload_id)` identity is atomically bound to
+FAT version, including retries and cached results. Absent `fat_version`, or
+explicit `fat_version=2`, retains the v2 response and behavior.
+
+This initial producer requires an existing, empty, unexpired generation-zero
+deal whose actual chain profile is K=8/M=4 and whose twelve distinct slots are
+active without pending replacements. It accepts nonempty plain files only;
+append, implicit deal creation, file flags, PolyCE, fake ingest and fast ingest
+are rejected. Only query parameters select the version and asynchronous identity.
+The file's contents are opaque; callers must not label externally encrypted
+bytes as a protocol encryption mode.
+
+During RS encoding, each worker hashes all 96 encoded blobs, including parity
+and padding, and writes one 3,072-byte block to its deterministic sidecar offset.
+The producer streams the completed vector to calculate its root, replaces the
+scalar-packed FAT header, and then computes the original encoded MDU0 root.
+Artifacts remain immutable and provisional until native generation admission.
+
+The producer uploads MDU0, witness/manifest metadata, the complete integrity
+sidecar and the assigned user shards to all twelve providers using the existing
+bundle transport. Even a colocated provider receives its bundle through its
+registered endpoint. Unsupported bundle endpoints and any incomplete fanout
+fail the upload; no per-artifact fallback drops the sidecar. Provider assignments
+are checked against the original snapshot before fanout and again before a
+successful response.
+
+A successful response contains `generation_candidate`, with decimal-string
+`deal_id`, `expected_current_generation`, `size_bytes`, `total_mdus`,
+`witness_mdus`, `integrity_leaf_count`; hex `polyfs_root`, `integrity_root`;
+`previous_polyfs_root`; `commit_action="propose-deal-generation-v3"` and
+`required_acceptances=12`. There is no top-level legacy `cid` or
+`manifest_root`, including asynchronous status and cached results.
+
+Save the response as `upload.json`, then use the native CLI proposal route
+with your usual owner signing/network flags:
+
+```sh
+polystorechaind tx polystorechain propose-deal-generation-v3 \
+  --deal-id "$(jq -r .generation_candidate.deal_id upload.json)" \
+  --expected-current-generation "$(jq -r .generation_candidate.expected_current_generation upload.json)" \
+  --previous-polyfs-root "$(jq -r .generation_candidate.previous_polyfs_root upload.json)" \
+  --polyfs-root "$(jq -r .generation_candidate.polyfs_root upload.json)" \
+  --integrity-root "$(jq -r .generation_candidate.integrity_root upload.json)" \
+  --size "$(jq -r .generation_candidate.size_bytes upload.json)" \
+  --total-mdus "$(jq -r .generation_candidate.total_mdus upload.json)" \
+  --witness-mdus "$(jq -r .generation_candidate.witness_mdus upload.json)" \
+  --integrity-leaf-count "$(jq -r .generation_candidate.integrity_leaf_count upload.json)"
+```
+
+For asynchronous status, the candidate is under `result.generation_candidate`.
+The size flag is `--size`, not `--size-bytes`. After proposal inclusion, invoke
+the authenticated acceptance action below on each provider. Confirm the pending
+candidate's acceptance mask is `4095` (`0xfff`), then have the owner submit
+`finalize-deal-generation-v3 --deal-id <id> --generation 1 --polyfs-root <root>`.
+The gateway does not sign proposals or finalize on the owner's behalf. Both
+legacy gateway update relays reject locally staged FAT v3 roots; a direct legacy
+chain transaction cannot inspect MDU0, so this is a local relay guard, not a new
+consensus format check. Chain activation remains disabled by default and must be
+qualified separately. Upload acceptance alone does not qualify retrieval or
+chain throughput.
+
 ## Provider-daemon integrity artifact
 
 A generation-local `integrity_leaves_v3.bin` contains the ordered raw 32-byte

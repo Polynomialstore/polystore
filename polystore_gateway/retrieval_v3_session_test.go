@@ -15,9 +15,7 @@ import (
 	cosmosmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bolt "go.etcd.io/bbolt"
-	"golang.org/x/crypto/blake2s"
 	"polystorechain/pkg/retrievalchallenge"
-	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -243,74 +241,13 @@ func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, re
 	if err := os.WriteFile(payload, bytes.Repeat([]byte{0x5a}, 1024), 0600); err != nil {
 		t.Fatal(err)
 	}
-	result, oldDir, err := mode2BuildArtifacts(context.Background(), payload, dealID, "General:rs=8+4", "payload.bin", 0)
+	result, newDir, err := mode2BuildArtifactsWithOptions(context.Background(), payload, dealID, "General:rs=8+4", "payload.bin", 0, mode2BuildOptions{fatVersion: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
 	metadataMDUs := uint64(1 + result.witnessMdus)
-	leaves := make([][32]byte, result.userMdus*retrievalchallenge.IntegrityLeavesPerUserMDU)
-	for user := uint64(0); user < result.userMdus; user++ {
-		mdu := metadataMDUs + user
-		for slot := uint32(0); slot < 12; slot++ {
-			shard, err := os.ReadFile(filepath.Join(oldDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mdu, slot)))
-			if err != nil || len(shard) != 8*types.BLOB_SIZE {
-				t.Fatalf("read slot artifact %d/%d: %v size=%d", mdu, slot, err, len(shard))
-			}
-			for row := uint32(0); row < 8; row++ {
-				leaf := slot*8 + row
-				hash, err := retrievalchallenge.IntegrityLeafV3(mdu, leaf, shard[int(row)*types.BLOB_SIZE:int(row+1)*types.BLOB_SIZE])
-				if err != nil {
-					t.Fatal(err)
-				}
-				leaves[user*retrievalchallenge.IntegrityLeavesPerUserMDU+uint64(leaf)] = hash
-			}
-		}
-	}
-	integrity, err := retrievalchallenge.IntegrityRootV3(leaves)
-	if err != nil {
-		t.Fatal(err)
-	}
-	vector := make([]byte, 0, len(leaves)*32)
-	for _, leaf := range leaves {
-		vector = append(vector, leaf[:]...)
-	}
-	if err := os.WriteFile(filepath.Join(oldDir, integrityLeavesV3File), vector, 0600); err != nil {
-		t.Fatal(err)
-	}
-	mdu0, err := os.ReadFile(filepath.Join(oldDir, "mdu_0.bin"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	builder, err := crypto_ffi.LoadMdu0Builder(mdu0, result.userMdus)
-	if err != nil {
-		t.Fatal(err)
-	}
-	recordCount := builder.GetRecordCount()
-	builder.Free()
-	writePackedFATHeaderV3(t, mdu0, retrievalchallenge.FATV3Header{RecordCount: recordCount, LeafCount: uint64(len(leaves)), IntegrityRoot: integrity})
-	if err := os.WriteFile(filepath.Join(oldDir, "mdu_0.bin"), mdu0, 0600); err != nil {
-		t.Fatal(err)
-	}
-	polyfsLeaves := make([][32]byte, 64)
-	for i := range polyfsLeaves {
-		commitment, err := crypto_ffi.CommitReceivedBlob(mdu0[i*types.BLOB_SIZE : (i+1)*types.BLOB_SIZE])
-		if err != nil {
-			t.Fatal(err)
-		}
-		polyfsLeaves[i] = blake2s.Sum256(commitment)
-	}
-	tree := buildProofMerkleTree(polyfsLeaves)
-	root, err := parseManifestRoot("0x" + hex.EncodeToString(tree[len(tree)-1][0][:]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	newDir := dealScopedDir(dealID, root)
-	if err := os.MkdirAll(filepath.Dir(newDir), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(oldDir, newDir); err != nil {
-		t.Fatal(err)
-	}
+	root := result.manifestRoot
+	integrity := result.integrityRoot
 	r, height := frozenSessionV3Fixture(t, 1024, result.userMdus)
 	r.Session.PolyfsRoot = bytes.Clone(root.Bytes[:])
 	r.Session.IntegrityRoot = integrity[:]
