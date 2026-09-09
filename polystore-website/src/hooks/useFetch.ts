@@ -1,3 +1,4 @@
+import { retrievalDiagnostic, timeRetrieval } from '../lib/retrievalDiagnostics'
 import { useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
@@ -185,25 +186,32 @@ export function useFetch() {
         setProgress((p) => ({ ...p, phase: 'fetching' }))
         const e = await endpoint(session.payee)
         const result = await transport.fetchWindow({ session, directBase: e?.baseUrl || input.serviceBase, p2pTarget: e?.p2pTarget, preference: input.routePreference, signal })
+        retrievalDiagnostic({ phase: 'verified_window', sessionId: session.sessionId, bytes: result.data.length })
         route = result.backend; return result.data
       }
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
         const gatewayBase = job.state.pending?.proofBase ?? availableProofBase()
         job.prepare(currentOrdinal, sessions, gatewayBase)
-        const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
-          confirm: (wave) => payment.confirm(wave, signal, job.key), signal,
+        const outcomes = await timeRetrieval('ack_and_provider_settlement', () => confirmAndRequestRetrievalProofs(sessions, {
+          confirm: (wave) => timeRetrieval('owner_ack', () => payment.confirm(wave, signal, job.key)), signal,
           gatewayBase,
-          onConfirmed: () => { confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
-        })
+          onConfirmed: () => { retrievalDiagnostic({ phase: 'acked', sessionIds: sessions.map((s) => s.sessionId) }); confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
+        }))
         if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
         for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
         job.complete(currentOrdinal, outcomes)
         if (job.state.cleanup) { await payment.forget(job.state.cleanup, job.key); job.cleaned() }
       }
       const consume = async (window: RetrievalWindow, bytes: Uint8Array) => {
-        for (const part of decodeRetrievalOutput(pin, file, window, bytes)) await sink.write(part.offset, part.bytes)
+        await timeRetrieval('decode_write', async () => {
+          for (const part of decodeRetrievalOutput(pin, file, window, bytes)) {
+            await sink.write(part.offset, part.bytes)
+            retrievalDiagnostic({ phase: 'verified_write', offset: Number(part.offset), bytes: part.bytes.length })
+          }
+        })
       }
+      const flushOutput = async () => { await timeRetrieval('flush', () => sink.flush()); retrievalDiagnostic({ phase: 'flushed' }) }
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0, {
         fetch: async (index) => {
           let last: unknown
@@ -232,7 +240,7 @@ export function useFetch() {
             await executeRetrievalWindows(windows, {
               open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key) },
               fetchAndVerify: async (session) => { try { return await fetchSession(session) } catch (error) { fetchFailed = true; throw error } },
-              consume, flush: () => sink.flush(), confirm,
+              consume, flush: flushOutput, confirm,
             }, signal, 64)
             return
           } catch (error) { signal.throwIfAborted(); if (!fetchFailed) throw error }
@@ -251,7 +259,7 @@ export function useFetch() {
               window.slices.forEach((slice, i) => selected.set(encoded.subarray(slice.encodedBlobIndex * BLOB_SIZE_BYTES, (slice.encodedBlobIndex + 1) * BLOB_SIZE_BYTES), i * BLOB_SIZE_BYTES))
               await consume(window, selected)
             }
-            await sink.flush()
+            await flushOutput()
           }, confirm,
         }, signal)
       }

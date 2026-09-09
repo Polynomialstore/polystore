@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import * as transactions from './retrievalTransactions'
+import * as diagnostics from './retrievalDiagnostics'
 import type { FrozenSession, PinnedGeneration, RetrievalWindow } from './retrieval'
 
 // Execute both actual hook paths; replace only transport/storage boundaries.
@@ -33,6 +34,7 @@ function fixture(mode: 'open' | 'ack') {
     return hash
   } }
   const modules: Record<string, unknown> = {
+    '../lib/retrievalDiagnostics': diagnostics,
     wagmi: { useAccount: () => ({ address }), usePublicClient: () => client, useWalletClient: () => ({ data: wallet }) },
     '@tanstack/react-query': { useQuery: () => ({ data: null }) },
     '../config': { appConfig: { chainId: 1, cosmosChainId: 'chain', polystorePrecompile: precompile } },

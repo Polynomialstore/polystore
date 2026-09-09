@@ -1,3 +1,4 @@
+import { timeRetrieval } from '../lib/retrievalDiagnostics'
 import { useCallback, useMemo } from 'react'
 import type { GatewayPlanResponse, UploadResult } from '../api/gatewayClient'
 import {
@@ -642,7 +643,8 @@ export function useTransportRouter() {
     const verify = async (get: (signal: AbortSignal) => ReturnType<typeof providerFetchRetrievalWindow>, signal: AbortSignal) => {
       const activeSignal = req.signal ? AbortSignal.any([req.signal, signal]) : signal
       activeSignal.throwIfAborted()
-      const bytes = await workerClient.verifyRetrievalWindow(req.session, await get(activeSignal))
+      const response = await timeRetrieval('window_transport', () => get(activeSignal), req.session.sessionId)
+      const bytes = await timeRetrieval('browser_verify', () => workerClient.verifyRetrievalWindow(req.session, response), req.session.sessionId)
       activeSignal.throwIfAborted()
       return bytes
     }

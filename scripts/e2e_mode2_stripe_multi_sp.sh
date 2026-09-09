@@ -72,8 +72,8 @@ export POLYSTORE_MODE2_UPLOAD_PARALLELISM="${POLYSTORE_MODE2_UPLOAD_PARALLELISM:
 if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then
   export E2E_MODE2_STREAMED_BYTES="${E2E_MODE2_STREAMED_BYTES:-16252928}"
   case "$E2E_MODE2_STREAMED_BYTES" in
-    16252928|1073741824) ;;
-    *) echo "ERROR: streamed retrieval supports 16252928 or 1073741824 bytes" >&2; exit 1 ;;
+    16252928|130023424|1073741824) ;;
+    *) echo "ERROR: streamed retrieval supports 16252928, 130023424 or 1073741824 bytes" >&2; exit 1 ;;
   esac
   export E2E_MODE2_FAST=0 PROVIDER_COUNT=12 VITE_DEFAULT_RS_K=8 VITE_DEFAULT_RS_M=4
   export CGO_ENABLED=1 POLYSTORE_CORE_LIB_DIR="$ROOT_DIR/polystore_core/target/release"
@@ -116,6 +116,10 @@ fi
 echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
   (cd "$ROOT_DIR/polystore-website" && npx playwright install --with-deps chromium)
+fi
+if [ "${E2E_MODE2_STREAMED:-0}" = "1" ] && [ "${E2E_MODE2_STREAMED_BYTES:-0}" = "1073741824" ]; then
+  # Prove the browser can persist the full output before funding a long retrieval.
+  (cd "$ROOT_DIR/polystore-website" && npm run test:e2e -- tests/retrieval-v2-browser.spec.ts --grep '1GiB OPFS' --retries=0 --workers=1 --output="$ROOT_DIR/_artifacts/devnet_alpha_multi_sp/opfs-preflight")
 fi
 playwright_args=("$E2E_MODE2_SPEC")
 if [ "${E2E_MODE2_STREAMED:-0}" = "1" ]; then

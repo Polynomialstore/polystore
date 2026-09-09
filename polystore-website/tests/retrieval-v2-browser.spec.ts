@@ -1,8 +1,9 @@
-import { test, expect, chromium } from '@playwright/test'
+import { RetrievalProgress, startRetrievalWatchdog } from './utils/retrievalProgress'
+import { test, expect } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import { readFile, mkdtemp, rm } from 'node:fs/promises'
+import { readFile, statfs, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { persistentTest } from './utils/persistentBrowser'
 import { gunzipSync } from 'node:zlib'
 import type { FrozenSession, PinnedGeneration, RetrievalWindow } from '../src/lib/retrieval'
 
@@ -320,24 +321,29 @@ test('secured selected window uses real Chromium Worker/WASM and OPFS before sim
   expect(sessionQueries).toBe(2); expect(metadataQueries).toBe(2); expect(windowQueries).toBe(2)
 })
 
-test('1GiB OPFS output preserves every flushed chunk through one in-place handle', async () => {
+persistentTest('1GiB OPFS output preserves every flushed chunk through one in-place handle', async ({ page }, testInfo) => {
   test.setTimeout(120_000)
-  const chunk = Buffer.alloc(8388608)
-  for (let i = 0; i < chunk.length; i++) chunk[i] = (i * 17 + (i >>> 8)) & 255
-  const hashes = Array.from({ length: 128 }, (_, i) => {
-    chunk.writeUInt32LE(i, 0); chunk.writeUInt32LE(i ^ 0xabcdef, chunk.length - 4)
-    return createHash('sha256').update(chunk).digest('hex')
+  const disk = await statfs(tmpdir())
+  expect(disk.bavail * disk.bsize, 'free disk for 1 GiB OPFS check').toBeGreaterThanOrEqual(3 * 2 ** 30)
+  const progress = new RetrievalProgress()
+  progress.enter('opfs_fixture_hashes')
+  let failure: Error | undefined, saved = Promise.resolve()
+  const persist = () => {
+    const json = JSON.stringify({ ...progress.snapshot(), phases: progress.phases })
+    saved = saved.then(() => writeFile(testInfo.outputPath('opfs-progress.json'), json))
+    void saved.catch(() => {})
+  }
+  const stop = startRetrievalWatchdog(progress, () => { console.log('[OPFS heartbeat]', JSON.stringify(progress.snapshot())); persist() }, (error) => {
+    failure = error; persist(); void page.context().close().catch(() => {})
   })
-  // Playwright's ephemeral context hit its storage ceiling below 1GiB on
-  // this host. Use a fresh disk-backed profile, never the user's Chrome data.
-  const profile = await mkdtemp(join(tmpdir(), 'polystore-opfs-257-'))
-  let context: Awaited<ReturnType<typeof chromium.launchPersistentContext>> | undefined
   try {
-    context = await chromium.launchPersistentContext(profile, {
-      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
-      headless: true, baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:5173',
+    const chunk = Buffer.alloc(8388608)
+    for (let i = 0; i < chunk.length; i++) chunk[i] = (i * 17 + (i >>> 8)) & 255
+    const hashes = Array.from({ length: 128 }, (_, i) => {
+      chunk.writeUInt32LE(i, 0); chunk.writeUInt32LE(i ^ 0xabcdef, chunk.length - 4)
+      return createHash('sha256').update(chunk).digest('hex')
     })
-    const page = await context.newPage()
+    await page.exposeFunction('__opfsProgress', (phase: string, bytes: number) => { progress.enter(phase); progress.advance(bytes) })
     await page.route('**/retrieval-output-harness', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>OPFS output check</title>' }))
     await page.goto('/retrieval-output-harness')
     const result = await page.evaluate(async (hashes) => {
@@ -345,6 +351,8 @@ test('1GiB OPFS output preserves every flushed chunk through one in-place handle
       const { createRetrievalOutput } = await import(/* @vite-ignore */ path) as typeof import('../src/lib/retrievalFlow')
       const bytes = new Uint8Array(8388608), view = new DataView(bytes.buffer)
       for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 17 + (i >>> 8)) & 255
+      const report = (window as unknown as { __opfsProgress: (phase: string, bytes: number) => Promise<void> }).__opfsProgress
+      await report('opfs_write_flush', 0)
       const output = await createRetrievalOutput(1073741824n)
       let flushed = 0
       try {
@@ -352,17 +360,22 @@ test('1GiB OPFS output preserves every flushed chunk through one in-place handle
           view.setUint32(0, i, true); view.setUint32(bytes.length - 4, i ^ 0xabcdef, true)
           await output.write(BigInt(i * bytes.length), bytes)
           await output.flush(); flushed++
+          await report('opfs_write_flush', flushed * bytes.length)
         }
         const file = await output.file()
         if (file.size !== 1073741824) throw new Error('output length mismatch')
+        await report('opfs_read_hash', 0)
         for (let i = 0; i < 128; i++) {
           const bytes = await file.slice(i * 8388608, (i + 1) * 8388608).arrayBuffer()
           const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (v) => v.toString(16).padStart(2, '0')).join('')
           if (hash !== hashes[i]) throw new Error(`wrong persisted chunk ${i}`)
+          await report('opfs_read_hash', (i + 1) * 8388608)
         }
         return { size: file.size, flushed }
       } finally { await output.cleanup() }
     }, hashes)
+    if (failure) throw failure
     expect(result).toEqual({ size: 1073741824, flushed: 128 })
-  } finally { try { await context?.close() } finally { await rm(profile, { recursive: true, force: true }) } }
+    progress.enter('done')
+  } finally { stop(); persist(); await saved }
 })

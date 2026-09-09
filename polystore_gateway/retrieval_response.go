@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -90,6 +91,7 @@ func validateSessionFunding(s types.RetrievalSession) error {
 }
 
 func serveFrozenRetrievalWindow(w http.ResponseWriter, r *http.Request, root ManifestRoot, index uint64, response *types.QueryGetRetrievalSessionResponse, height uint64) {
+	started := time.Now()
 	media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
 	if err != nil || media != "multipart/form-data" || params["version"] != "2" {
 		writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
@@ -152,11 +154,23 @@ func serveFrozenRetrievalWindow(w http.ResponseWriter, r *http.Request, root Man
 		writeJSONError(w, http.StatusNotFound, "retained generation unavailable", err.Error())
 		return
 	}
+	// Timings describe this provider response, not delivery or user acknowledgement.
+	// Session identity is public; never include request headers or signing material.
+	generationStarted := time.Now()
+	admissionMs := generationStarted.Sub(started).Seconds() * 1000
+	var generationMs, persistMs, writeMs float64
+	stage, success := "generation", false
+	defer func() {
+		log.Printf("provider-daemon retrieval timing session=%x admission_ms=%.3f generation_ms=%.3f persist_ms=%.3f write_ms=%.3f total_ms=%.3f stage=%s success=%t", c.ID, admissionMs, generationMs, persistMs, writeMs, time.Since(started).Seconds()*1000, stage, success)
+	}()
 	proofs, window, err := generateFrozenSessionProof(r.Context(), dir, f)
+	generationMs = time.Since(generationStarted).Seconds() * 1000
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to produce authenticated session window", err.Error())
 		return
 	}
+	stage = "persist"
+	persistStarted := time.Now()
 	metadata, err := json.Marshal(windowMetadata(f, proofs))
 	if err != nil || len(metadata) > maxRetrievalMetadataBytes {
 		writeJSONError(w, http.StatusInternalServerError, "session metadata exceeds response bound", "")
@@ -164,13 +178,21 @@ func serveFrozenRetrievalWindow(w http.ResponseWriter, r *http.Request, root Man
 	}
 	// Persist a complete verified proof atomically before exposing bytes. A write
 	// failure leaves it recoverable; this record is never evidence of a user ACK.
-	if err := storeFrozenSessionProof(f, proofs); err != nil {
+	err = storeFrozenSessionProof(f, proofs)
+	persistMs = time.Since(persistStarted).Seconds() * 1000
+	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "failed to persist session proof", err.Error())
 		return
 	}
-	if err := writeRetrievalWindow(w, metadata, window); err != nil {
+	stage = "write"
+	writeStarted := time.Now()
+	err = writeRetrievalWindow(w, metadata, window)
+	writeMs = time.Since(writeStarted).Seconds() * 1000
+	if err != nil {
 		log.Printf("provider-daemon retrieval response failed session=%x: %v", c.ID, err)
+		return
 	}
+	stage, success = "complete", true
 }
 
 func writeRetrievalWindow(w http.ResponseWriter, metadata, window []byte) error {
