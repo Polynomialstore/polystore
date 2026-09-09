@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -308,5 +309,39 @@ func BenchmarkMode2BuildArtifactsFATVersion(b *testing.B) {
 				b.StartTimer()
 			}
 		})
+	}
+}
+
+func TestProviderBundleUploadBatchesRespectReceiverLimit(t *testing.T) {
+	for _, count := range []int{4096, 4097, 8193} {
+		bundle := providerBundleUpload{providerBase: "http://provider", url: "http://provider/sp/upload_bundle"}
+		for i := 0; i < count; i++ {
+			task := uploadTask{mduIndex: strconv.Itoa(i), sizeBytes: int64(i + 1)}
+			bundle.tasks = append(bundle.tasks, task)
+			bundle.sizeBytes += task.sizeBytes
+		}
+		batches := splitProviderBundleUpload(bundle)
+		var got []uploadTask
+		var totalBytes int64
+		for _, batch := range batches {
+			if len(batch.tasks) == 0 || len(batch.tasks) > spUploadBundleMaxArtifacts {
+				t.Fatalf("%d artifacts: invalid batch size %d", count, len(batch.tasks))
+			}
+			if batch.providerBase != bundle.providerBase || batch.url != bundle.url {
+				t.Fatal("batch changed provider destination")
+			}
+			var batchBytes int64
+			for _, task := range batch.tasks {
+				batchBytes += task.sizeBytes
+			}
+			if batch.sizeBytes != batchBytes {
+				t.Fatalf("incorrect batch byte accounting: %d != %d", batch.sizeBytes, batchBytes)
+			}
+			totalBytes += batch.sizeBytes
+			got = append(got, batch.tasks...)
+		}
+		if !slices.Equal(got, bundle.tasks) || totalBytes != bundle.sizeBytes {
+			t.Fatalf("%d artifacts: batches lost, reordered or duplicated payloads", count)
+		}
 	}
 }

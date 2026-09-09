@@ -45,6 +45,46 @@ type mode2BuildOptions struct {
 	fatVersion uint16
 }
 
+type uploadTask struct {
+	kind                 string
+	providerBase         string
+	url                  string
+	path                 string
+	sizeBytes            int64
+	sendBytes            int64
+	maxBytes             int64
+	dealID               string
+	manifestRoot         string
+	previousManifestRoot string
+	mduIndex             string
+	slot                 string
+}
+
+type providerBundleUpload struct {
+	providerBase string
+	url          string
+	tasks        []uploadTask
+	sizeBytes    int64
+}
+
+// splitProviderBundleUpload respects the receiver's artifact limit. Callers run
+// these batches serially per provider so larger generations add no concurrency.
+func splitProviderBundleUpload(bundle providerBundleUpload) []providerBundleUpload {
+	var batches []providerBundleUpload
+	for tasks := range slices.Chunk(bundle.tasks, spUploadBundleMaxArtifacts) {
+		batch := bundle
+		batch.tasks = tasks
+		batch.sizeBytes = 0
+		for _, task := range tasks {
+			if task.sizeBytes > 0 {
+				batch.sizeBytes += task.sizeBytes
+			}
+		}
+		batches = append(batches, batch)
+	}
+	return batches
+}
+
 type providerUploadHTTPError struct {
 	statusCode int
 	status     string
@@ -1469,21 +1509,6 @@ func mode2UploadArtifactsToProvidersWithOptions(
 	dealIDStr := strconv.FormatUint(dealID, 10)
 	sparseUploads := mode2SparseUploadEnabled()
 
-	type uploadTask struct {
-		kind                 string
-		providerBase         string
-		url                  string
-		path                 string
-		sizeBytes            int64
-		sendBytes            int64
-		maxBytes             int64
-		dealID               string
-		manifestRoot         string
-		previousManifestRoot string
-		mduIndex             string
-		slot                 string
-	}
-
 	isRetryableUploadErr := func(err error) bool {
 		if err == nil {
 			return false
@@ -1932,13 +1957,6 @@ func mode2UploadArtifactsToProvidersWithOptions(
 		}
 	}()
 
-	type providerBundleUpload struct {
-		providerBase string
-		url          string
-		tasks        []uploadTask
-		sizeBytes    int64
-	}
-
 	uploadBundle := func(ctx context.Context, bundle providerBundleUpload) error {
 		const maxAttempts = 3
 		targetKey := mode2UploadTargetMetricKey(bundle.providerBase)
@@ -2209,26 +2227,32 @@ func mode2UploadArtifactsToProvidersWithOptions(
 			eg.Go(func() error {
 				inFlight.Add(1)
 				defer inFlight.Add(-1)
-				err := uploadBundle(egctx, bundle)
-				if err != nil && !opts.strictV3 && isBundleUnsupportedErr(err) {
-					if profile != nil {
-						profile.addCount("mode2_bundle_fallback_providers", 1)
+				batches := []providerBundleUpload{bundle}
+				if opts.strictV3 {
+					batches = splitProviderBundleUpload(bundle)
+				}
+				for _, bundle := range batches {
+					err := uploadBundle(egctx, bundle)
+					if err != nil && !opts.strictV3 && isBundleUnsupportedErr(err) {
+						if profile != nil {
+							profile.addCount("mode2_bundle_fallback_providers", 1)
+						}
+						for _, task := range bundle.tasks {
+							if err := uploadBlob(egctx, task); err != nil {
+								captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+								return err
+							}
+							bump(task.sizeBytes)
+						}
+						return nil
+					}
+					if err != nil {
+						captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
+						return err
 					}
 					for _, task := range bundle.tasks {
-						if err := uploadBlob(egctx, task); err != nil {
-							captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
-							return err
-						}
 						bump(task.sizeBytes)
 					}
-					return nil
-				}
-				if err != nil {
-					captureFirstNonContextError(err, &firstUploadErr, &firstUploadErrMu)
-					return err
-				}
-				for _, task := range bundle.tasks {
-					bump(task.sizeBytes)
 				}
 				return nil
 			})

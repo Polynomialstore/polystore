@@ -624,8 +624,10 @@ Artifacts remain immutable and provisional until native generation admission.
 
 The producer uploads MDU0, witness/manifest metadata, the complete integrity
 sidecar and the assigned user shards to all twelve providers using the existing
-bundle transport. Even a colocated provider receives its bundle through its
-registered endpoint. Unsupported bundle endpoints and any incomplete fanout
+bundle transport, in batches of at most 4,096 artifacts sent serially per
+provider. All batches must finish; file size does not increase concurrent
+requests. Even a colocated provider receives its bundles through its registered
+endpoint. Unsupported bundle endpoints and any incomplete fanout
 fail the upload; no per-artifact fallback drops the sidecar. Provider assignments
 are checked against the original snapshot before fanout and again before a
 successful response.
