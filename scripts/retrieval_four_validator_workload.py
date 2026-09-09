@@ -32,6 +32,9 @@ API = "/polystorechain/polystorechain/v1"
 ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 COUNTS = (1, 2, 8)
 SUSTAINED_RATES = (0.25, 0.5, 1, 2, 4)
+OPEN_SESSION_PREPARATION_GAS = 400_000
+OPEN_SESSION_BATCH_MAX = 64
+OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
 
 
 def mode2_layout(k):
@@ -62,7 +65,10 @@ def sustained_profile(k, step_seconds, offsets, proof_gas):
         proofs_per_session_unit="individual chained openings (legacy field name)",
         warmup_openings=8 * openings, measured_openings=len(offsets) * openings,
         bundle_opening_distribution={str(openings): inventory},
-        native_message_batching=dict(open_session_messages_per_preparation_transaction_max=64,
+        native_message_batching=dict(open_session_messages_per_preparation_transaction_max=OPEN_SESSION_BATCH_MAX,
+            open_session_gas_limit_per_message=OPEN_SESSION_PREPARATION_GAS,
+            open_session_batch_gas_limit_max=OPEN_SESSION_BATCH_GAS_CAP,
+            open_session_gas_limit_note="conservative pilot ceiling, not measured full execution cost",
             proof_sessions_per_submission_transaction=1, cross_provider_crypto_aggregation=False),
         k=k, m=layout["m"], assignment_count=layout["assignments"],
         provider_daemon_count=layout["assignments"],
@@ -819,13 +825,14 @@ def sustained_offsets(step_seconds):
 
 def open_session_batch(lifecycle, operations, directory, command):
     """SDK append signs one atomic transaction with one owner sequence."""
-    if not 1 <= len(operations) <= 64:
+    if not 1 <= len(operations) <= OPEN_SESSION_BATCH_MAX:
         raise ValueError("open batch must contain 1..64 sessions")
     owner = operations[0]["open-session"]["signer"]
     if any(op["open-session"]["signer"] != owner for op in operations):
         raise ValueError("atomic batch requires one owner")
     unsigned, signed = directory / "unsigned.jsonl", directory / "signed.json"
     directory.mkdir(mode=0o700)
+    generated_gas = 0
     with unsigned.open("x") as output:
         for operation in operations:
             args = operation["open-session"]["submit"] + ["--generate-only"]
@@ -833,6 +840,10 @@ def open_session_batch(lifecycle, operations, directory, command):
             messages = tx["body"]["messages"]
             if len(messages) != 1 or messages[0]["@type"] != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSession":
                 raise ValueError("generated open transaction has unexpected messages")
+            gas = producer.uint(tx.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
+            if gas != OPEN_SESSION_PREPARATION_GAS:
+                raise ValueError("generated open transaction has unexpected gas limit")
+            generated_gas += gas
             message, expected = messages[0], operation["proof_expectation"]["session"]
             if (message["creator"] != owner or message["provider"] != expected["provider"] or
                     message["authorized_proof_provider"] != expected["authorized_proof_provider"] or
@@ -851,6 +862,9 @@ def open_session_batch(lifecycle, operations, directory, command):
     original = [json.loads(line)["body"]["messages"][0] for line in unsigned.read_text().splitlines()]
     if value["body"]["messages"] != original or len(value["signatures"]) != 1:
         raise ValueError("signed batch differs from ordered open intent")
+    signed_gas = producer.uint(value.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
+    if signed_gas != generated_gas or signed_gas > OPEN_SESSION_BATCH_GAS_CAP:
+        raise ValueError("signed batch gas differs from bounded generated gas sum")
     job = dict(operations[0]["open-session"], kind="open-session-batch",
                submit=[str(lifecycle.binary), "tx", "broadcast", str(signed), *common,
                        "--broadcast-mode", "sync", "--output", "json"])
@@ -986,7 +1000,7 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
         opening = transaction_job(lifecycle, owner, ["open-retrieval-session", "--deal-id", deal["id"],
             "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", str(start_blob_index),
             "--blob-count", str(openings), "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
-            "--authorized-proof-provider", payee], kind="open-session", gas="300000")
+            "--authorized-proof-provider", payee], kind="open-session", gas=str(OPEN_SESSION_PREPARATION_GAS))
         proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
         operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < 8 else "measurement",
             offered_offset_ns=offset, **{"open-session": opening, "submit-proof": proof},
@@ -1069,10 +1083,10 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         inventory = lifecycle.home / "inventory"
         inventory.mkdir(mode=0o700)
         requests = []
-        for start in range(0, len(operations), 64):
+        for start in range(0, len(operations), OPEN_SESSION_BATCH_MAX):
             if failures:
                 raise failures[0]
-            batch = operations[start:start + 64]
+            batch = operations[start:start + OPEN_SESSION_BATCH_MAX]
             ids, opened_height = open_session_batch(lifecycle, batch, inventory / f"batch-{start}", command)
             wait(opened_height + 3)
             for operation, sid in zip(batch, ids):

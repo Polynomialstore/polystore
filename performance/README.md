@@ -170,6 +170,12 @@ unqualified and is retained as preparation for the later final C6 measurement.
 The final evidence and its revised disposition are summarized below and in the
 [qualification report](retrieval-v2-qualification.md).
 
+For the #290 native K8 pilot, inventory preparation uses a conservative 400,000
+gas allowance per session-open message: 15.6M for 39 sessions and at most 25.6M
+for a 64-message atomic batch. Before broadcast the harness verifies that the
+SDK appended the generated gas sum. This is a pilot ceiling, not measured full
+execution cost, and does not change proof, audit or block gas limits.
+
 
 ## Historical streamed browser retrieval (#260)
 
