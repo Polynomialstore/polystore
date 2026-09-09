@@ -163,7 +163,8 @@ func initFixtureWithBankKeeper(t *testing.T, bank types.BankKeeper) *fixture {
 	storeKey := storetypes.NewKVStoreKey(types.StoreKey)
 
 	storeService := runtime.NewKVStoreService(storeKey)
-	ctx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test")).Ctx
+	testCtx := testutil.DefaultContextWithDB(t, storeKey, storetypes.NewTransientStoreKey("transient_test"))
+	ctx := testCtx.Ctx
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	sdkCtx = sdkCtx.WithChainID("test-chain")
@@ -184,7 +185,7 @@ func initFixtureWithBankKeeper(t *testing.T, bank types.BankKeeper) *fixture {
 		t.Fatalf("failed to set params: %v", err)
 	}
 
-	return &fixture{ctx: ctx, keeper: k, addressCodec: addressCodec, storeService: storeService}
+	return &fixture{ctx: ctx, keeper: k, addressCodec: addressCodec, storeService: storeService, db: testCtx.DB, cms: testCtx.CMS, storeKey: storeKey}
 }
 
 func TestGamma4_CreateDeal_EnforcesMinDuration(t *testing.T) {

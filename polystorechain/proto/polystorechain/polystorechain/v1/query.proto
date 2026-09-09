@@ -48,6 +48,10 @@ service Query {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{id}";
   }
 
+  rpc GetDealGenerationV3(QueryGetDealGenerationV3Request) returns (QueryGetDealGenerationV3Response) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/generation-v3";
+  }
+
   // Queries a list of Provider items.
   rpc ListProviders(QueryListProvidersRequest) returns (QueryListProvidersResponse) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/providers";
@@ -566,4 +570,13 @@ message RetainedGeneration {
 message QueryRetainedGenerationsResponse {
   uint64 committed_height = 1;
   repeated RetainedGeneration generations = 2 [(gogoproto.nullable) = false];
+}
+
+message QueryGetDealGenerationV3Request {
+  uint64 deal_id = 1;
+}
+
+message QueryGetDealGenerationV3Response {
+  DealGenerationAdmissionV3 pending = 1;
+  DealGenerationAdmissionV3 admitted = 2;
 }

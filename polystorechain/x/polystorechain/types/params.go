@@ -13,6 +13,7 @@ var _ paramtypes.ParamSet = (*Params)(nil)
 
 var (
 	KeyRetrievalV2ActivationHeight = []byte("RetrievalV2ActivationHeight")
+	KeyRetrievalV3ActivationHeight = []byte("RetrievalV3ActivationHeight")
 	KeyBaseStripeCost              = []byte("BaseStripeCost")
 	KeyHalvingInterval             = []byte("HalvingInterval")
 	KeyEip712ChainID               = []byte("Eip712ChainId")
@@ -278,6 +279,7 @@ func DevnetPolicingParams() Params {
 func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 	return paramtypes.ParamSetPairs{
 		paramtypes.NewParamSetPair(KeyRetrievalV2ActivationHeight, &p.RetrievalV2ActivationHeight, validateUint64Any),
+		paramtypes.NewParamSetPair(KeyRetrievalV3ActivationHeight, &p.RetrievalV3ActivationHeight, validateUint64Any),
 		paramtypes.NewParamSetPair(KeyBaseStripeCost, &p.BaseStripeCost, validateBaseStripeCost),
 		paramtypes.NewParamSetPair(KeyHalvingInterval, &p.HalvingInterval, validateHalvingInterval),
 		paramtypes.NewParamSetPair(KeyEip712ChainID, &p.Eip712ChainId, validateEip712ChainID),
@@ -336,6 +338,11 @@ func (p Params) Validate() error {
 	if p.RetrievalV2ActivationHeight != 0 {
 		if p.EpochLenBlocks < 2 || p.RetrievalV2ActivationHeight > uint64(1<<63-3) || (p.RetrievalV2ActivationHeight-1)%p.EpochLenBlocks != 0 {
 			return fmt.Errorf("retrieval_v2_activation_height must be a one-indexed epoch boundary with epoch_len_blocks >= 2")
+		}
+	}
+	if p.RetrievalV3ActivationHeight != 0 {
+		if p.RetrievalV2ActivationHeight == 0 || p.RetrievalV3ActivationHeight < p.RetrievalV2ActivationHeight || p.EpochLenBlocks < 2 || p.RetrievalV3ActivationHeight > uint64(1<<63-3) || (p.RetrievalV3ActivationHeight-1)%p.EpochLenBlocks != 0 {
+			return fmt.Errorf("retrieval_v3_activation_height must be a one-indexed epoch boundary at or after v2 activation")
 		}
 	}
 	if err := validateBaseStripeCost(p.BaseStripeCost); err != nil {

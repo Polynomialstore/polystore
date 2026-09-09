@@ -1,8 +1,9 @@
 # Retrieval v3 native large-session contract
 
-Status: **contract candidate only; disabled by default**. This document fixes the
-wire-independent protocol choices needed to implement issue #291. It does not
-change keeper acceptance, activate a network version, or qualify delivery.
+Status: **contract reviewed; implementation partial and disabled by default**.
+This document fixes the wire-independent protocol choices for issue #291. The
+shared primitives and native generation-admission state are implemented, while
+session, proof, payment and delivery paths remain unimplemented and unqualified.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -545,8 +546,8 @@ route rejects v3 before charging or consuming authority. Activation requires:
 
 Vector success establishes byte-level agreement only. It does not qualify signer
 authority, block-hash freshness, gas, crash recovery, transport delivery or safe
-network activation. Keeper/protobuf implementation starts only after explicit
-independent approval of this contract.
+network activation. Every v3 runtime path remains disabled until the complete
+qualification list above passes independent review.
 
 Run the independent standard-library oracle with:
 

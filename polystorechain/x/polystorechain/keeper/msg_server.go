@@ -84,6 +84,26 @@ func ceilDivUint64(n, d uint64) uint64 {
 	return 1 + (n-1)/d
 }
 
+func contentGrowthTermDeposit(params types.Params, deal types.Deal, newSize uint64) (math.Int, error) {
+	if newSize <= deal.Size_ {
+		return math.ZeroInt(), nil
+	}
+	anchor := deal.PricingAnchorBlock
+	if anchor == 0 {
+		anchor = deal.StartBlock
+	}
+	if deal.EndBlock < anchor {
+		return math.Int{}, sdkerrors.ErrInvalidRequest.Wrap("invalid deal term: end_block < pricing_anchor_block")
+	}
+	if !params.StoragePrice.IsPositive() {
+		return math.ZeroInt(), nil
+	}
+	return params.StoragePrice.
+		MulInt(math.NewIntFromUint64(newSize - deal.Size_)).
+		MulInt(math.NewIntFromUint64(deal.EndBlock - anchor)).
+		Ceil().TruncateInt(), nil
+}
+
 func validatePolyFSContentLayout(deal types.Deal, sizeBytes uint64, totalMdus uint64, witnessMdus uint64) error {
 	if totalMdus == 0 {
 		return sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
@@ -958,30 +978,16 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	params := k.GetParams(ctx)
 
 	// --- TERM DEPOSIT (Storage Lock-in) ---
-	if msg.Size_ > deal.Size_ {
-		deltaSize := msg.Size_ - deal.Size_
-		anchor := deal.PricingAnchorBlock
-		if anchor == 0 {
-			anchor = deal.StartBlock
+	cost, err := contentGrowthTermDeposit(params, deal, msg.Size_)
+	if err != nil {
+		return nil, err
+	}
+	if cost.IsPositive() {
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
+			return nil, fmt.Errorf("failed to pay term deposit: %w", err)
 		}
-		if deal.EndBlock < anchor {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid deal term: end_block < pricing_anchor_block")
-		}
-		duration := deal.EndBlock - anchor
-
-		price := params.StoragePrice
-		if price.IsPositive() {
-			costDec := price.MulInt(math.NewIntFromUint64(deltaSize)).MulInt(math.NewIntFromUint64(duration))
-			cost := costDec.Ceil().TruncateInt()
-
-			if cost.IsPositive() {
-				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
-				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
-					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
-				}
-				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
-			}
-		}
+		deal.EscrowBalance = deal.EscrowBalance.Add(cost)
 	}
 
 	if strings.TrimSpace(msg.Cid) == "" {
@@ -1159,35 +1165,16 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 
 	// --- TERM DEPOSIT (Storage Lock-in) ---
-	// Cost = (NewSize - OldSize) * Duration * Price
-	// Only charge for size increase.
-	if intent.SizeBytes > deal.Size_ {
-		deltaSize := intent.SizeBytes - deal.Size_
-		anchor := deal.PricingAnchorBlock
-		if anchor == 0 {
-			anchor = deal.StartBlock
+	cost, err := contentGrowthTermDeposit(params, deal, intent.SizeBytes)
+	if err != nil {
+		return nil, err
+	}
+	if cost.IsPositive() {
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
+			return nil, fmt.Errorf("failed to pay term deposit: %w", err)
 		}
-		if deal.EndBlock < anchor {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid deal term: end_block < pricing_anchor_block")
-		}
-		duration := deal.EndBlock - anchor
-
-		// price is Dec per byte per block
-		price := params.StoragePrice
-		if price.IsPositive() {
-			costDec := price.MulInt(math.NewIntFromUint64(deltaSize)).MulInt(math.NewIntFromUint64(duration))
-			cost := costDec.Ceil().TruncateInt()
-
-			if cost.IsPositive() {
-				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
-				// Deduct from Creator -> Module Account (Escrow)
-				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
-					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
-				}
-				// Credit the deal's escrow balance (Total Value Locked)
-				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
-			}
-		}
+		deal.EscrowBalance = deal.EscrowBalance.Add(cost)
 	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))

@@ -59,6 +59,9 @@ type Keeper struct {
 	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider    collections.Map[[]byte, string]
 	RetrievalV2ActivatedHeight       collections.Item[uint64]
+	RetrievalV3ActivatedHeight       collections.Item[uint64]
+	PendingDealGenerationsV3         collections.Map[uint64, types.DealGenerationAdmissionV3]
+	AdmittedDealGenerationsV3        collections.Map[uint64, types.DealGenerationAdmissionV3]
 	ChallengeAnchors                 collections.Map[uint64, types.ChallengeAnchor]
 	ChallengePendingAnchors          collections.Map[uint64, bool]
 	RetrievalSessionExpiryRefs       collections.Map[collections.Pair[uint64, []byte], bool]
@@ -181,6 +184,9 @@ func NewKeeper(
 		),
 		RetrievalSessionProofProvider:    collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
 		RetrievalV2ActivatedHeight:       collections.NewItem(sb, types.RetrievalV2ActivatedHeightKey, "retrieval_v2_activated_height", collections.Uint64Value),
+		RetrievalV3ActivatedHeight:       collections.NewItem(sb, types.RetrievalV3ActivatedHeightKey, "retrieval_v3_activated_height", collections.Uint64Value),
+		PendingDealGenerationsV3:         collections.NewMap(sb, types.PendingDealGenerationsV3Key, "pending_deal_generations_v3", collections.Uint64Key, codec.CollValue[types.DealGenerationAdmissionV3](cdc)),
+		AdmittedDealGenerationsV3:        collections.NewMap(sb, types.AdmittedDealGenerationsV3Key, "admitted_deal_generations_v3", collections.Uint64Key, codec.CollValue[types.DealGenerationAdmissionV3](cdc)),
 		ChallengeAnchors:                 collections.NewMap(sb, types.ChallengeAnchorsKey, "challenge_anchors", collections.Uint64Key, codec.CollValue[types.ChallengeAnchor](cdc)),
 		ChallengePendingAnchors:          collections.NewMap(sb, types.ChallengePendingAnchorsKey, "challenge_pending_anchors", collections.Uint64Key, collections.BoolValue),
 		RetrievalSessionExpiryRefs:       collections.NewMap(sb, types.RetrievalSessionExpiryRefsKey, "retrieval_session_expiry_refs", collections.PairKeyCodec(collections.Uint64Key, collections.BytesKey), collections.BoolValue),

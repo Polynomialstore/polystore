@@ -30,6 +30,28 @@ func (k queryServer) GetDeal(goCtx context.Context, req *types.QueryGetDealReque
 	return &types.QueryGetDealResponse{Deal: &deal}, nil
 }
 
+func (k queryServer) GetDealGenerationV3(goCtx context.Context, req *types.QueryGetDealGenerationV3Request) (*types.QueryGetDealGenerationV3Response, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	response := &types.QueryGetDealGenerationV3Response{}
+	if pending, err := k.k.PendingDealGenerationsV3.Get(ctx, req.DealId); err == nil {
+		response.Pending = &pending
+	} else if !errors.Is(err, collections.ErrNotFound) {
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+	if admitted, err := k.k.AdmittedDealGenerationsV3.Get(ctx, req.DealId); err == nil {
+		response.Admitted = &admitted
+	} else if !errors.Is(err, collections.ErrNotFound) {
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+	if response.Pending == nil && response.Admitted == nil {
+		return nil, status.Error(codes.NotFound, "v3 generation admission not found")
+	}
+	return response, nil
+}
+
 func (k queryServer) GetVirtualStripe(goCtx context.Context, req *types.QueryGetVirtualStripeRequest) (*types.QueryGetVirtualStripeResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
