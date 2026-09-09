@@ -34,6 +34,9 @@ class Handler(BaseHTTPRequestHandler):
     missing_provider_headers = False
     retrieval_status = 400
     retrieval_cors = True
+    gateway_upload_status = 400
+    gateway_upload_error = "invalid deal_id"
+    gateway_upload_cors = True
     extra_provider = False
     extra_draining_provider = False
     public_base = ""
@@ -142,6 +145,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.evm_530:
             self.send_json({"error": "edge unavailable"}, 530, cors=True)
             return
+        if self.path.startswith("/gateway/upload?"):
+            self.send_json(
+                {"error": self.gateway_upload_error}, self.gateway_upload_status,
+                browser_cors=self.gateway_upload_cors,
+            )
+            return
         request = json.loads(self.rfile.read(int(self.headers.get("content-length", "0"))) or b"{}")
         result = "0x3e7" if request.get("method") == "eth_chainId" and self.wrong_id else "0x1352573"
         if request.get("method") == "eth_call":
@@ -215,6 +224,9 @@ exit 1
         Handler.missing_provider_headers = False
         Handler.retrieval_status = 400
         Handler.retrieval_cors = True
+        Handler.gateway_upload_status = 400
+        Handler.gateway_upload_error = "invalid deal_id"
+        Handler.gateway_upload_cors = True
         Handler.extra_provider = False
         Handler.extra_draining_provider = False
 
@@ -325,6 +337,21 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("retrieval GET missing matching Access-Control-Allow-Origin", result.stdout)
+
+    def test_public_check_rejects_missing_or_wrong_gateway_upload_handler(self):
+        for status, error in ((404, "not found"), (500, "failed"), (200, "invalid deal_id"), (400, "wrong error")):
+            with self.subTest(status=status, error=error):
+                Handler.gateway_upload_status = status
+                Handler.gateway_upload_error = error
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Gateway upload POST did not return the expected deal validation rejection", result.stdout)
+
+    def test_public_check_rejects_missing_gateway_upload_post_cors(self):
+        Handler.gateway_upload_cors = False
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Gateway upload POST missing matching Access-Control-Allow-Origin", result.stdout)
 
     def test_public_check_rejects_unexpected_active_provider(self):
         Handler.extra_provider = True

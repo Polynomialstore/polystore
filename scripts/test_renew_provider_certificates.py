@@ -10,12 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CertificateRenewalTest(unittest.TestCase):
-    def run_renewal(self, fail_reload=False):
+    def run_renewal(self, fail_reload=False, token_contents=None):
         with tempfile.TemporaryDirectory() as raw:
             temp = Path(raw)
             calls = temp / "calls"
             token = temp / "cloudflare.env"
-            token.write_text("CLOUDFLARE_API_TOKEN=test-token\n")
+            token.write_text(token_contents or (
+                "CLOUDFLARE_DNS_API_TOKEN=dns-token\n"
+                "CLOUDFLARE_ZONE_API_TOKEN=zone-token\n"
+            ))
             token.chmod(0o600)
             config = temp / "Caddyfile"
             config.write_text("{}\n")
@@ -30,7 +33,12 @@ class CertificateRenewalTest(unittest.TestCase):
                 path.chmod(0o755)
                 return path
 
-            lego = stub("lego-bin", f'printf "lego %s\\n" "$*" >>"{calls}"\n')
+            lego = stub(
+                "lego-bin",
+                f'printf "lego dns=%s zone=%s args=%s\\n" '
+                f'"${{CLOUDFLARE_DNS_API_TOKEN:-}}" '
+                f'"${{CLOUDFLARE_ZONE_API_TOKEN:-}}" "$*" >>"{calls}"\n',
+            )
             setfacl = stub("setfacl", f'printf "setfacl %s\\n" "$*" >>"{calls}"\n')
             caddy = stub(
                 "caddy",
@@ -53,11 +61,12 @@ class CertificateRenewalTest(unittest.TestCase):
                 [str(ROOT / "scripts/renew_provider_certificates.sh")],
                 env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             )
-            return result, calls.read_text()
+            return result, calls.read_text() if calls.exists() else ""
 
     def test_renews_applies_acl_and_reloads(self):
         result, calls = self.run_renewal()
         self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("lego dns=dns-token zone=zone-token", calls)
         self.assertIn("--email ops@example.com", calls)
         self.assertIn("--domains sp1.example --domains sp2.example renew --days 30 --no-random-sleep", calls)
         self.assertIn("setfacl -m u:caddy:r", calls)
@@ -68,6 +77,27 @@ class CertificateRenewalTest(unittest.TestCase):
         self.assertEqual(result.returncode, 9, result.stdout)
         self.assertIn("caddy reload --config", calls)
         self.assertNotIn("completed", result.stdout)
+
+    def test_maps_existing_single_token_file_to_lego_dns_token(self):
+        result, calls = self.run_renewal(
+            token_contents="CLOUDFLARE_API_TOKEN=legacy-token\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("lego dns=legacy-token zone=", calls)
+
+    def test_maps_documented_cf_token_aliases_to_canonical_names(self):
+        result, calls = self.run_renewal(token_contents=(
+            "CF_DNS_API_TOKEN=alias-dns-token\n"
+            "CF_ZONE_API_TOKEN=alias-zone-token\n"
+        ))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("lego dns=alias-dns-token zone=alias-zone-token", calls)
+
+    def test_rejects_token_file_without_lego_cloudflare_credentials(self):
+        result, calls = self.run_renewal(token_contents="UNRELATED_TOKEN=value\n")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("CLOUDFLARE_DNS_API_TOKEN", result.stdout)
+        self.assertEqual(calls, "")
 
 
 if __name__ == "__main__":

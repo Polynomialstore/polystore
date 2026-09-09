@@ -35,8 +35,20 @@ set -a
 # shellcheck disable=SC1090
 source "$TOKEN_ENV_FILE"
 set +a
-: "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required in token environment}"
-export CF_DNS_API_TOKEN="$CLOUDFLARE_API_TOKEN"
+
+# lego's Cloudflare provider reads the documented DNS token names. Preserve
+# compatibility with the existing single-token deployment file while also
+# accepting a least-privilege split DNS/zone token pair.
+dns_api_token="${CLOUDFLARE_DNS_API_TOKEN:-${CF_DNS_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}}"
+zone_api_token="${CLOUDFLARE_ZONE_API_TOKEN:-${CF_ZONE_API_TOKEN:-}}"
+[[ -n "$dns_api_token" ]] || {
+  echo "ERROR: CLOUDFLARE_DNS_API_TOKEN (or CF_DNS_API_TOKEN) is required in token environment" >&2
+  exit 2
+}
+export CLOUDFLARE_DNS_API_TOKEN="$dns_api_token"
+if [[ -n "$zone_api_token" ]]; then
+  export CLOUDFLARE_ZONE_API_TOKEN="$zone_api_token"
+fi
 
 domain_args=()
 for domain in $CERT_DOMAINS; do
