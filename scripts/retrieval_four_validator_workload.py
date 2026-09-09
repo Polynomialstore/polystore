@@ -249,6 +249,53 @@ def journal_results(path, operations, *, proof_only=False):
     return rows, transactions
 
 
+def assignment_submission_counts(operations, transactions):
+    """Report bundle and opening outcomes per native storage assignment."""
+    expected = {operation["operation_id"]: operation for operation in operations}
+    counts = {}
+    for operation in operations:
+        slot = str(operation["proof_expectation"]["snapshot"]["slot"])
+        openings = producer.uint(operation["proof_expectation"]["session"]["blob_count"])
+        row = counts.setdefault(slot, dict(offered_bundles=0, offered_openings=0,
+            submitted_bundles=0, submitted_openings=0, committed_valid_bundles=0,
+            committed_valid_openings=0))
+        row["offered_bundles"] += 1
+        row["offered_openings"] += openings
+    seen = set()
+    for transaction in transactions:
+        identity = transaction.get("operation_id")
+        if identity not in expected or identity in seen:
+            raise ValueError("assignment accounting requires one transaction per operation")
+        seen.add(identity)
+        operation = expected[identity]
+        slot = str(operation["proof_expectation"]["snapshot"]["slot"])
+        openings = producer.uint(operation["proof_expectation"]["session"]["blob_count"])
+        row = counts[slot]
+        if transaction.get("outcome") not in ("not_submitted", "skipped"):
+            row["submitted_bundles"] += 1
+            row["submitted_openings"] += openings
+        if transaction.get("outcome") == "committed_success":
+            row["committed_valid_bundles"] += 1
+            row["committed_valid_openings"] += openings
+    if seen != set(expected):
+        raise ValueError("assignment accounting is missing transaction outcomes")
+    return counts
+
+
+def export_inventory_request(operation, session_id, evidence, output_path, directories):
+    """Bind an exported proof request to its assigned provider artifact."""
+    expectation = operation["proof_expectation"]
+    session, snapshot = expectation["session"], expectation["snapshot"]
+    rows = artifact.BLOBS_PER_MDU // producer.uint(snapshot["k"])
+    if producer.uint(session["start_blob_index"]) != producer.uint(snapshot["slot"]) * rows:
+        raise ValueError("full-row exporter request does not start at its assignment")
+    assigned = session["provider"]
+    if assigned not in directories:
+        raise ValueError("missing artifact directory for assigned provider")
+    return dict(artifact_directory=str(directories[assigned]), evidence=evidence,
+                expected=expectation, session_id=session_id, output_path=output_path)
+
+
 def retrieval_snapshot(lifecycle, height, deals, session_ids):
     bank = lifecycle.snapshot(height)
     rows = []
@@ -884,13 +931,19 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
     """Build one native full-row submission bundle per prepared session."""
     layout = mode2_layout(k)
     openings = layout["openings_per_bundle"]
-    owner, assigned = lifecycle.signers["owner0"], providers[0]
+    slots = sorted(providers)
+    if slots != list(range(layout["assignments"])):
+        raise ValueError("providers must cover every native assignment exactly once")
+    owner = lifecycle.signers["owner0"]
     root = producer.b64(deal["manifest_root"], 32).hex()
     operations = []
     for index, offset in enumerate([0] * 8 + offsets):
+        slot = slots[index % len(slots)]
+        assigned = providers[slot]
+        start_blob_index = slot * openings
         payee, end = deputies[index % len(deputies)], expiry + index // 128
         opening = transaction_job(lifecycle, owner, ["open-retrieval-session", "--deal-id", deal["id"],
-            "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", "0",
+            "--provider", assigned, "--manifest-root", "0x" + root, "--start-mdu-index", "2", "--start-blob-index", str(start_blob_index),
             "--blob-count", str(openings), "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
             "--authorized-proof-provider", payee], kind="open-session", gas="300000")
         proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
@@ -898,17 +951,17 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
             offered_offset_ns=offset, **{"open-session": opening, "submit-proof": proof},
             proof_expectation=dict(minimum_opened_height=minimum,
                 session=dict(deal_id=deal["id"], owner=owner, provider=assigned, authorized_proof_provider=payee,
-                    manifest_root=root, nonce=index + 1, expires_at=end, start_mdu_index=2, start_blob_index=0,
+                    manifest_root=root, nonce=index + 1, expires_at=end, start_mdu_index=2, start_blob_index=start_blob_index,
                     blob_count=openings, total_bytes=layout["bytes_per_bundle"], funding=1,
                     locked_fee=str(price * openings)),
                 snapshot=dict(chain_id=lifecycle.chain, setup_digest=producer.SETUP_DIGEST,
-                    generation=deal.get("current_gen", "0"), layout=2, k=k, m=layout["m"], slot=0,
+                    generation=deal.get("current_gen", "0"), layout=2, k=k, m=layout["m"], slot=slot,
                     metadata_mdus=2, user_mdus=1, deal_end=deal["end_block"]))))
     return operations
 
 
 def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas, k=2):
-    """Real slot-zero inventory and bounded existing scheduler; no client ACK claim."""
+    """Real per-assignment inventory and bounded scheduler; no client ACK claim."""
     import threading
     layout = mode2_layout(k)
     offsets = sustained_offsets(step_seconds)
@@ -924,11 +977,11 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
     profile = sustained_profile(k, step_seconds, offsets, proof_gas)
     openings = profile["openings_per_bundle"]
     doc.update(mode="four-validator-sustained-retrieval",
-        workload=f"real K{k} slot zero, {openings} fresh openings/submission transaction; eight deputy signers",
+        workload=f"real K{k} assignment round-robin, {openings} fresh openings/submission transaction; eight deputy signers",
         sustained_profile=profile,
         limits=["Proof acceptance capacity only; no delivered bytes or client ACKs",
                 "Normal mint retained; raw economics are not a conservation assertion",
-                "Only slot zero is challenged; this is not a many-provider throughput claim",
+                "Assignment round-robin binds each proof to its provider artifact and snapshot slot",
                 "Four local processes do not establish WAN capacity", "No restart qualification"])
     epoch_length = producer.uint(doc["frozen_module_params"]["epoch_len_blocks"])
     monitor_stop, failures = threading.Event(), []
@@ -967,9 +1020,9 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         if expiry + (len(offsets) + 7) // 128 >= producer.uint(deal["end_block"]):
             raise ValueError("insufficient deal lifetime for inventory")
         price = producer.uint(doc["frozen_module_params"]["retrieval_price_per_blob"]["amount"], 256)
-        assigned = providers[0]
         root = producer.b64(deal["manifest_root"], 32).hex()
-        directory = next(Path(row["directory"]) for row in doc["providers"] if row["address"] == assigned) / "deals" / str(deal["id"]) / root
+        directories = {row["address"]: Path(row["directory"]) / "deals" / str(deal["id"]) / root
+                       for row in doc["providers"]}
         operations = build_sustained_operations(lifecycle, deal, providers, deputies, offsets, minimum, expiry,
                                                 price, proof_gas, k)
         inventory = lifecycle.home / "inventory"
@@ -988,8 +1041,7 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 evidence = read_session_evidence(lifecycle, operation, sid, None, lifecycle.deadline)
                 operation["prepared"] = dict(session_id=sid, proof_path=path, evidence=evidence)
                 artifact.prepared_session_pin(operation, evidence)
-                requests.append(dict(artifact_directory=str(directory), evidence=evidence, expected=operation["proof_expectation"],
-                                     session_id=sid, output_path=path))
+                requests.append(export_inventory_request(operation, sid, evidence, path, directories))
         manifest = inventory / "manifest.json"
         manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain, trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"],
             deadline_unix_ms=int(time.time() * 1000 + (lifecycle.deadline - artifact.monotonic_ns()) / 1e6), sessions=requests)))
@@ -1035,10 +1087,20 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         started = artifact.monotonic_ns()
         for operation in operations:
             operation["submit-proof"]["_deadline_ns"] = min(lifecycle.deadline, started + (duration + 120) * 10**9)
+        progress_path = lifecycle.home / "sustained-progress.jsonl"
+        def progress(row):
+            with progress_path.open("a") as output:
+                output.write(json.dumps(row, sort_keys=True) + "\n")
         doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations,
             journal_path=lifecycle.home / "sustained.sqlite", signers=deputies,
             max_in_flight=8, max_queued=128, max_queued_per_signer=16, mode="prepared-proof-only",
-            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
+            read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline),
+            progress_callback=progress, heartbeat_seconds=60, stall_timeout_seconds=600)
+        doc["progress"] = dict(path=str(progress_path), sha256=artifact.sha256(progress_path),
+                               heartbeat_seconds=60, no_progress_timeout_seconds=600,
+                               source="scheduler in-memory counters; no additional chain query")
+        _, sustained_transactions = journal_results(lifecycle.home / "sustained.sqlite", operations, proof_only=True)
+        doc["assignment_submission_counts"] = assignment_submission_counts(operations, sustained_transactions)
         # The last offered operation precedes the declared end by one interval.
         while artifact.monotonic_ns() < started + duration * 10**9:
             time.sleep(min(0.2, lifecycle.remaining()))

@@ -786,7 +786,8 @@ class RetrievalLifecycleJournal:
 
 def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_session_proof=None,
                                  max_in_flight, max_queued, max_queued_per_signer,
-                                 mode="lifecycle", read_session_evidence=None):
+                                 mode="lifecycle", read_session_evidence=None,
+                                 progress_callback=None, heartbeat_seconds=60, stall_timeout_seconds=600):
     """Incremental open -> anchored proof -> confirm preparation; no runtime qualification.
 
     Operations arrive in absolute offered-offset order with one lookahead. The
@@ -803,15 +804,17 @@ def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_
     requests current state, otherwise exactly that committed height. The callback
     must honor the shared absolute deadline and cannot broadcast. Pre-opening and
     proof generation are excluded; fresh state reads and digest checks are included.
-    Prepared inputs retain the producer's slot-zero K8/K2 geometry restrictions;
-    payloads may come from authenticated real artifacts. This scheduler alone
+    Prepared inputs retain the producer's native per-assignment K8/K2 geometry
+    restrictions; payloads may come from authenticated real artifacts. This scheduler alone
     does not qualify delivered bytes or storage audits.
     """
     lifecycle = RetrievalLifecycleJournal(journal_path, signers, prepare_session_proof,
                                           mode=mode, read_session_evidence=read_session_evidence)
     try:
         result = schedule_transactions(operations, max_in_flight=max_in_flight, max_queued=max_queued,
-                                       max_queued_per_signer=max_queued_per_signer, _lifecycle=lifecycle)
+                                       max_queued_per_signer=max_queued_per_signer, _lifecycle=lifecycle,
+                                       progress_callback=progress_callback, heartbeat_seconds=heartbeat_seconds,
+                                       stall_timeout_seconds=stall_timeout_seconds)
         with lifecycle.db:
             lifecycle.db.execute("UPDATE run SET status='finished', result=?", (json.dumps(result),))
         return result
@@ -823,7 +826,9 @@ def schedule_retrieval_lifecycles(operations, *, journal_path, signers, prepare_
         lifecycle.db.close()
 
 
-def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_signer, record_transaction=None, _lifecycle=None):
+def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_signer, record_transaction=None,
+                          _lifecycle=None, progress_callback=None, heartbeat_seconds=60,
+                          stall_timeout_seconds=600):
     """Bounded transaction scheduling foundation, not a runtime benchmark mode.
 
     Jobs are prepared in offered-offset order, with dependency IDs referring only
@@ -841,6 +846,10 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
         integer(len(jobs), "jobs", 1, 8192)
     if record_transaction is not None and not callable(record_transaction):
         raise ValueError("record_transaction must be callable")
+    if progress_callback is not None and not callable(progress_callback):
+        raise ValueError("progress_callback must be callable")
+    heartbeat_seconds = integer(heartbeat_seconds, "heartbeat_seconds", 1, 600)
+    stall_timeout_seconds = integer(stall_timeout_seconds, "stall_timeout_seconds", heartbeat_seconds, 3600)
     jobs = [dict(job) for job in jobs] if _lifecycle is None else iter(jobs)
     known, operation_phases, previous_offset, measurement_seen = set(), {}, 0, False
     for job in jobs if _lifecycle is None else ():
@@ -869,9 +878,23 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
     warmup_overlap = False
     latest_warmup_finished_ns = start
     followups = []
+    last_progress_ns = last_heartbeat_ns = start
+    completed_submissions = committed_submissions = committed_height = 0
+
+    def progress(force=False):
+        nonlocal last_heartbeat_ns
+        now = monotonic_ns()
+        if progress_callback is None or (not force and now - last_heartbeat_ns < heartbeat_seconds * 10**9):
+            return
+        progress_callback(dict(schema_version=1, phase="scheduler", monotonic_ns=now,
+            elapsed_ns=now - start, completed_submissions=completed_submissions,
+            committed_valid_submissions=committed_submissions, committed_height=committed_height,
+            pending=len(pending), in_flight=len(running), followups=len(followups),
+            next_offer_loaded=offered is not None, seconds_since_progress=(now - last_progress_ns) / 1e9))
+        last_heartbeat_ns = now
 
     def record(job, result, started=None):
-        nonlocal latest_warmup_finished_ns
+        nonlocal latest_warmup_finished_ns, last_progress_ns, completed_submissions, committed_submissions, committed_height
         # Only this coordinator mutates accounting. Duplicate hashes remain
         # visible but never produce another successful transaction/operation.
         item = {"id": job["id"], "operation_id": job["operation_id"], "phase": job["phase"],
@@ -887,6 +910,12 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 item["original_outcome"], item["outcome"] = item["outcome"], "duplicate"
             else:
                 seen_hashes.add(item["txhash"])
+        if item["kind"] == "submit-proof":
+            completed_submissions += 1
+            committed_submissions += item["outcome"] == "committed_success"
+            if item["outcome"] in ("committed_success", "committed_failure"):
+                committed_height = max(committed_height, integer(item["height"], "committed height", 1))
+                last_progress_ns = item["finished_ns"]
         item["queue_latency_ns"] = None if started is None else started - item["offered_ns"]
         item["terminal_latency_ns"] = item["finished_ns"] - item["offered_ns"]
         if _lifecycle is not None:
@@ -990,6 +1019,10 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 if _lifecycle is not None:
                     retained = pending + followups + [item for item, _ in running.values()] + ([offered] if offered else [])
                     peak_operation_states = max(peak_operation_states, len({id(item["_state"]) for item in retained}))
+                progress()
+                if (progress_callback is not None and monotonic_ns() - last_progress_ns >= stall_timeout_seconds * 10**9 and
+                        (pending or running or followups or offered is not None)):
+                    raise TimeoutError("scheduler made no submission progress before watchdog deadline")
                 if offered is not None or pending or running or followups:
                     delay = max(0, (start + offered["offered_offset_ns"] - monotonic_ns()) / 1e9) if offered is not None else 0.001
                     time.sleep(min(0.001 if running else 0.05, delay))
@@ -1003,6 +1036,8 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 job.setdefault("_enqueued_ns", monotonic_ns())
                 record(job, {"outcome": "not_submitted", "error": "run_aborted"})
             raise
+
+    progress(force=True)
 
     phases = {}
     for phase in ("warmup", "measurement"):

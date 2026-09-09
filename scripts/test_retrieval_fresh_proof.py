@@ -97,6 +97,36 @@ class FreshProofTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             producer.frozen_context(view, expected, sid, 151)
 
+    def test_frozen_context_accepts_only_the_assigned_slot_range(self):
+        view, expected, sid = fixture_view()
+        for target in (view, expected):
+            snapshot = target["session"]["challenge_snapshot"] if target is view else target["snapshot"]
+            snapshot["slot"] = 7
+            target["session"]["start_blob_index"] = 56
+            target["session"]["blob_count"] = "8"
+            target["session"]["total_bytes"] = str(8 * 131072)
+        fields = {name: value for name, _, value in GOLDEN["schema"]["fields"]}
+        c = dict(fields)
+        c.update(chain_id="polystore-test-1", setup_digest=producer.SETUP_DIGEST, context_id=sid,
+                 deal_id=9007199254740993, generation=7, root="cd" * 32,
+                 assigned="01" * 20, payee="02" * 20, layout=2, k=8, m=4, slot=7,
+                 metadata_mdus=2, user_mdus=1, start_mdu=2, start_leaf=56, blob_count=8,
+                 snapshot_height=100, anchor_height=101, first_response_height=102,
+                 deadline_height=150, deal_end=200)
+        raw = producer.context_bytes(c)
+        view["challenge_context"] = base64.b64encode(raw).decode()
+        view["challenge_context_hash"] = base64.b64encode(hashlib.sha256(raw).digest()).decode()
+        self.assertEqual(producer.frozen_context(view, expected, sid, 102)[0]["start_leaf"], 56)
+        for start, count in ((0, 8), (55, 8), (56, 9), (64, 1)):
+            bad = copy.deepcopy(view)
+            bad["session"]["start_blob_index"] = start
+            bad["session"]["blob_count"] = str(count)
+            bad["session"]["total_bytes"] = str(count * 131072)
+            wanted = copy.deepcopy(expected)
+            wanted["session"].update(start_blob_index=start, blob_count=str(count), total_bytes=str(count * 131072))
+            with self.subTest(start=start, count=count), self.assertRaises(ValueError):
+                producer.frozen_context(bad, wanted, sid, 102)
+
     def test_rows_use_global_scalar_index(self):
         for k in (2, 8):
             for row in (0, 1, 64 // k - 1):

@@ -16,6 +16,42 @@ from test_bench_retrieval_sessions import OPEN_RESPONSE_DATA
 
 
 class SustainedTest(unittest.TestCase):
+    def test_scheduler_progress_uses_existing_completion_counters(self):
+        job = dict(id="proof", operation_id="proof", phase="measurement", signer="deputy",
+                   kind="submit-proof", offered_offset_ns=0, timeout_seconds=1,
+                   submit=["chain", "submit", "--from", "deputy"], query=["chain", "query"])
+        progress = []
+        with patch.object(artifact, "execute_scheduled_transaction",
+                          return_value=dict(outcome="committed_success", height=17, txhash="AA" * 32)):
+            artifact.schedule_transactions([job], max_in_flight=1, max_queued=1,
+                max_queued_per_signer=1, progress_callback=progress.append)
+        self.assertEqual(len(progress), 1)
+        self.assertEqual((progress[0]["phase"], progress[0]["completed_submissions"],
+                          progress[0]["committed_valid_submissions"], progress[0]["committed_height"]),
+                         ("scheduler", 1, 1, 17))
+        self.assertEqual((progress[0]["pending"], progress[0]["in_flight"], progress[0]["followups"]),
+                         (0, 0, 0))
+
+    def test_scheduler_watchdog_uses_no_observer_reads_and_rejection_is_not_progress(self):
+        def job(identity, offset):
+            return dict(id=identity, operation_id=identity, phase="measurement", signer="deputy",
+                        kind="submit-proof", offered_offset_ns=offset, timeout_seconds=1,
+                        submit=["chain", "submit", "--from", "deputy"], query=["chain", "query"])
+        ticks = iter(range(0, 20_000_000_000, 250_000_000))
+        progress = []
+        with patch.object(artifact, "monotonic_ns", side_effect=lambda: next(ticks)), \
+             patch.object(artifact.time, "sleep"), \
+             patch.object(artifact, "execute_scheduled_transaction",
+                          return_value=dict(outcome="checktx_rejected", code=7)) as execute:
+            with self.assertRaisesRegex(TimeoutError, "no submission progress"):
+                artifact.schedule_transactions([job("rejected", 0), job("future", 10_000_000_000)],
+                    max_in_flight=1, max_queued=1, max_queued_per_signer=1,
+                    progress_callback=progress.append, heartbeat_seconds=1, stall_timeout_seconds=1)
+        self.assertEqual(execute.call_count, 1)
+        self.assertTrue(progress)
+        self.assertEqual(progress[-1]["committed_valid_submissions"], 0)
+        self.assertGreaterEqual(progress[-1]["seconds_since_progress"], 1)
+
     def test_native_layout_and_reported_denominators_cannot_drift(self):
         offsets = workload.sustained_offsets(4)
         expected = {
@@ -72,8 +108,8 @@ class SustainedTest(unittest.TestCase):
             signers={"owner0": owner})
         deal = dict(id="7", manifest_root=base64.b64encode(bytes([8]) * 32).decode(),
                     current_gen="1", end_block="5000")
-        providers = {0: AUDIT_ADDRESSES[1]}
-        deputies = AUDIT_ADDRESSES[2:10]
+        providers = {slot: f"provider{slot}" for slot in range(12)}
+        deputies = [f"deputy{index}" for index in range(8)]
         operations = workload.build_sustained_operations(
             life, deal, providers, deputies, [0, 250_000_000], 10, 4000, 17, 9_000_000, 8)
         self.assertEqual(len(operations), 10)
@@ -82,12 +118,58 @@ class SustainedTest(unittest.TestCase):
             snapshot = operation["proof_expectation"]["snapshot"]
             submit = operation["open-session"]["submit"]
             self.assertEqual((session["blob_count"], session["total_bytes"], session["locked_fee"]), (8, 1024 * 1024, "136"))
-            self.assertEqual((snapshot["k"], snapshot["m"], snapshot["slot"]), (8, 4, 0))
+            slot = index % 12
+            self.assertEqual((snapshot["k"], snapshot["m"], snapshot["slot"]), (8, 4, slot))
+            self.assertEqual((session["provider"], session["start_blob_index"]),
+                             (providers[slot], slot * 8))
             self.assertEqual(session["authorized_proof_provider"], deputies[index % 8])
+            self.assertEqual(submit[submit.index("--provider") + 1], providers[slot])
+            self.assertEqual(submit[submit.index("--start-blob-index") + 1], str(slot * 8))
             self.assertEqual(submit[submit.index("--blob-count") + 1], "8")
             self.assertEqual(operation["submit-proof"]["submit"][
                 operation["submit-proof"]["submit"].index("--gas") + 1], "9000000")
         self.assertEqual([row["phase"] for row in operations], ["warmup"] * 8 + ["measurement"] * 2)
+
+        transactions = [dict(operation_id=operation["operation_id"], outcome="committed_success")
+                        for operation in operations]
+        counts = workload.assignment_submission_counts(operations, transactions)
+        self.assertEqual(counts["0"], dict(offered_bundles=1, offered_openings=8,
+            submitted_bundles=1, submitted_openings=8, committed_valid_bundles=1,
+            committed_valid_openings=8))
+        self.assertEqual(set(counts), {str(slot) for slot in range(10)})
+        transactions[-1]["outcome"] = "not_submitted"
+        self.assertEqual(workload.assignment_submission_counts(operations, transactions)["9"],
+            dict(offered_bundles=1, offered_openings=8, submitted_bundles=0,
+                 submitted_openings=0, committed_valid_bundles=0, committed_valid_openings=0))
+        with self.assertRaises(ValueError):
+            workload.assignment_submission_counts(operations, transactions[:-1])
+
+        directories = {provider: Path(f"/artifacts/{slot}") for slot, provider in providers.items()}
+        for operation in operations:
+            request = workload.export_inventory_request(operation, "ab" * 32, {"height": 9}, "/proof", directories)
+            slot = operation["proof_expectation"]["snapshot"]["slot"]
+            self.assertEqual(request["artifact_directory"], f"/artifacts/{slot}")
+        bad = copy.deepcopy(operations[-1])
+        bad["proof_expectation"]["session"]["start_blob_index"] = 0
+        with self.assertRaises(ValueError):
+            workload.export_inventory_request(bad, "ab" * 32, {}, "/proof", directories)
+
+    def test_k2_operations_keep_default_geometry_and_disjoint_deputies(self):
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1",
+            deadline=artifact.monotonic_ns() + 60 * 10**9,
+            nodes=[dict(home="/home/validator0", rpc=26657)], env={}, signers={"owner0": "owner"})
+        deal = dict(id="7", manifest_root=base64.b64encode(bytes([2]) * 32).decode(),
+                    current_gen="1", end_block="5000")
+        providers = {slot: f"provider{slot}" for slot in range(3)}
+        deputies = [f"provider{index}" for index in range(3, 11)]
+        operations = workload.build_sustained_operations(
+            life, deal, providers, deputies, [0], 10, 4000, 17, 20_000_000, 2)
+        self.assertEqual([(row["proof_expectation"]["snapshot"]["slot"],
+                           row["proof_expectation"]["session"]["start_blob_index"])
+                          for row in operations],
+                         [(index % 3, (index % 3) * 32) for index in range(9)])
+        self.assertEqual({row["proof_expectation"]["session"]["blob_count"] for row in operations}, {32})
+        self.assertFalse(set(providers.values()) & set(deputies))
 
     def test_atomic_response_count_order_type_and_uniqueness(self):
         second = OPEN_RESPONSE_DATA[:-64] + '31' * 32

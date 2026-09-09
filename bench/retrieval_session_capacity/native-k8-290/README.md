@@ -35,10 +35,12 @@ from committed valid transaction outcomes. CheckTx acceptance, offered work, or
 a later state observation are not commit counts. Committed gas used must be reported
 separately from the declared gas limit.
 
-Both profiles currently load slot zero only. Twelve active K8 assignments and
-their audits establish the native placement topology, but do not establish
-many-provider proof throughput. A later measurement needs actual proof submissions
-across more than one assignment before making that claim.
+Both profiles submit full-row bundles round-robin across every active assignment.
+Each operation binds the assigned provider, that provider's artifact directory,
+the snapshot slot, and global `start_blob_index = slot * (64 / K)`. The retained
+report records offered, submitted, and committed-valid bundle and opening counts
+for every assignment. These mechanics allow a later many-provider measurement;
+this unmeasured milestone itself establishes no throughput.
 
 ## Candidate pilot after review
 
@@ -78,8 +80,11 @@ denominator, lower proof checks or audits, or raise block limits to obtain a
 larger number.
 
 The existing absolute phase and overall deadlines, bounded queue, signer
-quarantine, port reservations, and process-group cleanup remain unchanged. This
-milestone does not yet add the requested 60-second progress heartbeat. The short
-pilot can use existing coordinator phase and log observations, but a heartbeat
-that reports existing scheduler counters and phase progress is required before
-sustained retained collection. It does not need another LCD observer.
+quarantine, port reservations, and process-group cleanup remain unchanged. The
+scheduler writes a progress record every 60 seconds while active, plus its final
+state, using only its in-memory counters. It reports completed and committed-valid
+submissions, latest committed height, pending and in-flight work, and time since
+progress. A 600-second no-progress watchdog aborts pending scheduler work; the
+overall deadline remains the shorter authority. Setup and the single bounded
+exporter subprocess remain visible through their existing phase and log artifacts;
+they do not yet emit periodic heartbeat records or make extra LCD queries.
