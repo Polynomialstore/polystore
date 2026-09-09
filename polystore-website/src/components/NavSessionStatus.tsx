@@ -8,6 +8,8 @@ const SESSION_BADGE_STYLES: Record<string, string> = {
   disconnected: 'border-border/30 bg-background/70 text-muted-foreground',
   'needs-reconnect': 'border-primary/30 bg-primary/10 text-primary',
   'wrong-network': 'border-destructive/30 bg-destructive/10 text-destructive',
+  'checking-balance': 'border-border/30 bg-background/70 text-muted-foreground',
+  'balance-unavailable': 'border-destructive/30 bg-destructive/10 text-destructive',
   'needs-funds': 'border-primary/30 bg-primary/10 text-primary',
   'ready-browser': 'border-success/30 bg-success/10 text-success',
   'ready-gateway': 'border-success/30 bg-success/10 text-success',
@@ -17,6 +19,8 @@ const SESSION_BADGE_LABELS: Record<string, string> = {
   disconnected: 'Connect Wallet',
   'needs-reconnect': 'Reconnect',
   'wrong-network': 'Wrong Network',
+  'checking-balance': 'Checking Balance',
+  'balance-unavailable': 'Balance Unavailable',
   'needs-funds': 'Needs Funds',
   'ready-browser': 'Ready',
   'ready-gateway': 'Gateway Ready',
@@ -43,7 +47,8 @@ export function NavSessionStatus({
   const session = useSessionStatus()
   const stakeBalanceLabel = session.lcdStakeBalance ? `${session.lcdStakeBalance} stake` : '—'
 
-  const shouldShowFaucet = session.faucetEnabled && session.isConnected && !session.isWrongNetwork
+  const shouldShowFaucet = session.faucetEnabled && session.isConnected && !session.isWrongNetwork &&
+    (session.fundingStatus === 'funded' || session.fundingStatus === 'unfunded')
   const faucetClassName = responsive
     ? 'px-2.5 py-2 text-[9px] 2xl:px-3 2xl:text-[10px]'
     : compact

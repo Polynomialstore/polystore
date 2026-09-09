@@ -14,7 +14,8 @@ function ethToPolystoreAddress(ethAddress: string): string {
   return bech32.encode('nil', words)
 }
 
-test('Deal Explorer: stale browser cache does not bypass required provider sync', async ({ page }) => {
+for (const scenario of ['stale', 'cached-unfunded', 'cached-unavailable'] as const) {
+test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, async ({ page }) => {
   test.setTimeout(180_000)
 
   const randomPk = generatePrivateKey()
@@ -24,8 +25,8 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
-  const manifestRoot = `0x${'bb'.repeat(48)}`
-  const staleManifestRoot = `0x${'cc'.repeat(48)}`
+  const manifestRoot = `0x${'bb'.repeat(32)}`
+  const staleManifestRoot = `0x${'cc'.repeat(32)}`
   const filePath = 'browser-network.txt'
   const fileBytes = Buffer.from('hello browser network')
   const staleCachedBytes = Buffer.from('stale browser cache bytes')
@@ -53,6 +54,10 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
             owner: polystoreAddress,
             cid: manifestRoot,
             size: String(24 * 1024 * 1024),
+            total_mdus: '3',
+            witness_mdus: '1',
+            redundancy_mode: 2,
+            mode2_profile: { k: 8, m: 4 },
             escrow_balance: '1000000',
             end_block: '1000',
             providers: ['nil1provider'],
@@ -72,6 +77,10 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
           owner: polystoreAddress,
           manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
           size: String(24 * 1024 * 1024),
+          total_mdus: '3',
+          witness_mdus: '1',
+          redundancy_mode: 2,
+          mode2_profile: { k: 8, m: 4 },
           escrow_balance: '1000000',
           end_block: '1000',
           providers: ['nil1provider'],
@@ -82,9 +91,9 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
 
   await page.route('**/cosmos/bank/v1beta1/balances/*', async (route) => {
     await route.fulfill({
-      status: 200,
+      status: scenario === 'cached-unavailable' ? 503 : 200,
       contentType: 'application/json',
-      body: JSON.stringify({ balances: [{ denom: 'stake', amount: '1000' }], pagination: { total: '1' } }),
+      body: JSON.stringify(scenario === 'cached-unavailable' ? { error: 'RPC unavailable' } : { balances: [{ denom: 'stake', amount: scenario === 'stale' ? '1000' : '0' }] }),
     })
   })
 
@@ -372,6 +381,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     const w = window as any
     if (w.ethereum) return
     let sendCount = 0
+    w.__browserNetworkSendCount = 0
     w.ethereum = {
       isMetaMask: true,
       selectedAddress: address,
@@ -391,6 +401,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
             return computeResult
           case 'eth_sendTransaction':
             sendCount += 1
+            w.__browserNetworkSendCount = sendCount
             return sendCount % 2 === 1 ? txOpen : txConfirm
           default:
             return null
@@ -413,6 +424,18 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
 
   await page.goto(path)
 
+  // This browser test covers UI routing and downloaded bytes. Its tiny OPFS
+  // fixture deliberately mocks the worker boundary; cachedDownload.test.ts
+  // separately exercises the same path with production WASM commitments.
+  await page.evaluate(async ({ filePath, fileSize }) => {
+    const { workerClient } = await import('/src/lib/worker-client.ts')
+    workerClient.initRetrievalWasm = async () => {}
+    workerClient.verifyRetrievalMetadata = async () => [{ path: filePath, start_offset: 0n, size_bytes: BigInt(fileSize), timestamp: 0n, flags: 0 }]
+    workerClient.verifyRetrievalWitness = async (bytes) => bytes
+    workerClient.readRetrievalCommitments = async (pin) => new Uint8Array(pin.leafCount * 48)
+    workerClient.verifyRetrievalMdu = async (_pin, bytes) => bytes
+  }, { filePath, fileSize: fileBytes.length })
+
   if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
@@ -420,7 +443,7 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
 
   // Seed OPFS with a stale manifest root and stale browser file cache. The default Download
   // path must ignore this stale local cache and fetch the current bytes from the network.
-  await page.evaluate(async ({ dealId, manifestRoot, filePath, cachedBytes }) => {
+  await page.evaluate(async ({ dealId, manifestRoot, filePath, cachedBytes, scenario, owner }) => {
     async function sha256Hex(text: string): Promise<string> {
       const encoded = new TextEncoder().encode(text)
       const digest = await crypto.subtle.digest('SHA-256', encoded)
@@ -430,7 +453,12 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     }
 
     const root = await navigator.storage.getDirectory()
-    const dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+    let dealDir = await root.getDirectoryHandle(`deal-${dealId}`, { create: true })
+    const outerDir = dealDir
+    if (scenario !== 'stale') {
+      const generations = await dealDir.getDirectoryHandle('generations', { create: true })
+      dealDir = await generations.getDirectoryHandle('gen-browser-test', { create: true })
+    }
     const writeFile = async (name: string, bytes: Uint8Array | string) => {
       const h = await dealDir.getFileHandle(name, { create: true })
       const w = await (h as any).createWritable()
@@ -438,13 +466,47 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
       await w.close()
     }
     await writeFile('manifest_root.txt', manifestRoot)
-    const cacheName = `filecache_${await sha256Hex(filePath)}.bin`
-    await writeFile(cacheName, new Uint8Array(cachedBytes as number[]))
-  }, { dealId, manifestRoot: staleManifestRoot, filePath, cachedBytes: [...staleCachedBytes] })
+    if (scenario === 'stale') {
+      const cacheName = `filecache_${await sha256Hex(filePath)}.bin`
+      await writeFile(cacheName, new Uint8Array(cachedBytes))
+    } else {
+      const mdu = new Uint8Array(8 * 1024 * 1024)
+      mdu.set(cachedBytes, 32 - cachedBytes.length)
+      await writeFile('mdu_0.bin', new Uint8Array(8 * 1024 * 1024))
+      await writeFile('mdu_1.bin', new Uint8Array(8 * 1024 * 1024))
+      await writeFile('mdu_2.bin', mdu)
+      await writeFile('manifest.bin', new Uint8Array([1]))
+      await writeFile('slab_meta.json', JSON.stringify({
+        schema_version: 1, generation_id: manifestRoot.slice(2), manifest_root: manifestRoot,
+        deal_id: dealId, owner, source: 'browser_mode2_commit', created_at: new Date().toISOString(),
+        witness_mdus: 1, user_mdus: 1, total_mdus: 3,
+        file_records: [{ path: filePath, start_offset: 0, size_bytes: cachedBytes.length, flags: 0 }],
+      }))
+      await writeFile('.generation_complete', manifestRoot)
+      dealDir = outerDir
+      await writeFile('active_generation.txt', 'gen-browser-test')
+    }
+  }, { dealId, manifestRoot: scenario === 'stale' ? staleManifestRoot : manifestRoot, filePath,
+    cachedBytes: [...(scenario === 'stale' ? staleCachedBytes : fileBytes)], scenario, owner: polystoreAddress })
 
   await page.getByTestId(`deal-row-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
+  if (scenario !== 'stale') {
+    await expect(page.getByTestId('wallet-balance-unavailable')).toContainText(scenario === 'cached-unfunded' ? 'Fund your wallet' : 'Wallet balance temporarily unavailable')
+    await expect(page.getByTestId('retrieval-availability')).toBeVisible()
+    const button = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
+    await expect(button).toBeEnabled()
+    const downloaded = page.waitForEvent('download')
+    await button.click()
+    const stream = await (await downloaded).createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream!) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks)).toEqual(fileBytes)
+    expect(fetchCalls).toBe(0)
+    expect(await page.evaluate(() => (window as any).__browserNetworkSendCount)).toBe(0)
+    return
+  }
   await expect(page.getByTestId('deal-index-sync-panel')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('deal-index-sync-panel')).toContainText('Deal Index Required')
   await expect(page.getByTestId('deal-index-sync-panel')).toContainText(/stale|missing/i)
@@ -452,3 +514,5 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
   expect(listFilesCalls).toBe(0)
   expect(fetchCalls).toBe(0)
 })
+
+}

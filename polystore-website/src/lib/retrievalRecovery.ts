@@ -5,7 +5,9 @@ import { decodeRetrievalSlice } from './retrievalFlow'
 import type { RetrievalCrypto } from './retrievalWire'
 
 const RAW_MDU = BigInt(RAW_MDU_CAPACITY_BYTES)
-export function witnessSpan(pin: PinnedGeneration, ordinal: bigint) {
+export type RecoveryGeometry = Pick<PinnedGeneration, 'layout' | 'k' | 'm' | 'rows' | 'leafCount' | 'metadataMdus' | 'userMdus'>
+
+export function witnessSpan(pin: RecoveryGeometry, ordinal: bigint) {
   if (pin.layout !== 2 || ordinal < 0n || ordinal >= pin.userMdus || pin.leafCount < 64 || pin.leafCount > 16384) throw new Error('invalid recovery geometry')
   const total = pin.userMdus * BigInt(pin.leafCount * 48), start = ordinal * BigInt(pin.leafCount * 48), end = start + BigInt(pin.leafCount * 48)
   if (total > (pin.metadataMdus - 1n) * RAW_MDU) throw new Error('insufficient frozen witness extent')
@@ -19,7 +21,7 @@ export function verifyWitnessMdu(bytes: Uint8Array, cell: Uint8Array, crypto: Re
   for (let i = 0; i < 64; i++) commitments.set(crypto.commit_received_blob(bytes.subarray(i * 131072, (i + 1) * 131072)), i * 48)
   assertPolyfsRootCell(new Uint8Array(crypto.compute_mdu_root(commitments) as ArrayLike<number>), cell)
 }
-export function readUserCommitments(pin: PinnedGeneration, ordinal: bigint, witness: readonly { index: bigint; bytes: Uint8Array }[], userCell: Uint8Array, crypto: RetrievalCrypto): Uint8Array {
+export function readUserCommitments(pin: RecoveryGeometry, ordinal: bigint, witness: readonly { index: bigint; bytes: Uint8Array }[], userCell: Uint8Array, crypto: RetrievalCrypto): Uint8Array {
   const span = witnessSpan(pin, ordinal)
   if (witness.length !== span.indices.length || witness.some((w, i) => w.index !== span.indices[i] || w.bytes.length !== 8388608)) throw new Error('wrong witness generation span')
   const out = new Uint8Array(pin.leafCount * 48)
@@ -36,7 +38,7 @@ export function readUserCommitments(pin: PinnedGeneration, ordinal: bigint, witn
   assertPolyfsRootCell(new Uint8Array(crypto.compute_mdu_root(out) as ArrayLike<number>), userCell)
   return out
 }
-export function verifyRecoveredMdu(pin: PinnedGeneration, bytes: Uint8Array, commitments: Uint8Array, crypto: RetrievalCrypto): void {
+export function verifyRecoveredMdu(pin: RecoveryGeometry, bytes: Uint8Array, commitments: Uint8Array, crypto: RetrievalCrypto): void {
   if (bytes.length !== 8388608 || commitments.length !== pin.leafCount * 48) throw new Error('incomplete recovered MDU')
   for (let blob = 0; blob < 64; blob++) {
     const leaf = (blob % pin.k) * pin.rows + Math.floor(blob / pin.k)
@@ -84,16 +86,16 @@ export async function recoverRetrievalMdu(pin: PinnedGeneration, ordinal: bigint
   return bytes
 }
 
-export interface RecoveryMetadataReader {
+export interface RecoveryMetadataReader<T extends RecoveryGeometry = RecoveryGeometry> {
   fetch(index: bigint): Promise<Uint8Array>
   verifyWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array>
-  readCommitments(pin: PinnedGeneration, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array>
+  readCommitments(pin: T, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array>
 }
 // One reader belongs to one immutable generation. Two verified witness MDUs
 // cover any legal user list; older entries are evicted before another is kept.
-export function createRecoveryCommitmentReader(pin: PinnedGeneration, mdu0: Uint8Array, reader: RecoveryMetadataReader, signal?: AbortSignal): (ordinal: bigint) => Promise<Uint8Array> {
+export function createRecoveryCommitmentReader<T extends RecoveryGeometry>(pin: T, mdu0: Uint8Array, reader: RecoveryMetadataReader<T>, signal?: AbortSignal): (ordinal: bigint) => Promise<Uint8Array> {
   if (mdu0.length !== 8388608) throw new Error('missing authenticated MDU0')
-  const frozen = { ...pin }, roots = mdu0.slice(0, 2 * 1024 * 1024)
+  const frozen = { ...pin } as T, roots = mdu0.slice(0, 2 * 1024 * 1024)
   const cache = new Map<bigint, Uint8Array>()
   const cell = (index: bigint) => roots.slice(Number(index - 1n) * 32, Number(index) * 32)
   return async (ordinal) => {
