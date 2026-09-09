@@ -262,6 +262,15 @@ func TestRetrievalSessionV3RealProofAckSettlementAndReplay(t *testing.T) {
 	require.Len(t, challenges, 1)
 	require.Equal(t, uint32(0), challenges[0].Slot)
 	sample := f.proof(t, challenges[0])
+	beforeUnauthorized := sessionStoreSnapshot(t, response, f.g.fixture.storeService)
+	transfersBeforeUnauthorized := len(f.g.bank.transfers)
+	_, err = f.g.server.SubmitRetrievalSessionProofV3(response, &types.MsgSubmitRetrievalSessionProofV3{
+		Creator: f.g.providers[1], SessionId: s.SessionId, Slot: 0,
+		Proofs: []types.RetrievalSampleProofV3{sample},
+	})
+	require.ErrorContains(t, err, "creator is not the frozen provider")
+	require.Equal(t, beforeUnauthorized, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+	require.Len(t, f.g.bank.transfers, transfersBeforeUnauthorized)
 
 	proofGasBefore := response.GasMeter().GasConsumed()
 	submitted, err := f.g.server.SubmitRetrievalSessionProofV3(response, &types.MsgSubmitRetrievalSessionProofV3{
@@ -625,6 +634,46 @@ func TestRetrievalSessionV2AndV3ShareLifecycleCapacity(t *testing.T) {
 	query, err := keeper.NewQueryServerImpl(g.fixture.keeper).GetRetrievalSessionV3(expiredCtx, &types.QueryGetRetrievalSessionV3Request{SessionId: v3.SessionId})
 	require.NoError(t, err)
 	require.Empty(t, query.AnchorSeed)
+}
+
+func TestRetainedGenerationsIncludesLiveV3AndMixedSessions(t *testing.T) {
+	g, v3 := openOwnerSessionV3(t)
+	query := keeper.NewQueryServerImpl(g.fixture.keeper)
+	want := []types.RetainedGeneration{{
+		DealId: g.deal.Id, Generation: g.deal.CurrentGen, ManifestRoot: g.deal.ManifestRoot,
+	}}
+
+	got, err := query.RetainedGenerations(g.ctx, &types.QueryRetainedGenerationsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, want, got.Generations)
+	anchor, err := g.fixture.keeper.ChallengeAnchors.Get(g.ctx, v3.AnchorHeight)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), anchor.SessionReferences)
+
+	_, err = g.server.OpenRetrievalSession(g.ctx, &types.MsgOpenRetrievalSession{
+		Creator: g.owner, DealId: g.deal.Id, Provider: g.providers[0], ManifestRoot: g.deal.ManifestRoot,
+		StartMduIndex: 2, StartBlobIndex: 0, BlobCount: 1, Nonce: 91, ExpiresAt: 20,
+		ChallengeVersion: retrievalchallenge.Version,
+	})
+	require.NoError(t, err)
+	got, err = query.RetainedGenerations(g.ctx, &types.QueryRetainedGenerationsRequest{})
+	require.NoError(t, err)
+	require.Equal(t, want, got.Generations)
+	anchor, err = g.fixture.keeper.ChallengeAnchors.Get(g.ctx, v3.AnchorHeight)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), anchor.SessionReferences)
+}
+
+func TestRetainedGenerationsRejectsMalformedV3ExpiryReference(t *testing.T) {
+	g, session := openOwnerSessionV3(t)
+	require.NoError(t, g.fixture.keeper.RetrievalSessionExpiryRefs.Remove(g.ctx,
+		collections.Join(session.DeadlineHeight, session.SessionId)))
+	require.NoError(t, g.fixture.keeper.RetrievalSessionExpiryRefs.Set(g.ctx,
+		collections.Join(session.DeadlineHeight+1, session.SessionId), true))
+
+	got, err := keeper.NewQueryServerImpl(g.fixture.keeper).RetainedGenerations(g.ctx, &types.QueryRetainedGenerationsRequest{})
+	require.ErrorContains(t, err, "v3 session expiry reference/context mismatch")
+	require.Nil(t, got)
 }
 
 func TestRetrievalSessionV3SponsoredPublicChargesRequesterOnce(t *testing.T) {
