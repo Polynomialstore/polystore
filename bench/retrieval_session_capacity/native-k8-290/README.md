@@ -140,3 +140,36 @@ proof-submission transactions (6,736 openings) with normal audits. At the final
 16/s offered step, 88 offers hit the bounded queue; its consensus-header-time
 window recorded 8.8 bundles/s. This is a single-host, 30-second-per-step result,
 not a production-capacity or byte-delivery qualification.
+
+## Native v3 production-route pilot
+
+The fixed `native-v3-providers` mode is a finite same-path diagnostic for the
+sampled large-session protocol. It uploads exactly 16 MiB through FAT v3,
+admits the generation through all twelve provider HTTP routes, opens two native
+sessions with U=133 and Q=132, and asks the eight systematic providers to submit
+one provider-batched proof transaction for each session. It records the sixteen
+committed transaction messages and gas, 264 newly accepted bitmap ordinals,
+normal audits, and expiry/refund cleanup. It never sends an owner ACK because it
+does not download and verify the file bytes. HTTP duration combines proof
+generation, local verification, gas simulation, signing, broadcast, and commit
+observation; it is neither pure proof-generation time nor chain capacity.
+
+Run only from reviewed, landed source with separately frozen Linux runtime
+hashes and a new private home:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-providers --audit-profile normal --timeout 600 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-16m-pilot-001"
+```
+
+The pilot keeps v3 disabled by default and enables it only in its isolated test
+genesis. A retained result can establish production-route correctness and a
+bounded offered/committed diagnostic. A longer reviewed profile is required
+before quoting stable throughput, and delivered-file performance remains a
+separate measurement.

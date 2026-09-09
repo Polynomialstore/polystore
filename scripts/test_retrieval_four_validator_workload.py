@@ -308,7 +308,120 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 workload.journal_results(path, [operation])
 
 
+class NativeV3PilotHelpersTest(unittest.TestCase):
+    ROOT = "11" * 32
+    INTEGRITY = "22" * 32
+    SESSION = "33" * 32
+
+    def session(self, *, expired=False, refunded=False):
+        bitmap = bytearray(17)
+        for ordinal in range(132):
+            if ordinal != 17:
+                bitmap[ordinal // 8] |= 1 << (ordinal % 8)
+        counts = [17] * 7 + [14]
+        return dict(session=dict(
+            session_id=base64.b64encode(bytes.fromhex(self.SESSION)).decode(), deal_id="7",
+            generation="1", owner=AUDIT_ADDRESSES[8], payer=AUDIT_ADDRESSES[8], nonce="1",
+            polyfs_root=base64.b64encode(bytes.fromhex(self.ROOT)).decode(),
+            integrity_root=base64.b64encode(bytes.fromhex(self.INTEGRITY)).decode(),
+            setup_digest=base64.b64encode(bytes([9]) * 32).decode(), plan_hash=base64.b64encode(bytes([8]) * 32).decode(),
+            file_record_index=0, file_start_offset="0", file_length=str(workload.V3_PILOT_BYTES),
+            range_start="0", range_length=str(workload.V3_PILOT_BYTES), metadata_mdus="2", user_mdus="3",
+            first_blob="0", last_blob="132", population="133", sample_count="132", nonce_string="unused",
+            deadline_height="250", chain_id="polystore_291-1", accepted_sample_bitmap=base64.b64encode(bitmap).decode(),
+            obligations=[dict(slot=i, assigned_provider=AUDIT_ADDRESSES[i], payee=AUDIT_ADDRESSES[i],
+                              blob_count=str(count), sample_count="0", locked_fee=str(count))
+                         for i, count in enumerate(counts)],
+            acked_slots_mask=0, settled_slots_mask=0,
+            refunded_slots_mask=255 if refunded else 0, locked_fee="0" if refunded else "133",
+            expired=expired))
+
+    def validate_session(self, value, **kwargs):
+        return workload.validate_v3_session(value, session_id=self.SESSION, deal_id="7",
+            owner=AUDIT_ADDRESSES[8], providers=dict(enumerate(AUDIT_ADDRESSES[:8])), nonce=1,
+            polyfs_root=self.ROOT, integrity_root=self.INTEGRITY, chain_id="polystore_291-1",
+            deadline_height=250, **kwargs)
+
+    def test_session_bitmap_and_refund_authorities_fail_closed(self):
+        session, accepted = self.validate_session(self.session())
+        self.assertEqual((len(accepted), 17 in accepted, sum(int(o["blob_count"]) for o in session["obligations"])),
+                         (131, False, 133))
+        self.validate_session(self.session(expired=True), expired=True)
+        self.validate_session(self.session(expired=True, refunded=True), expired=True, refunded=True)
+        mutations = {
+            "wrong root": lambda s: s.update(polyfs_root=base64.b64encode(bytes(32)).decode()),
+            "wrong chain": lambda s: s.update(chain_id="other"),
+            "wrong deadline": lambda s: s.update(deadline_height="251"),
+            "wrong partition": lambda s: s["obligations"][0].update(blob_count="18"),
+            "premature refund": lambda s: s.update(refunded_slots_mask=255, locked_fee="0"),
+            "settled without ack": lambda s: s.update(settled_slots_mask=1),
+            "padding bit": lambda s: s.update(accepted_sample_bitmap=base64.b64encode(bytes([255]) * 17).decode()),
+        }
+        for name, mutate in mutations.items():
+            value = self.session()
+            mutate(value["session"])
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.validate_session(value)
+
+    def test_open_response_is_exact_and_nonzero(self):
+        sid = bytes.fromhex(self.SESSION)
+        kind = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
+        suffix = (b"\x10" + workload._encode_varint(workload.V3_PILOT_BYTES) +
+                  b"\x18" + workload._encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
+                  b"\x20" + workload._encode_varint(132))
+        response = b"\x0a\x20" + sid + suffix
+        any_value = b"\x0a" + workload._encode_varint(len(kind)) + kind + b"\x12" + workload._encode_varint(len(response)) + response
+        raw = b"\x12" + workload._encode_varint(len(any_value)) + any_value
+        self.assertEqual(workload.opened_v3_session(dict(outcome="committed_success", data=raw.hex())), self.SESSION)
+        for changed in (raw + b"\x00", bytes([raw[0] ^ 1]) + raw[1:], raw.replace(sid, bytes(32))):
+            with self.assertRaises(ValueError):
+                workload.opened_v3_session(dict(outcome="committed_success", data=changed.hex()))
+
+    def test_provider_wave_and_committed_message_are_exact(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+        rows = [dict(status="success", http_status=200, session_id=self.SESSION, cleanup_status="complete",
+                     slot=i, provider=providers[i], proof_count=17 if i < 7 else 13,
+                     tx_hash=f"{i + 1:064x}") for i in range(8)]
+        self.assertEqual(workload.validate_v3_provider_outcomes(rows, providers, session_id=self.SESSION)["proof_count"], 132)
+        for field, bad in (("http_status", 202), ("cleanup_status", "pending"), ("tx_hash", rows[1]["tx_hash"])):
+            changed = copy.deepcopy(rows)
+            changed[0][field] = bad
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                workload.validate_v3_provider_outcomes(changed, providers, session_id=self.SESSION)
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
+                   "creator": providers[0], "slot": 0,
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                   "proofs": [{"ordinal": str(i)} for i in range(17)]}
+        self.assertEqual(workload.validate_v3_committed_message(message, kind="session-proof",
+            creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17), list(range(17)))
+        duplicate = copy.deepcopy(message)
+        duplicate["proofs"][-1]["ordinal"] = "0"
+        with self.assertRaises(ValueError):
+            workload.validate_v3_committed_message(duplicate, kind="session-proof",
+                creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
+
+
+
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
+        common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra in ([], required + ["--timeout", "601"], required + ["--audit-profile", "c6"],
+                      required + ["--proof-only"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit) as error:
+                    workload.main()
+                self.assertEqual(error.exception.code, 2)
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required + ["--timeout", "600"]), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_v3=True, audit_profile="normal")
+
     def test_healthy_cli_requires_explicit_binaries_and_bounded_timeout(self):
         common = ["diagnostic", "--mode", "healthy-providers", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]
