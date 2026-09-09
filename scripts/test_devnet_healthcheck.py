@@ -42,6 +42,10 @@ class Handler(BaseHTTPRequestHandler):
     gateway_upload_status = 400
     gateway_upload_error = "invalid deal_id"
     gateway_upload_cors = True
+    faucet_status = 400
+    faucet_body = "Invalid request\n"
+    faucet_cors = True
+    faucet_auth_header = True
     extra_provider = False
     extra_draining_provider = False
     public_base = ""
@@ -85,6 +89,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("access-control-allow-headers", allowed)
         elif self.path == "/polystorechain/polystorechain/v1/params":
             self.send_header("access-control-allow-headers", "x-cosmos-block-height")
+        elif self.path == "/faucet":
+            allowed = "content-type" + (", x-polystore-faucet-auth" if self.faucet_auth_header else "")
+            self.send_header("access-control-allow-headers", allowed)
         else:
             self.send_header("access-control-allow-headers", "content-type")
         self.end_headers()
@@ -157,6 +164,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def do_POST(self):
+        if self.path == "/faucet":
+            assert self.rfile.read(int(self.headers.get("content-length", "0"))) == b"{"
+            self.send_response(self.faucet_status)
+            self.send_header("content-type", "text/plain; charset=utf-8")
+            if self.faucet_cors:
+                self.send_header("access-control-allow-origin", "*")
+            self.end_headers()
+            self.wfile.write(self.faucet_body.encode())
+            return
         if self.evm_530:
             self.send_json({"error": "edge unavailable"}, 530, cors=True)
             return
@@ -247,6 +263,10 @@ exit 1
         Handler.gateway_upload_status = 400
         Handler.gateway_upload_error = "invalid deal_id"
         Handler.gateway_upload_cors = True
+        Handler.faucet_status = 400
+        Handler.faucet_body = "Invalid request\n"
+        Handler.faucet_cors = True
+        Handler.faucet_auth_header = True
         Handler.extra_provider = False
         Handler.extra_draining_provider = False
 
@@ -404,6 +424,32 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("active provider inventory mismatch", result.stdout)
+
+    def test_public_check_recognizes_access_controlled_faucet(self):
+        Handler.faucet_status = 401
+        Handler.faucet_body = "Unauthorized\n"
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_public_check_rejects_missing_or_wrong_faucet_despite_health_and_options(self):
+        for status, body in ((404, "not found"), (200, "Invalid request"), (400, "wrong error"), (401, '{"error":"forbidden"}')):
+            with self.subTest(status=status, body=body):
+                Handler.faucet_status, Handler.faucet_body = status, body
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Faucet POST did not return the expected", result.stdout)
+
+    def test_public_check_rejects_missing_faucet_cors(self):
+        Handler.faucet_cors = False
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Faucet POST missing matching Access-Control-Allow-Origin", result.stdout)
+
+    def test_public_check_rejects_missing_faucet_auth_preflight_header(self):
+        Handler.faucet_auth_header = False
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Faucet CORS preflight missing required request headers", result.stdout)
 
     def test_public_check_allows_additional_draining_provider(self):
         Handler.extra_draining_provider = True

@@ -760,6 +760,31 @@ check_faucet_health() {
   check_http_200 "Faucet /health" "$faucet_base/health"
 }
 
+check_faucet_handler() {
+  local headers body status allow_origin response
+  headers="$(mktemp)"
+  body="$(mktemp)"
+  # Malformed JSON stops before rate limiting or funding. An access-controlled
+  # faucet rejects the missing token first; never give this monitor a token.
+  if ! curl -sS --max-time "$HC_TIMEOUT" -X POST -D "$headers" -o "$body" \
+    -H "Origin: $BROWSER_ORIGIN" -H 'Content-Type: application/json' \
+    --data-binary '{' "$FAUCET/faucet"; then
+    fail "Faucet POST unreachable"
+  else
+    status="$(awk 'NR == 1 { print $2 }' "$headers")"
+    allow_origin="$(header_value "$headers" 'Access-Control-Allow-Origin')"
+    response="$(cat "$body")"
+    if [[ "$status:$response" != '400:Invalid request' && "$status:$response" != '401:Unauthorized' ]]; then
+      fail "Faucet POST did not return the expected validation or authorization rejection (HTTP ${status:-000})"
+    elif [[ "$allow_origin" != "*" && "$allow_origin" != "$BROWSER_ORIGIN" ]]; then
+      fail "Faucet POST missing matching Access-Control-Allow-Origin"
+    else
+      ok "Faucet POST reaches faucet handler (HTTP $status; funding not exercised)"
+    fi
+  fi
+  rm -f "$headers" "$body"
+}
+
 check_provider_health() {
   local provider_base="$1"
   check_http_200 "Provider /health" "$provider_base/health"
@@ -917,7 +942,8 @@ if [[ "$MODE" == "hub" ]]; then
       'x-cosmos-block-height' "$LATEST_COMMITTED_HEIGHT" 'x-cosmos-block-height'
     check_cors_preflight "Gateway" "$GATEWAY/gateway/upload" "$BROWSER_ORIGIN"
     check_gateway_upload_handler
-    check_cors_preflight "Faucet" "$FAUCET/faucet" "$BROWSER_ORIGIN"
+    check_cors_preflight "Faucet" "$FAUCET/faucet" "$BROWSER_ORIGIN" POST 'content-type,x-polystore-faucet-auth'
+    check_faucet_handler
     check_public_provider_inventory
     for expected_provider in "${EXPECTED_PROVIDERS[@]}"; do
       check_public_provider "$expected_provider"
