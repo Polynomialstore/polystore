@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -116,11 +117,15 @@ func committedTxResult(body []byte, expected string) error {
 
 // A bounded, caller-driven observation. The caller retains the returned hash on
 // every unknown or failed outcome and never interprets HTTP status as settlement.
-func waitForCommittedTx(ctx context.Context, rawHash string) (string, error) {
+func waitForCommittedTx(ctx context.Context, rawHash string) (resultHash string, resultErr error) {
 	hash, err := normalizeTxHash(rawHash)
 	if err != nil {
 		return "", err
 	}
+	started := time.Now()
+	defer func() {
+		log.Printf("transaction timing tx=%s inclusion_observation_ms=%.3f success=%t", hash, float64(time.Since(started))/float64(time.Millisecond), resultErr == nil)
+	}()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	client := &http.Client{Timeout: 2 * time.Second}
@@ -172,7 +177,9 @@ func submitTxAndWait(ctx context.Context, args ...string) (string, error) {
 // Durable callers also mark their submission intent before invoking the CLI so
 // a crash before the hash is recorded remains explicitly pending after restart.
 func submitTxAndRecord(ctx context.Context, record func(string) error, args ...string) (string, error) {
+	started := time.Now()
 	out, submitErr := runTxWithRetry(ctx, args...)
+	submissionMs := float64(time.Since(started)) / float64(time.Millisecond)
 	body := extractJSONBody(out)
 	var response struct {
 		Hash      string          `json:"txhash"`
@@ -188,6 +195,8 @@ func submitTxAndRecord(ctx context.Context, record func(string) error, args ...s
 	if hashErr != nil {
 		hash, _ = normalizeTxHash(extractTxHash(string(out)))
 	}
+	// Only the normalized public hash is logged; CLI arguments and output can contain secrets.
+	log.Printf("transaction timing tx=%s cli_submission_ms=%.3f cli_success=%t", hash, submissionMs, submitErr == nil)
 	code, codeErr := explicitTxCode(response.Code)
 	// Cosmos can synthesize this response after the RPC reports an existing
 	// mempool transaction. It is still pending, not a rejection authorizing retry.

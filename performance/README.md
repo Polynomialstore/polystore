@@ -214,8 +214,11 @@ window transport (including server work), Worker verification, decode/write,
 flush, owner ACK and ACK-plus-provider-settlement. These nested timings overlap
 and must not be summed as critical-path wall time. Worker verification still
 includes both proof validation and received-byte commitment checks; provider
-logs isolate response generation/persistence/write costs. Provider submission
-and inclusion remain combined in proof-request HTTP durations. The OPFS
+logs isolate response generation/persistence/write costs. Transaction logs split
+CLI submission from inclusion observation, including recovery polling; these
+are observation durations, not consensus execution time. The summary records
+Node/browser versions and SHA-256 hashes of launched executable paths, served
+WASM/setup assets and available native link candidates. The OPFS
 preflight separately retains `opfs-progress.json` with flushed and hash-checked
 chunk progress. None of these diagnostics establish acceptable performance
 without an actual retained, equivalent-security measurement.

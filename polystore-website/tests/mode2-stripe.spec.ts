@@ -5,7 +5,7 @@ import { persistentTest } from './utils/persistentBrowser'
 import crypto from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
-import { createWriteStream } from 'node:fs'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -671,6 +671,22 @@ test.describe('mode2 streamed retrieval', () => {
       persist()
     }, fail)
     try {
+      // The stack launcher builds/starts these exact paths; hash incrementally so
+      // provenance does not allocate another executable-sized buffer.
+      const native = (await fs.readdir('../polystore_core/target/release')).filter((name) => /^libpolystore_core\.(so|dylib|a)$/.test(name))
+      expect(native.length).toBeGreaterThan(0)
+      const runtimeFiles = ['../polystorechain/polystorechaind', '../polystore_gateway/polystore_gateway',
+        '../polystore_cli/target/release/polystore_cli', '../polystorechain/trusted_setup.txt',
+        'public/trusted_setup.txt', 'public/wasm/polystore_core.js', 'public/wasm/polystore_core_bg.wasm',
+        ...native.map((name) => `../polystore_core/target/release/${name}`)]
+      const sha256: Record<string, string> = {}
+      for (const file of runtimeFiles) {
+        const digest = crypto.createHash('sha256')
+        for await (const chunk of createReadStream(file)) digest.update(chunk)
+        sha256[file] = digest.digest('hex')
+      }
+      summary.runtime = { node: process.version, browser: page.context().browser()?.version(), sha256,
+        scope: 'launched executable paths and served assets; native files include all available link candidates' }
       await page.exposeFunction('__polystoreRetrievalEvent'  , (event: RetrievalDiagnostic) => {
         try {
           progress.event(event)
