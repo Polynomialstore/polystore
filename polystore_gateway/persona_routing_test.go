@@ -95,6 +95,17 @@ func TestProviderDaemonRoutes_DoNotExposeGatewaySurface(t *testing.T) {
 			t.Fatalf("expected provider daemon to expose retrieval route %s", path)
 		}
 	}
+
+	wContinue := httptest.NewRecorder()
+	r.ServeHTTP(wContinue, httptest.NewRequest(http.MethodPost, "/sp/retrieval/session-proof/continue", nil))
+	if wContinue.Code == http.StatusNotFound {
+		t.Fatalf("expected provider daemon to expose public retrieval continuation")
+	}
+	wOldContinue := httptest.NewRecorder()
+	r.ServeHTTP(wOldContinue, httptest.NewRequest(http.MethodPost, "/sp/session-proof/continue", nil))
+	if wOldContinue.Code != http.StatusNotFound {
+		t.Fatalf("expected provider daemon to hide continuation outside /sp/retrieval/*, got %d", wOldContinue.Code)
+	}
 }
 
 func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {

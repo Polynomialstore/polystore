@@ -238,7 +238,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
     2.  Open session on-chain via MetaMask (`openRetrievalSession` precompile).
     3.  Fetch bytes with `X-PolyStore-Session-Id` header via `/gateway/fetch/{manifest_root}` (gateway or direct SP).
     4.  Confirm completion on-chain (`confirmRetrievalSession`).
-    5.  Resolve each frozen payee's registered HTTP endpoint and continue its owner-confirmed session via `POST /sp/session-proof/continue`.
+    5.  Resolve each frozen payee's registered HTTP endpoint and continue its owner-confirmed session via `POST /sp/retrieval/session-proof/continue`.
 *   **Striped retrieval:** Blob ranges remain slot-aware, and gateways may reconstruct missing MDUs from `/sp/shard`. Historical full-replica handling is compatibility-only.
 
 ### 4.6 `useFaucet` (`src/hooks/useFaucet.ts`)
@@ -389,7 +389,7 @@ The website depends on the following services (configured in `config.ts`):
 *   `GET /gateway/list-files/{manifest_root}?deal_id=...&owner=...`: `{ manifest_root, total_size_bytes, files:[{path,size_bytes,start_offset,flags}] }` (deduplicated: latest non-tombstone record per path).
 *   `GET /gateway/plan-retrieval-session/{manifest_root}?deal_id=...&owner=...&file_path=...`: Returns blob-range plan for retrieval sessions.
 *   `GET /gateway/fetch/{manifest_root}?deal_id=...&owner=...&file_path=...`: Streams file bytes with `X-PolyStore-Session-Id` header (encode `file_path` with `encodeURIComponent`; errors are JSON `{error,hint}`).
-*   `POST /sp/session-proof/continue`: `{session_id}` -> provider submission outcome. The browser calls the frozen payee directly after its owner ACK commits; no provider secret, routing hint, or proof bytes are accepted.
+*   `POST /sp/retrieval/session-proof/continue`: `{session_id}` -> provider submission outcome. The browser calls the frozen payee directly after its owner ACK commits; no provider secret, routing hint, or proof bytes are accepted.
 *   `POST /gateway/prove-retrieval`: `{deal_id, epoch_id, manifest_root, file_path}` -> `{tx_hash}` (legacy devnet helper; deprecated).
 *   `GET /gateway/status`: Local gateway status/capabilities (optional).
 *   `GET /gateway/manifest-info/{manifest_root}`: Returns `manifest_blob_hex` + ordered MDU roots (debug/inspection).
@@ -449,7 +449,7 @@ The website depends on the following services (configured in `config.ts`):
     2.  Client opens the session(s) on-chain (MetaMask `openRetrievalSession` or `openRetrievalSessions` for multi-provider).
     3.  Client fetches bytes via `GET /gateway/fetch/...` with `X‑PolyStore‑Session‑Id` header.
     4.  Client confirms completion on-chain (`confirmRetrievalSession` or `confirmRetrievalSessions`).
-    5.  Client resolves each frozen payee and calls its `POST /sp/session-proof/continue` endpoint after the owner ACK commits.
+    5.  Client resolves each frozen payee and calls its `POST /sp/retrieval/session-proof/continue` endpoint after the owner ACK commits.
 *   **Implication:** Browser holds the **Liveness Authority** (on‑chain session open/confirm). Gateway is a relay/compute helper, not a signer.
 
 ### 8.2.1 SDK: Batch Retrieval Precompile

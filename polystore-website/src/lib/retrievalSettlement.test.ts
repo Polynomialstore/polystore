@@ -80,7 +80,7 @@ test('ACK commits before singular requests, preserving each immutable deputy and
     fetchFn: async (url, init) => {
       const s = sessions.find((session) => session.sessionId === JSON.parse(String(init?.body)).session_id)!
       assert.deepEqual(events.slice(0, 2), ['ACK', 'confirmed'])
-      assert.equal(String(url), `${providerBase}/sp/session-proof/continue`)
+      assert.equal(String(url), `${providerBase}/sp/retrieval/session-proof/continue`)
       assert.equal(init?.method, 'POST'); assert.equal(init?.redirect, 'error'); assert.ok(init?.signal)
       assert.deepEqual(init?.headers, { 'Content-Type': 'application/json' })
       assert.deepEqual(JSON.parse(String(init?.body)), { session_id: s.sessionId })
@@ -157,6 +157,11 @@ test('committed, reconciled, pending known/unknown and explicit failure remain d
   assert.equal(rejected.state, 'failed'); assert.match(rejected.message!, /403.*forbidden/)
   const [lost] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm, fetchFn: async () => json({ error: 'upstream response lost' }, 502) })
   assert.equal(lost.state, 'pending')
+  for (const cleanup_status of ['pending', 'retained']) {
+    const [cleanup] = await confirmAndRequestRetrievalProofs([s], { resolveProviderBase, confirm,
+      fetchFn: async () => json({ ...payload(s, 'reconciled', ''), cleanup_status }) })
+    assert.equal(cleanup.state, 'pending'); assert.match(cleanup.message!, /settlement is committed.*cleanup is pending/i)
+  }
 })
 
 test('missing, failed or non-HTTP provider resolution preserves ACK without a POST', async () => {

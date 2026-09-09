@@ -196,7 +196,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
     })
   })
 
-  await page.route('**/sp/session-proof/continue', async (route) => {
+  await page.route('**/sp/retrieval/session-proof/continue', async (route) => {
     const url = route.request().url()
     if (url.includes(':8080/')) gatewayProofCalls += 1
     if (url.includes(':8082/')) spProofCalls += 1
@@ -205,7 +205,7 @@ test('Deal Explorer debug: after provider sync, default download prefers browser
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ status: 'success', session_id: body.session_id, proof_count: 1, tx_hash: 'A'.repeat(64) }),
+      body: JSON.stringify({ status: 'success', session_id: body.session_id, proof_count: 1, tx_hash: 'A'.repeat(64), cleanup_status: 'complete' }),
     })
   })
 

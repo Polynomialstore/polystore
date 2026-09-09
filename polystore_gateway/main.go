@@ -317,7 +317,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
-	r.HandleFunc("/sp/session-proof/continue", SpContinueRetrievalSessionProof).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/generation-v3/accept", SpAcceptDealGenerationV3).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")

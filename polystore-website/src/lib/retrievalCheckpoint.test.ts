@@ -88,6 +88,26 @@ test('a lost proof POST preserves the pending wave; retry repeats only the same 
   assert.equal(sends, 1); assert.equal(posts, 2); assert.equal(restored.state.through, 0n)
 })
 
+test('committed provider cleanup remains checkpointed until reconciliation completes', async () => {
+  const { confirmAndRequestRetrievalProofs } = await import('./retrievalSettlement')
+  const storage = store(), cursor = retrievalCheckpointCursor(storage, 'file', { id: 'opfs', length: 4n, through: -1n })
+  cursor.prepare(0n, sessions)
+  let posts = 0, forgotten = 0
+  const settle = () => confirmAndRequestRetrievalProofs(sessions, {
+    confirm: async () => {}, resolveProviderBase: async () => 'https://provider.example',
+    fetchFn: async () => {
+      posts++
+      return new Response(JSON.stringify({ status: 'reconciled', session_id: hash, proof_count: 1, tx_hash: '',
+        cleanup_status: posts === 1 ? 'pending' : 'complete' }), { headers: { 'content-type': 'application/json' } })
+    },
+  })
+  cursor.complete(0n, await settle())
+  assert.equal(cursor.state.unsettled, 1); assert.ok(storage.get('file:settlement:0'))
+  await cursor.reconcile(settle, async () => { forgotten++ })
+  assert.equal(posts, 2); assert.equal(forgotten, 1); assert.equal(cursor.state.unsettled, 0)
+  assert.equal(storage.get('file:settlement:0'), undefined)
+})
+
 
 test('denied control storage releases the browser lock before any output or wallet work', async () => {
   const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
@@ -176,7 +196,7 @@ test('two gateway-free MDUs survive reload and settle the same IDs without anoth
     fetchFn: async (_, init) => {
       const id = JSON.parse(String(init?.body)).session_id
       posted.push(id)
-      return new Response(JSON.stringify({ status: 'reconciled', session_id: id, proof_count: 8, tx_hash: '' }), { headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'reconciled', session_id: id, proof_count: 8, tx_hash: '', cleanup_status: 'complete' }), { headers: { 'content-type': 'application/json' } })
     },
   }), async (wave) => {
     forgotten.push(wave.map((s) => s.sessionId))

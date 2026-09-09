@@ -103,7 +103,7 @@ func invokeSubmission(body string) *httptest.ResponseRecorder {
 }
 
 func invokeContinuation(body string) *httptest.ResponseRecorder {
-	request := httptest.NewRequest("POST", "/sp/session-proof/continue", strings.NewReader(body))
+	request := httptest.NewRequest("POST", "/sp/retrieval/session-proof/continue", strings.NewReader(body))
 	recorder := httptest.NewRecorder()
 	SpContinueRetrievalSessionProof(recorder, request)
 	return recorder
@@ -138,7 +138,7 @@ func (r *deadlineRequiredReader) Read(p []byte) (int, error) {
 func TestPublicContinuationBoundsBodyRead(t *testing.T) {
 	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
 	body := &deadlineRequiredReader{w: w, reader: strings.NewReader(`{}`)}
-	request := httptest.NewRequest(http.MethodPost, "/sp/session-proof/continue", body)
+	request := httptest.NewRequest(http.MethodPost, "/sp/retrieval/session-proof/continue", body)
 	started := time.Now()
 	SpContinueRetrievalSessionProof(w, request)
 	if w.Code != http.StatusBadRequest || !body.checked {

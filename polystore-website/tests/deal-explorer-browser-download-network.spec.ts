@@ -278,13 +278,13 @@ test('Deal Explorer: stale browser cache does not bypass required provider sync'
     })
   })
 
-  await page.route('**/sp/session-proof/continue', async (route) => {
+  await page.route('**/sp/retrieval/session-proof/continue', async (route) => {
     const body = route.request().postDataJSON()
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ status: 'success', session_id: body.session_id, proof_count: 1, tx_hash: 'A'.repeat(64) }),
+      body: JSON.stringify({ status: 'success', session_id: body.session_id, proof_count: 1, tx_hash: 'A'.repeat(64), cleanup_status: 'complete' }),
     })
   })
 

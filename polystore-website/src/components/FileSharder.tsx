@@ -2110,7 +2110,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
-      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Use the file menu's provider download action to retry settlement using the saved bytes before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
+      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Retry the same append action to settle the retained sessions using the saved bytes before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
       const file = await output.file()
       job.finish()
       await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
@@ -2121,7 +2121,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       await job.retain()
       throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
     }
-  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

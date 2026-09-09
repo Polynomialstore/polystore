@@ -751,7 +751,7 @@ test.describe('mode2 streamed retrieval', () => {
       const onRequest = (request: import('@playwright/test').Request) => {
         const url = new URL(request.url()), id = request.headers()['x-polystore-session-id']
         if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) { const entry = { id, gateway: isGatewayOrigin(url.origin), startMs: performance.now() }; windows.push(entry); pendingWindows.set(request, entry) }
-        if (url.pathname === '/sp/session-proof/continue' && request.method() === 'POST') {
+        if (url.pathname === '/sp/retrieval/session-proof/continue' && request.method() === 'POST') {
           const entry = { id: request.postDataJSON().session_id as string, startMs: performance.now() }
           proofRequests.push(entry); pendingProofs.set(request, entry)
         }
@@ -968,7 +968,7 @@ test.describe('mode2 streamed retrieval', () => {
       }
       await route.continue()
     })
-    await page.route('**/sp/session-proof/continue', async (route) => {
+    await page.route('**/sp/retrieval/session-proof/continue', async (route) => {
       const request = route.request()
       if (request.method() !== 'POST') return route.continue()
       const input = request.postDataJSON()

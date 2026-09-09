@@ -54,7 +54,7 @@ async function requestProof(session: RetrievalSettlementSession, base: string, o
   const signal = AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(options.signal ? [options.signal] : [])])
   try {
     signal.throwIfAborted()
-    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}/sp/session-proof/continue`, {
+    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}/sp/retrieval/session-proof/continue`, {
       method: 'POST', redirect: 'error', signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: session.sessionId }),
@@ -79,7 +79,9 @@ async function requestProof(session: RetrievalSettlementSession, base: string, o
         (value.error !== undefined && typeof value.error !== 'string')) throw new Error('mismatched or malformed outcome')
     const txHash = value.tx_hash || undefined
     if (response.status === 200 && (value.status === 'reconciled' || (value.status === 'success' && txHash))) {
-      return { state: 'committed', sessionId: session.sessionId, txHash }
+      if (value.cleanup_status === 'complete') return { state: 'committed', sessionId: session.sessionId, txHash }
+      return { state: 'pending', sessionId: session.sessionId, txHash,
+        message: `Provider settlement is committed for session ${session.sessionId}${txHash ? ` (transaction ${txHash})` : ''}, but durable provider cleanup is pending. Reconcile this same session with the provider; do not rebroadcast.` }
     }
     if (response.status === 202 && value.status === 'pending') return pending(session, 'The provider retained the proof and submission state.', txHash)
     if (response.status === 409 && value.status === 'failed') {
