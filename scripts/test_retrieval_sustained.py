@@ -86,7 +86,7 @@ class SustainedTest(unittest.TestCase):
                 self.assertEqual(profile["native_message_batching"]["proof_sessions_per_submission_transaction"], 1)
                 self.assertFalse(profile["native_message_batching"]["cross_provider_crypto_aggregation"])
                 self.assertEqual(profile["native_message_batching"]["open_session_gas_limit_per_message"], 400_000)
-                self.assertEqual(profile["native_message_batching"]["open_session_gas_limit_per_preparation_transaction"], 100_000)
+                self.assertEqual(profile["native_message_batching"]["open_session_base_gas_per_preparation_transaction"], 100_000)
                 self.assertEqual(profile["native_message_batching"]["open_session_batch_gas_limit_max"], 25_700_000)
                 self.assertIn("not measured", profile["native_message_batching"]["open_session_gas_limit_note"])
         for k in (0, 2.0, 4, 16, True, "8"):
@@ -264,9 +264,20 @@ class SustainedTest(unittest.TestCase):
             artifact.opened_session_ids(dict(data=OPEN_RESPONSE_DATA), 65)
 
     def test_batch_pins_unsigned_signed_and_committed_order_before_proofs(self):
-        for corruption in (None, 'generated_nonce', 'generated_gas', 'signed_order', 'signed_gas', 'unknown'):
-            life, _, _, operations = fixture_state()
-            operations = operations[:2]
+        cases = [(None, count) for count in (1, 2, 64)] + [
+            (corruption, 2) for corruption in ('generated_nonce', 'generated_gas', 'signed_order', 'signed_gas', 'unknown')]
+        for corruption, count in cases:
+            life, _, _, source = fixture_state()
+            operations = []
+            for index in range(count):
+                operation = copy.deepcopy(source[0])
+                operation['proof_expectation']['session']['nonce'] = index + 1
+                submit = operation['open-session']['submit']
+                submit[submit.index('--nonce') + 1] = str(index + 1)
+                submit[submit.index('--gas') + 1] = '400000'
+                operations.append(operation)
+            original_gas = [op['open-session']['submit'][op['open-session']['submit'].index('--gas') + 1]
+                            for op in operations]
             life.doc, life.save = {}, Mock()
             generated = []
             def command(args):
@@ -296,7 +307,7 @@ class SustainedTest(unittest.TestCase):
                     body=dict(messages=messages), auth_info=dict(fee=dict(gas_limit=str(gas))), signatures=['signed'])))
                 return ''
             response = dict(outcome='unknown' if corruption == 'unknown' else 'committed_success', height=12,
-                            data=OPEN_RESPONSE_DATA + OPEN_RESPONSE_DATA[:-64] + '31' * 32)
+                            data=''.join(OPEN_RESPONSE_DATA[:-64] + f'{index + 1:02x}' * 32 for index in range(count)))
             with tempfile.TemporaryDirectory() as home, patch.object(artifact, 'scheduled_transaction', return_value=response) as submit:
                 if corruption:
                     with self.assertRaises(ValueError):
@@ -306,18 +317,16 @@ class SustainedTest(unittest.TestCase):
                         submit.assert_not_called()
                 else:
                     ids, height = workload.open_session_batch(life, operations, Path(home) / 'batch', command)
-                    self.assertEqual((len(ids), height), (2, 12))
+                    self.assertEqual((len(ids), height), (count, 12))
                     self.assertEqual(submit.call_count, 1)
                     self.assertEqual(life.doc['preparation_transactions'], [response])
-                    self.assertEqual([int(tx['auth_info']['fee']['gas_limit']) for tx in generated], [500_000, 400_000])
-
-    def test_open_session_batch_gas_boundaries_include_one_transaction_base(self):
-        for messages, expected in ((1, 500_000), (2, 900_000), (64, 25_700_000)):
-            with self.subTest(messages=messages):
-                self.assertEqual(workload.OPEN_SESSION_BATCH_BASE_GAS +
-                    workload.OPEN_SESSION_PREPARATION_GAS * messages, expected)
-                self.assertLessEqual(expected, workload.OPEN_SESSION_BATCH_GAS_CAP)
-                self.assertLess(expected, 64_000_000)
+                    generated_gas = [int(tx['auth_info']['fee']['gas_limit']) for tx in generated]
+                    self.assertEqual(generated_gas, [500_000] + [400_000] * (count - 1))
+                    signed = json.loads((Path(home) / 'batch/signed.json').read_text())
+                    self.assertEqual(int(signed['auth_info']['fee']['gas_limit']), sum(generated_gas))
+                    self.assertEqual(original_gas, ['400000'] * count)
+                    self.assertEqual([op['open-session']['submit'][op['open-session']['submit'].index('--gas') + 1]
+                                      for op in operations], original_gas)
 
 
     def test_block_reconciliation_rejects_missing_transaction_gas_and_header_drift(self):

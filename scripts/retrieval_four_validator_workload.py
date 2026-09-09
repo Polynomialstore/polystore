@@ -80,7 +80,7 @@ def sustained_profile(k, step_seconds, offsets, proof_gas, rate_scale=1, deputy_
         bundle_opening_distribution={str(openings): inventory},
         native_message_batching=dict(open_session_messages_per_preparation_transaction_max=OPEN_SESSION_BATCH_MAX,
             open_session_gas_limit_per_message=OPEN_SESSION_PREPARATION_GAS,
-            open_session_gas_limit_per_preparation_transaction=OPEN_SESSION_BATCH_BASE_GAS,
+            open_session_base_gas_per_preparation_transaction=OPEN_SESSION_BATCH_BASE_GAS,
             open_session_batch_gas_limit_max=OPEN_SESSION_BATCH_GAS_CAP,
             open_session_gas_limit_note="conservative per-message and transaction-base ceilings, not measured full execution cost",
             proof_sessions_per_submission_transaction=1, cross_provider_crypto_aggregation=False),
