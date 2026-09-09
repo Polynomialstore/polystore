@@ -182,6 +182,14 @@ are diagnostic only. The 20M declared proof gas constrained SDK proposal packing
 to at most three transactions under the unchanged 64M block limit despite about
 4.13M actual gas used per transaction, so it is not a chain-capacity result.
 
+The follow-up [60-second-step diagnostic](../bench/retrieval_session_capacity/native-k8-290/sustained-001/README.md)
+used a 5M declared ceiling and committed all 465 measured K8 bundles with normal
+audits. One local 4 bundles/s step reached the configured offered ceiling with
+four client completion observations draining after the boundary, peak queue
+three, and at most 30M declared gas in a block. It establishes a workload-limited
+local lower bound only. #290 remains open for higher offered load and realistic
+deployment measurement.
+
 
 ## Historical streamed browser retrieval (#260)
 

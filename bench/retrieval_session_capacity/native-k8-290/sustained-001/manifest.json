@@ -1,0 +1,84 @@
+{
+  "schema": "polystore.issue290.k8-sustained-publication.v1",
+  "artifact": "native K8 sustained 001 local diagnostic",
+  "qualification": false,
+  "issue_status": "open",
+  "source_run": "$ARTIFACT_ROOT/290-k8-all-assignment-60s-001",
+  "original_sources": {
+    "summary.json": {
+      "source_name": "290-k8-all-assignment-60s-001.summary.json",
+      "sha256": "943a156909e632c74ee70d8cba4b000d508374d509a784da61d0376a6d7efe4d",
+      "bytes": 9559
+    },
+    "plan.json": {
+      "source_name": "290-k8-all-assignment-60s-001-plan.json",
+      "sha256": "bfc8318480ccdee58d13222a5df33ca6f7124226b87659b9509a4defb2bfb719",
+      "bytes": 5850
+    },
+    "runtime-provenance.json": {
+      "source_name": "local290-build-provenance.json",
+      "sha256": "2f4631e4abcdea604537d177445115caf1b203bb85f43267ba3b4f69f59b5580",
+      "bytes": 7486
+    }
+  },
+  "published_files": {
+    "summary.json": {
+      "sha256": "768e2b2adab5bf1205fecc9832eab30f7b564e3f9f0a030fcaaffc07b43e0340",
+      "bytes": 9515
+    },
+    "plan.json": {
+      "sha256": "b74545e34a4f77bbb6872995938da995dd0bc67ae546442a9a617f067951d0f1",
+      "bytes": 5210
+    },
+    "runtime-provenance.json": {
+      "sha256": "f83c7af3118c07c93781f05ae52c4b67791a5b5c6c1b115414e2de6bcc61645c",
+      "bytes": 6462
+    }
+  },
+  "sanitization": {
+    "method": "JSON parse plus documented field removal and string replacement; numeric results, hashes, commits, Git objects, commands, workload geometry, and toolchain versions retained",
+    "replacements": [
+      {
+        "original": "K8 harness checkout absolute path",
+        "published": "$SOURCE_CHECKOUT"
+      },
+      {
+        "original": "reused core release absolute path",
+        "published": "$REUSED_CORE_RELEASE"
+      },
+      {
+        "original": "private artifact-root absolute path",
+        "published": "$ARTIFACT_ROOT"
+      },
+      {
+        "original": "local host name",
+        "published": "<redacted-host>"
+      },
+      {
+        "original": "summary links to local plan and provenance",
+        "published": "sibling plan.json and runtime-provenance.json"
+      },
+      {
+        "original": "private driver log path and hash in local summary",
+        "published": "excluded_private_sources label only"
+      }
+    ]
+  },
+  "validated_private_artifacts": {
+    "count": 7,
+    "result": "all byte counts and SHA-256 hashes in summary.json matched the retained local files before publication",
+    "published": false
+  },
+  "excluded": [
+    "run home and test keyrings",
+    "raw evidence and proof inventory",
+    "warmup and sustained SQLite journals",
+    "validator, provider, exporter, and private driver logs",
+    "generated payload and storage data"
+  ],
+  "limits": [
+    "This publication is a bounded local diagnostic, not a capacity qualification.",
+    "No raw transaction bodies, credentials, authentication material, private logs, wallets, or keyrings are published.",
+    "Issue #290 remains open because the maximum offered rate did not locate a chain limiter and realistic deployment infrastructure was unavailable."
+  ]
+}

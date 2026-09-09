@@ -85,6 +85,13 @@ is not capacity evidence; its 20M declared proof gas limited proposal packing to
 at most three proof transactions under the unchanged 64M block limit even though
 each transaction used about 4.13M gas.
 
+The [retained sustained 001 diagnostic](sustained-001/README.md) uses the measured
+5M proof-gas ceiling and 60-second steps. All 465 measured K8 bundles eventually
+committed with normal audits, and the final 4 bundles/s step reached the configured
+offered ceiling without filling the queue or block gas. This is a workload-limited
+local lower bound, not a chain-saturation or deployment-capacity result. Issue
+#290 remains open for a higher offered workload and realistic deployment evidence.
+
 The existing absolute phase and overall deadlines, bounded queue, signer
 quarantine, port reservations, and process-group cleanup remain unchanged. The
 scheduler writes a progress record every 60 seconds while active, plus its final

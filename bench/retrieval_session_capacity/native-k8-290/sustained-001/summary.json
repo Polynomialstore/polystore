@@ -1,0 +1,283 @@
+{
+  "artifacts": {
+    "evidence.json": {
+      "bytes": 656104,
+      "sha256": "4718d5e368d49f5c394cf2e6da94f735d8e0fbc4b2d8635287587761b6de06ff"
+    },
+    "inventory/manifest.json": {
+      "bytes": 1390206,
+      "sha256": "c7bb1eee0208731180b3fb1ceaa830e2e378293e5ae2d3ecc9a7588afbcc4755"
+    },
+    "sustained-audits.jsonl": {
+      "bytes": 131415,
+      "sha256": "6c9e25fe9fc49a7b1e0da3acf36bc12c3cae5ef574b882f756df4b4127b424f0"
+    },
+    "sustained-blocks.jsonl": {
+      "bytes": 159431,
+      "sha256": "04033d61b8e5557648b6fc0b0a800b65de5254416ce4e177c4654ed623ee830e"
+    },
+    "sustained-progress.jsonl": {
+      "bytes": 1826,
+      "sha256": "351108211b39d911e4b9afd846170fae561f717763554e7cee375725ab18e0ad"
+    },
+    "sustained.sqlite": {
+      "bytes": 2805760,
+      "sha256": "57640e06ea59f49542fdbd47c66c9929fe550b11562cdaef90676f65e355eb25"
+    },
+    "warmup.sqlite": {
+      "bytes": 81920,
+      "sha256": "7b5671f455730fc3d5578be881f2ec5db738af270d5b0f3fda3aa57c0937923d"
+    }
+  },
+  "assignments": {
+    "all_offered_submitted_committed": true,
+    "count": 12,
+    "eventual_bundle_counts": [
+      38,
+      38,
+      38,
+      39,
+      39,
+      39,
+      39,
+      39,
+      39,
+      39,
+      39,
+      39
+    ]
+  },
+  "attempts": 1,
+  "audits": {
+    "accepted": 12,
+    "assignments": 12,
+    "coverage_verified": true,
+    "epoch": 7,
+    "finalized": 12,
+    "height": 701,
+    "missed_epochs_total": 0
+  },
+  "consensus": {
+    "all_four_headers_agree": true,
+    "all_four_results_agree": true,
+    "same_height_reconciled": 636,
+    "workload_height_range": [
+      411,
+      636
+    ]
+  },
+  "excluded_private_sources": [
+    "private driver log and its hash",
+    "run home and test keyrings",
+    "raw evidence and proof inventory",
+    "warmup and sustained SQLite journals",
+    "validator, provider, exporter, and driver logs",
+    "generated payload and storage data"
+  ],
+  "gas": {
+    "admission_semantics": "Default proposal handler sums declared GasTx.GetGas limits against MaxGas.",
+    "block_max_gas": 64000000,
+    "declared_per_proof_transaction": 5000000,
+    "max_workload_gas_used_per_block": 24804642,
+    "max_workload_gas_wanted_per_block": 30000000,
+    "max_workload_transactions_per_block": 6,
+    "used_per_proof_transaction_range": [
+      4131317,
+      4134115
+    ],
+    "used_total": 1921920915,
+    "wanted_total": 2325000000,
+    "workload_blocks": 181
+  },
+  "infrastructure": {
+    "fallback": "four validator processes and twelve provider daemons on one nonquiet local Apple workstation; diagnostic only",
+    "reason": "Repository configuration does not supply a dedicated multi-host four-validator and twelve-provider deployment inventory; using the explicitly authorized one-host fallback.",
+    "status": "INFRASTRUCTURE_UNAVAILABLE"
+  },
+  "interpretation": {
+    "basis": "The 4/s step offered 240 bundles; 239 client completions were observed during that 60s interval, pending ended at 4, all 240 eventually committed within the bounded 1.327s drain, queues stayed bounded (peak 3), and observed max per-block declared/used gas was 30.0M/24.805M of 64M.",
+    "claim_limit": "Local one-host nonquiet diagnostic only. It does not establish chain saturation, production capacity, WAN behavior, or realistic dedicated deployment performance. Journal finished_ns is client observation time, while block reconciliation separately proves commits at heights 411-636.",
+    "classification": "workload_limited_at_max_offered_rate"
+  },
+  "launcher_exit_code": 0,
+  "measurement": {
+    "client_observed_committed_by_300s_end": 461,
+    "eventual_committed_valid_bundles": 465,
+    "eventual_committed_valid_openings": 3720,
+    "offered_bundles": 465,
+    "offered_openings": 3720,
+    "post_window_client_observations": 4,
+    "steps": [
+      {
+        "all_client_completions_observed_during_step": 15,
+        "eventual_committed_valid": 15,
+        "offered_bundles": 15,
+        "offered_rate_bundles_per_s": 0.25,
+        "pending_at_step_end": 0,
+        "same_cohort_client_observed_by_step_end": 15,
+        "terminal_latency_ms": {
+          "max": 2135.772,
+          "p50": 1929.602,
+          "p95": 2092.574,
+          "p99": 2127.132
+        }
+      },
+      {
+        "all_client_completions_observed_during_step": 30,
+        "eventual_committed_valid": 30,
+        "offered_bundles": 30,
+        "offered_rate_bundles_per_s": 0.5,
+        "pending_at_step_end": 0,
+        "same_cohort_client_observed_by_step_end": 30,
+        "terminal_latency_ms": {
+          "max": 2073.751,
+          "p50": 1466.861,
+          "p95": 2009.969,
+          "p99": 2067.974
+        }
+      },
+      {
+        "all_client_completions_observed_during_step": 59,
+        "eventual_committed_valid": 60,
+        "offered_bundles": 60,
+        "offered_rate_bundles_per_s": 1,
+        "pending_at_step_end": 1,
+        "same_cohort_client_observed_by_step_end": 59,
+        "terminal_latency_ms": {
+          "max": 2204.042,
+          "p50": 1397.677,
+          "p95": 2015.348,
+          "p99": 2111.971
+        }
+      },
+      {
+        "all_client_completions_observed_during_step": 118,
+        "eventual_committed_valid": 120,
+        "offered_bundles": 120,
+        "offered_rate_bundles_per_s": 2,
+        "pending_at_step_end": 3,
+        "same_cohort_client_observed_by_step_end": 117,
+        "terminal_latency_ms": {
+          "max": 2300.033,
+          "p50": 1473.953,
+          "p95": 2013.249,
+          "p99": 2139.637
+        }
+      },
+      {
+        "all_client_completions_observed_during_step": 239,
+        "eventual_committed_valid": 240,
+        "offered_bundles": 240,
+        "offered_rate_bundles_per_s": 4,
+        "pending_at_step_end": 4,
+        "same_cohort_client_observed_by_step_end": 236,
+        "terminal_latency_ms": {
+          "max": 2539.131,
+          "p50": 1687.826,
+          "p95": 2298.946,
+          "p99": 2427.317
+        }
+      }
+    ]
+  },
+  "plan": {
+    "path": "plan.json"
+  },
+  "preparation": {
+    "committed_success": 8,
+    "gas_ceiling_per_open_message": 400000,
+    "gas_used_range": [
+      9576879,
+      24450778
+    ],
+    "gas_used_total": 180665709,
+    "gas_wanted_total": 189200000,
+    "sessions_opened": 473,
+    "transactions": 8
+  },
+  "qualification": false,
+  "resources": {
+    "commit_cpu_limit": "Two wide scrapes do not establish p95 or reconcile workload block boundaries; trailing observations may be missing",
+    "commit_step_cpu_wide_scrape": [
+      {
+        "commit_step_sum_seconds_delta": 14.754940786,
+        "node_id": "d55ddc4f7844069eb3e5e9a52702250a30566732",
+        "one_core_percent": 4.893,
+        "wide_scrape_wall_seconds": 301.562276
+      },
+      {
+        "commit_step_sum_seconds_delta": 15.18994379,
+        "node_id": "950a80af5ef62b96f42256d033bf9b449596a575",
+        "one_core_percent": 5.037,
+        "wide_scrape_wall_seconds": 301.563285
+      },
+      {
+        "commit_step_sum_seconds_delta": 14.957921707,
+        "node_id": "18319fb99d7d5e66dbde4f2356aab541ea0cf507",
+        "one_core_percent": 4.96,
+        "wide_scrape_wall_seconds": 301.566726
+      },
+      {
+        "commit_step_sum_seconds_delta": 15.044792756,
+        "node_id": "547583d7cf158578863ee0b7afdb5e7a9fa89e4c",
+        "one_core_percent": 4.989,
+        "wide_scrape_wall_seconds": 301.567686
+      }
+    ],
+    "commit_stream_all_within_700ms_budget": true,
+    "commit_stream_boundary": "commit-step execution upper bound",
+    "commit_stream_excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling",
+    "commit_stream_observed_blocks_each": [
+      226,
+      226,
+      226,
+      226
+    ],
+    "commit_stream_p95_upper_bound_seconds": [
+      0.15761854200412087,
+      0.15597108300416365,
+      0.15715154200406092,
+      0.160497834003784
+    ],
+    "final_free_bytes": 2822971392,
+    "retained_home_bytes": 204345344,
+    "validator_peak_rss_bytes": [
+      309968896,
+      297631744,
+      295223296,
+      297484288
+    ]
+  },
+  "run": {
+    "completed_at_utc": "2026-09-09T05:50:14.696450Z",
+    "fenced_interval_over_300s_seconds": 1.326692,
+    "fenced_scheduler_and_drain_seconds": 301.326692,
+    "launched_at_utc": "2026-09-09T05:34:26Z",
+    "offered_window_seconds": 300,
+    "peak_in_flight": 8,
+    "peak_queued": 3,
+    "quarantined_signers": [],
+    "retries": 0,
+    "scheduler_elapsed_seconds": 301.24422,
+    "scheduler_post_window_drain_seconds": 1.24422
+  },
+  "schema": "polystore.issue290.k8-sustained-summary.v1",
+  "source": {
+    "cli_sha256": "78f520b01226feef0788a3ad84aa1ba830bf9fd2031956d22dc7649e4c80b370",
+    "driver_sha256": "80dd29217c5e131760995ca0ae2f9fe376bdf792d1ceab1ed1efff464ba9e48f",
+    "driver_sha256_verified_current_file": true,
+    "gateway_sha256": "3d9578613b3fea2810c19a7019ec7d676c918cfcd83fd42fe8f159ba1bf31a6e",
+    "merged_harness_source": "81ed30f6173416c3d9c001f7c22b96874ab3ea99",
+    "native_library_sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "runtime_binary_sha256": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba",
+    "runtime_provenance": "runtime-provenance.json",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "status": "SUCCESS_DIAGNOSTIC_ONLY",
+  "summary_generated_at_utc": "2026-09-09T05:59:47Z",
+  "warmup": {
+    "committed_valid_bundles": 8,
+    "offered_bundles": 8,
+    "openings": 64
+  }
+}
