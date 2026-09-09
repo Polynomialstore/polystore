@@ -57,6 +57,9 @@ func activeK8M4Providers(deal types.Deal) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		if _, err := rawAddress(provider, fmt.Sprintf("slot %d provider", i)); err != nil {
+			return nil, err
+		}
 		if _, duplicate := seen[provider]; duplicate {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("FAT v3 requires twelve distinct slot providers")
 		}
@@ -236,9 +239,10 @@ func (k msgServer) AcceptDealGenerationV3(goCtx context.Context, msg *types.MsgA
 	if msg.Slot >= v3GenerationSlots || candidate.Providers[msg.Slot] != creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("creator is not the frozen provider for this slot")
 	}
-	providerAddr, _ := sdk.AccAddressFromBech32(creator)
-	var provider [20]byte
-	copy(provider[:], providerAddr)
+	provider, err := rawAddress(creator, "creator")
+	if err != nil {
+		return nil, err
+	}
 	var setup, root, integrity [32]byte
 	copy(setup[:], candidate.SetupDigest)
 	copy(root[:], candidate.PolyfsRoot)

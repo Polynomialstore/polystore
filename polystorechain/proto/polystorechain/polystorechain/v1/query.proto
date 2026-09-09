@@ -51,6 +51,9 @@ service Query {
   rpc GetDealGenerationV3(QueryGetDealGenerationV3Request) returns (QueryGetDealGenerationV3Response) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/deals/{deal_id}/generation-v3";
   }
+  rpc GetRetrievalSessionV3(QueryGetRetrievalSessionV3Request) returns (QueryGetRetrievalSessionV3Response) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/retrieval-sessions-v3/{session_id}";
+  }
 
   // Queries a list of Provider items.
   rpc ListProviders(QueryListProvidersRequest) returns (QueryListProvidersResponse) {
@@ -579,4 +582,13 @@ message QueryGetDealGenerationV3Request {
 message QueryGetDealGenerationV3Response {
   DealGenerationAdmissionV3 pending = 1;
   DealGenerationAdmissionV3 admitted = 2;
+}
+
+message QueryGetRetrievalSessionV3Request { bytes session_id = 1; }
+message QueryGetRetrievalSessionV3Response {
+  RetrievalSessionV3 session = 1 [(gogoproto.nullable) = false];
+  // Raw H+1 block anchor bytes. Derive ContextV3.Seed(anchor_seed) before
+  // passing the result to ContextV3.Challenges. Empty before capture and after
+  // the anchor is released.
+  bytes anchor_seed = 2;
 }

@@ -3,6 +3,7 @@ package keeper_test
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"cosmossdk.io/collections"
@@ -78,6 +79,21 @@ func activateGenerationV3(t *testing.T, g generationV3Fixture) {
 	t.Helper()
 	require.NoError(t, g.fixture.keeper.RetrievalV2ActivatedHeight.Set(g.ctx, 1))
 	require.NoError(t, g.fixture.keeper.RetrievalV3ActivatedHeight.Set(g.ctx, 1))
+}
+
+func TestGenerationV3RejectsNon20ByteProvider(t *testing.T) {
+	for _, size := range []int{19, 21} {
+		t.Run(fmt.Sprintf("%d_bytes", size), func(t *testing.T) {
+			g := setupGenerationV3(t)
+			activateGenerationV3(t, g)
+			provider, err := g.fixture.addressCodec.BytesToString(bytes.Repeat([]byte{0x7a}, size))
+			require.NoError(t, err)
+			g.deal.Mode2Slots[0].Provider = provider
+			require.NoError(t, g.fixture.keeper.Deals.Set(g.ctx, g.deal.Id, g.deal))
+			_, err = g.server.ProposeDealGenerationV3(g.ctx, generationProposal(g, 0x51))
+			require.ErrorContains(t, err, "must decode to 20 bytes")
+		})
+	}
 }
 
 func TestGenerationV3ActivationBoundary(t *testing.T) {

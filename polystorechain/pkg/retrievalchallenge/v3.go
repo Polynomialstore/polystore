@@ -422,7 +422,10 @@ func (c ContextV3) Challenges(seed []byte) ([]ChallengeV3, error) {
 	out := make([]ChallengeV3, len(positions))
 	for i, p := range positions {
 		t := r.First + p
-		mdu, leaf, slot := coordinateV3(t, c.MetadataMDUs)
+		mdu, leaf, slot, e := SystematicCoordinateV3(t, c.MetadataMDUs, c.UserMDUs)
+		if e != nil {
+			return nil, e
+		}
 		v := ChallengeV3{uint64(i), p, t, mdu, leaf, slot, [32]byte{}}
 		b := appendLP(nil, "polystore/blob-challenge/v3")
 		b = append(b, h[:]...)
@@ -440,9 +443,19 @@ func (c ContextV3) Challenges(seed []byte) ([]ChallengeV3, error) {
 	}
 	return out, nil
 }
-func coordinateV3(t, metadata uint64) (uint64, uint32, uint32) {
+
+// SystematicCoordinateV3 maps a checked raw-data blob ordinal to its K8 slot,
+// slot-major witness leaf and PolyFS user MDU.
+func SystematicCoordinateV3(t, metadata, userMDUs uint64) (uint64, uint32, uint32, error) {
+	if userMDUs == 0 || userMDUs > math.MaxUint64/64 || t >= userMDUs*64 {
+		return 0, 0, 0, errors.New("v3 systematic coordinate exceeds generation")
+	}
 	d := t % 64
 	slot := uint32(d % 8)
 	row := uint32(d / 8)
-	return metadata + t/64, slot*8 + row, slot
+	mdu, ok := add64(metadata, t/64)
+	if !ok {
+		return 0, 0, 0, errors.New("v3 systematic MDU coordinate overflow")
+	}
+	return mdu, slot*8 + row, slot, nil
 }
