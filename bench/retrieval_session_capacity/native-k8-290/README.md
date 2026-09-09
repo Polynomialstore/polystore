@@ -79,8 +79,7 @@ larger number.
 
 The existing absolute phase and overall deadlines, bounded queue, signer
 quarantine, port reservations, and process-group cleanup remain unchanged. This
-milestone does not add a parallel heartbeat because the audit monitor already
-performs bounded LCD reads and a second observer would add competing state reads
-during the small pilot. After the first pilot, add a single bounded progress
-record only if retained diagnostics show the existing scheduler state is
-insufficient to locate a stall.
+milestone does not yet add the requested 60-second progress heartbeat. The short
+pilot can use existing coordinator phase and log observations, but a heartbeat
+that reports existing scheduler counters and phase progress is required before
+sustained retained collection. It does not need another LCD observer.
