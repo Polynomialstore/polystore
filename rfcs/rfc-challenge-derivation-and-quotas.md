@@ -7,6 +7,16 @@
 
 ---
 
+## Version 3 large-session amendment (contract only)
+
+The [retrieval v3 large-session profile](../docs/retrieval-v3-large-session-profile.md)
+fixes its own context, committed-anchor seed, session-wide sparse sampling and
+fresh off-domain point transcripts. Its population is the exact frozen set of
+encoded blobs needed by a logical range, rather than every MDU/slot proof or 132
+samples per provider. The checked-in Python oracle and golden fixture pin the
+inactive bytes. No v3 keeper path exists or activates through this amendment;
+the v2 package and rules below remain unchanged.
+
 ## Version 2: canonical challenge primitives (inactive)
 
 The pure Go package `polystorechain/pkg/retrievalchallenge` implements this section's
