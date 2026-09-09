@@ -1046,6 +1046,22 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fatVersion, versionErr := uploadFATVersion(r)
+	if versionErr != nil {
+		http.Error(w, versionErr.Error(), http.StatusBadRequest)
+		return
+	}
+	if fatVersion == 3 {
+		if r.Method != http.MethodPost || len(r.URL.Query()["deal_id"]) != 1 || r.URL.Query().Get("deal_id") == "" || len(r.URL.Query()["upload_id"]) > 1 {
+			http.Error(w, "FAT v3 requires POST with one explicit deal_id", http.StatusBadRequest)
+			return
+		}
+		if polyceEnabled || os.Getenv("POLYSTORE_FAKE_INGEST") == "1" || os.Getenv("POLYSTORE_FAST_INGEST") == "1" {
+			http.Error(w, "FAT v3 requires canonical plain ingest; disable PolyCE, fake and fast ingest", http.StatusBadRequest)
+			return
+		}
+	}
+
 	rawDealID := strings.TrimSpace(r.URL.Query().Get("deal_id"))
 	var dealIDQuery uint64
 	dealIDQueryOK := false
@@ -1069,38 +1085,17 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	skipExistingAsyncRun := false
 	ownsAsyncUploadJob := false
 	if dealIDQueryOK && uploadID != "" {
-		existing := lookupUploadJob(dealIDQuery, uploadID)
-		if existing != nil {
-			snapshot := existing.snapshot()
-			switch snapshot.Status {
-			case string(uploadJobRunning):
-				job = existing
-				asyncUpload = true
-				skipExistingAsyncRun = true
-				log.Printf("GatewayUpload: deduped async upload (running) deal_id=%d upload_id=%s phase=%s", dealIDQuery, uploadID, snapshot.Phase)
-			case string(uploadJobSuccess):
-				job = existing
-				asyncUpload = true
-				skipExistingAsyncRun = true
-				log.Printf("GatewayUpload: deduped async upload (success) deal_id=%d upload_id=%s manifest_root=%s", dealIDQuery, uploadID, snapshot.Result.ManifestRoot)
-			default:
-				job = newUploadJob(dealIDQuery, uploadID)
-				asyncUpload = true
-				ownsAsyncUploadJob = true
-				job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
-				storeUploadJob(job)
-				log.Printf("GatewayUpload: replacing terminal async job deal_id=%d upload_id=%s status=%s", dealIDQuery, uploadID, snapshot.Status)
-			}
-		} else {
-			job = newUploadJob(dealIDQuery, uploadID)
-			asyncUpload = true
-			ownsAsyncUploadJob = true
-			job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
-			storeUploadJob(job)
-			log.Printf("GatewayUpload: created async job deal_id=%d upload_id=%s", dealIDQuery, uploadID)
+		var err error
+		job, skipExistingAsyncRun, err = claimUploadJob(dealIDQuery, uploadID, fatVersion)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
 		}
-	} else if uploadID != "" {
-		log.Printf("GatewayUpload: upload_id provided but async job disabled (deal_id missing/invalid), processing synchronously upload_id=%s", uploadID)
+		asyncUpload = true
+		ownsAsyncUploadJob = !skipExistingAsyncRun
+		if ownsAsyncUploadJob {
+			job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
+		}
 	}
 
 	cleanupTmpFiles := []string{}
@@ -1139,7 +1134,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		job.setError(fmt.Sprintf("upload failed (HTTP %d)", code))
 	}()
 	defer func() {
-		if !asyncUpload {
+		if releaseProfile {
 			cleanupRun()
 		}
 	}()
@@ -1189,6 +1184,11 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		reuseSnap := reuse.snapshot()
 		if reuseSnap.Status != string(uploadJobSuccess) || reuseSnap.Result == nil {
 			writeUploadError(uploadFailure{status: http.StatusTooManyRequests, message: "upload job has not completed"})
+			return
+		}
+		if reuseSnap.Result.GenerationCandidate != nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "generation_candidate": reuseSnap.Result.GenerationCandidate, "deal_id": reuseSnap.DealID, "upload_id": uploadID, "status_url": buildStatusURL(r, dealIDQuery, uploadID)})
 			return
 		}
 		log.Printf("GatewayUpload: replaying cached result for upload_id=%s deal_id=%d", uploadID, dealIDQuery)
@@ -1273,6 +1273,25 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			val := strings.TrimSpace(string(b))
+			if fatVersion == 3 {
+				switch formName {
+				case "owner", "file_path", "file_size_bytes":
+				case "deal_id":
+					if val != dealIDStr {
+						writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "multipart deal_id conflicts with query"})
+						return
+					}
+				case "upload_id":
+					if val != uploadID {
+						writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "multipart upload_id conflicts with query"})
+						return
+					}
+				default:
+					writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "unsupported FAT v3 field: " + formName})
+					return
+				}
+			}
+
 			switch formName {
 			case "owner":
 				owner = val
@@ -1427,6 +1446,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	contentEncoding := "none"
 	fileFlags := uint8(0)
+	if fatVersion == 3 {
+		if _, ok, err := detectPolyceHeaderFromFile(rawPath); err != nil || ok {
+			writeUploadError(uploadFailure{status: http.StatusBadRequest, message: "FAT v3 requires plain file bytes without a PolyCE envelope"})
+			return
+		}
+	}
 	prepareStarted := time.Now()
 	if polyceEnabled {
 		wrapped, err := maybeWrapPolyceZstd(receiveCtx, rawPath, polyceMinSavingsBps, polyceSampleBytes)
@@ -1455,6 +1480,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	profile.addDuration("gateway_prepare_ms", time.Since(prepareStarted))
 
 	type gatewayUploadResult struct {
+		candidate       *generationCandidateV3
 		cid             string
 		size            uint64
 		fileSize        uint64
@@ -1467,6 +1493,17 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		ctx = withMode2UploadProfile(ctx, profile)
 		if ctx == nil {
 			return nil, uploadFailure{status: http.StatusInternalServerError, message: "missing ingest context"}
+		}
+
+		if fatVersion == 3 {
+			candidate, err := ingestGenerationV3(withUploadJob(ctx, job), ingestPath, fileRecordPath, owner, dealIDQuery)
+			if err != nil {
+				return nil, err
+			}
+			if job != nil {
+				job.setResult(uploadJobResult{GenerationCandidate: candidate})
+			}
+			return &gatewayUploadResult{candidate: candidate}, nil
 		}
 
 		var (
@@ -1736,13 +1773,9 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			writeUploadAcceptedResponse("accepted")
 			return
 		}
-		if current.Status != string(uploadJobRunning) && skipExistingAsyncRun {
-			log.Printf("GatewayUpload: duplicate async upload status changed; re-starting async ingest deal_id=%d upload_id=%s status=%s", dealIDQuery, uploadID, current.Status)
-			skipExistingAsyncRun = false
-			job = newUploadJob(dealIDQuery, uploadID)
-			ownsAsyncUploadJob = true
-			job.setPhase(uploadJobPhaseReceiving, "Starting upload...")
-			storeUploadJob(job)
+		if skipExistingAsyncRun {
+			writeUploadError(uploadFailure{status: http.StatusConflict, message: "upload job changed; retry request"})
+			return
 		}
 
 		log.Printf("GatewayUpload async accepted: file=%s deal_id=%s upload_id=%s", filename, dealIDStr, uploadID)
@@ -1800,6 +1833,12 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 	result, runErr := runIngest(receiveCtx, filename, maxUserMdusStr, dealIDStr)
 	if runErr != nil {
 		writeUploadError(runErr)
+		return
+	}
+
+	if result.candidate != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"generation_candidate": result.candidate})
 		return
 	}
 
@@ -1998,6 +2037,10 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TotalMdus <= 1+req.WitnessMdus {
 		http.Error(w, "total_mdus must be > 1 + witness_mdus", http.StatusBadRequest)
+		return
+	}
+	if err := rejectLegacyV3Commit(req.DealID, req.Cid); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	meta, err := fetchDealMetaFresh(req.DealID)
@@ -2341,6 +2384,10 @@ func GatewayUpdateDealContentFromEvm(w http.ResponseWriter, r *http.Request) {
 	dealID, ok := parseUintFromJSON(rawDealID)
 	if !ok {
 		http.Error(w, "deal_id must be a valid integer", http.StatusBadRequest)
+		return
+	}
+	if err := rejectLegacyV3Commit(dealID, rawCid); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	meta, err := fetchDealMetaFresh(dealID)

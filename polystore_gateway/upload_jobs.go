@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -34,12 +35,13 @@ type uploadJobKey struct {
 }
 
 type uploadJobResult struct {
-	ManifestRoot    string `json:"manifest_root"`
-	SizeBytes       uint64 `json:"size_bytes"`
-	FileSizeBytes   uint64 `json:"file_size_bytes"`
-	AllocatedLength uint64 `json:"allocated_length"`
-	TotalMdus       uint64 `json:"total_mdus"`
-	WitnessMdus     uint64 `json:"witness_mdus"`
+	GenerationCandidate *generationCandidateV3 `json:"-"`
+	ManifestRoot        string                 `json:"manifest_root"`
+	SizeBytes           uint64                 `json:"size_bytes"`
+	FileSizeBytes       uint64                 `json:"file_size_bytes"`
+	AllocatedLength     uint64                 `json:"allocated_length"`
+	TotalMdus           uint64                 `json:"total_mdus"`
+	WitnessMdus         uint64                 `json:"witness_mdus"`
 }
 
 type uploadJob struct {
@@ -48,7 +50,8 @@ type uploadJob struct {
 	dealID   uint64
 	uploadID string
 
-	fileName string
+	fatVersion uint16 // Immutable once stored. Zero is the legacy v2 default.
+	fileName   string
 
 	status  uploadJobStatus
 	phase   uploadJobPhase
@@ -96,6 +99,43 @@ type uploadJobResponse struct {
 
 var uploadJobsMu sync.RWMutex
 var uploadJobs = map[uploadJobKey]*uploadJob{}
+
+// MarshalJSON preserves the v2 wire shape while v3 exposes only proposal input.
+func (r uploadJobResult) MarshalJSON() ([]byte, error) {
+	if r.GenerationCandidate != nil {
+		return json.Marshal(struct {
+			Candidate *generationCandidateV3 `json:"generation_candidate"`
+		}{r.GenerationCandidate})
+	}
+	type legacy uploadJobResult
+	return json.Marshal(legacy(r))
+}
+
+// Lookup, version binding, and replacement must be one operation: otherwise two
+// simultaneous v2/v3 requests can both claim the same upload ID.
+func claimUploadJob(dealID uint64, uploadID string, version uint16) (*uploadJob, bool, error) {
+	pruneUploadJobs(time.Now())
+	uploadJobsMu.Lock()
+	defer uploadJobsMu.Unlock()
+	key := uploadJobKey{dealID, strings.TrimSpace(uploadID)}
+	if existing := uploadJobs[key]; existing != nil {
+		v := existing.fatVersion
+		if v == 0 {
+			v = 2
+		}
+		if v != version {
+			return nil, false, fmt.Errorf("upload_id is already bound to FAT version %d", v)
+		}
+		snapshot := existing.snapshot()
+		if snapshot.Status == string(uploadJobRunning) || snapshot.Status == string(uploadJobSuccess) {
+			return existing, true, nil
+		}
+	}
+	job := newUploadJob(dealID, uploadID)
+	job.fatVersion = version
+	uploadJobs[key] = job
+	return job, false, nil
+}
 
 func pruneUploadJobs(now time.Time) {
 	uploadJobsMu.Lock()
