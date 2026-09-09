@@ -62,6 +62,14 @@ export interface SlabMetadata {
     file_records: SlabMetadataFileRecord[]
 }
 
+export interface CompleteSlabGeneration {
+    manifestRoot: string
+    readManifestRoot(): Promise<string | null>
+    readMetadata(): Promise<SlabMetadata | null>
+    readMdu(mduIndex: number): Promise<Uint8Array | null>
+    mduSize(mduIndex: number): Promise<number | null>
+}
+
 /**
  * Returns a handle to the root of the origin's private file system.
  * This handle is persistent across sessions for the same origin.
@@ -125,6 +133,17 @@ async function readBlobFromDirectory(dir: FileSystemDirectoryHandle, name: strin
     throw lastRetryableError
 }
 
+async function readBlobSizeFromDirectory(dir: FileSystemDirectoryHandle, name: string): Promise<number | null> {
+    try {
+        const fileHandle = await dir.getFileHandle(name)
+        const file = await fileHandle.getFile()
+        return file.size
+    } catch (e: unknown) {
+        if (isDomErrorName(e, 'NotFoundError')) return null
+        throw e
+    }
+}
+
 async function removeEntryIfExists(dir: FileSystemDirectoryHandle, name: string, recursive = false): Promise<void> {
     try {
         await dir.removeEntry(name, recursive ? { recursive: true } : undefined)
@@ -177,12 +196,13 @@ async function writeActiveGenerationName(dealDir: FileSystemDirectoryHandle, gen
 }
 
 async function generationLooksComplete(dir: FileSystemDirectoryHandle): Promise<boolean> {
-    const marker = await readBlobFromDirectory(dir, GENERATION_COMPLETE_MARKER_FILE)
-    if (!marker) return false
-    const meta = await readBlobFromDirectory(dir, SLAB_METADATA_FILE)
-    const mdu0 = await readBlobFromDirectory(dir, 'mdu_0.bin')
-    const manifest = await readBlobFromDirectory(dir, 'manifest.bin')
-    return !!meta && !!mdu0 && !!manifest
+    const [marker, meta, mdu0, manifest] = await Promise.all([
+        readBlobSizeFromDirectory(dir, GENERATION_COMPLETE_MARKER_FILE),
+        readBlobSizeFromDirectory(dir, SLAB_METADATA_FILE),
+        readBlobSizeFromDirectory(dir, 'mdu_0.bin'),
+        readBlobSizeFromDirectory(dir, 'manifest.bin'),
+    ])
+    return marker !== null && marker > 0 && meta !== null && meta > 0 && mdu0 !== null && manifest !== null
 }
 
 async function cleanupInactiveGenerations(
@@ -464,7 +484,9 @@ export async function writeSlabGenerationAtomically(
         }
         const payload = JSON.stringify(metadata, null, 2)
         await writeBlobToDirectory(generationDir, SLAB_METADATA_FILE, new TextEncoder().encode(payload))
-        await writeBlobToDirectory(generationDir, GENERATION_COMPLETE_MARKER_FILE, new TextEncoder().encode('ok\n'))
+        // Bind the completion marker to the root written into this immutable
+        // generation. Legacy `ok` markers cannot prove which root they contain.
+        await writeBlobToDirectory(generationDir, GENERATION_COMPLETE_MARKER_FILE, new TextEncoder().encode(`${manifestRoot}\n`))
 
         await writeActiveGenerationName(dealDir, generationName)
         try {
@@ -503,13 +525,20 @@ export async function readManifestRoot(dealId: string): Promise<string | null> {
     return trimmed ? trimmed : null;
 }
 
-function coerceNumber(value: unknown): number | null {
-    const n = typeof value === 'number' ? value : Number(value)
-    if (!Number.isFinite(n) || n < 0) return null
-    return Math.floor(n)
+async function readManifestRootFromDirectory(dir: FileSystemDirectoryHandle): Promise<string | null> {
+    const bytes = await readBlobFromDirectory(dir, 'manifest_root.txt')
+    if (!bytes) return null
+    const value = new TextDecoder().decode(bytes).trim()
+    return value || null
 }
 
-function normalizeSlabMetadata(value: unknown): SlabMetadata | null {
+function coerceNumber(value: unknown): number | null {
+    const n = typeof value === 'number' ? value : Number(value)
+    if (!Number.isSafeInteger(n) || n < 0) return null
+    return n
+}
+
+function normalizeSlabMetadata(value: unknown, strictFileRecords = false): SlabMetadata | null {
     if (!value || typeof value !== 'object') return null
     const raw = value as Record<string, unknown>
 
@@ -543,15 +572,22 @@ function normalizeSlabMetadata(value: unknown): SlabMetadata | null {
     if (totalMdus !== 1 + witnessMdus + userMdus) return null
 
     const fileRecords: SlabMetadataFileRecord[] = []
+    if (strictFileRecords && !Array.isArray(raw.file_records)) return null
     if (Array.isArray(raw.file_records)) {
         for (const item of raw.file_records) {
-            if (!item || typeof item !== 'object') continue
+            if (!item || typeof item !== 'object') {
+                if (strictFileRecords) return null
+                continue
+            }
             const rec = item as Record<string, unknown>
             const path = typeof rec.path === 'string' ? rec.path.trim() : ''
             const startOffset = coerceNumber(rec.start_offset)
             const sizeBytes = coerceNumber(rec.size_bytes)
             const flags = coerceNumber(rec.flags)
-            if (!path || startOffset == null || sizeBytes == null || flags == null) continue
+            if (!path || startOffset == null || sizeBytes == null || flags == null) {
+                if (strictFileRecords) return null
+                continue
+            }
             fileRecords.push({
                 path,
                 start_offset: startOffset,
@@ -576,8 +612,8 @@ function normalizeSlabMetadata(value: unknown): SlabMetadata | null {
     const dealId =
         typeof dealIdRaw === 'string'
             ? dealIdRaw.trim() || undefined
-            : typeof dealIdRaw === 'number'
-                ? Math.floor(dealIdRaw)
+            : typeof dealIdRaw === 'number' && Number.isSafeInteger(dealIdRaw) && dealIdRaw >= 0
+                ? dealIdRaw
                 : undefined
 
     const owner = typeof raw.owner === 'string' ? raw.owner.trim() : undefined
@@ -613,6 +649,57 @@ export async function readSlabMetadata(dealId: string): Promise<SlabMetadata | n
         return normalizeSlabMetadata(parsed)
     } catch {
         return null
+    }
+}
+
+async function readSlabMetadataFromDirectory(dir: FileSystemDirectoryHandle): Promise<SlabMetadata | null> {
+    const bytes = await readBlobFromDirectory(dir, SLAB_METADATA_FILE)
+    if (!bytes) return null
+    try {
+        return normalizeSlabMetadata(JSON.parse(new TextDecoder().decode(bytes)) as unknown, true)
+    } catch {
+        return null
+    }
+}
+
+async function readArtifactSizeFromDirectory(dir: FileSystemDirectoryHandle, name: string): Promise<number | null> {
+    const physicalSize = await readBlobSizeFromDirectory(dir, name)
+    if (physicalSize == null) return null
+    const fullSize = await readArtifactMetaFullSize(dir, name)
+    if (fullSize == null) return physicalSize
+    if (physicalSize > fullSize) throw new Error(`artifact bytes exceed fullSize: ${physicalSize} > ${fullSize}`)
+    return fullSize
+}
+
+/**
+ * Pins one immutable, root-bound generation directory for a cache decision.
+ * Every subsequent read uses this handle, so an active-generation swap cannot
+ * mix metadata from one generation with bytes from another.
+ */
+export async function openCompleteSlabGeneration(dealId: string): Promise<CompleteSlabGeneration | null> {
+    try {
+        const dealDir = await getDealDirectory(dealId, false)
+        const generationName = await readActiveGenerationName(dealDir)
+        if (!generationName) return null
+        const generationsDir = await getGenerationsDirectory(dealDir, false)
+        if (!generationsDir) return null
+        const dir = await generationsDir.getDirectoryHandle(generationName)
+        if (!(await generationLooksComplete(dir))) return null
+
+        const markerBytes = await readBlobFromDirectory(dir, GENERATION_COMPLETE_MARKER_FILE)
+        const manifestRoot = normalizeManifestRootString(new TextDecoder().decode(markerBytes || new Uint8Array()))
+        if (!/^0x(?:[0-9a-f]{64}|[0-9a-f]{96})$/.test(manifestRoot)) return null
+
+        return {
+            manifestRoot,
+            readManifestRoot: () => readManifestRootFromDirectory(dir),
+            readMetadata: () => readSlabMetadataFromDirectory(dir),
+            readMdu: (mduIndex) => readArtifactFromDirectory(dir, `mdu_${mduIndex}.bin`),
+            mduSize: (mduIndex) => readArtifactSizeFromDirectory(dir, `mdu_${mduIndex}.bin`),
+        }
+    } catch (e: unknown) {
+        if (isDomErrorName(e, 'NotFoundError')) return null
+        throw e
     }
 }
 
