@@ -32,49 +32,62 @@ API = "/polystorechain/polystorechain/v1"
 ENV_KEYS = ("GOMAXPROCS", "POLYSTORE_TRUSTED_SETUP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 COUNTS = (1, 2, 8)
 SUSTAINED_RATES = (0.25, 0.5, 1, 2, 4)
+SUSTAINED_RATE_SCALES = (1, 4)
+SUSTAINED_DEPUTY_COUNTS = (8, 32)
 OPEN_SESSION_PREPARATION_GAS = 400_000
 OPEN_SESSION_BATCH_MAX = 64
 OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
 
 
-def mode2_layout(k):
+def mode2_layout(k, deputy_count=8):
     """Return the complete supported full-row geometry for one Mode 2 MDU."""
     if type(k) is not int or k not in (2, 8):
         raise ValueError("sustained retrieval requires native K2 or K8")
+    if type(deputy_count) is not int or deputy_count not in SUSTAINED_DEPUTY_COUNTS:
+        raise ValueError("sustained retrieval requires 8 or 32 deputies")
     m = 1 if k == 2 else 4
     openings = artifact.BLOBS_PER_MDU // k
     assignments = k + m
     return dict(k=k, m=m, assignments=assignments,
-                deputy_indices=list(range(assignments, assignments + 8)), openings_per_bundle=openings,
+                deputy_indices=list(range(assignments, assignments + deputy_count)),
+                provisioned_provider_signers=max(12, assignments + deputy_count), openings_per_bundle=openings,
                 bytes_per_opening=artifact.ENCODED_BLOB_BYTES,
                 bytes_per_bundle=openings * artifact.ENCODED_BLOB_BYTES)
 
 
-def sustained_profile(k, step_seconds, offsets, proof_gas):
+def sustained_rates(rate_scale=1):
+    """Return one of the two bounded offered-rate profiles."""
+    if type(rate_scale) is not int or rate_scale not in SUSTAINED_RATE_SCALES:
+        raise ValueError("sustained retrieval requires rate scale 1 or 4")
+    return tuple(rate * rate_scale for rate in SUSTAINED_RATES)
+
+
+def sustained_profile(k, step_seconds, offsets, proof_gas, rate_scale=1, deputy_count=8):
     """Describe rates with explicit transaction-bundle and opening denominators."""
-    layout = mode2_layout(k)
-    rates = list(SUSTAINED_RATES)
-    inventory = len(offsets) + 8
+    layout = mode2_layout(k, deputy_count)
+    rates = list(sustained_rates(rate_scale))
+    inventory = len(offsets) + deputy_count
     openings = layout["openings_per_bundle"]
     return dict(step_seconds=step_seconds, measurement_seconds=step_seconds * len(rates), rates=rates,
         rate_unit="offered proof-submission transactions per second",
         offered_openings_per_second=[rate * openings for rate in rates],
         bundle_unit="one MsgSubmitRetrievalSessionProof transaction for one retrieval session",
-        inventory=inventory, warmup_sessions=8, measured_sessions=len(offsets),
+        inventory=inventory, warmup_sessions=deputy_count, measured_sessions=len(offsets),
         proofs_per_session=openings, openings_per_bundle=openings,
         proofs_per_session_unit="individual chained openings (legacy field name)",
-        warmup_openings=8 * openings, measured_openings=len(offsets) * openings,
+        warmup_openings=deputy_count * openings, measured_openings=len(offsets) * openings,
         bundle_opening_distribution={str(openings): inventory},
         native_message_batching=dict(open_session_messages_per_preparation_transaction_max=OPEN_SESSION_BATCH_MAX,
             open_session_gas_limit_per_message=OPEN_SESSION_PREPARATION_GAS,
             open_session_batch_gas_limit_max=OPEN_SESSION_BATCH_GAS_CAP,
             open_session_gas_limit_note="conservative pilot ceiling, not measured full execution cost",
             proof_sessions_per_submission_transaction=1, cross_provider_crypto_aggregation=False),
-        k=k, m=layout["m"], assignment_count=layout["assignments"],
+        k=k, m=layout["m"], assignment_count=layout["assignments"], rate_scale=rate_scale,
         provider_daemon_count=layout["assignments"],
+        deputy_signer_count=deputy_count,
         deputy_signer_indices=layout["deputy_indices"],
-        provisioned_provider_signers=max(12, layout["assignments"] + len(layout["deputy_indices"])),
-        max_in_flight=8, max_queued=128, max_queued_per_signer=16,
+        provisioned_provider_signers=layout["provisioned_provider_signers"],
+        max_in_flight=deputy_count, max_queued=128, max_queued_per_signer=16,
         proof_gas=proof_gas,
         proof_gas_limit_per_submission_transaction=proof_gas,
         proof_gas_limit_per_opening=dict(gas=proof_gas, openings=openings),
@@ -814,11 +827,12 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
     return found
 
 
-def sustained_offsets(step_seconds):
-    """Five fixed offered-rate steps; pilot scales duration, never the rates."""
+def sustained_offsets(step_seconds, rate_scale=1):
+    """Five fixed offered-rate steps with one bounded rate multiplier."""
     artifact.integer(step_seconds, "step seconds", 4, 180)
+    rates = sustained_rates(rate_scale)
     return [(step * step_seconds * 10**9 + index * interval)
-            for step, rate in enumerate(SUSTAINED_RATES)
+            for step, rate in enumerate(rates)
             for interval in (int(10**9 / rate),)
             for index in range((step_seconds * 10**9 + interval - 1) // interval)]
 
@@ -992,7 +1006,8 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
     owner = lifecycle.signers["owner0"]
     root = producer.b64(deal["manifest_root"], 32).hex()
     operations = []
-    for index, offset in enumerate([0] * 8 + offsets):
+    warmup_count = len(deputies)
+    for index, offset in enumerate([0] * warmup_count + offsets):
         slot = slots[index % len(slots)]
         assigned = providers[slot]
         start_blob_index = slot * openings
@@ -1002,7 +1017,7 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
             "--blob-count", str(openings), "--nonce", index + 1, "--expires-at", end, "--challenge-version", "2",
             "--authorized-proof-provider", payee], kind="open-session", gas=str(OPEN_SESSION_PREPARATION_GAS))
         proof = transaction_job(lifecycle, payee, ["submit-retrieval-proof", "{proof_path}"], gas=str(proof_gas))
-        operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < 8 else "measurement",
+        operations.append(dict(operation_id=f"sustained-{index}", phase="warmup" if index < warmup_count else "measurement",
             offered_offset_ns=offset, **{"open-session": opening, "submit-proof": proof},
             proof_expectation=dict(minimum_opened_height=minimum,
                 session=dict(deal_id=deal["id"], owner=owner, provider=assigned, authorized_proof_provider=payee,
@@ -1015,12 +1030,14 @@ def build_sustained_operations(lifecycle, deal, providers, deputies, offsets, mi
     return operations
 
 
-def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas, k=2):
+def run_sustained(lifecycle, deal, providers, send, command, audits, wait, exporter, step_seconds, proof_gas,
+                  k=2, rate_scale=1, deputy_count=8):
     """Real per-assignment inventory and bounded scheduler; no client ACK claim."""
     import threading
-    layout = mode2_layout(k)
-    offsets = sustained_offsets(step_seconds)
-    duration = step_seconds * 5
+    layout = mode2_layout(k, deputy_count)
+    offsets = sustained_offsets(step_seconds, rate_scale)
+    rates = sustained_rates(rate_scale)
+    duration = step_seconds * len(rates)
     exporter = Path(exporter).resolve(strict=True)
     if not exporter.is_file() or not os.access(exporter, os.X_OK):
         raise ValueError("proof exporter must be executable")
@@ -1029,10 +1046,10 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", "/ip4/127.0.0.1/tcp/1/http"])
     deputies = [lifecycle.signers[f"provider{i}"] for i in layout["deputy_indices"]]
     doc = lifecycle.doc
-    profile = sustained_profile(k, step_seconds, offsets, proof_gas)
+    profile = sustained_profile(k, step_seconds, offsets, proof_gas, rate_scale, deputy_count)
     openings = profile["openings_per_bundle"]
     doc.update(mode="four-validator-sustained-retrieval",
-        workload=f"real K{k} assignment round-robin, {openings} fresh openings/submission transaction; eight deputy signers",
+        workload=f"real K{k} assignment round-robin, {openings} fresh openings/submission transaction; {deputy_count} deputy signers",
         sustained_profile=profile,
         limits=["Proof acceptance capacity only; no delivered bytes or client ACKs",
                 "Normal mint retained; raw economics are not a conservation assertion",
@@ -1072,7 +1089,7 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         minimum = lifecycle.wait_height(3)
         # Keep all expiry buckets below128 and TTL <=4096 at every open.
         expiry = minimum + 4000
-        if expiry + (len(offsets) + 7) // 128 >= producer.uint(deal["end_block"]):
+        if expiry + (len(offsets) + deputy_count - 1) // 128 >= producer.uint(deal["end_block"]):
             raise ValueError("insufficient deal lifetime for inventory")
         price = producer.uint(doc["frozen_module_params"]["retrieval_price_per_blob"]["amount"], 256)
         root = producer.b64(deal["manifest_root"], 32).hex()
@@ -1116,17 +1133,17 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 raise ValueError("exporter changed ordered session intent")
             prepared["proof_sha256"] = result["proof_sha256"]
             artifact.validate_prepared_proof_file(operation, pin)
-        warmup, operations = operations[:8], operations[8:]
+        warmup, operations = operations[:deputy_count], operations[deputy_count:]
         warmup_journal = lifecycle.home / "warmup.sqlite"
         warmup_deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
         for operation in warmup:
             operation["submit-proof"]["_deadline_ns"] = warmup_deadline
         doc["warmup_scheduler"] = artifact.schedule_retrieval_lifecycles(warmup,
-            journal_path=warmup_journal, signers=deputies, max_in_flight=8, max_queued=8,
+            journal_path=warmup_journal, signers=deputies, max_in_flight=deputy_count, max_queued=deputy_count,
             max_queued_per_signer=1, mode="prepared-proof-only",
             read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline))
         _, warmup_transactions = journal_results(warmup_journal, warmup, proof_only=True)
-        doc["warmup"] = dict(journal=str(warmup_journal), sessions=8, submission_transactions=8,
+        doc["warmup"] = dict(journal=str(warmup_journal), sessions=deputy_count, submission_transactions=deputy_count,
                              proofs=profile["warmup_openings"], proof_unit="individual chained openings",
                              committed_transactions=warmup_transactions, all_committed=True)
         # One-second minimum local block time gives a conservative remaining-height floor.
@@ -1148,7 +1165,7 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 output.write(json.dumps(row, sort_keys=True) + "\n")
         doc["scheduler"] = artifact.schedule_retrieval_lifecycles(operations,
             journal_path=lifecycle.home / "sustained.sqlite", signers=deputies,
-            max_in_flight=8, max_queued=128, max_queued_per_signer=16, mode="prepared-proof-only",
+            max_in_flight=deputy_count, max_queued=128, max_queued_per_signer=16, mode="prepared-proof-only",
             read_session_evidence=lambda operation, sid, height, deadline: read_session_evidence(lifecycle, operation, sid, height, deadline),
             progress_callback=progress, heartbeat_seconds=60, stall_timeout_seconds=600)
         doc["progress"] = dict(path=str(progress_path), sha256=artifact.sha256(progress_path),
@@ -1197,7 +1214,9 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
 def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None, audit_profile="normal"):
     """Real canonical ingest and normal audits; optional bounded retrieval workload."""
     k = sustained.get("k", 2) if sustained is not None else 2
-    layout = mode2_layout(k)
+    deputy_count = sustained.get("deputy_count", 8) if sustained is not None else 8
+    rate_scale = sustained.get("rate_scale", 1) if sustained is not None else 1
+    layout = mode2_layout(k, deputy_count)
     gateway = Path(gateway_binary).resolve(strict=True)
     cli = Path(cli_binary).resolve(strict=True)
     source = Path(product_source).resolve(strict=True)
@@ -1211,7 +1230,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if not export_binary.is_file() or not os.access(export_binary, os.X_OK):
             raise ValueError("proof exporter must be executable")
         artifact.integer(sustained["proof_gas"], "proof gas", 1, 64000000)
-        sustained_offsets(sustained["step_seconds"])
+        sustained_offsets(sustained["step_seconds"], rate_scale)
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
@@ -1280,8 +1299,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             artifact_source_match="supplied binaries/library; build correspondence not attested")
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
-        lifecycle.prepare(audit_profile=audit_profile,
-                          provider_count=max(12, layout["assignments"] + len(layout["deputy_indices"])))
+        lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"])
         # Normal mint is retained for both explicit audit profiles.
         population = layout["openings_per_bundle"]
         quotas = {min(population, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
@@ -1471,6 +1489,10 @@ def main():
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
     parser.add_argument("--sustained-k", type=int, choices=(2, 8), default=2,
                         help="Native Mode 2 data width; full-row bundles contain 64/K openings")
+    parser.add_argument("--sustained-rate-scale", type=int, choices=SUSTAINED_RATE_SCALES, default=1,
+                        help="Multiply the five fixed offered transaction rates by 1 or 4")
+    parser.add_argument("--sustained-deputies", type=int, choices=SUSTAINED_DEPUTY_COUNTS, default=8,
+                        help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
@@ -1482,12 +1504,16 @@ def main():
     exporter = options.pop("proof_exporter")
     step_seconds, proof_gas = options.pop("step_seconds"), options.pop("proof_gas")
     sustained_k = options.pop("sustained_k")
+    sustained_rate_scale = options.pop("sustained_rate_scale")
+    sustained_deputies = options.pop("sustained_deputies")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
-            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas, k=sustained_k), audit_profile=audit_profile))
-    elif exporter or proof_gas is not None or step_seconds != 180 or sustained_k != 2:
+            sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas, k=sustained_k,
+                           rate_scale=sustained_rate_scale, deputy_count=sustained_deputies), audit_profile=audit_profile))
+    elif (exporter or proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
+          sustained_rate_scale != 1 or sustained_deputies != 8):
         parser.error("exporter, proof gas, sustained K and pilot duration require sustained-providers")
     elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:

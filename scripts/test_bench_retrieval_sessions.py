@@ -1448,6 +1448,16 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertEqual((params["quota_min_blobs"], params["quota_max_blobs"]), ("132", "132"))
             self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"), self.runner.doc["genesis_sha256"])
 
+    def test_prepare_provisions_bounded_high_load_signer_population(self):
+        self.runner.home.mkdir(mode=0o700)
+        self.runner.prepare(provider_count=44)
+        self.assertEqual(len(self.runner.signers), 61)
+        self.assertIn("provider43", self.runner.signers)
+        funding = [c for c in self.runner.doc["commands"] if c[1:3] == ["genesis", "add-genesis-account"]]
+        self.assertEqual({c[3] for c in funding}, set(self.runner.signers.values()))
+        with self.assertRaises(ValueError):
+            artifact.FourValidatorLifecycle(self.binary, self.library, self.root / "too-many").prepare(provider_count=45)
+
     def test_owned_child_peak_memory_survives_normal_and_forced_stop(self):
         # Touch actual pages, then release them before exit: wait4 retains the
         # peak while a late process-list sample would miss this allocation.

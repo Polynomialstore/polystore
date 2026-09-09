@@ -42,6 +42,39 @@ report records offered, submitted, and committed-valid bundle and opening counts
 for every assignment. These mechanics allow a later many-provider measurement;
 this unmeasured milestone itself establishes no throughput.
 
+## Bounded higher-load profile
+
+The default remains eight deputies and the original 0.25, 0.5, 1, 2, and 4
+bundle/s steps. Two bounded controls select the next chain-knee experiment:
+`--sustained-deputies` accepts 8 or 32, and `--sustained-rate-scale` accepts 1
+or 4. The scale-4 profile therefore offers 1, 2, 4, 8, and 16 bundles/s. It
+uses 32 independent deputies with one active transaction per signer while
+retaining the 128-entry queue. For K8, assignment signers remain
+`provider0`..`provider11`; deputies become `provider12`..`provider43`, and all
+44 provider identities are funded and provisioned before node start.
+
+The harness warms up every selected deputy once. A four-second scale-4 pilot
+therefore prepares 32 warmups plus 124 measured sessions (156 total); a full
+180-second run would prepare 5,612 sessions. The selected rates, signer sets,
+session counts, concurrency, and opening denominators are written into the
+profile before submission. Start with the bounded four-second path after the
+harness is reviewed and landed:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode sustained-providers \
+  --sustained-k 8 \
+  --sustained-rate-scale 4 \
+  --sustained-deputies 32 \
+  --step-seconds 4 \
+  --proof-gas 5000000 \
+  ...
+```
+
+The high-load profile retains the explicit 5M K8 proof limit selected after the
+bounded pilot. It does not change the 64M gas or 2 MiB block limits, normal
+audit load, proof message shape, or one-session-per-transaction semantics.
+
 ## Candidate pilot after review
 
 Retained performance collection must wait until this harness/schema has focused

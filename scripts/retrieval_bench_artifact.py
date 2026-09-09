@@ -1330,7 +1330,7 @@ class FourValidatorLifecycle:
     def prepare(self, *, audit_profile="normal", provider_count=12):
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
-        provider_count = integer(provider_count, "provider signer count", 12, 20)
+        provider_count = integer(provider_count, "provider signer count", 12, 44)
         self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",
                  "--node-dir-prefix", "validator", "--chain-id", self.chain,
                  "--starting-ip-address", "127.0.0.1", "--list-ports", "26657,26654,26651,26648",

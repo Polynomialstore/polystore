@@ -331,13 +331,17 @@ class HealthyAuditViewsTest(unittest.TestCase):
                   "--home", "/new-home", "--gateway-binary", "/gateway", "--cli-binary", "/native-cli",
                   "--product-source", "/source", "--proof-exporter", "/exporter", "--proof-gas", "20000000",
                   "--step-seconds", "4"]
-        for extra, k in (([], 2), (["--sustained-k", "8"], 8)):
+        cases = (([], 2, 1, 8),
+                 (["--sustained-k", "8", "--sustained-rate-scale", "4", "--sustained-deputies", "32"],
+                  8, 4, 32))
+        for extra, k, rate_scale, deputies in cases:
             with self.subTest(k=k), patch.object(workload.sys, "argv", common + extra), \
                  patch.object(artifact, "FourValidatorLifecycle") as constructor, \
                  patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
                 workload.main()
                 run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
-                    sustained=dict(exporter="/exporter", step_seconds=4, proof_gas=20000000, k=k), audit_profile="normal")
+                    sustained=dict(exporter="/exporter", step_seconds=4, proof_gas=20000000, k=k,
+                                   rate_scale=rate_scale, deputy_count=deputies), audit_profile="normal")
 
     def fixture(self, *, complete=True, counts=None, k=2):
         layout = workload.mode2_layout(k)
