@@ -10,6 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Disable preinstalled Google Chrome apt source
+        run: .github/scripts/disable-google-chrome-apt-source.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:

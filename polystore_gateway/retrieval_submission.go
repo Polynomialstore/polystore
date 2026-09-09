@@ -150,7 +150,7 @@ func decodePendingSigner(raw []byte, out *pendingSignerOperation) error {
 	if err := d.Decode(out); err != nil {
 		return err
 	}
-	if (out.Kind != "retrieval" && out.Kind != "audit") || len(out.IDs) == 0 || len(out.IDs) > 64 {
+	if (out.Kind != "retrieval" && out.Kind != "audit" && out.Kind != "generation-v3" && out.Kind != "retrieval-v3") || len(out.IDs) == 0 || len(out.IDs) > 64 {
 		return fmt.Errorf("invalid pending signer identity")
 	}
 	seen := make(map[string]bool, len(out.IDs))
@@ -487,6 +487,10 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		response, height, err := queryRetrievalSession(r.Context(), id)
 		if err != nil {
+			if errors.Is(err, ErrSessionNotFound) && len(ids) == 1 && request.SessionIDs == nil {
+				submitRetrievalSessionProofV3(w, r.Context(), key, signer, id)
+				return
+			}
 			writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
 			return
 		}

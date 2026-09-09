@@ -12,6 +12,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Disable preinstalled Google Chrome apt source
+        run: .github/scripts/disable-google-chrome-apt-source.sh
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:

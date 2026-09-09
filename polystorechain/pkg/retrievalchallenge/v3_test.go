@@ -1,10 +1,12 @@
 package retrievalchallenge
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -337,6 +339,54 @@ func TestV3FATAndIntegrityGolden(t *testing.T) {
 	}
 	if _, e := IntegrityLeafV3(10, 0, pattern("zero")[:1]); e == nil {
 		t.Fatal("truncated blob")
+	}
+}
+
+func TestIntegrityRootV3Reader(t *testing.T) {
+	counts := make([]int, 0, 259)
+	for count := 1; count <= 257; count++ {
+		counts = append(counts, count)
+	}
+	counts = append(counts, 288, 133*96)
+	for _, count := range counts {
+		leaves := make([][32]byte, count)
+		var wire bytes.Buffer
+		for i := range leaves {
+			leaves[i] = sha256.Sum256([]byte(fmt.Sprintf("leaf-%d", i)))
+			wire.Write(leaves[i][:])
+		}
+		want, err := IntegrityRootV3(leaves)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := IntegrityRootV3Reader(bytes.NewReader(wire.Bytes()), uint64(count))
+		if err != nil || got != want {
+			t.Fatalf("count %d: got %x, %v; want %x", count, got, err, want)
+		}
+		if _, err := IntegrityRootV3Reader(bytes.NewReader(wire.Bytes()[:wire.Len()-1]), uint64(count)); err == nil {
+			t.Fatalf("count %d: accepted truncated vector", count)
+		}
+		if _, err := IntegrityRootV3Reader(bytes.NewReader(append(wire.Bytes(), 0)), uint64(count)); err == nil {
+			t.Fatalf("count %d: accepted extended vector", count)
+		}
+	}
+}
+
+func BenchmarkIntegrityRootV3Reader(b *testing.B) {
+	for _, leafCount := range []int{96, 288, 133 * 96} {
+		wire := make([]byte, leafCount*sha256.Size)
+		for i := 0; i < leafCount; i++ {
+			leaf := sha256.Sum256([]byte(fmt.Sprintf("leaf-%d", i)))
+			copy(wire[i*sha256.Size:], leaf[:])
+		}
+		b.Run(fmt.Sprintf("leaves_%d", leafCount), func(b *testing.B) {
+			b.SetBytes(int64(len(wire)))
+			for i := 0; i < b.N; i++ {
+				if _, err := IntegrityRootV3Reader(bytes.NewReader(wire), uint64(leafCount)); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

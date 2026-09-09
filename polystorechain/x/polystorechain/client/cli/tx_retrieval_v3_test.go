@@ -74,3 +74,23 @@ func TestRetrievalSessionV3CLI(t *testing.T) {
 		})
 	}
 }
+
+func TestRetrievalSessionV3CLIClassifiesPreBroadcastFailure(t *testing.T) {
+	cdc, config := retrievalTestEncoding()
+	signer := sdk.AccAddress(bytes20(7))
+	message := filepath.Join(t.TempDir(), "message.json")
+	require.NoError(t, os.WriteFile(message, []byte("{"), 0600))
+	phase := filepath.Join(t.TempDir(), "phase")
+	require.NoError(t, os.WriteFile(phase, nil, 0600))
+	ctx := client.Context{}.WithCodec(cdc).WithTxConfig(config).WithFromAddress(signer).WithChainID("cli-test").WithGenerateOnly(true).WithOutput(&bytes.Buffer{})
+	cmd := CmdRetrievalSessionV3()
+	cmd.SetContext(context.Background())
+	require.NoError(t, client.SetCmdClientContext(cmd, ctx))
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"refund", message, "--from", signer.String(), "--" + submissionPhaseFlag, phase})
+	require.Error(t, cmd.Execute())
+	marker, err := os.ReadFile(phase)
+	require.NoError(t, err)
+	require.Equal(t, submissionNotBroadcast, string(marker))
+}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -20,6 +21,7 @@ const (
 	spUploadBundleKindMDU       = "mdu"
 	spUploadBundleKindShard     = "shard"
 	spUploadBundleKindManifest  = "manifest"
+	spUploadBundleKindIntegrity = "integrity_leaves_v3"
 	spUploadBundleV2Magic       = "NLB2"
 	spUploadBundleV2MediaType   = "application/x.polystore-bundle-v2"
 	spUploadBundleMaxArtifacts  = 4096
@@ -135,6 +137,14 @@ func (a spUploadBundleArtifact) resolve() (spUploadBundleResolvedArtifact, error
 			return spUploadBundleResolvedArtifact{}, fmt.Errorf("manifest artifact full_size must be %d", types.BLOB_SIZE)
 		}
 		resolved.filename = "manifest.bin"
+		resolved.fullSize = a.FullSize
+		resolved.maxBodyLen = a.FullSize
+	case spUploadBundleKindIntegrity:
+		maxBytes := int64(retrievalchallenge.MaxIntegrityLeaves * 32)
+		if a.MduIndex != nil || a.Slot != nil || a.FullSize <= 0 || a.FullSize > maxBytes || a.FullSize%32 != 0 {
+			return spUploadBundleResolvedArtifact{}, fmt.Errorf("integrity leaf vector has invalid coordinates or size")
+		}
+		resolved.filename = "integrity_leaves_v3.bin"
 		resolved.fullSize = a.FullSize
 		resolved.maxBodyLen = a.FullSize
 	default:

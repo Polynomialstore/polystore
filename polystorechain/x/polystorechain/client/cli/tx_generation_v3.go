@@ -76,7 +76,9 @@ func CmdAcceptDealGenerationV3() *cobra.Command {
 		Use:   "accept-deal-generation-v3",
 		Short: "Accept one frozen FAT v3 slot assignment",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			phase := beginSubmissionPhase(cmd)
+			defer phase.finish(&err)
 			clientCtx, err := getClientTxContextFn(cmd)
 			if err != nil {
 				return err
@@ -87,6 +89,10 @@ func CmdAcceptDealGenerationV3() *cobra.Command {
 			}
 			dealID, _ := cmd.Flags().GetUint64("deal-id")
 			slot, _ := cmd.Flags().GetUint32("slot")
+			clientCtx, err = phase.track(clientCtx)
+			if err != nil {
+				return err
+			}
 			return generateOrBroadcastTxCLIFn(clientCtx, cmd.Flags(), &types.MsgAcceptDealGenerationV3{Creator: clientCtx.GetFromAddress().String(), DealId: dealID, Slot: slot, AcceptanceDigest: digest})
 		},
 	}
@@ -97,6 +103,7 @@ func CmdAcceptDealGenerationV3() *cobra.Command {
 		_ = cmd.MarkFlagRequired(name)
 	}
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(submissionPhaseFlag, "", "Write a final pre-broadcast failure marker for the invoking gateway")
 	return cmd
 }
 
