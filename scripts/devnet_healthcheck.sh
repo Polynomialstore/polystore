@@ -397,26 +397,30 @@ check_provider_retrieval_handler() {
   rm -f "$headers" "$body"
 }
 
-check_gateway_upload_handler() {
-  local headers body status allow_origin
+check_upload_handler() {
+  local name="$1" url="$2" format="$3" headers body status allow_origin valid_error=false
   headers="$(mktemp)"
   body="$(mktemp)"
-  # An invalid deal ID is rejected by RouterGatewayUpload before it resolves a
-  # provider or reads/stores a request body. This distinguishes the actual
-  # user-gateway route from a global OPTIONS responder or provider daemon.
+  # Both RouterGatewayUpload and GatewayUpload reject an invalid deal ID
+  # before resolving providers or reading/storing the request body.
   if ! curl -sS --max-time "$HC_TIMEOUT" -X POST -D "$headers" -o "$body" \
     -H "Origin: $BROWSER_ORIGIN" -H 'Content-Type: application/octet-stream' \
-    --data-binary '' "$GATEWAY/gateway/upload?deal_id=invalid"; then
-    fail "Gateway upload POST unreachable"
+    --data-binary '' "$url?deal_id=invalid"; then
+    fail "$name upload POST unreachable"
   else
     status="$(awk 'NR == 1 { print $2 }' "$headers")"
     allow_origin="$(header_value "$headers" 'Access-Control-Allow-Origin')"
-    if [[ "$status" != "400" ]] || ! jq -e '.error == "invalid deal_id"' "$body" >/dev/null 2>&1; then
-      fail "Gateway upload POST did not return the expected deal validation rejection (HTTP ${status:-000})"
+    if [[ "$format" == json ]]; then
+      jq -e '.error == "invalid deal_id"' "$body" >/dev/null 2>&1 && valid_error=true
+    elif [[ "$(cat "$body")" == 'invalid deal_id' ]]; then
+      valid_error=true
+    fi
+    if [[ "$status" != "400" || "$valid_error" != true ]]; then
+      fail "$name upload POST did not return the expected deal validation rejection (HTTP ${status:-000})"
     elif [[ "$allow_origin" != "*" && "$allow_origin" != "$BROWSER_ORIGIN" ]]; then
-      fail "Gateway upload POST missing matching Access-Control-Allow-Origin"
+      fail "$name upload POST missing matching Access-Control-Allow-Origin"
     else
-      ok "Gateway upload POST reaches user-gateway handler"
+      ok "$name upload POST reaches deal validation"
     fi
   fi
   rm -f "$headers" "$body"
@@ -437,6 +441,8 @@ check_public_provider() {
     "$public_base/sp/retrieval/mdu/0x00/0" "$BROWSER_ORIGIN" GET \
     'X-PolyStore-Session-Id,X-PolyStore-Start-Blob-Index,X-PolyStore-Blob-Count'
   check_provider_retrieval_handler "$address" "$public_base"
+  check_cors_preflight "Provider $address upload" "$public_base/sp/retrieval/upload" "$BROWSER_ORIGIN"
+  check_upload_handler "Provider $address" "$public_base/sp/retrieval/upload" text
   if ! status="$(http_get "$public_base/status")"; then
     fail "Provider $address public /status unreachable"
     return
@@ -941,7 +947,7 @@ if [[ "$MODE" == "hub" ]]; then
       "$LCD/polystorechain/polystorechain/v1/params" "$BROWSER_ORIGIN" \
       'x-cosmos-block-height' "$LATEST_COMMITTED_HEIGHT" 'x-cosmos-block-height'
     check_cors_preflight "Gateway" "$GATEWAY/gateway/upload" "$BROWSER_ORIGIN"
-    check_gateway_upload_handler
+    check_upload_handler Gateway "$GATEWAY/gateway/upload" json
     check_cors_preflight "Faucet" "$FAUCET/faucet" "$BROWSER_ORIGIN" POST 'content-type,x-polystore-faucet-auth'
     check_faucet_handler
     check_public_provider_inventory

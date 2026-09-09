@@ -8,8 +8,9 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
   pins the public chain IDs, retrieval-v2 activation, 64M/2MiB consensus
   limits, EVM precompile, denomination metadata, active provider identities,
   placement eligibility, first-advertised public endpoint routing, TLS lifetime,
-  browser CORS, and advancing blocks. Harmless upload, retrieval, and faucet
-  requests must reach their handlers; the faucet probe accepts its exact
+  browser CORS, and advancing blocks. Harmless upload requests to the user-gateway
+  and every provider, retrieval requests, and faucet requests must reach their
+  handlers; the faucet probe accepts its exact
   malformed-body or missing-token rejection without exercising funding:
   - `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
   - `.github/workflows/public-devnet-health.yml` runs the same read-only gate

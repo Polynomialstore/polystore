@@ -42,6 +42,9 @@ class Handler(BaseHTTPRequestHandler):
     gateway_upload_status = 400
     gateway_upload_error = "invalid deal_id"
     gateway_upload_cors = True
+    provider_upload_status = 400
+    provider_upload_body = 'invalid deal_id\n'
+    provider_upload_cors = True
     faucet_status = 400
     faucet_body = "Invalid request\n"
     faucet_cors = True
@@ -164,6 +167,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def do_POST(self):
+        if self.path == '/sp/retrieval/upload?deal_id=invalid':
+            assert int(self.headers.get('content-length', '0')) == 0
+            self.send_response(self.provider_upload_status)
+            self.send_header('content-type', 'text/plain; charset=utf-8')
+            if self.provider_upload_cors:
+                self.send_header('access-control-allow-origin', '*')
+            self.end_headers()
+            self.wfile.write(self.provider_upload_body.encode())
+            return
         if self.path == "/faucet":
             assert self.rfile.read(int(self.headers.get("content-length", "0"))) == b"{"
             self.send_response(self.faucet_status)
@@ -263,6 +275,9 @@ exit 1
         Handler.gateway_upload_status = 400
         Handler.gateway_upload_error = "invalid deal_id"
         Handler.gateway_upload_cors = True
+        Handler.provider_upload_status = 400
+        Handler.provider_upload_body = 'invalid deal_id\n'
+        Handler.provider_upload_cors = True
         Handler.faucet_status = 400
         Handler.faucet_body = "Invalid request\n"
         Handler.faucet_cors = True
@@ -418,6 +433,21 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Gateway upload POST missing matching Access-Control-Allow-Origin", result.stdout)
+
+    def test_public_check_rejects_missing_or_wrong_provider_upload_handler(self):
+        for status, body in ((404, 'not found'), (500, 'failed'), (200, 'invalid deal_id'), (400, 'wrong error')):
+            with self.subTest(status=status, body=body):
+                Handler.provider_upload_status = status
+                Handler.provider_upload_body = body
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f'Provider {ADDRESS} upload POST did not return the expected deal validation rejection', result.stdout)
+
+    def test_public_check_rejects_missing_provider_upload_post_cors(self):
+        Handler.provider_upload_cors = False
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f'Provider {ADDRESS} upload POST missing matching Access-Control-Allow-Origin', result.stdout)
 
     def test_public_check_rejects_unexpected_active_provider(self):
         Handler.extra_provider = True
