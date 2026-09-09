@@ -67,8 +67,12 @@ case "$cmd" in
     esac
     ;;
   tx)
-    if [ "$#" -ge 2 ] && [ "$1" = "polystorechain" ] && [ "$2" = "request-provider-link" ]; then
-      printf 'tx polystorechain request-provider-link %s\\n' "$3" >>"\${POLYSTORE_TEST_TX_LOG:?}"
+    if [ "$#" -ge 2 ] && [ "$1" = "nilchain" ] && [ "$2" = "--help" ]; then
+      echo 'nilchain transactions subcommands'
+      exit 0
+    fi
+    if [ "$#" -ge 2 ] && [ "$1" = "nilchain" ] && [ "$2" = "request-provider-link" ]; then
+      printf 'tx nilchain request-provider-link %s\\n' "$3" >>"\${POLYSTORE_TEST_TX_LOG:?}"
       exit 0
     fi
     echo "polystorechaind stub: unsupported tx invocation: $*" >&2
@@ -221,7 +225,7 @@ test('run_devnet_provider link auto-funds from faucet then submits provider-link
   assert.match(result.combinedOutput, /Faucet funding request accepted/i)
   assert.match(result.combinedOutput, /Provider account funded/i)
   assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
-  assert.match(result.txLogContent, /tx polystorechain request-provider-link nil1operatorstub/)
+  assert.match(result.txLogContent, /tx nilchain request-provider-link nil1operatorstub/)
 })
 
 test('run_devnet_provider pair creates a missing key, auto-funds it, and submits provider-link tx', () => {
@@ -239,5 +243,5 @@ test('run_devnet_provider pair creates a missing key, auto-funds it, and submits
   assert.match(result.combinedOutput, /Faucet funding request accepted/i)
   assert.match(result.combinedOutput, /Provider account funded/i)
   assert.match(result.combinedOutput, /Requesting provider link on-chain/i)
-  assert.match(result.txLogContent, /tx polystorechain request-provider-link nil1operatorstub/)
+  assert.match(result.txLogContent, /tx nilchain request-provider-link nil1operatorstub/)
 })
