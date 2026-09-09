@@ -548,8 +548,11 @@ route rejects v3 before charging or consuming authority. Activation requires:
 
 Vector success establishes byte-level agreement only. It does not qualify signer
 authority, block-hash freshness, gas, crash recovery, transport delivery or safe
-network activation. Every v3 runtime path remains disabled until the complete
-qualification list above passes independent review.
+network activation. Deployed v3 runtime paths remain disabled until the complete
+qualification list above passes independent review. Isolated qualification
+networks may explicitly enable v3 through its normal activation parameter to run
+these tests under the same protocol and resource limits; this does not authorize
+deployed activation or establish delivery or throughput claims.
 
 Run the independent standard-library oracle with:
 
@@ -595,3 +598,57 @@ contains the raw committed H+1 anchor, **not** the derived sampling seed. Derive
 before anchor capture and after reference release. The CLI does not generate
 proofs, authenticate downloaded bytes, or create ACK digests; those require the
 frozen context and provider/client integration specified above.
+
+## Provider-daemon integrity artifact
+
+A generation-local `integrity_leaves_v3.bin` contains the ordered raw 32-byte
+integrity leaf hashes, with no header or per-leaf sibling paths. Entry
+`(mdu_index - metadata_mdus) * 96 + leaf_index` corresponds to that absolute
+coordinate under the frozen generation. Its exact length is
+`user_mdus * 96 * 32` bytes, bounded by 201,326,592 bytes at the protocol limit.
+This is a local ingest representation, not an additional consensus encoding.
+
+Before accepting a proposed generation, the provider-daemon authenticates the
+FAT v3 header and requires its root and leaf count to match the proposal. It
+streams the leaf vector to reconstruct the canonical duplicate-last tree root
+with logarithmic working memory, and recomputes every leaf in its assigned slot
+from the stored encoded blob while verifying its KZG commitment membership.
+This includes parity slots. A matching sidecar root alone does not establish
+that the provider stores the corresponding bytes.
+
+The vector belongs to the immutable generation artifacts. Reusing a generation
+with shifted absolute MDU coordinates requires new leaf hashes, as specified
+above. This representation does not by itself provide client integrity-path
+serving or qualify full-byte delivery.
+
+The authenticated provider-daemon action is `POST /sp/generation-v3/accept`
+with `{"deal_id":0}` and the existing `X-PolyStore-Gateway-Auth` header. An
+optional `provider` must equal the daemon's actual signing address. The action
+queries the proposed generation and derives the provider slot; callers do not
+supply acceptance roots or digests. Owner proposal/finalization remain native
+CLI actions. Acceptance uses the same signer coordination and durable pending
+transaction state as normal audits; an uncertain broadcast requires
+reconciliation before further signing.
+
+## Provider-daemon sampled proof action
+
+Use the existing authenticated `POST /sp/session-proof` action with a single
+`session_id` and, optionally, the daemon's actual `provider` address. V3 routing
+requires an explicit not-found response from the older session query; a timeout,
+malformed response, or server error does not authorize a version fallback.
+
+The daemon reconstructs the frozen context, compact provider plan, and global
+sample set from committed session state and the raw anchor. It selects only its
+assigned, unaccepted global ordinals, generates and locally verifies at most 64
+proofs, then submits one native proof message. Further calls handle any remaining
+samples. The action reads challenged blobs; it does not download the requested
+file, acknowledge delivery, or qualify client integrity verification.
+
+Normal audits, generation acceptance, and retrieval proofs share the actual
+provider's signer lock and durable pending-operation record. A recorded
+transaction hash is reconciled before fresh signing, even when its proposal or
+session is no longer current. An unknown broadcast without a recorded hash
+remains blocked unless the exact operation's accepted effects establish its
+outcome. A recovered transaction is not evidence that a different requested
+session is complete; callers must query current session state before deciding
+whether more proofs or a delivery acknowledgement are required.
