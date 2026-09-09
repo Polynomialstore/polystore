@@ -324,7 +324,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             generation="1", owner=AUDIT_ADDRESSES[8], payer=AUDIT_ADDRESSES[8], nonce="1",
             polyfs_root=base64.b64encode(bytes.fromhex(self.ROOT)).decode(),
             integrity_root=base64.b64encode(bytes.fromhex(self.INTEGRITY)).decode(),
-            setup_digest=base64.b64encode(bytes([9]) * 32).decode(), plan_hash=base64.b64encode(bytes([8]) * 32).decode(),
+            setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode(), plan_hash=base64.b64encode(bytes([8]) * 32).decode(),
             file_record_index=0, file_start_offset="0", file_length=str(workload.V3_PILOT_BYTES),
             range_start="0", range_length=str(workload.V3_PILOT_BYTES), metadata_mdus="2", user_mdus="3",
             first_blob="0", last_blob="132", population="133", sample_count="132", nonce_string="unused",
@@ -352,6 +352,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             "wrong root": lambda s: s.update(polyfs_root=base64.b64encode(bytes(32)).decode()),
             "wrong chain": lambda s: s.update(chain_id="other"),
             "wrong deadline": lambda s: s.update(deadline_height="251"),
+            "wrong setup": lambda s: s.update(setup_digest=base64.b64encode(bytes([9]) * 32).decode()),
             "wrong partition": lambda s: s["obligations"][0].update(blob_count="18"),
             "premature refund": lambda s: s.update(refunded_slots_mask=255, locked_fee="0"),
             "settled without ack": lambda s: s.update(settled_slots_mask=1),
@@ -399,6 +400,74 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             workload.validate_v3_committed_message(duplicate, kind="session-proof",
                 creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
+
+
+    def test_provider_endpoint_uses_address_not_assignment_slot(self):
+        lifecycle = SimpleNamespace(doc={"providers": [
+            {"address": AUDIT_ADDRESSES[1], "port": 19091},
+            {"address": AUDIT_ADDRESSES[0], "port": 19092},
+        ]})
+        self.assertEqual(workload.provider_http_url(lifecycle, AUDIT_ADDRESSES[0], "/sp/session-proof"),
+                         "http://127.0.0.1:19092/sp/session-proof")
+        with self.assertRaises(ValueError):
+            workload.provider_http_url(lifecycle, AUDIT_ADDRESSES[2], "/sp/session-proof")
+
+    def test_unfenced_v3_queries_choose_one_common_height(self):
+        calls = []
+        lifecycle = SimpleNamespace(nodes=[{"id": i} for i in range(4)],
+            wait_height=Mock(return_value=77))
+        session = self.session()
+        retained = {"generations": [{"deal_id": "7", "generation": "1",
+            "manifest_root": base64.b64encode(bytes.fromhex(self.ROOT)).decode()}]}
+        def query(node, route, height):
+            calls.append((node["id"], route, height))
+            return retained if route.endswith("retained-generations") else session
+        lifecycle.query = query
+        self.assertEqual(workload.v3_session_query(lifecycle, self.SESSION), session)
+        self.assertEqual(workload.v3_retained_generations(
+            lifecycle, deal_id="7", root=self.ROOT), retained)
+        self.assertEqual(lifecycle.wait_height.call_count, 2)
+        self.assertEqual({row[2] for row in calls}, {77})
+
+    def test_http_phase_drains_and_retains_provider_tagged_outcomes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(provider="provider-a", url="http://a/ok", body={}),
+                        dict(provider="provider-b", url="http://b/fail", body={})]
+            def run(argv, deadline, env):
+                if "/fail" in argv[-1]:
+                    raise ValueError("expected provider failure")
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                with self.assertRaisesRegex(ValueError, "expected provider failure"):
+                    workload.run_v3_http_phase(lifecycle, "/curl", requests, "proofs", max_in_flight=2)
+            retained = lifecycle.doc["v3_http_phases"]["proofs"]
+            self.assertEqual({row["provider"] for row in retained}, {"provider-a", "provider-b"})
+            self.assertEqual({row["status"] for row in retained}, {"success", "driver_error"})
+
+    def test_disk_threshold_fails_closed(self):
+        with patch.object(workload.shutil, "disk_usage", return_value=SimpleNamespace(free=99)):
+            with self.assertRaisesRegex(ValueError, "found 99"):
+                workload.require_free_disk(Path("/"), 100, "pilot")
+
+    def test_session_list_is_retained_before_first_open_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={"native_v3_generation": {
+                "candidate": {"integrity_root": "0x" + self.INTEGRITY}}},
+                signers={"owner0": AUDIT_ADDRESSES[8]}, chain="polystore_291-1",
+                wait_height=Mock(return_value=70), save=Mock())
+            deal = {"id": "7", "end_block": "1000",
+                    "manifest_root": base64.b64encode(bytes.fromhex(self.ROOT)).decode()}
+            with patch.object(workload, "v3_retained_generations", return_value={}), \
+                 self.assertRaisesRegex(ValueError, "open failed"):
+                workload.run_native_v3_sessions(lifecycle, deal=deal,
+                    providers=dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    send=Mock(side_effect=ValueError("open failed")), wait=Mock(), curl="/curl")
+            self.assertEqual(lifecycle.doc["native_v3"]["sessions"], [])
+            lifecycle.save.assert_called()
 
 
 

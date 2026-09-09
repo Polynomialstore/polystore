@@ -44,6 +44,25 @@ V3_PILOT_SESSIONS = 2
 V3_MAX_SAMPLES = 132
 V3_BITMAP_BYTES = (V3_MAX_SAMPLES + 7) // 8
 V3_SYSTEMATIC_PROVIDERS = 8
+V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
+V3_ABORT_FREE_BYTES = 768 * 1024**2
+
+
+def require_free_disk(path, minimum, phase):
+    free = shutil.disk_usage(path).free
+    if free < minimum:
+        raise ValueError(f"{phase} requires {minimum} free bytes; found {free}")
+    return free
+
+
+def provider_http_url(lifecycle, address, route):
+    matches = [row for row in lifecycle.doc.get("providers", []) if row.get("address") == address]
+    if len(matches) != 1:
+        raise ValueError("provider address does not identify exactly one owned daemon")
+    port = producer.uint(matches[0].get("port", 0))
+    if not 1 <= port <= 65535 or not route.startswith("/"):
+        raise ValueError("owned provider daemon has an invalid HTTP endpoint")
+    return f"http://127.0.0.1:{port}{route}"
 
 
 def v3_bitmap_ordinals(session):
@@ -94,7 +113,7 @@ def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonc
             session.get("chain_id") != chain_id or
             producer.b64(session.get("polyfs_root", ""), 32).hex() != polyfs_root or
             producer.b64(session.get("integrity_root", ""), 32).hex() != integrity_root or
-            not any(producer.b64(session.get("setup_digest", ""), 32)) or
+            producer.b64(session.get("setup_digest", ""), 32).hex() != producer.SETUP_DIGEST or
             not any(producer.b64(session.get("plan_hash", ""), 32)) or
             bool(session.get("expired", False)) is not expired):
         raise ValueError("v3 session differs from the fixed pilot authority")
@@ -189,6 +208,7 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
     if (not requests or not 1 <= max_in_flight <= 12 or
             len({row["provider"] for row in requests}) != len(requests)):
         raise ValueError("v3 HTTP phase requires distinct provider signers")
+    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
     directory = lifecycle.home / "v3-http"
     directory.mkdir(mode=0o700, exist_ok=True)
     started = artifact.monotonic_ns()
@@ -227,25 +247,30 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
                     request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
                     stderr=result.stderr[-8192:], curl_returncode=result.returncode)
 
+    errors = []
     with ThreadPoolExecutor(max_workers=max_in_flight) as executor:
-        pending = {executor.submit(execute, index, request) for index, request in enumerate(requests)}
+        pending = {executor.submit(execute, index, request): request
+                   for index, request in enumerate(requests)}
         while pending:
-            done, pending = wait_futures(pending, timeout=1, return_when=FIRST_COMPLETED)
+            done, _ = wait_futures(pending, timeout=1, return_when=FIRST_COMPLETED)
             now = artifact.monotonic_ns()
             for future in done:
+                request = pending.pop(future)
                 try:
                     row = future.result()
                 except BaseException as error:
-                    retained.append(dict(status="driver_error", error=str(error)[-8192:],
-                                         request_finished_ns=now))
+                    row = dict(status="driver_error", provider=request["provider"],
+                               error=str(error)[-8192:], request_finished_ns=now)
+                    retained.append(row)
+                    errors.append(error)
                     lifecycle.save()
-                    raise
+                    continue
                 completed.append(row)
                 retained.append(row)
                 lifecycle.save()
                 last_progress = now
-            if now - last_progress >= 600 * 10**9:
-                raise TimeoutError(f"{phase} made no progress for 600 seconds")
+            if not errors and now - last_progress >= 600 * 10**9:
+                errors.append(TimeoutError(f"{phase} made no progress for 600 seconds"))
             if now - last_heartbeat >= 60 * 10**9:
                 heartbeat = dict(
                     phase=phase, completed=len(completed), total=len(requests),
@@ -254,7 +279,14 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
                 lifecycle.save()
                 print(json.dumps(heartbeat, sort_keys=True), flush=True)
                 last_heartbeat = now
-            lifecycle.remaining()
+            if not errors:
+                try:
+                    lifecycle.remaining()
+                    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+                except BaseException as error:
+                    errors.append(error)
+    if errors:
+        raise errors[0]
     heartbeat = dict(
         phase=phase, completed=len(completed), total=len(requests),
         elapsed_ns=artifact.monotonic_ns() - started, seconds_since_progress=0)
@@ -265,6 +297,8 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
 
 
 def v3_session_query(lifecycle, session_id, height=None):
+    if height is None:
+        height = lifecycle.wait_height(1)
     encoded = base64.urlsafe_b64encode(bytes.fromhex(session_id)).decode()
     route = API + "/retrieval-sessions-v3/" + encoded
     rows = [lifecycle.query(node, route, height) for node in lifecycle.nodes]
@@ -275,6 +309,8 @@ def v3_session_query(lifecycle, session_id, height=None):
 
 def v3_retained_generations(lifecycle, *, deal_id, root, height=None):
     """Record the all-validator retention union without attributing its source."""
+    if height is None:
+        height = lifecycle.wait_height(1)
     rows = [lifecycle.query(node, API + "/retained-generations", height) for node in lifecycle.nodes]
     if any(row != rows[0] for row in rows[1:]):
         raise ValueError("four validators disagree on retained generations")
@@ -383,6 +419,8 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
     doc["retained_generations_before_sessions"] = v3_retained_generations(
         lifecycle, deal_id=deal["id"], root=polyfs_root)
     sessions = []
+    doc["sessions"] = sessions
+    lifecycle.save()
     for nonce in range(1, V3_PILOT_SESSIONS + 1):
         path = lifecycle.home / f"v3-open-{nonce}.json"
         message = dict(creator=owner, deal_id=str(deal["id"]), generation="1",
@@ -407,7 +445,8 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
         row["before_proofs"] = before
     capture_workload_metrics(lifecycle, "native_v3_before_proofs", fenced=True)
     for row in sessions:
-        requests = [dict(provider=providers[slot], url=f"http://127.0.0.1:{19091 + slot}/sp/session-proof",
+        requests = [dict(provider=providers[slot],
+                         url=provider_http_url(lifecycle, providers[slot], "/sp/session-proof"),
                          body=dict(session_id=row["session_id"]))
                     for slot in range(V3_SYSTEMATIC_PROVIDERS)]
         outcomes = run_v3_http_phase(lifecycle, curl, requests,
@@ -457,7 +496,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
         lifecycle.save()
     doc["retained_generations_after_refund"] = v3_retained_generations(
         lifecycle, deal_id=deal["id"], root=polyfs_root)
-    doc.update(sessions=sessions, offered_proof_transactions=16,
+    doc.update(offered_proof_transactions=16,
                committed_valid_proof_transactions=sum(len(row["proof_transactions"]) for row in sessions),
                authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions),
                logical_bytes_per_session=V3_PILOT_BYTES, sample_population=133,
@@ -489,7 +528,7 @@ def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send,
     proposed["validators"] = verify_transaction_nodes(lifecycle, proposed)
     lifecycle.wait_height(proposed["height"] + 1)
     requests = [dict(provider=providers[slot],
-                     url=f"http://127.0.0.1:{19091 + slot}/sp/generation-v3/accept",
+                     url=provider_http_url(lifecycle, providers[slot], "/sp/generation-v3/accept"),
                      body=dict(deal_id=producer.uint(deal_id), provider=providers[slot]))
                 for slot in range(12)]
     outcomes = run_v3_http_phase(lifecycle, curl, requests, "generation-acceptance", max_in_flight=12)
@@ -1744,6 +1783,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
+    preflight_free = None
+    if native_v3:
+        preflight_free = require_free_disk(lifecycle.home.parent, V3_PREFLIGHT_FREE_BYTES,
+                                           "native v3 preflight")
     lifecycle.home.mkdir(mode=0o700)
     processes, reservations = [], []
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -1753,6 +1796,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         signal.signal(sig, interrupted)
     doc = lifecycle.doc
     doc.pop("transactions_submitted", None)
+    if native_v3:
+        doc["disk_guard"] = dict(preflight_free_bytes=preflight_free,
+                                 preflight_minimum_bytes=V3_PREFLIGHT_FREE_BYTES,
+                                 runtime_minimum_bytes=V3_ABORT_FREE_BYTES)
     doc.update(mode="four-validator-native-v3-provider-diagnostic" if native_v3 else "four-validator-healthy-provider-diagnostic",
         setup_transactions=[], providers=[],
         workload=("one 16 MiB FAT v3 K8 deal; twelve production provider-daemons; two preopened native sessions"
@@ -1761,13 +1808,21 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             ("Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
              if native_v3 else "No deputy retrieval yet"),
             "Normal mint and audit parameters retained; no economic conservation assertion", "No restart qualification"])
+    def check_disk(phase):
+        if native_v3:
+            free = require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+            doc["disk_guard"]["last_checked_free_bytes"] = free
+            doc["disk_guard"]["last_checked_phase"] = phase
+        return None
     def command(args, timeout=60):
         lifecycle.remaining()
+        check_disk("command")
         result = artifact.run_bounded_command(args, min(lifecycle.deadline, artifact.monotonic_ns() + timeout * 10**9), env=lifecycle.env)
         if result.returncode:
             raise ValueError("owned diagnostic command failed: " + (result.stderr + result.stdout)[-8192:])
         return result.stdout
     def send(name, args):
+        check_disk("transaction")
         job = transaction_job(lifecycle, lifecycle.signers[name], args)
         result = artifact.scheduled_transaction(job)
         doc["setup_transactions"].append(dict(result, signer=job["signer"], submit=job["submit"]))
@@ -1783,9 +1838,24 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             os.kill(process.pid, 0)
     def wait(height):
         # Keep provider failures visible while the validators advance.
+        started = last_heartbeat = last_progress = artifact.monotonic_ns()
+        previous_height = 0
         while True:
             check_providers()
+            check_disk("height wait")
             current = lifecycle.wait_height(1)
+            now = artifact.monotonic_ns()
+            if current > previous_height:
+                previous_height = current
+                last_progress = now
+            if now - last_heartbeat >= 60 * 10**9:
+                heartbeat = dict(phase="height-wait", current_height=current,
+                    target_height=height, elapsed_ns=now - started,
+                    seconds_since_progress=(now - last_progress) / 1e9)
+                doc.setdefault("progress", []).append(heartbeat)
+                lifecycle.save()
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = now
             if current >= height:
                 return current
             time.sleep(min(0.2, lifecycle.remaining()))

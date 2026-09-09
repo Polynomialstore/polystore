@@ -154,8 +154,10 @@ does not download and verify the file bytes. HTTP duration combines proof
 generation, local verification, gas simulation, signing, broadcast, and commit
 observation; it is neither pure proof-generation time nor chain capacity.
 
-Run only from reviewed, landed source with separately frozen Linux runtime
-hashes and a new private home:
+A bounded pre-merge correctness smoke may run from an exact independently
+reviewed head with separately frozen Linux runtime hashes and a new private
+home. It is not retained performance evidence. Retained performance collection
+requires the harness to be reviewed and landed:
 
 ```sh
 python3 scripts/retrieval_four_validator_workload.py \
