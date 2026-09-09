@@ -15,6 +15,11 @@ on:
         required: true
         default: false
         type: boolean
+      streamed_size:
+        description: 'Authenticated retrieval fixture (small first; larger sizes require measured scaling gate)'
+        type: choice
+        default: none
+        options: [none, small, intermediate, large]
       run_mode2_large:
         description: 'Run the guarded 1 GiB authenticated retrieval instead of the small Mode2 suite'
         required: true
@@ -24,9 +29,9 @@ on:
 jobs:
   e2e-mode2-heavy:
     name: E2E Mode2 Stripe (Heavy 12 SPs)
-    if: ${{ github.event_name == 'schedule' || inputs.run_mode2_heavy || inputs.run_mode2_large }}
+    if: ${{ github.event_name == 'schedule' || inputs.run_mode2_heavy || inputs.run_mode2_large || (inputs.streamed_size != '' && inputs.streamed_size != 'none') }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.run_mode2_large && 270 || 360 }}
+    timeout-minutes: ${{ (inputs.run_mode2_large || (inputs.streamed_size != '' && inputs.streamed_size != 'none')) && 90 || 360 }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
     steps:
@@ -97,9 +102,13 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_INSTALL: '1'
           PROVIDER_COUNT: '12'
-          E2E_MODE2_STREAMED: ${{ inputs.run_mode2_large && '1' || '0' }}
-          E2E_MODE2_STREAMED_BYTES: '1073741824'
+          E2E_MODE2_STREAMED: ${{ (inputs.run_mode2_large || (inputs.streamed_size != '' && inputs.streamed_size != 'none')) && '1' || '0' }}
+          E2E_MODE2_STREAMED_BYTES: ${{ (inputs.run_mode2_large || inputs.streamed_size == 'large') && '1073741824' || inputs.streamed_size == 'intermediate' && '130023424' || '16252928' }}
         run: |
+          if [ '${{ inputs.run_mode2_large }}' = true ] && [ '${{ inputs.streamed_size }}' != '' ] && [ '${{ inputs.streamed_size }}' != none ] && [ '${{ inputs.streamed_size }}' != large ]; then
+            echo 'Conflicting streamed_size and legacy run_mode2_large inputs' >&2
+            exit 1
+          fi
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           scripts/e2e_mode2_stripe_multi_sp.sh
 
@@ -111,11 +120,13 @@ jobs:
           path: |
             _artifacts/devnet_alpha_multi_sp/*.log
             polystore-website/test-results/**/retrieval-summary.json
+            polystore-website/test-results/**/retrieval-progress.json
+            _artifacts/devnet_alpha_multi_sp/opfs-preflight/**/opfs-progress.json
             polystore-website/test-results/**/retrieval-delivery-accounting.json
             polystore-website/test-results/**/error-context.md
-            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.png' || '' }}
-            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.zip' || '' }}
-            ${{ !inputs.run_mode2_large && 'polystore-website/playwright-report/**' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/test-results/**/*.png' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/test-results/**/*.zip' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/playwright-report/**' || '' }}
           if-no-files-found: ignore
 
   e2e-libp2p-relay:
