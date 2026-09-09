@@ -209,7 +209,7 @@ def negative_checks(fixture):
     assert not verify_path(leaf(10, 0, changed), 0, 3, paths[0], root)
     assert not verify_path(leaf(10, 1, pattern(info["patterns"][0])), 0, 3, paths[0], root)
     assert not verify_path(leaves[0], 0, 3, paths[0], bytes(32))
-    assert not verify_path(leaves[0], -1, 3, paths[0], root)
+    assert not verify_path(leaves[2], -1, 3, paths[2], root)
     assert not verify_path(leaves[0], 0, 3, paths[0][:-1], root)
     odd_bad = list(paths[2]); odd_bad[0] = bytes(32)
     assert not verify_path(leaves[2], 2, 3, odd_bad, root)
