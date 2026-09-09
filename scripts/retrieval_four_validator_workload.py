@@ -233,14 +233,45 @@ def build_operations(lifecycle, fixtures, deals, minimum_height):
     return operations
 
 
-def journal_results(path, operations, *, proof_only=False):
+def journal_results(path, operations, *, proof_only=False, require_all_committed=True):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         rows = {identity: json.loads(result) if result else None for identity, result in db.execute("SELECT id, result FROM operations")}
         transactions = [json.loads(row[0]) for row in db.execute("SELECT result FROM transactions ORDER BY rowid")]
-    if set(rows) != {op["operation_id"] for op in operations} or any(not row or row.get("all_transactions_committed") is not True for row in rows.values()):
+    expected = [op["operation_id"] for op in operations]
+    if len(set(expected)) != len(expected) or set(rows) != set(expected) or any(not row for row in rows.values()):
+        raise ValueError("incomplete lifecycle journal")
+    if require_all_committed and any(row.get("all_transactions_committed") is not True for row in rows.values()):
         raise ValueError("lifecycle did not commit every open/proof/confirmation; inspect retained journal")
-    if (len(transactions) != (1 if proof_only else 3) * len(operations) or
-            any(row["outcome"] != "committed_success" for row in transactions) or
+    if len(transactions) != (1 if proof_only else 3) * len(operations):
+        raise ValueError("unexpected transaction outcomes")
+    if proof_only:
+        outcomes = {"committed_success", "committed_failure", "checktx_rejected", "unknown",
+                    "not_submitted", "skipped", "duplicate"}
+        mapped = {}
+        hashes = set()
+        for transaction in transactions:
+            identity = transaction.get("operation_id")
+            if identity not in rows or identity in mapped or transaction.get("outcome") not in outcomes:
+                raise ValueError("unexpected transaction outcomes")
+            txhash = transaction.get("txhash")
+            if transaction["outcome"] == "duplicate":
+                if not txhash or txhash not in hashes:
+                    raise ValueError("inconsistent duplicate transaction outcome")
+            elif txhash:
+                if txhash in hashes:
+                    raise ValueError("duplicate transaction hash was counted twice")
+                hashes.add(txhash)
+            mapped[identity] = transaction
+        if set(mapped) != set(expected):
+            raise ValueError("unexpected transaction outcomes")
+        for identity, transaction in mapped.items():
+            valid = (transaction["outcome"] == "committed_success" and
+                     transaction.get("proof_state_verified") is True)
+            if (rows[identity].get("operation_id") != identity or
+                rows[identity].get("outcome") != transaction["outcome"] or
+                rows[identity].get("proof_submitted") is not valid):
+                raise ValueError("inconsistent proof lifecycle outcome")
+    if require_all_committed and (any(row["outcome"] != "committed_success" for row in transactions) or
             (proof_only and any(row.get("proof_submitted") is not True for row in rows.values()))):
         raise ValueError("unexpected transaction outcomes")
     ids = [row["session_id"] for row in rows.values()]
@@ -262,11 +293,20 @@ def assignment_submission_counts(operations, transactions):
         row["offered_bundles"] += 1
         row["offered_openings"] += openings
     seen = set()
+    hashes = set()
     for transaction in transactions:
         identity = transaction.get("operation_id")
         if identity not in expected or identity in seen:
             raise ValueError("assignment accounting requires one transaction per operation")
         seen.add(identity)
+        txhash = transaction.get("txhash")
+        if transaction.get("outcome") == "duplicate":
+            if not txhash or txhash not in hashes:
+                raise ValueError("assignment accounting has inconsistent duplicate transaction")
+        elif txhash:
+            if txhash in hashes:
+                raise ValueError("assignment accounting counted a transaction hash twice")
+            hashes.add(txhash)
         operation = expected[identity]
         slot = str(operation["proof_expectation"]["snapshot"]["slot"])
         openings = producer.uint(operation["proof_expectation"]["session"]["blob_count"])
@@ -274,7 +314,8 @@ def assignment_submission_counts(operations, transactions):
         if transaction.get("outcome") not in ("not_submitted", "skipped"):
             row["submitted_bundles"] += 1
             row["submitted_openings"] += openings
-        if transaction.get("outcome") == "committed_success":
+        if (transaction.get("outcome") == "committed_success" and
+                transaction.get("proof_state_verified") is True):
             row["committed_valid_bundles"] += 1
             row["committed_valid_openings"] += openings
     if seen != set(expected):
@@ -1099,7 +1140,8 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
         doc["progress"] = dict(path=str(progress_path), sha256=artifact.sha256(progress_path),
                                heartbeat_seconds=60, no_progress_timeout_seconds=600,
                                source="scheduler in-memory counters; no additional chain query")
-        _, sustained_transactions = journal_results(lifecycle.home / "sustained.sqlite", operations, proof_only=True)
+        _, sustained_transactions = journal_results(lifecycle.home / "sustained.sqlite", operations,
+                                                     proof_only=True, require_all_committed=False)
         doc["assignment_submission_counts"] = assignment_submission_counts(operations, sustained_transactions)
         # The last offered operation precedes the declared end by one interval.
         while artifact.monotonic_ns() < started + duration * 10**9:

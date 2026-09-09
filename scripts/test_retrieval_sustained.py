@@ -130,7 +130,8 @@ class SustainedTest(unittest.TestCase):
                 operation["submit-proof"]["submit"].index("--gas") + 1], "9000000")
         self.assertEqual([row["phase"] for row in operations], ["warmup"] * 8 + ["measurement"] * 2)
 
-        transactions = [dict(operation_id=operation["operation_id"], outcome="committed_success")
+        transactions = [dict(operation_id=operation["operation_id"], outcome="committed_success",
+                             proof_state_verified=True)
                         for operation in operations]
         counts = workload.assignment_submission_counts(operations, transactions)
         self.assertEqual(counts["0"], dict(offered_bundles=1, offered_openings=8,
@@ -153,6 +154,47 @@ class SustainedTest(unittest.TestCase):
         bad["proof_expectation"]["session"]["start_blob_index"] = 0
         with self.assertRaises(ValueError):
             workload.export_inventory_request(bad, "ab" * 32, {}, "/proof", directories)
+
+    def test_sustained_mixed_outcomes_reach_assignment_accounting(self):
+        outcomes = [
+            dict(outcome="committed_success", proof_state_verified=True, txhash="AA" * 32),
+            dict(outcome="not_submitted", error="queue_full"),
+            dict(outcome="checktx_rejected", code=7),
+            dict(outcome="unknown", txhash="BB" * 32),
+            dict(outcome="committed_success", proof_state_verified=False, txhash="CC" * 32),
+            dict(outcome="duplicate", txhash="AA" * 32, original_outcome="committed_success"),
+        ]
+        operations = [dict(operation_id=f"proof-{index}", proof_expectation=dict(
+            snapshot=dict(slot=0), session=dict(blob_count=8))) for index in range(len(outcomes))]
+        with tempfile.TemporaryDirectory() as home:
+            journal = Path(home) / "sustained.sqlite"
+            with sqlite3.connect(journal) as db:
+                db.executescript("CREATE TABLE operations(id TEXT, result TEXT); CREATE TABLE transactions(result TEXT);")
+                for index, (operation, transaction) in enumerate(zip(operations, outcomes)):
+                    transaction.update(operation_id=operation["operation_id"])
+                    valid = transaction["outcome"] == "committed_success" and transaction.get("proof_state_verified") is True
+                    result = dict(operation_id=operation["operation_id"], session_id=f"{index + 1:064x}",
+                                  outcome=transaction["outcome"], proof_submitted=valid,
+                                  all_transactions_committed=transaction["outcome"] == "committed_success")
+                    db.execute("INSERT INTO operations VALUES (?, ?)",
+                               (operation["operation_id"], json.dumps(result)))
+                    db.execute("INSERT INTO transactions VALUES (?)", (json.dumps(transaction),))
+            with self.assertRaisesRegex(ValueError, "did not commit"):
+                workload.journal_results(journal, operations, proof_only=True)
+            _, transactions = workload.journal_results(
+                journal, operations, proof_only=True, require_all_committed=False)
+            self.assertEqual([row["outcome"] for row in transactions],
+                             [row["outcome"] for row in outcomes])
+            counts = workload.assignment_submission_counts(operations, transactions)["0"]
+            self.assertEqual(counts, dict(offered_bundles=6, offered_openings=48,
+                submitted_bundles=5, submitted_openings=40,
+                committed_valid_bundles=1, committed_valid_openings=8))
+
+            corrupt = json.loads(json.dumps(transactions))
+            corrupt[5]["outcome"] = "committed_success"
+            corrupt[5]["proof_state_verified"] = True
+            with self.assertRaisesRegex(ValueError, "counted.*twice"):
+                workload.assignment_submission_counts(operations, corrupt)
 
     def test_k2_operations_keep_default_geometry_and_disjoint_deputies(self):
         life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1",
