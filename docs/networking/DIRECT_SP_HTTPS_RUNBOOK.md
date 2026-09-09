@@ -122,8 +122,12 @@ user journal if any step fails:
 Prerequisites are lego v4.35.2, `setfacl`, a mode-0600 Cloudflare token env,
 the existing lego state, parent-directory traverse access, and a Caddy local
 admin endpoint that permits the operator to reload the configured server.
+Enable lingering for the operator account so its user timers run after logout
+and start at boot without an interactive login.
 
 ```bash
+sudo loginctl enable-linger "$USER"
+test "$(loginctl show-user "$USER" -p Linger --value)" = yes
 mkdir -p ~/.config/systemd/user ~/.config/polystore
 install -d /opt/polystore/scripts
 install -m 755 scripts/renew_provider_certificates.sh /opt/polystore/scripts/

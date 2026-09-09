@@ -124,6 +124,8 @@ cp ops/systemd/env/polystore-provider-cert-renewal.env ~/.config/polystore/
 chmod 600 ~/.config/polystore/polystore-provider-cert-renewal.env
 # Edit the private renewal env, including POLYSTORE_LEGO_EMAIL and token path.
 systemctl --user daemon-reload
+sudo loginctl enable-linger "$USER"
+test "$(loginctl show-user "$USER" -p Linger --value)" = yes
 systemctl --user enable --now polystore-public-healthcheck.timer polystore-provider-cert-renewal.timer
 ```
 
