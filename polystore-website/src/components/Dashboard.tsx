@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp, Coins } from 'lucide-react'
+import { RefreshCw, CheckCircle2, HardDrive, Database, ChevronDown, ChevronUp } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCreateDeal } from '../hooks/useCreateDeal'
 import { useUpdateDealContent } from '../hooks/useUpdateDealContent'
@@ -104,6 +104,7 @@ export function Dashboard() {
     isConnected,
     polystoreAddress,
     hasFunds,
+    fundingStatus,
     isWrongNetwork,
     walletChainId,
     genesisMismatch,
@@ -1000,6 +1001,13 @@ export function Dashboard() {
     if (!file || !address) {
       return
     }
+    if (!hasFunds) {
+      setStatusTone('error')
+      setStatusMsg(fundingStatus === 'unavailable'
+        ? 'Wallet balance is temporarily unavailable. Uploads remain paused until the network answers balance checks.'
+        : 'A funded wallet is required before uploading data.')
+      return
+    }
     if (!targetDealId) {
       setStatusTone('error')
       setStatusMsg('Select a target deal before uploading.')
@@ -1062,7 +1070,9 @@ export function Dashboard() {
     if (!hasFunds) {
       setStatusTone('error')
       setStatusMsg(
-        appConfig.faucetEnabled
+        fundingStatus === 'unavailable' || fundingStatus === 'checking'
+          ? 'Wallet balance is temporarily unavailable. Creating deals remains paused until the network confirms your balance.'
+          : appConfig.faucetEnabled
           ? 'You must request testnet NIL from the faucet before creating a storage deal.'
           : 'Your wallet needs funds before creating a storage deal.',
       )
@@ -1179,7 +1189,9 @@ export function Dashboard() {
 
   const handleCreateDealClick = async () => {
     if (!hasFunds) {
-      const message = appConfig.faucetEnabled
+      const message = fundingStatus === 'unavailable' || fundingStatus === 'checking'
+        ? 'Wallet balance is temporarily unavailable. Creating deals remains paused until the network confirms your balance.'
+        : appConfig.faucetEnabled
         ? 'You must request testnet NIL from the faucet before creating a storage deal.'
         : 'Your wallet needs funds before creating a storage deal.'
       setStatusTone('error')
@@ -1436,30 +1448,6 @@ export function Dashboard() {
       </div>
     )
 
-  if (!hasFunds)
-    return (
-      <div className="px-4 pb-12 pt-24">
-        <div className="container mx-auto max-w-6xl">
-          <div className="glass-panel industrial-border p-12 text-center">
-            <div className="nil-section-label">/DASHBOARD</div>
-            <h2 className="mt-2 text-xl font-semibold text-foreground">Fund your wallet to continue</h2>
-            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Your wallet is connected, but it needs testnet NIL before you can allocate deals or upload data.
-            </p>
-            <button
-              type="button"
-              onClick={() => void session.requestFunds()}
-              disabled={!address || session.faucetBusy || !session.faucetEnabled}
-              className="cta-shadow mt-6 inline-flex items-center justify-center gap-3 border border-primary bg-primary px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {session.faucetBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-              {session.faucetBusy ? 'Funding' : 'Fund Wallet'}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-
   const onChainCid = String(targetDeal?.cid || '').trim()
 
   const dealExplorerTopPanel = (
@@ -1534,7 +1522,7 @@ export function Dashboard() {
                 <input
                   type="file"
                   onChange={handleFileChange}
-                  disabled={!targetDealId || uploadLoading || isTargetDealMode2 || targetDealExpired}
+                  disabled={!hasFunds || !targetDealId || uploadLoading || isTargetDealMode2 || targetDealExpired}
                   data-testid="content-file-input"
                   className="w-full recessed-input px-3 py-2 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/30 disabled:opacity-50"
                 />
@@ -1591,7 +1579,7 @@ export function Dashboard() {
                     stagedUpload.witnessMdus,
                   )
                 }}
-                disabled={updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2 || targetDealExpired}
+                disabled={!hasFunds || updateLoading || !stagedUpload || !targetDealId || isTargetDealMode2 || targetDealExpired}
                 data-testid="content-commit"
                 className="px-4 py-3 bg-primary hover:bg-primary/90 text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] font-mono-data shadow-[0_0_50px_rgba(0,0,0,0.06)] dark:shadow-[0_0_60px_rgba(0,0,0,0.8)] disabled:opacity-50 transition-all"
               >
@@ -1609,6 +1597,10 @@ export function Dashboard() {
                 {targetDealExpiryMsg}
               </div>
             </div>
+          ) : !hasFunds ? (
+            <InlineNotice tone="info" title="Uploads paused while balance is unavailable" testId="upload-balance-unavailable">
+              Existing deal files remain available. Upload controls will resume after the network confirms your wallet balance.
+            </InlineNotice>
           ) : (
             <FileSharder
               dealId={targetDealId}
@@ -1760,7 +1752,7 @@ export function Dashboard() {
 
         <button
           onClick={handleCreateDealClick}
-          disabled={dealLoading || !initialEscrow}
+          disabled={!hasFunds || dealLoading || !initialEscrow}
           data-testid="alloc-submit"
           className="w-full bg-primary py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
@@ -1773,6 +1765,23 @@ export function Dashboard() {
   return (
     <div className="px-4 pb-12 pt-24">
       <div className="container mx-auto max-w-6xl space-y-6">
+      {fundingStatus !== 'funded' ? (
+        <InlineNotice
+          tone={fundingStatus === 'checking' ? 'pending' : 'info'}
+          title={fundingStatus === 'unavailable'
+            ? 'Wallet balance temporarily unavailable'
+            : fundingStatus === 'unfunded'
+              ? 'Fund your wallet to create or upload'
+              : 'Checking wallet balance'}
+          testId="wallet-balance-unavailable"
+        >
+          {fundingStatus === 'unavailable'
+            ? 'The network did not report a zero balance. Existing deals and verified cached downloads remain available; uploads and creating deals will resume after balance checks recover.'
+            : fundingStatus === 'unfunded'
+              ? 'Your wallet has no confirmed testnet NIL. Existing deals and cached files remain available; use Fund Wallet in the navigation to create or upload.'
+              : 'Existing deals remain available while the network confirms whether uploads and creating deals can continue.'}
+        </InlineNotice>
+      ) : null}
       {/* TOP HEADER PANEL */}
       <div className="glass-panel industrial-border">
         <div className="flex items-end justify-between gap-6 border-b border-border/20 p-6">
