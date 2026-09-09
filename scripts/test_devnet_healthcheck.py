@@ -32,6 +32,10 @@ class Handler(BaseHTTPRequestHandler):
     missing_lcd_height = False
     mismatched_lcd_height = False
     missing_provider_headers = False
+    retrieval_status = 400
+    retrieval_cors = True
+    extra_provider = False
+    extra_draining_provider = False
     public_base = ""
 
     def log_message(self, _format, *_args):
@@ -119,6 +123,16 @@ class Handler(BaseHTTPRequestHandler):
                 "address": ADDRESS, "endpoints": ["/dns4/localhost/tcp/443/https"],
                 "status": "Jailed" if self.inactive_provider else "Active", "draining": False,
             }})
+        elif self.path == "/polystorechain/polystorechain/v1/providers":
+            providers = [{"address": ADDRESS, "status": "Active", "draining": False}]
+            if self.extra_provider or self.extra_draining_provider:
+                providers.append({"address": "nil1unexpected", "status": "Active", "draining": self.extra_draining_provider})
+            self.send_json({"providers": providers})
+        elif self.path.startswith("/sp/retrieval/mdu/"):
+            self.send_json(
+                {"error": "invalid session_id" if self.retrieval_status == 400 else "handler unavailable"},
+                self.retrieval_status, browser_cors=self.retrieval_cors,
+            )
         elif self.path == "/health":
             self.send_json({"ok": True})
         else:
@@ -199,6 +213,10 @@ exit 1
         Handler.missing_lcd_height = False
         Handler.mismatched_lcd_height = False
         Handler.missing_provider_headers = False
+        Handler.retrieval_status = 400
+        Handler.retrieval_cors = True
+        Handler.extra_provider = False
+        Handler.extra_draining_provider = False
 
     def run_check(self, chain_cli=False):
         base = Handler.public_base
@@ -293,6 +311,31 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing required request headers", result.stdout)
+
+    def test_public_check_rejects_missing_or_failed_retrieval_handler_despite_options(self):
+        for status in (404, 500, 200):
+            with self.subTest(status=status):
+                Handler.retrieval_status = status
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("retrieval GET did not return the expected authorization rejection", result.stdout)
+
+    def test_public_check_rejects_missing_retrieval_get_cors(self):
+        Handler.retrieval_cors = False
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retrieval GET missing matching Access-Control-Allow-Origin", result.stdout)
+
+    def test_public_check_rejects_unexpected_active_provider(self):
+        Handler.extra_provider = True
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("active provider inventory mismatch", result.stdout)
+
+    def test_public_check_allows_additional_draining_provider(self):
+        Handler.extra_draining_provider = True
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

@@ -344,6 +344,56 @@ check_chain_cli_surface() {
   ok "chain CLI provider lifecycle surface module=$module"
 }
 
+check_public_provider_inventory() {
+  local body expected actual
+  if ! body="$(http_get "$LCD/polystorechain/polystorechain/v1/providers")"; then
+    fail "active provider inventory unavailable"
+    return
+  fi
+  expected="$(printf '%s\n' "${EXPECTED_PROVIDERS[@]}" | jq -Rsc 'split("\n")[:-1] | map(split("|")[0]) | sort')"
+  # ListProviders returns the complete registry, without pagination. Placement
+  # considers every Active, non-draining provider, including unconfigured ones.
+  if ! actual="$(jq -ce '
+    .providers | select(type == "array") |
+    select(all(.[]; (.address | type == "string" and length > 0) and
+      (.status | type == "string") and (.draining | type == "boolean"))) |
+    select((map(.address) | unique | length) == length) |
+    map(select(.status == "Active" and .draining == false) | .address) | sort
+  ' <<<"$body")"; then
+    fail "active provider inventory is malformed"
+  elif [[ "$actual" != "$expected" ]]; then
+    fail "active provider inventory mismatch: expected=$expected actual=$actual"
+  else
+    ok "active provider inventory matches configured placement set"
+  fi
+}
+
+check_provider_retrieval_handler() {
+  local address="$1" base="$2" headers body status allow_origin
+  headers="$(mktemp)"
+  body="$(mktemp)"
+  # A global OPTIONS responder cannot establish that this route exists. A
+  # malformed session ID reaches its authorization parser without reading
+  # customer data, opening a session, or submitting a transaction.
+  if ! curl -sS --max-time "$HC_TIMEOUT" -D "$headers" -o "$body" \
+    -H "Origin: $BROWSER_ORIGIN" -H 'X-PolyStore-Session-Id: invalid' \
+    -H 'Accept: multipart/form-data; version=2' \
+    "$base/sp/retrieval/mdu/0x0000000000000000000000000000000000000000000000000000000000000000/0"; then
+    fail "Provider $address retrieval GET unreachable"
+  else
+    status="$(awk 'NR == 1 { print $2 }' "$headers")"
+    allow_origin="$(header_value "$headers" 'Access-Control-Allow-Origin')"
+    if [[ "$status" != "400" ]] || ! jq -e '.error == "invalid session_id"' "$body" >/dev/null 2>&1; then
+      fail "Provider $address retrieval GET did not return the expected authorization rejection (HTTP ${status:-000})"
+    elif [[ "$allow_origin" != "*" && "$allow_origin" != "$BROWSER_ORIGIN" ]]; then
+      fail "Provider $address retrieval GET missing matching Access-Control-Allow-Origin"
+    else
+      ok "Provider $address retrieval GET reaches session authorization"
+    fi
+  fi
+  rm -f "$headers" "$body"
+}
+
 check_public_provider() {
   local spec="$1"
   local address public_base endpoint body status actual_address status_address persona chain_id status_endpoint provider_status draining
@@ -358,6 +408,7 @@ check_public_provider() {
   check_cors_preflight "Provider $address retrieval" \
     "$public_base/sp/retrieval/mdu/0x00/0" "$BROWSER_ORIGIN" GET \
     'X-PolyStore-Session-Id,X-PolyStore-Start-Blob-Index,X-PolyStore-Blob-Count'
+  check_provider_retrieval_handler "$address" "$public_base"
   if ! status="$(http_get "$public_base/status")"; then
     fail "Provider $address public /status unreachable"
     return
@@ -817,6 +868,7 @@ if [[ "$MODE" == "hub" ]]; then
       'x-cosmos-block-height' "$LATEST_COMMITTED_HEIGHT" 'x-cosmos-block-height'
     check_cors_preflight "Gateway" "$GATEWAY/gateway/upload" "$BROWSER_ORIGIN"
     check_cors_preflight "Faucet" "$FAUCET/faucet" "$BROWSER_ORIGIN"
+    check_public_provider_inventory
     for expected_provider in "${EXPECTED_PROVIDERS[@]}"; do
       check_public_provider "$expected_provider"
     done
