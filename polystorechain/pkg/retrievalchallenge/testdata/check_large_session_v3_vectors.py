@@ -222,6 +222,8 @@ def negative_checks(fixture):
     changed = bytearray(pattern(info["patterns"][0])); changed[-1] ^= 1
     assert not verify_path(leaf(10, 0, changed), 0, 3, paths[0], root)
     assert not verify_path(leaf(10, 1, pattern(info["patterns"][0])), 0, 3, paths[0], root)
+    # Witness growth shifts absolute MDU indices even for unchanged bytes.
+    assert not verify_path(leaf(11, 0, pattern(info["patterns"][0])), 0, 3, paths[0], root)
     assert not verify_path(leaves[0], 0, 3, paths[0], bytes(32))
     assert not verify_path(leaves[2], -1, 3, paths[2], root)
     assert not verify_path(leaves[0], 0, 3, paths[0][:-1], root)

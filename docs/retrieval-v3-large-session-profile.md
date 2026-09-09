@@ -128,8 +128,15 @@ attributable to that provider for obligation failure and nonpayment. V3 creates
 no new slashing or provider-health penalty.
 
 The leaf binds its physical coordinate and bytes, while authenticated MDU0 and
-the acceptance bind the deal and generation. An append can therefore reuse
-unchanged leaf hashes without rehashing their 128 KiB bodies. Per-slot acceptance
+the acceptance bind the deal and generation. An append may reuse a leaf hash only
+when its encoded bytes AND absolute `(mdu_index, leaf_index)` remain unchanged.
+If witness growth changes `metadata_mdus`, existing user MDUs shift absolute
+indices: the uploader MUST rehash every affected encoded blob at its new
+coordinate and rebuild the new generation's integrity tree and paths before
+provider acceptance. Old-generation bytes, hashes and paths remain bound to the
+old generation for its retained sessions. Qualification MUST cover an append
+across a witness-count boundary and reject reuse of the old-coordinate hashes.
+Per-slot acceptance
 does not prove global Reed-Solomon correctness, truthful FAT metadata or
 consistency among other slots. Bad owner-generated parity can impair recovery;
 this systematic-only profile neither attributes that fault to an honest provider
