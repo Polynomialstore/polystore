@@ -1,0 +1,506 @@
+{
+  "artifacts": {
+    "commit-0391653b8a4084c15a19351f7ce87629506890c4.jsonl": {
+      "bytes": 157925,
+      "sha256": "32b04622e428784eb9c119c2d941ef32092fff421f9874e0fc3e13277dfc373c"
+    },
+    "commit-2fbc437bef549a79becefda16b365a339cd188ef.jsonl": {
+      "bytes": 157753,
+      "sha256": "d326ace1635a6aad46e2a219b016bb7be6842e27bdad153aa545dd5384fb5a19"
+    },
+    "commit-31fa8b94c45a55c5eb3c9c8773ecebe88daae459.jsonl": {
+      "bytes": 157890,
+      "sha256": "0e821f6d0041d047edde287976ce85e658818ee95ab548000786b21c8191e9cd"
+    },
+    "commit-cb835dbb9f04aa3ed59bb771b390d15394fe6b9a.jsonl": {
+      "bytes": 158167,
+      "sha256": "d116e8b57c4b53bc8893a7deabf68124c838ee94f3a7bda7eafcd4ecb2a0a83f"
+    },
+    "evidence.json": {
+      "bytes": 856286,
+      "sha256": "1e7a734501edb2fca46a2c96e7026b9236740611ee939915eb53d90faa62eb10"
+    },
+    "sustained-audits.jsonl": {
+      "bytes": 131415,
+      "sha256": "d8dc096dbc2a3ba77f655bf369e79e54e0f643497a19e13de360a6df0ab9e15a"
+    },
+    "sustained-blocks.jsonl": {
+      "bytes": 195525,
+      "sha256": "2783baf3281fca08b28928484e2529e869dd283eec1bcd81440c5a376490c273"
+    },
+    "sustained-progress.jsonl": {
+      "bytes": 923,
+      "sha256": "7ddaf0aef293f3adb774293b13225d9e5214367451123778c43344145065ae42"
+    },
+    "sustained.sqlite": {
+      "bytes": 5173248,
+      "sha256": "bb20ad784082787c09cf6eb89f29cb016eded3c93f24dae0b96b1889f000f957"
+    }
+  },
+  "attempts": 1,
+  "audits": {
+    "accepted": 12,
+    "assignments": 12,
+    "coverage_verified": true,
+    "epoch": 7,
+    "finalized": 12,
+    "height": 701,
+    "missed_epochs_total": 0
+  },
+  "consensus": {
+    "all_four_headers_agree": true,
+    "all_four_results_agree": true,
+    "header_time_mapping": {
+      "capture_offset_spread_ns": 512720,
+      "limit": "The spread describes agreement among the four mapping samples; it is not a full clock-error bound. Comet header.Time is not wall-clock FinalizeBlock or Commit completion.",
+      "method": "median across four pre-measurement metric captures of wall_time_ns minus the monotonic sample midpoint, plus scheduler started_ns",
+      "scheduler_start_wall_time_ns": 1788944161270079657
+    },
+    "header_time_windows": {
+      "accounted_transactions": 842,
+      "after_offered_window": 139,
+      "before_measurement": 1,
+      "cohort_cross_tabulation": {
+        "columns": [
+          "before_start",
+          "0_to_30s",
+          "30_to_60s",
+          "60_to_90s",
+          "90_to_120s",
+          "120_to_150s",
+          "after_150s"
+        ],
+        "committed_valid_bundles": [
+          [
+            1,
+            29,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            60,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            120,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            7,
+            222,
+            11,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            253,
+            139
+          ]
+        ],
+        "interpretation": "Rows use scheduled client offer time; columns use consensus header.Time, not actual wall-clock Commit completion. Negative relative header times are possible.",
+        "offered_rates_bundles_per_s": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "openings_per_bundle": 8
+      },
+      "interpretation": "Windows contain carryover across offered cohorts and are keyed by consensus header.Time, not actual Commit completion.",
+      "thirty_second_windows": [
+        {
+          "gas_used": 119856991,
+          "gas_wanted": 145000000,
+          "header_time_rate_bundles_per_s": 0.967,
+          "header_time_rate_openings_per_s": 7.733,
+          "offered_rate_bundles_per_s": 1,
+          "reconciled_openings": 232,
+          "reconciled_transactions": 29
+        },
+        {
+          "gas_used": 247988704,
+          "gas_wanted": 300000000,
+          "header_time_rate_bundles_per_s": 2.0,
+          "header_time_rate_openings_per_s": 16.0,
+          "offered_rate_bundles_per_s": 2,
+          "reconciled_openings": 480,
+          "reconciled_transactions": 60
+        },
+        {
+          "gas_used": 524918308,
+          "gas_wanted": 635000000,
+          "header_time_rate_bundles_per_s": 4.233,
+          "header_time_rate_openings_per_s": 33.867,
+          "offered_rate_bundles_per_s": 4,
+          "reconciled_openings": 1016,
+          "reconciled_transactions": 127
+        },
+        {
+          "gas_used": 917565637,
+          "gas_wanted": 1110000000,
+          "header_time_rate_bundles_per_s": 7.4,
+          "header_time_rate_openings_per_s": 59.2,
+          "offered_rate_bundles_per_s": 8,
+          "reconciled_openings": 1776,
+          "reconciled_transactions": 222
+        },
+        {
+          "gas_used": 1091165320,
+          "gas_wanted": 1320000000,
+          "header_time_rate_bundles_per_s": 8.8,
+          "header_time_rate_openings_per_s": 70.4,
+          "offered_rate_bundles_per_s": 16,
+          "reconciled_openings": 2112,
+          "reconciled_transactions": 264
+        }
+      ]
+    },
+    "reconciled_successful_transactions": 842,
+    "workload_height_range": [
+      556,
+      679
+    ]
+  },
+  "gas": {
+    "admission_interpretation": "At 5,000,000 declared gas, twelve proof transactions use 60,000,000 of the 64,000,000 proposal cap; a thirteenth would exceed it. Gas used does not replace declared gas for proposal admission.",
+    "block_max_gas": 64000000,
+    "declared_per_proof_transaction": 5000000,
+    "median_used_per_opening": 516758.75,
+    "peak_workload_block": {
+      "gas_used": 49609028,
+      "gas_wanted": 60000000,
+      "height": 652,
+      "transactions": 12
+    },
+    "used_per_proof_transaction_range": [
+      4131317,
+      4134115
+    ]
+  },
+  "interpretation": {
+    "basis": "The 8/s cohort developed client-observed carryover; at 16/s the bounded 128-entry driver queue rejected 88 offers, while reconciled blocks reached twelve 5M-gas transactions (60M declared gas).",
+    "claim_limit": "Single Linux host with four validator processes and twelve provider daemons. This diagnostic does not establish production capacity, WAN performance, completed-session throughput, or byte delivery.",
+    "classification": "driver_queue_and_declared_gas_limited_at_highest_offered_steps"
+  },
+  "measurement": {
+    "assignment_basis": "Pinned session snapshot slot from hash-verified preparation inventory; measurement only, excluding warmup. Submitted means worker started and transaction subsequently committed; there are no failed or unknown submissions in this run.",
+    "assignments": [
+      {
+        "committed_valid_bundles": 71,
+        "committed_valid_openings": 568,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 7,
+        "slot": 0,
+        "submitted_bundles": 71,
+        "submitted_openings": 568
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 1,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 2,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 3,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 4,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 5,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 6,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 7,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 69,
+        "committed_valid_openings": 552,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 9,
+        "slot": 8,
+        "submitted_bundles": 69,
+        "submitted_openings": 552
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 9,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 10,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 72,
+        "committed_valid_openings": 576,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 6,
+        "slot": 11,
+        "submitted_bundles": 72,
+        "submitted_openings": 576
+      }
+    ],
+    "client_completion_observations_after_150s": 156,
+    "committed_valid_bundles": 842,
+    "committed_valid_openings": 6736,
+    "fence_backlog_definition": "At each scheduled 30-second end fence: offered but not terminal; queued has not started, in-flight has started. Terminal queue_full offers are excluded. These are client scheduler states, not chain mempool counts.",
+    "offered_bundles": 930,
+    "offered_openings": 7440,
+    "queue_full_not_submitted": 88,
+    "steps": [
+      {
+        "all_client_completion_observations_during_step": 29,
+        "end_fence_in_flight": 1,
+        "end_fence_pending": 1,
+        "end_fence_queued": 0,
+        "eventual_committed_valid_bundles": 30,
+        "offered_bundles": 30,
+        "offered_rate_bundles_per_s": 1,
+        "queue_full_not_submitted": 0,
+        "same_cohort_client_observed_by_step_end": 29,
+        "terminal_observation_latency_ms": {
+          "max": 1947.417,
+          "p50": 1282.211,
+          "p95": 1933.821,
+          "p99": 1944.427
+        }
+      },
+      {
+        "all_client_completion_observations_during_step": 58,
+        "end_fence_in_flight": 3,
+        "end_fence_pending": 3,
+        "end_fence_queued": 0,
+        "eventual_committed_valid_bundles": 60,
+        "offered_bundles": 60,
+        "offered_rate_bundles_per_s": 2,
+        "queue_full_not_submitted": 0,
+        "same_cohort_client_observed_by_step_end": 57,
+        "terminal_observation_latency_ms": {
+          "max": 2030.68,
+          "p50": 1409.1,
+          "p95": 1990.806,
+          "p99": 2025.739
+        }
+      },
+      {
+        "all_client_completion_observations_during_step": 116,
+        "end_fence_in_flight": 7,
+        "end_fence_pending": 7,
+        "end_fence_queued": 0,
+        "eventual_committed_valid_bundles": 120,
+        "offered_bundles": 120,
+        "offered_rate_bundles_per_s": 4,
+        "queue_full_not_submitted": 0,
+        "same_cohort_client_observed_by_step_end": 113,
+        "terminal_observation_latency_ms": {
+          "max": 2274.078,
+          "p50": 1452.992,
+          "p95": 2103.979,
+          "p99": 2258.661
+        }
+      },
+      {
+        "all_client_completion_observations_during_step": 224,
+        "end_fence_in_flight": 23,
+        "end_fence_pending": 23,
+        "end_fence_queued": 0,
+        "eventual_committed_valid_bundles": 240,
+        "offered_bundles": 240,
+        "offered_rate_bundles_per_s": 8,
+        "queue_full_not_submitted": 0,
+        "same_cohort_client_observed_by_step_end": 217,
+        "terminal_observation_latency_ms": {
+          "max": 5092.606,
+          "p50": 1755.151,
+          "p95": 3386.195,
+          "p99": 4284.979
+        }
+      },
+      {
+        "all_client_completion_observations_during_step": 259,
+        "end_fence_in_flight": 32,
+        "end_fence_pending": 156,
+        "end_fence_queued": 124,
+        "eventual_committed_valid_bundles": 392,
+        "offered_bundles": 480,
+        "offered_rate_bundles_per_s": 16,
+        "queue_full_not_submitted": 88,
+        "same_cohort_client_observed_by_step_end": 236,
+        "terminal_observation_latency_ms": {
+          "max": 22782.641,
+          "p50": 13381.66,
+          "p95": 20445.364,
+          "p99": 21500.649
+        }
+      }
+    ]
+  },
+  "preparation": {
+    "batch_sizes": [
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      2
+    ],
+    "committed_success": 16,
+    "gas_used_total": 367420844,
+    "gas_wanted_total": 386400000,
+    "sessions_opened": 962,
+    "setup_committed_success": 46,
+    "transactions": 16
+  },
+  "qualification": false,
+  "resources": {
+    "commit_stream_observed_blocks_each": [
+      124,
+      124,
+      124,
+      124
+    ],
+    "commit_stream_p95_upper_bound_seconds": [
+      0.3389775400041074,
+      0.33529044500514354,
+      0.3460720980048709,
+      0.2859745970043405
+    ],
+    "commit_stream_qualified_all_four": true,
+    "rss_source": "wait4 ru_maxrss, converted from KiB; not CPU usage",
+    "validator_peak_rss_bytes": [
+      393928704,
+      381997056,
+      381140992,
+      386924544
+    ]
+  },
+  "run": {
+    "completed_at_utc": "2026-09-09T08:59:25Z",
+    "completion_basis": "retained supervisor completion record; elapsed 966 seconds from launch timestamp",
+    "launched_at_utc": "2026-09-09T08:43:19Z",
+    "offered_window_seconds": 150,
+    "post_window_drain_seconds": 18.783641163,
+    "retries": 0,
+    "scheduler_elapsed_seconds": 168.783641163,
+    "supervisor_exit_code": 0
+  },
+  "scheduler": {
+    "automatic_submission_retries": false,
+    "max_in_flight": 32,
+    "max_queued": 128,
+    "peak_in_flight": 32,
+    "peak_queued": 128,
+    "peak_queued_per_signer": 6,
+    "quarantined_signers": []
+  },
+  "schema": "polystore.issue290.linux-k8-highload-summary.v1",
+  "source": {
+    "harness_merge": "07b1c626fa230dfe348fe72aa1ef00354ca7501f",
+    "reviewed_head": "f73ff0b8c0cf67ff79b9d8d07ae543acf6e590ea",
+    "runtime_product_source": "a6e130af3accb3ab9634d6ae04959e612653193a"
+  },
+  "status": "SUCCESS_DIAGNOSTIC_ONLY",
+  "summary_generated_at_utc": "2026-09-09T09:14:48.736049Z",
+  "warmup": {
+    "committed_valid_bundles": 32,
+    "offered_bundles": 32,
+    "openings": 256
+  }
+}

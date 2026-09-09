@@ -1,0 +1,271 @@
+{
+  "bounds": {
+    "base_expiry_height_delta": 4000,
+    "deal_end_block": 100016,
+    "deal_escrow_stake": 100000000,
+    "deal_lifetime_guard": "harness rejects unless base expiry plus 7 is below deal end",
+    "funding_assessment": "7696 stake total session locks fit the 100000000 stake deal escrow; identity funding remains unchanged",
+    "last_expiry_bucket_increment": 7,
+    "maximum_expiry_height_delta": 4007,
+    "post_inventory_guard": "harness requires current height + 150s offered window + 120s drain below first expiry and at least 270s deadline remaining",
+    "retrieval_price_per_opening_stake": 1,
+    "session_ttl_limit": 4096,
+    "total_session_lock_stake": 7696
+  },
+  "claim_limits": [
+    "Single host with four validator processes; not realistic distributed deployment capacity.",
+    "Client completion observations remain distinct from reconciled block commit timestamps.",
+    "Declared 5M proof gas governs proposal admission even when used gas is lower.",
+    "No delivery, settlement, browser or completed-session throughput claim.",
+    "A plateau is chain-capacity evidence only if actual block commits, queues, signer activity, gas wanted/used and all-validator audit agreement exclude offered-workload and driver ceilings."
+  ],
+  "completed_at_utc": "2026-09-09T08:59:25Z",
+  "invocation": {
+    "absolute_timeout_seconds": 1800,
+    "argv": [
+      "/usr/bin/python3",
+      "$HARNESS_CHECKOUT/scripts/retrieval_four_validator_workload.py",
+      "--mode",
+      "sustained-providers",
+      "--audit-profile",
+      "normal",
+      "--sustained-k",
+      "8",
+      "--sustained-rate-scale",
+      "4",
+      "--sustained-deputies",
+      "32",
+      "--binary",
+      "$ARTIFACT_ROOT/bin/polystorechaind",
+      "--library",
+      "$PRODUCT_SOURCE/polystore_core/target/release/libpolystore_core.so",
+      "--gateway-binary",
+      "$ARTIFACT_ROOT/bin/polystore_gateway",
+      "--cli-binary",
+      "$ARTIFACT_ROOT/bin/polystore_cli",
+      "--product-source",
+      "$PRODUCT_SOURCE",
+      "--proof-exporter",
+      "$ARTIFACT_ROOT/bin/retrieval-exporter.test",
+      "--proof-gas",
+      "5000000",
+      "--step-seconds",
+      "30",
+      "--timeout",
+      "1800",
+      "--home",
+      "$ARTIFACT_ROOT/runs/k8-highload-30s-002"
+    ],
+    "attempt_limit": 1,
+    "cwd": "$HARNESS_CHECKOUT",
+    "environment": {
+      "GOMAXPROCS": "2",
+      "LD_LIBRARY_PATH_prepend": "$PRODUCT_SOURCE/polystore_core/target/release",
+      "POLYSTORE_TRUSTED_SETUP_effective": "$HARNESS_CHECKOUT/polystorechain/trusted_setup.txt",
+      "PYTHONUNBUFFERED": "1"
+    }
+  },
+  "launched_at_utc": "2026-09-09T08:43:19Z",
+  "launcher_exit_code": 0,
+  "measurement_reporting": {
+    "audit_rule": "Require all four validators at the same final height/state and retain normal audit agreement independently of proof throughput.",
+    "block_time_precision": "Comet header.Time is a consensus block timestamp, not the wall-clock instant when FinalizeBlock/Commit completed; label rates as header-time-fenced reconciled block rates.",
+    "carryover_rule": "Do not credit a client completion observed in a later rate step to that later step. Attribute each operation by offered step and report its actual block-commit step separately.",
+    "client_observation_rule": "Keep scheduler finished_ns/client observations as latency and driver evidence only; do not use them as the chain block-commit throughput denominator.",
+    "drain_rule": "Report commits after the 150-second offered window separately from every in-window rate result; eventual completion is not an in-window throughput rate.",
+    "per_rate_required": [
+      "offered proof-submission transactions",
+      "actual block commits inside the rate fence",
+      "reconciled openings inside the rate fence",
+      "declared gas wanted inside the rate fence",
+      "gas used inside the rate fence",
+      "end-of-fence pending and in-flight counts"
+    ],
+    "primary_denominator": "Successful DeliverTx outcomes reconciled to blocks; no per-rate block throughput is published because Comet header.Time is not a wall-clock Commit completion timestamp."
+  },
+  "next_action": "Retain and review this single diagnostic; do not infer production capacity.",
+  "prelaunch_required": [
+    "Root supplies and verifies the exact merged PR297 commit; no launch from reviewed head alone.",
+    "Create a separate clean detached harness checkout at that merge commit and verify the four recorded harness file hashes.",
+    "Verify runtime component trees and all five artifact hashes remain identical to build-manifest.json at source a6e130af.",
+    "Verify the harness-checkout trusted_setup.txt and immutable product-source trusted_setup.txt both match the recorded setup hash.",
+    "Verify the product source tracked component paths remain clean at a6e130af.",
+    "Verify the run parent exists, the new run home is absent, required ports are free, no competing benchmark/service load exists, and at least 2 GiB is free.",
+    "Materialize and inspect the run-002 supervisor with all source, home and log paths updated and both the harness and outer hard cap set to 1800 seconds.",
+    "Receive explicit root launch authorization after all prior gates pass."
+  ],
+  "prepared_at_utc": "2026-09-09T08:31:43.221804+00:00",
+  "purpose": "One 30-second-per-rate K8 single-host chain-throughput attempt after the batch base-gas fix; diagnostic until retained evidence is reviewed.",
+  "runtime": {
+    "artifact_sha256": {
+      "$ARTIFACT_ROOT/bin/polystore_cli": "46864fd4f12fee3d470a4fcebbf326aab88b2c6e39b9012610278cea6417b28a",
+      "$ARTIFACT_ROOT/bin/polystore_gateway": "7fcfbb428e1c1ad0ed33c059ed8118c1868b56fd4bc9cf7bdde092cb1272778c",
+      "$ARTIFACT_ROOT/bin/polystorechaind": "433de9e70274b057bebd24dd3fd29f7089074f96f919e3658daf32944137c34a",
+      "$ARTIFACT_ROOT/bin/retrieval-exporter.test": "394f064ac6aea84c2e98f89921677483989a207092979c230b8e51284b3068a9",
+      "$PRODUCT_SOURCE/polystore_core/target/release/libpolystore_core.so": "d50bf0a1bf1f79a2ad1b7ace17a91951ed0e9dcb5a405bdd1125723fabff9c27"
+    },
+    "build_manifest": "$ARTIFACT_ROOT/provenance/build-manifest.json",
+    "build_source_commit": "a6e130af3accb3ab9634d6ae04959e612653193a",
+    "library_path": "$PRODUCT_SOURCE/polystore_core/target/release/libpolystore_core.so",
+    "product_source_path": "$PRODUCT_SOURCE",
+    "reuse": "unchanged Linux x86-64 binaries/library; no rebuild authorized",
+    "trusted_setup_actual_path": "$HARNESS_CHECKOUT/polystorechain/trusted_setup.txt",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "schema": "polystore.issue290.k8-highload-sustained-plan.v2",
+  "source_gate": {
+    "expected_harness_hashes_at_reviewed_content": {
+      "scripts/retrieval_bench_artifact.py": "68966919f33bd84a3132fa08b78c8886270cd587731f5c3df5cff9a2584f09dd",
+      "scripts/retrieval_commit_metrics.py": "e8b272852684639efe6292d3b72eb2396fee0c2bdb99558d52c611b7d638e11f",
+      "scripts/retrieval_four_validator_workload.py": "9d6eb11e86f537bf49d464f322a1e0fd64652b60ee3a3e52b253d0aa84320d49",
+      "scripts/retrieval_fresh_proof.py": "74ced497d80442a7d463872623879737b7775ad2a49ec4c5a53ced8a8650e67b"
+    },
+    "harness_checkout": "$HARNESS_CHECKOUT",
+    "harness_checkout_requirement": "fresh clean checkout detached at the exact PR297 merge commit; do not reuse the current patched checkout",
+    "merge_commit": "07b1c626fa230dfe348fe72aa1ef00354ca7501f",
+    "merge_commit_status": "VERIFIED_MERGED_EXACT_REVIEWED_CONTENT",
+    "pr": 297,
+    "product_component_trees": {
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+      "polystore_gateway": "6d0c3bfc9147565180931347ef979113d5983b8a",
+      "polystorechain": "d002c6f58a35d9cfa80f104b413ef5a7b478c764"
+    },
+    "product_source_checkout": "$PRODUCT_SOURCE",
+    "product_source_commit": "a6e130af3accb3ab9634d6ae04959e612653193a",
+    "product_source_role": "immutable source identity for the already-built CLI, core, gateway, chain and provider runtime",
+    "reviewed_head": "f73ff0b8c0cf67ff79b9d8d07ae543acf6e590ea",
+    "split_source_validation": {
+      "reason": "FourValidatorLifecycle records source_checkout from the executing harness root, while run_healthy independently records product_source, product_source_commit, product source status and CLI source hash. It accepts supplied absolute runtime artifacts and does not require the two commits to match.",
+      "result": "SUPPORTED_BY_INSPECTED_HARNESS",
+      "runtime_correspondence_limit": "The evidence labels supplied binary/library build correspondence as not attested; build-manifest.json and prelaunch hash checks provide that separate correspondence.",
+      "trusted_setup_behavior": "FourValidatorLifecycle resets POLYSTORE_TRUSTED_SETUP to the executing harness checkout. Require that file to match the immutable build setup SHA-256 before launch; an exported old-source path alone does not control it."
+    }
+  },
+  "status": "completed_once_diagnostic_only",
+  "supervision": {
+    "hard_cap_seconds": 1800,
+    "heartbeat_fields": [
+      "timestamp_utc",
+      "elapsed_seconds",
+      "phase",
+      "setup_committed_count",
+      "inventory_total",
+      "inventory_exported_count",
+      "warmup_committed_count",
+      "measured_finished_count",
+      "measured_committed_success_count",
+      "pending_count",
+      "in_flight_count",
+      "free_bytes"
+    ],
+    "heartbeat_requirement": "Emit machine-derived phase and counts from retained evidence, manifest/result files and scheduler journals/progress, plus elapsed and free bytes; process liveness or log-tail text alone is insufficient.",
+    "heartbeat_seconds": 60,
+    "minimum_free_bytes_before_launch": 2147483648,
+    "new_run_home": "$ARTIFACT_ROOT/runs/k8-highload-30s-002",
+    "no_automatic_retry": true,
+    "planned_supervisor": "$ARTIFACT_ROOT/provenance/run-once-supervisor-highload-30s-002.sh",
+    "runtime_abort_floor_bytes": 805306368,
+    "supervisor_sha256": "5cf72bb8a5acd5df9b685cec37281046ea11650d092b0dff30ca9bcce2191b2d",
+    "supervisor_template": "$ARTIFACT_ROOT/provenance/run-once-supervisor-highload-30s-001.sh"
+  },
+  "workload": {
+    "assignment_indices": [
+      0,
+      11
+    ],
+    "assignments_and_provider_daemons": 12,
+    "block_limits": {
+      "max_bytes": 2097152,
+      "max_gas": 64000000
+    },
+    "calibration_evidence": {
+      "limit": "These calibrations validate one- and two-message transactions only; they do not measure a 64-message batch cost or chain throughput.",
+      "one_message": {
+        "gas_used": 430165,
+        "gas_wanted": 500000,
+        "outcome": "committed_success"
+      },
+      "two_messages": {
+        "gas_used": 811146,
+        "gas_wanted": 900000,
+        "outcome": "committed_success"
+      }
+    },
+    "deputy_indices": [
+      12,
+      43
+    ],
+    "deputy_signers": 32,
+    "k": 8,
+    "m": 4,
+    "max_active_per_signer": 1,
+    "max_in_flight": 32,
+    "max_queued": 128,
+    "measured_bundles": 930,
+    "measured_openings": 7440,
+    "normal_audit_samples_per_epoch": 12,
+    "offered_bundle_rates_per_second": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "offered_window_seconds": 150,
+    "open_session_preparation_scope": "962 session-open messages in 16 atomic transactions; excludes provider/deal lifecycle setup transactions",
+    "open_session_preparation_transactions": 16,
+    "openings_per_bundle": 8,
+    "preparation_batch_sizes": [
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      64,
+      2
+    ],
+    "preparation_declared_gas": [
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      25700000,
+      900000
+    ],
+    "preparation_declared_gas_total": 386400000,
+    "preparation_gas_formula": "100000 transaction base + 400000 per open-session message",
+    "proof_declared_gas_per_bundle": 5000000,
+    "proof_submission_scope": {
+      "measured_openings": 7440,
+      "measured_transactions": 930,
+      "openings_per_transaction": 8,
+      "warmup_openings": 256,
+      "warmup_transactions": 32
+    },
+    "seconds_per_step": 30,
+    "total_bundles": 962,
+    "total_openings": 7696,
+    "warmup_bundles": 32,
+    "warmup_openings": 256
+  }
+}

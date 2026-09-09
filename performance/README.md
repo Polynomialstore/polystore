@@ -287,3 +287,9 @@ a disk guard interrupted a later audit wait after measurement and drain.
 The artifact separates that interruption and supplementary recovery from the
 measured window. These are prepared-proof transaction acceptance results, not
 generation, delivery or paid lifecycle throughput.
+
+The [Linux high-load diagnostic 002](../bench/retrieval_session_capacity/native-k8-290/linux-highload-30s-002/README.md) reconciles 842 successful K8
+proof-submission transactions (6,736 openings) with normal audits. At the final
+16/s offered step, 88 offers hit the bounded queue; its consensus-header-time
+window recorded 8.8 bundles/s. This is a single-host, 30-second-per-step result,
+not a production-capacity or byte-delivery qualification.

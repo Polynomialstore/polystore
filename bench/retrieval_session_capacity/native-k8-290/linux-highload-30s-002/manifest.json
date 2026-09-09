@@ -1,0 +1,88 @@
+{
+  "schema": "polystore.retained-publication.v1",
+  "published_files": {
+    "summary.json": {
+      "sha256": "f5154c3c6ede8511adeea635c8a87353cb598bd32e8afdfbed5c32fd6313f40f",
+      "bytes": 15651
+    },
+    "plan.json": {
+      "sha256": "a7b52025a5293e4c7bcb7ba113ec7959d3ce76e33aeac29a28e31304af4c9e9a",
+      "bytes": 12589
+    },
+    "runtime-provenance.json": {
+      "sha256": "4a8b2b44dd282752c72137bf2715f74596fb1952b8db0358facfdfb14b5688c5",
+      "bytes": 2954
+    },
+    "README.md": {
+      "sha256": "6a033b1dacfd23a1af245b58a89595e1fea7d84066cffa18bea566520a415a00",
+      "bytes": 6777
+    }
+  },
+  "private_source_artifacts": {
+    "evidence.json": {
+      "sha256": "1e7a734501edb2fca46a2c96e7026b9236740611ee939915eb53d90faa62eb10",
+      "bytes": 856286
+    },
+    "sustained-audits.jsonl": {
+      "sha256": "d8dc096dbc2a3ba77f655bf369e79e54e0f643497a19e13de360a6df0ab9e15a",
+      "bytes": 131415
+    },
+    "commit-0391653b8a4084c15a19351f7ce87629506890c4.jsonl": {
+      "sha256": "32b04622e428784eb9c119c2d941ef32092fff421f9874e0fc3e13277dfc373c",
+      "bytes": 157925
+    },
+    "sustained-blocks.jsonl": {
+      "sha256": "2783baf3281fca08b28928484e2529e869dd283eec1bcd81440c5a376490c273",
+      "bytes": 195525
+    },
+    "commit-2fbc437bef549a79becefda16b365a339cd188ef.jsonl": {
+      "sha256": "d326ace1635a6aad46e2a219b016bb7be6842e27bdad153aa545dd5384fb5a19",
+      "bytes": 157753
+    },
+    "build-manifest.json": {
+      "sha256": "ae65fe3174c6260f8c3dc2aa954b552227d02300d32ca772863a8ecbe3c9f97f",
+      "bytes": 3962
+    },
+    "commit-31fa8b94c45a55c5eb3c9c8773ecebe88daae459.jsonl": {
+      "sha256": "0e821f6d0041d047edde287976ce85e658818ee95ab548000786b21c8191e9cd",
+      "bytes": 157890
+    },
+    "sustained-progress.jsonl": {
+      "sha256": "7ddaf0aef293f3adb774293b13225d9e5214367451123778c43344145065ae42",
+      "bytes": 923
+    },
+    "commit-cb835dbb9f04aa3ed59bb771b390d15394fe6b9a.jsonl": {
+      "sha256": "d116e8b57c4b53bc8893a7deabf68124c838ee94f3a7bda7eafcd4ecb2a0a83f",
+      "bytes": 158167
+    },
+    "run-once-supervisor-highload-30s-002.sh": {
+      "sha256": "5cf72bb8a5acd5df9b685cec37281046ea11650d092b0dff30ca9bcce2191b2d",
+      "bytes": 2415
+    },
+    "sustained.sqlite": {
+      "sha256": "bb20ad784082787c09cf6eb89f29cb016eded3c93f24dae0b96b1889f000f957",
+      "bytes": 5173248
+    },
+    "raw-hash-manifest.json": {
+      "sha256": "965f63e15ac880ed0ac7c733e36d5f52788e9e7dbf84746ecb13086c1769f9b5",
+      "bytes": 3731
+    },
+    "inventory/manifest.json": {
+      "sha256": "d85a62674258dfc99b057bfb75881f9390551d9850791b822e8c6517c116503e",
+      "bytes": 2810145
+    }
+  },
+  "transformations": [
+    "Summary derived from retained evidence, SQLite transaction outcomes and reconciled blocks; consensus header-time fences use the documented wall/monotonic mapping.",
+    "Plan updated with final merged harness identity and completion status; absolute paths replaced with named placeholders.",
+    "Runtime provenance preserves build component hashes, toolchains and commands; absolute paths replaced with named placeholders."
+  ],
+  "excluded": [
+    "keyrings",
+    "payload and storage data",
+    "proof inventory",
+    "raw evidence and journals",
+    "provider and validator logs"
+  ],
+  "scope": "Only these published report files are committed. Private artifacts remain retained on the measurement host and coordinator."
+}
