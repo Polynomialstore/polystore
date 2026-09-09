@@ -1,0 +1,136 @@
+{
+  "schema": "polystore.issue290.k8-pilot-result.v1",
+  "status": "completed_successfully_once",
+  "qualification": false,
+  "attempts": 1,
+  "started_at_utc": "2026-09-09T04:26:31Z",
+  "finished_at_utc": "2026-09-09T04:33:27Z",
+  "wall_elapsed_seconds_approx": 416,
+  "source": {
+    "merged_harness_source": "81ed30f6173416c3d9c001f7c22b96874ab3ea99",
+    "reviewed_head": "48889159cbf7d271dec12d9ee1dd04e6efa5985f",
+    "merged_vs_reviewed_relevant_paths": "identical",
+    "plan": "plan.json",
+    "runtime_provenance": "runtime-provenance.json"
+  },
+  "preparation": {
+    "outcome": "committed_success",
+    "transaction_hash": "91DF8D36F569D863399F7513E459A512EA6673E8D0AB7C5B2B82C28A4C081214",
+    "height": 213,
+    "code": 0,
+    "sessions_opened": 39,
+    "gas_limit_per_open_message": 400000,
+    "gas_wanted": 15600000,
+    "gas_used": 14924033
+  },
+  "proof_submissions": {
+    "openings_per_bundle": 8,
+    "warmup": {
+      "bundles": 8,
+      "openings": 64,
+      "committed_success": 8,
+      "gas_used_sum": 33072539,
+      "gas_used_min": 4133940,
+      "gas_used_median": 4134084.5,
+      "gas_used_max": 4134092
+    },
+    "measured": {
+      "bundles": 31,
+      "openings": 248,
+      "committed_success": 31,
+      "gas_used_sum": 128123531,
+      "gas_used_min": 4131357,
+      "gas_used_median": 4134077,
+      "gas_used_max": 4134092,
+      "height_first": 232,
+      "height_last": 249
+    },
+    "total": {
+      "bundles": 39,
+      "openings": 312,
+      "committed_success": 39
+    },
+    "proof_gas_ceiling_per_bundle": 20000000,
+    "measured_mean_gas_per_opening": 516627.14112903224
+  },
+  "scheduler": {
+    "offered_measurement_window_seconds": 20,
+    "measured_scheduler_and_drain_seconds": 23.714082,
+    "eventual_measured_bundle_rate_per_second": 1.3072401453279954,
+    "eventual_measured_opening_rate_per_second": 10.457921162623963,
+    "peak_in_flight": 8,
+    "peak_queued": 3,
+    "automatic_retries": false,
+    "quarantined_signers": 0,
+    "completion_basis": "committed transaction plus pinned PROOF_SUBMITTED state; no confirmations or completed sessions"
+  },
+  "assignments": {
+    "count": 12,
+    "provider_daemons": 12,
+    "all_received_committed_valid_bundles": true,
+    "bundle_counts_by_slot": {
+      "0": 3,
+      "1": 3,
+      "2": 3,
+      "3": 2,
+      "4": 2,
+      "5": 2,
+      "6": 2,
+      "7": 2,
+      "8": 3,
+      "9": 3,
+      "10": 3,
+      "11": 3
+    }
+  },
+  "normal_audit": {
+    "coverage_verified": true,
+    "height": 301,
+    "epoch": 3,
+    "assignments": 12,
+    "finalized": 12,
+    "sample_count_sum": 12,
+    "accepted_count_sum": 12,
+    "missed_epochs_sum": 0
+  },
+  "artifacts": {
+    "evidence.json": {
+      "sha256": "9f6bc3b04a1213809c23347483df3d6e5366bddc895aa9ee27dffcde0d1094d2",
+      "bytes": 318353
+    },
+    "warmup.sqlite": {
+      "sha256": "b43e1db577c809ed14dd8135a24d780ab37625ee11049ff20d3644dd6f17c940",
+      "bytes": 81920
+    },
+    "sustained.sqlite": {
+      "sha256": "c0e4ea251614d00e738f60abe58a7d5ff6fe842a7b131cd3ac8301b8d11e8200",
+      "bytes": 212992
+    },
+    "sustained-audits.jsonl": {
+      "sha256": "606dc7c2bf7229dae126e295e721276adf29a231b7acb29c72a4e6cb88ab0e68",
+      "bytes": 26283
+    },
+    "sustained-blocks.jsonl": {
+      "sha256": "3eae569d2eb5ec979bdf7792ab407740947f88c904fab04d1186db273b6d06e1",
+      "bytes": 11333
+    },
+    "sustained-progress.jsonl": {
+      "sha256": "3f363dbd3427f5a47fb3d75710c6afdff676d6c34cff36a6ce1b86d9a6e6cb9e",
+      "bytes": 303
+    },
+    "inventory/manifest.json": {
+      "sha256": "633b38bf55f2a682d07a2affdbe4c36040d9b18df26e0e8a4ae613a941bc5524",
+      "bytes": 115117
+    },
+    "inventory/manifest.json.result.json": {
+      "sha256": "af0ed9536fdd106d5a11ae48b62207d5eb9035f95012f2bec300fecb4a364d20",
+      "bytes": 23283
+    }
+  },
+  "limits": [
+    "This was a path and gas diagnostic on a nonquiet single Apple host with four validator processes and twelve provider daemons; it is not a realistic deployment or capacity result.",
+    "The 31 measured bundles were eventually committed across the 20-second offered window plus drain; this artifact does not claim all 31 committed inside the offered window.",
+    "Completion ended at PROOF_SUBMITTED and did not measure confirmation, completed sessions, client delivery or acknowledgement, WAN behavior, or downloads."
+  ],
+  "cleanup": "owned workload, validator, gateway, and provider processes stopped; run home retained"
+}

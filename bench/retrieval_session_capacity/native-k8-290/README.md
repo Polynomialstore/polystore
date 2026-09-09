@@ -79,6 +79,12 @@ safety margin for a sustained K8 run. Do not reuse the K2 limit as a K8 capacity
 denominator, lower proof checks or audits, or raise block limits to obtain a
 larger number.
 
+The [retained pilot 002 artifact](pilot-002/README.md) records one successful
+four-second-per-step path and gas diagnostic across all twelve assignments. It
+is not capacity evidence; its 20M declared proof gas limited proposal packing to
+at most three proof transactions under the unchanged 64M block limit even though
+each transaction used about 4.13M gas.
+
 The existing absolute phase and overall deadlines, bounded queue, signer
 quarantine, port reservations, and process-group cleanup remain unchanged. The
 scheduler writes a progress record every 60 seconds while active, plus its final

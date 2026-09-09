@@ -176,6 +176,12 @@ for a 64-message atomic batch. Before broadcast the harness verifies that the
 SDK appended the generated gas sum. This is a pilot ceiling, not measured full
 execution cost, and does not change proof, audit or block gas limits.
 
+One [retained K8 pilot](../bench/retrieval_session_capacity/native-k8-290/pilot-002/README.md)
+completed the all-assignment path and measured proof gas. Its four-second steps
+are diagnostic only. The 20M declared proof gas constrained SDK proposal packing
+to at most three transactions under the unchanged 64M block limit despite about
+4.13M actual gas used per transaction, so it is not a chain-capacity result.
+
 
 ## Historical streamed browser retrieval (#260)
 
