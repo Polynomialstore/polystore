@@ -430,15 +430,22 @@ proof. Each sample MUST pass the existing PolyFS chained verification against th
 session's frozen 32-byte `polyfs_root`:
 
 1. Authenticate the root-table DU commitment through its Merkle path under
-   `polyfs_root` (64 MDU0 leaves). Derive its DU index as
+   `polyfs_root` (64 MDU0 leaves). The expected `mdu_index` MUST be a user MDU
+   inside the frozen generation and the root-table range `1..65536`. Derive its
+   DU index as
    `floor((mdu_index - 1) / 4096)` and its cell as `(mdu_index - 1) % 4096`.
+   The DU path consumes exactly `merkle_sibling_count(DU index,64)=6`
+   siblings; truncated, extended or reindexed paths reject.
 2. Verify the root-table KZG opening at that fixed cell with the canonical
    encoding of the submitted target MDU root as its expected value. This is the
    existing `verify_mdu0_root_table_proof` contract, not a standalone manifest
    commitment supplied by the provider.
 3. Authenticate the submitted blob commitment through its exact Merkle path
    under that authenticated MDU root, at the derived `leaf_index` among the
-   frozen K8/M4 layout's 96 leaves.
+   frozen K8/M4 layout's 96 leaves. The path consumes exactly
+   `merkle_sibling_count(leaf_index,96)` siblings (six or seven, as selected by
+   the existing carry-forward tree); truncated, extended, reindexed or
+   duplicate-last paths reject.
 4. Verify the fresh data KZG opening for that authenticated blob commitment at
    the derived `z` and submitted canonical `y`.
 
