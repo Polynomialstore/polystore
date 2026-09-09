@@ -7,6 +7,7 @@ export class RetrievalProgress {
   phase = 'fixture'
   private lastProgress: number
   private phaseStarted: number
+  private deadline = Infinity
   private phaseUnits = 0
   private ranges: Array<[number, number]> = []
   private verified = new Set<string>()
@@ -26,6 +27,10 @@ export class RetrievalProgress {
     if (phase === this.phase) return
     this.phases.push({ phase: this.phase, startMs: this.phaseStarted - this.started, endMs: this.now() - this.started })
     this.phase = phase; this.phaseStarted = this.lastProgress = this.now(); this.phaseUnits = 0
+  }
+  startRetrieval(budgetMs: number) {
+    this.enter('retrieval')
+    this.deadline = this.now() + budgetMs
   }
   advance(units: number) {
     if (units > this.phaseUnits) { this.phaseUnits = units; this.lastProgress = this.now() }
@@ -56,6 +61,7 @@ export class RetrievalProgress {
     this.completedSessions = this.terminal.size; this.lastHeight = height
   }
   check() {
+    if (this.now() >= this.deadline) throw new Error('retrieval qualification exceeded its execution budget')
     if (this.now() - this.lastProgress >= this.stallMs) throw new Error(`retrieval qualification stalled in ${this.phase}: no substantive progress for ${this.stallMs}ms`)
   }
   snapshot() {

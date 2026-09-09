@@ -34,3 +34,16 @@ test('heartbeat and watchdog survive download event; failure and explicit cleanu
   const cleanup = startRetrievalWatchdog(new RetrievalProgress(() => now), () => beats++, () => failures++, timers, () => now)
   cleanup(); tick(); assert.equal(cleared, 2); assert.equal(failures, 1)
 })
+
+
+test('absolute retrieval budget includes a progressing final stream', () => {
+  let now = 0
+  const p = new RetrievalProgress(() => now)
+  p.startRetrieval(30 * 60_000)
+  now = 590_000; p.advance(1); p.check()
+  p.enter('final_download_hash')
+  now += 590_000; p.advance(2); p.check()
+  now += 590_000; p.advance(3); p.check()
+  now = 30 * 60_000; p.advance(4)
+  assert.throws(() => p.check(), /execution budget/)
+})

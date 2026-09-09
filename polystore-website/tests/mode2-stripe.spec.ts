@@ -767,7 +767,7 @@ test.describe('mode2 streamed retrieval', () => {
       summary.windows = windows
       await checkDisk(2)
       const button = await openFileActionMenuItem(page, fileName, route === 'gateway' ? 'deal-detail-download-gateway-provider' : 'deal-detail-download-sp')
-      progress.enter('retrieval')
+      progress.startRetrieval(downloadTimeout)
       const retrievalStarted = performance.now()
       summary.retrievalStartOffsetMs = retrievalStarted - progress.started
       let checkedAt = 0

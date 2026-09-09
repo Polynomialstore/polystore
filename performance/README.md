@@ -207,7 +207,12 @@ requests, retries, ACKs and duplicate observations do not. Other phases have
 their own ten-minute no-progress deadline and the existing overall bounds.
 The independent Node watchdog also covers waiting for the browser download
 event, final stream and hash. Failure closes the task-owned browser context;
-it never issues a payment retry. Normal test profile cleanup remains in effect.
+it never issues a payment retry. Successful tests remove their owned profile;
+failed tests retain it privately in the logged temporary directory for diagnosis
+and operator cleanup. Never upload that profile: it contains wallet material
+and financial journals. Stack teardown still applies, so automatic cross-run
+recovery is not promised. Streamed runs disable retries and retain at most one
+profile per run. All streamed workflow selections have a 90-minute job bound.
 
 Browser events distinguish open transaction/reconciliation, challenge readiness,
 window transport (including server work), Worker verification, decode/write,

@@ -31,7 +31,7 @@ jobs:
     name: E2E Mode2 Stripe (Heavy 12 SPs)
     if: ${{ github.event_name == 'schedule' || inputs.run_mode2_heavy || inputs.run_mode2_large || (inputs.streamed_size != '' && inputs.streamed_size != 'none') }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.run_mode2_large && 270 || 360 }}
+    timeout-minutes: ${{ (inputs.run_mode2_large || (inputs.streamed_size != '' && inputs.streamed_size != 'none')) && 90 || 360 }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
     steps:
@@ -124,9 +124,9 @@ jobs:
             polystore-website/test-results/**/opfs-progress.json
             polystore-website/test-results/**/retrieval-delivery-accounting.json
             polystore-website/test-results/**/error-context.md
-            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.png' || '' }}
-            ${{ !inputs.run_mode2_large && 'polystore-website/test-results/**/*.zip' || '' }}
-            ${{ !inputs.run_mode2_large && 'polystore-website/playwright-report/**' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/test-results/**/*.png' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/test-results/**/*.zip' || '' }}
+            ${{ !inputs.run_mode2_large && inputs.streamed_size != 'large' && 'polystore-website/playwright-report/**' || '' }}
           if-no-files-found: ignore
 
   e2e-libp2p-relay:
@@ -201,10 +201,6 @@ jobs:
 
       - name: Run Playwright (LibP2P Relay)
         run: |
-          if [ '${{ inputs.run_mode2_large }}' = true ] && [ '${{ inputs.streamed_size }}' != '' ] && [ '${{ inputs.streamed_size }}' != none ] && [ '${{ inputs.streamed_size }}' != large ]; then
-            echo 'Conflicting streamed_size and legacy run_mode2_large inputs' >&2
-            exit 1
-          fi
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/polystore_core/target/release
           scripts/e2e_browser_libp2p_relay.sh
 
