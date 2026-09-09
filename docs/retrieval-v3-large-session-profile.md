@@ -2,8 +2,10 @@
 
 Status: **contract reviewed; implementation partial and disabled by default**.
 This document fixes the wire-independent protocol choices for issue #291. The
-shared primitives and native generation-admission state are implemented, while
-session, proof, payment and delivery paths remain unimplemented and unqualified.
+shared primitives, native generation admission, owner/sponsored session opening,
+sampled proof submission, per-provider ACK/settlement and expiry refunds are
+implemented. EVM parity, provider/client delivery integration and end-to-end
+activation qualification remain incomplete.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -562,3 +564,34 @@ confidence fraction against
 It also rejects changed bytes, changed coordinates, wrong roots, truncated paths
 and invalid odd-leaf duplication. The three-blob tree is a hashing primitive
 vector, not a complete admitted generation.
+
+## Native transaction and query interface
+
+The native CLI accepts the generated protobuf JSON message directly:
+
+```sh
+polystorechaind tx polystorechain retrieval-session-v3 open request.json \
+  --from owner --chain-id "$CHAIN_ID" --generate-only
+```
+
+Remove `--generate-only` to sign and submit using the usual chain transaction
+flags. The JSON `creator` must equal the address resolved by `--from`; integers
+of type `uint64` use decimal strings and byte fields use base64. See command
+`--help` for an open-request example. The action selects these message schemas
+in `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`:
+
+| Action | Message |
+| --- | --- |
+| `open` | `MsgOpenRetrievalSessionV3` |
+| `open-sponsored` | `MsgOpenRetrievalSessionV3Sponsored` |
+| `prove` | `MsgSubmitRetrievalSessionProofV3` |
+| `ack` | `MsgAcknowledgeRetrievalObligationV3` |
+| `refund` | `MsgRefundRetrievalSessionV3` |
+
+`Query.GetRetrievalSessionV3` takes the 32-byte session ID and returns the frozen
+session, progress bitmap, settlement/refund masks and `anchor_seed`. This field
+contains the raw committed H+1 anchor, **not** the derived sampling seed. Derive
+`ContextV3.Seed(anchor_seed)` before calling `ContextV3.Challenges`. It is empty
+before anchor capture and after reference release. The CLI does not generate
+proofs, authenticate downloaded bytes, or create ACK digests; those require the
+frozen context and provider/client integration specified above.
