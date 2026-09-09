@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -128,6 +129,87 @@ func TestGatewayMduFrozenPayeeRouting(t *testing.T) {
 				t.Fatalf("authority bypass: payee=%d/%d wrong=%d mutable=%d", providerHits, hits, wrongHits, currentDealReads)
 			}
 		})
+	}
+}
+
+func TestGatewayContinuationUsesFrozenPayeeWithoutPrivilegedAuth(t *testing.T) {
+	response := testFrozenSession(t)
+	response.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	id := "0x" + hex.EncodeToString(response.Session.SessionId)
+	body := fmt.Sprintf(`{"session_id":%q}`, id)
+	providerHits := 0
+	redirectURL := ""
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerHits++
+		if r.URL.Path != "/sp/retrieval/session-proof/continue" || r.Header.Get(gatewayAuthHeader) != "" {
+			t.Errorf("unexpected continuation forwarding: path=%s auth=%q", r.URL.Path, r.Header.Get(gatewayAuthHeader))
+		}
+		got, _ := io.ReadAll(r.Body)
+		if string(got) != body {
+			t.Errorf("continuation identity changed: %s", got)
+		}
+		if redirectURL != "" {
+			http.Redirect(w, r, redirectURL, http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"reconciled","session_id":"` + id + `","proof_count":1,"tx_hash":"","cleanup_status":"complete"}`))
+	}))
+	defer provider.Close()
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "retrieval-sessions/"):
+			w.Header().Set(committedHeightHeader, "12")
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, &response)
+		case strings.Contains(r.URL.Path, "/providers/"):
+			if got := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"); got != response.Session.AuthorizedProofProvider {
+				t.Errorf("resolved caller or mutable provider %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"provider": map[string]any{"endpoints": []string{mustHTTPMultiaddr(t, provider.URL)}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcdBase = oldLCD }()
+	providerBaseCache = sync.Map{}
+
+	invoke := func(requestBody string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", strings.NewReader(requestBody))
+		recorder := httptest.NewRecorder()
+		RouterGatewayContinueRetrievalSessionProof(recorder, request)
+		return recorder
+	}
+	if got := invoke(body); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"status":"reconciled"`) {
+		t.Fatalf("continuation relay failed: %d %s", got.Code, got.Body.String())
+	}
+	for _, invalid := range []string{
+		fmt.Sprintf(`{"session_id":%q,"provider":%q}`, id, response.Session.Provider),
+		fmt.Sprintf(`{"session_ids":[%q]}`, id),
+	} {
+		if got := invoke(invalid); got.Code != http.StatusBadRequest {
+			t.Fatalf("accepted caller routing authority: %d %s", got.Code, got.Body.String())
+		}
+	}
+	response.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN
+	if got := invoke(body); got.Code != http.StatusConflict {
+		t.Fatalf("relayed before owner ACK: %d %s", got.Code, got.Body.String())
+	}
+	response.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	redirectHits := 0
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { redirectHits++ }))
+	defer redirectTarget.Close()
+	redirectURL = redirectTarget.URL
+	if got := invoke(body); got.Code != http.StatusFound {
+		t.Fatalf("unexpected redirect outcome: %d %s", got.Code, got.Body.String())
+	}
+	if redirectHits != 0 {
+		t.Fatalf("followed provider continuation redirect: %d", redirectHits)
+	}
+	if providerHits != 2 {
+		t.Fatalf("unexpected provider continuations: %d", providerHits)
 	}
 }
 

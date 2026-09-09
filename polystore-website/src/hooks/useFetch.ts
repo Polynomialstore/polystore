@@ -9,6 +9,8 @@ import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, typ
 import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
+import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
@@ -172,10 +174,11 @@ export function useFetch() {
       let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
       let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
       const job = checkpoint, sink = job.output
+      const gatewayProofBase = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint() ? appConfig.gatewayBase : undefined
       const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
       await job.reconcile((sessions) => confirmAndRequestRetrievalProofs(sessions, {
         // Durable settlement rows are written only after the original ACK commits.
-        confirm: async () => {}, resolveProviderBase: resolveProofBase, signal,
+        confirm: async () => {}, gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase, signal,
       }), (sessions) => payment.forget(sessions, job.key), signal)
       unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
@@ -192,7 +195,7 @@ export function useFetch() {
         job.prepare(currentOrdinal, sessions)
         const outcomes = await timeRetrieval('ack_and_provider_settlement', () => confirmAndRequestRetrievalProofs(sessions, {
           confirm: (wave) => timeRetrieval('owner_ack', () => payment.confirm(wave, signal, job.key)), signal,
-          resolveProviderBase: resolveProofBase,
+          gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase,
           onConfirmed: () => { retrievalDiagnostic({ phase: 'acked', sessionIds: sessions.map((s) => s.sessionId) }); confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
         }))
         if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')

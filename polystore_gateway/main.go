@@ -267,6 +267,7 @@ func registerGatewayDealLifecycleRoutes(r *mux.Router) {
 }
 
 func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
+	r.HandleFunc("/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof).Methods("POST", "OPTIONS")
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")

@@ -127,4 +127,15 @@ func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {
 	if wGateway.Code == http.StatusNotFound {
 		t.Fatalf("expected user gateway to expose /gateway/* routes")
 	}
+
+	wContinue := httptest.NewRecorder()
+	r.ServeHTTP(wContinue, httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", nil))
+	if wContinue.Code == http.StatusNotFound || wContinue.Code == http.StatusForbidden {
+		t.Fatalf("expected browser-safe user-gateway continuation without privileged auth, got %d", wContinue.Code)
+	}
+	wPrivileged := httptest.NewRecorder()
+	r.ServeHTTP(wPrivileged, httptest.NewRequest(http.MethodPost, "/gateway/session-proof", nil))
+	if wPrivileged.Code != http.StatusForbidden {
+		t.Fatalf("expected privileged proof relay to require auth, got %d", wPrivileged.Code)
+	}
 }

@@ -22,6 +22,7 @@ interface SettlementOptions<S extends RetrievalSettlementSession> {
   confirm: (sessions: readonly S[]) => Promise<void>
   onConfirmed?: () => void
   resolveProviderBase?: (provider: string, signal: AbortSignal) => Promise<string | undefined>
+  gatewayBase?: string
   signal?: AbortSignal
   fetchFn?: typeof fetch
 }
@@ -50,11 +51,12 @@ function withSignal<T>(start: () => Promise<T>, signal: AbortSignal): Promise<T>
   })
 }
 
-async function requestProof(session: RetrievalSettlementSession, base: string, options: Pick<SettlementOptions<RetrievalSettlementSession>, 'fetchFn' | 'signal'>): Promise<RetrievalSettlementOutcome> {
+async function requestProof(session: RetrievalSettlementSession, base: string, throughGateway: boolean, options: Pick<SettlementOptions<RetrievalSettlementSession>, 'fetchFn' | 'signal'>): Promise<RetrievalSettlementOutcome> {
   const signal = AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(options.signal ? [options.signal] : [])])
   try {
     signal.throwIfAborted()
-    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}/sp/retrieval/session-proof/continue`, {
+    const path = throughGateway ? '/gateway/retrieval/session-proof/continue' : '/sp/retrieval/session-proof/continue'
+    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}${path}`, {
       method: 'POST', redirect: 'error', signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: session.sessionId }),
@@ -122,17 +124,18 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
       for (const index of groups[nextGroup++]) {
         const session = sessions[index]
         let base: string | undefined
+        const throughGateway = Boolean(options.gatewayBase)
         try {
-          base = options.resolveProviderBase
+          base = options.gatewayBase || (options.resolveProviderBase
             ? await withSignal(() => options.resolveProviderBase!(session.payee, proofSignal), proofSignal)
-            : undefined
+            : undefined)
         } catch { /* unavailable below */ }
         if (!base || !/^https?:\/\//.test(base)) {
           outcomes[index] = { state: 'unavailable', sessionId: session.sessionId,
             message: `Provider settlement unavailable for session ${session.sessionId}: the provider endpoint could not be resolved. Verified output and owner confirmation are preserved; provider proof submission is still required. Use the file menu's provider download action to retry settlement using the saved bytes.` }
           continue
         }
-        outcomes[index] = await requestProof(session, base, { ...options, signal: proofSignal })
+        outcomes[index] = await requestProof(session, base, throughGateway, { ...options, signal: proofSignal })
       }
     }
   }

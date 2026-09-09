@@ -261,9 +261,13 @@ defines the strict received-byte and PSB1 verifier boundaries.
    validate decoded packing, then flush and ACK the accepted sessions. Fetch,
    crypto, reconstruction, output-write or cancellation failure must not ACK
    the failed wave. Previously acknowledged waves remain acknowledged.
-7. After successful owner confirmation, the browser resolves the frozen proof
-   payee's registered HTTP endpoint and asks that provider to continue the exact
-   session through `POST /sp/retrieval/session-proof/continue`. The request contains only
+7. After successful owner confirmation, the browser asks the healthy user-gateway
+   to continue the exact session through `POST /gateway/retrieval/session-proof/continue`.
+   The user-gateway derives the frozen proof payee and its registered HTTP endpoint
+   from committed chain state, then relays without privileged provider authorization
+   to `POST /sp/retrieval/session-proof/continue`. When the user-gateway is absent,
+   the browser resolves that provider endpoint and calls the provider route directly.
+   The request contains only
    a singular `session_id`; chain state and the provider's retained proof supply
    all authority. The provider rejects sessions without a committed owner ACK,
    another authorized signer, or a mismatched frozen context. This callback also
@@ -396,12 +400,13 @@ Do not send both ID fields. The provider accepts 1–64 unique IDs in at most
 16 KiB of request JSON; it applies separate stored-proof, unsigned transaction,
 signed transaction and gas bounds. HTTP fields are `session_id` or `session_ids`,
 optional `provider`, and the accepted legacy `deal_id` hint. Neither hint replaces
-chain authority. The public `/sp/retrieval/session-proof/continue` endpoint instead
-accepts exactly one `session_id`, only after its owner ACK is committed, and
-never accepts routing or proof material. The privileged provider and
-user-gateway relay endpoints require the deployment's shared-token
-authorization; relay requests include `provider` so the user-gateway can route
-to that signer.
+chain authority. The public `/sp/retrieval/session-proof/continue` endpoint and
+the user-gateway's `/gateway/retrieval/session-proof/continue` relay instead accept
+exactly one `session_id`, only after its owner ACK is committed, and never accept
+routing or proof material. The relay derives the frozen payee from chain state and
+does not add privileged authorization. The older `/sp/session-proof` provider API
+and `/gateway/session-proof` relay remain shared-token protected and accept
+`provider` only for their privileged operator workflow.
 
 | HTTP result | Meaning | Next action |
 | --- | --- | --- |

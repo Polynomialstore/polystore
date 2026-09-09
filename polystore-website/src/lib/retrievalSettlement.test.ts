@@ -92,6 +92,48 @@ test('ACK commits before singular requests, preserving each immutable deputy and
   assert.deepEqual(outcomes.map((o) => o.state), ['committed', 'committed'])
 })
 
+test('healthy user-gateway is the only continuation route and direct provider is the absent-gateway fallback', async () => {
+  const s = session()
+  let resolutions = 0
+  const gatewayBase = 'http://127.0.0.1:8080'
+  const [throughGateway] = await confirmAndRequestRetrievalProofs([s], {
+    gatewayBase,
+    resolveProviderBase: async () => { resolutions++; return providerBase },
+    confirm,
+    fetchFn: async (url, init) => {
+      assert.equal(String(url), `${gatewayBase}/gateway/retrieval/session-proof/continue`)
+      assert.deepEqual(JSON.parse(String(init?.body)), { session_id: s.sessionId })
+      return json(payload(s))
+    },
+  })
+  assert.equal(throughGateway.state, 'committed')
+  assert.equal(resolutions, 0)
+
+  const [gatewayFailure] = await confirmAndRequestRetrievalProofs([s], {
+    gatewayBase,
+    resolveProviderBase: async () => { resolutions++; return providerBase },
+    confirm,
+    fetchFn: async (url) => {
+      assert.equal(String(url), `${gatewayBase}/gateway/retrieval/session-proof/continue`)
+      throw new Error('gateway response lost')
+    },
+  })
+  assert.equal(gatewayFailure.state, 'pending')
+  assert.equal(gatewayFailure.responseUnknown, true)
+  assert.equal(resolutions, 0)
+
+  const [direct] = await confirmAndRequestRetrievalProofs([s], {
+    resolveProviderBase: async () => { resolutions++; return providerBase },
+    confirm,
+    fetchFn: async (url) => {
+      assert.equal(String(url), `${providerBase}/sp/retrieval/session-proof/continue`)
+      return json(payload(s))
+    },
+  })
+  assert.equal(direct.state, 'committed')
+  assert.equal(resolutions, 1)
+})
+
 test('failed ACK never submits a proof request', async () => {
   let posts = 0
   await assert.rejects(confirmAndRequestRetrievalProofs([session()], {

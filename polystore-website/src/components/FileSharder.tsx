@@ -2062,12 +2062,13 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
     const output = job.output
     let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
+    const gatewayProofBase = localGateway.status === 'connected' && isTrustedLocalGatewayBase(localGateway.url) ? localGateway.url : undefined
     const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
     const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
       job.prepare(ordinal, sessions)
       const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
         confirm: (wave) => retrievalPayment.confirm(wave, signal, job.key), signal,
-        resolveProviderBase: resolveProofBase,
+        gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase,
       })
       if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
       for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
@@ -2076,7 +2077,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     }
     try {
       await job.reconcile((sessions) => confirmAndRequestRetrievalProofs(sessions, {
-        confirm: async () => {}, resolveProviderBase: resolveProofBase, signal,
+        confirm: async () => {}, gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase, signal,
       }), (sessions) => retrievalPayment.forget(sessions, job.key), signal)
       unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
@@ -2121,7 +2122,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       await job.retain()
       throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
     }
-  }, [addLog, baseManifestRoot, dealId, dealOwner, retrievalPayment, retrievalTransport, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

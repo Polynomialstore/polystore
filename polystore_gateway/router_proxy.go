@@ -723,6 +723,10 @@ func RouterGatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func forwardJSONToProviderBase(w http.ResponseWriter, r *http.Request, providerBaseURL string, path string, body []byte) {
+	forwardJSONToProviderBaseWithAuth(w, r, providerBaseURL, path, body, true)
+}
+
+func forwardJSONToProviderBaseWithAuth(w http.ResponseWriter, r *http.Request, providerBaseURL string, path string, body []byte, privileged bool) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -736,11 +740,21 @@ func forwardJSONToProviderBase(w http.ResponseWriter, r *http.Request, providerB
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	if privileged {
+		req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	}
 
 	client := routerHTTPClient
-	if path == "/sp/session-proof" {
+	boundedOutcome := path == "/sp/session-proof" || path == "/sp/retrieval/session-proof/continue"
+	if boundedOutcome {
 		client = sessionProofHTTPClient
+	}
+	if !privileged {
+		// Match the browser's direct-provider policy: the chain-selected
+		// endpoint cannot redirect this public continuation to another host.
+		noRedirect := *client
+		noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		client = &noRedirect
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -750,7 +764,7 @@ func forwardJSONToProviderBase(w http.ResponseWriter, r *http.Request, providerB
 	defer resp.Body.Close()
 
 	var out []byte
-	if path == "/sp/session-proof" {
+	if boundedOutcome {
 		out, err = io.ReadAll(io.LimitReader(resp.Body, maxSessionProofOutcomeBytes+1))
 		if len(out) > maxSessionProofOutcomeBytes {
 			err = fmt.Errorf("provider outcome exceeds limit")
@@ -769,6 +783,63 @@ func forwardJSONToProviderBase(w http.ResponseWriter, r *http.Request, providerB
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(out)
+}
+
+// RouterGatewayContinueRetrievalSessionProof keeps the healthy user-gateway as
+// the browser boundary while preserving the provider continuation's narrow
+// authority. The caller supplies only a canonical session ID; committed chain
+// state selects the frozen proof payee and its registered endpoint.
+func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	release, err := claimPublicRetrievalContinuation()
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "retrieval continuation busy", err.Error())
+		return
+	}
+	defer release()
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(time.Now().Add(publicContinuationBodyTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeJSONError(w, http.StatusInternalServerError, "cannot bound continuation request", err.Error())
+		return
+	} else if err == nil {
+		defer controller.SetReadDeadline(time.Time{})
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	body, _, ids, err := readConfirmedSessionProofRequest(r.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid session continuation request", err.Error())
+		return
+	}
+	response, height, err := queryRetrievalSession(ctx, ids[0])
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
+		return
+	}
+	if response.Session.ChallengeVersion != 2 || (response.Session.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && response.Session.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED) {
+		writeJSONError(w, http.StatusConflict, "owner confirmation is not committed", "")
+		return
+	}
+	frozen, err := frozenRetrievalIdentity(response, height)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "invalid frozen session", err.Error())
+		return
+	}
+	if err := validateSessionFunding(frozen.Session); err != nil {
+		writeJSONError(w, http.StatusConflict, "invalid session funding", err.Error())
+		return
+	}
+	baseURL, err := resolveProviderHTTPBaseURL(ctx, frozen.Session.AuthorizedProofProvider)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "authorized retrieval provider unavailable", err.Error())
+		return
+	}
+	forwardJSONToProviderBaseWithAuth(w, r, baseURL, "/sp/retrieval/session-proof/continue", body, false)
 }
 
 func RouterGatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {
