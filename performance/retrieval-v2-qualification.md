@@ -1,6 +1,6 @@
 # Retrieval v2 qualification
 
-Draft pending successful hosted 1 GiB retrieval and final review. This is a trusted-devnet implementation and measurement report. Activation remains disabled by default; a local four-process run does not establish WAN capacity or a hardware minimum.
+Draft pending successful hosted 1 GiB retrieval, measured delivery latency and final review. This is a trusted-devnet implementation and measurement report. Activation remains disabled by default; a local four-process run does not establish WAN capacity or a hardware minimum.
 
 ## C1: separate claims and counters
 
@@ -62,6 +62,16 @@ These comparisons complement the owning v2 transcript, boundary, migration, fund
 | Saturation, stable tested offered load, four-validator Commit/RSS and audit coverage | [Final C6 window](../bench/retrieval_session_capacity/capacity-final-260/README.md); preserves original interrupted-run status and separates recovery |
 | Live small byte delivery | [1 KiB](../bench/retrieval_session_capacity/delivery-final-260/1kib.json), [160 KiB](../bench/retrieval_session_capacity/delivery-final-260/160kib.json), and [hosted source identity](../bench/retrieval_session_capacity/delivery-final-260/small-run.json); these are successful delivery checks, not capacity measurements |
 | Large byte delivery | Pending complete hosted 1 GiB artifact; earlier diagnostics are not substituted |
+
+## Delivery latency and observability remain unqualified
+
+The current hosted run reports its retrieval summary only at completion. GitHub job status does not establish forward progress. It has no periodic retrieval heartbeat or stalled-progress watchdog, so elapsed time alone cannot distinguish a slow path from a stall. Its existing timeout remains unchanged; even a successful hash and terminal-session census will not close the separate latency gate in [#260 M2b](https://github.com/Polynomialstore/polystore/issues/260).
+
+The production `useFetch` caller processes one MDU at a time: normally eight K8 sessions per wave, across 133 MDUs for this file. Fetch, verification and output writes are sequential within each wave. Flush and owner ACK precede settlement; settlement already overlaps up to four distinct payee groups. These code facts identify measurement boundaries, not a measured bottleneck.
+
+Before another large run, instrument 60-second substantive progress heartbeats and a 10-minute no-progress watchdog, including the wait for the browser download event and final stream. Report uniquely verified logical bytes, flush progress, ACKs and chain-confirmed completed sessions separately. Preserve partial diagnostics and existing financial recovery state on failure. Measure the existing 15.5 MiB / 16-session public path first, with open/challenge, fetch/generation, client verification, write/flush, ACK and settlement timings. Profile the dominant cost before changing concurrency or transaction batching; retain all authentication, proof coverage, durability and bounded-memory checks.
+
+Only advance to a 124 MiB / 128-session scaling check when the small result supports it. Future 1 GiB attempts must fit an initial 30-minute retrieval execution budget from measured scaling, with separate setup/upload/finalization budgets. This is a collection-cost guardrail, not an accepted user-facing performance target. Two hours for 1 GiB would imply roughly 146 KiB/s over that interval; this illustration is not a measured phase throughput. Prepared-proof C6 capacity is not delivery bandwidth. No further blind large rerun or timeout increase is authorized by completion of the current run.
 
 ## Reproduction and disposition
 

@@ -21,8 +21,11 @@ budgets passed. A later disk-guard interruption and supplementary audit recovery
 remain separately recorded. This establishes neither four-host/WAN capacity nor
 a validator hardware minimum, and is not paid delivery throughput.
 
-Final hosted byte-delivery artifacts and report review are pending. #254/#260
-remain open until those gates complete.
+Final hosted byte-delivery artifacts, observable progress, measured retrieval
+latency and report review are pending. A complete 1 GiB hash check alone does not
+qualify download performance. #260 M2b requires a small instrumented public-path
+measurement before another large run; #254/#260 remain open until those gates
+complete.
 
 ## One-command local testnet
 
