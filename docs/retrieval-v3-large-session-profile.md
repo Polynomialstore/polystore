@@ -164,8 +164,9 @@ and obtain fresh acceptances; no gateway may synthesize a v3 root at read time.
 ## 3. Frozen logical range and provider plan
 
 V3 supports only active FAT v3 records with no compression or encryption flags.
-The file record authenticates `start_offset` and `length`. The request supplies a
-positive file-relative `(range_start, range_length)` fully inside that length.
+The file record authenticates `start_offset` and `length`. The request supplies
+file-relative `range_start >= 0` and `range_length > 0`, with
+`range_start + range_length <= file.length` using checked addition.
 The initial profile caps `range_length` at 1073741824 bytes (1 GiB). An unaligned
 1 GiB range can therefore cover at most 8458 encoded data blobs.
 Let `C=126976`, the payload bytes carried by one canonical encoded data blob, and:
@@ -187,7 +188,7 @@ U = last - first + 1
 ```
 
 Admission requires `last < user_mdus*64` after checked additions and rejects a
-zero, overflowed or out-of-generation range before charging.
+zero-length, overflowed or out-of-generation range before charging.
 
 This is the same raw-offset-to-systematic-blob mapping used by the canonical
 31/32 encoder. For each raw blob ordinal `t` in `[first,last]`:
