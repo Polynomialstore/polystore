@@ -11,6 +11,15 @@ range, including a 1 GiB range, through a bounded set of provider obligations.
 It uses one session-wide sample budget and separately authenticates every byte
 that the client accepts.
 
+V3 initially applies only to ordinary USER retrieval, either deal-owner-funded
+from deal escrow or sponsored and funded by an authenticated requester. Protocol
+audit and repair remain v2; every
+protocol-funded/grant attempt carrying version 3 rejects before charging,
+consuming authority or writing state. No protocol-grant transcript is extended.
+`session_owner_raw20` below means the deal owner for deal-escrow funding and the
+authenticated session requester for sponsored funding; it is not always the deal
+owner.
+
 Normative words MUST, MUST NOT, SHOULD and MAY have their usual RFC 2119 meaning.
 `LP(x)` is `U32BE(len(x)) || x`. All integer arithmetic is checked before state,
 allocation, signature verification, fee transfer or voucher consumption.
@@ -201,14 +210,14 @@ The v3 session ID is:
 ```text
 SHA256(
   LP("polystore/retrieval-session/v3") || U32BE(3) || LP(chain_id) ||
-  owner_raw20 || U64BE(deal_id) || U64BE(generation) ||
+  session_owner_raw20 || U64BE(deal_id) || U64BE(generation) ||
   U32BE(file_record_index) || U64BE(range_start) || U64BE(range_length) ||
   plan_hash32 || U64BE(nonce)
 )
 ```
 
-The nonce is monotonic in the `(owner_raw20,deal_id)` scope across v3 sessions;
-provider-plan changes do not create another nonce namespace. A duplicate open is
+The nonce is monotonic in the `(session_owner_raw20,deal_id)` scope across v3
+sessions; provider-plan changes do not create another nonce namespace. A duplicate open is
 idempotent only when the stored session ID and complete context hash match.
 Reusing an ID with different terms, or replaying a consumed nonce, rejects before
 fees, voucher consumption or state.
@@ -231,7 +240,7 @@ The canonical challenge context is SHA-256 of this exact transcript:
 
 ```text
 LP("polystore/challenge-context/v3") || U32BE(3) || LP(chain_id) ||
-setup_digest32 || session_id32 || owner_raw20 ||
+setup_digest32 || session_id32 || session_owner_raw20 ||
 U64BE(deal_id) || U64BE(generation) || polyfs_root32 || integrity_root32 ||
 U32BE(file_record_index) || U64BE(file_start_offset) || U64BE(file_length) ||
 U64BE(range_start) || U64BE(range_length) ||
@@ -339,10 +348,18 @@ or providers choosing what to withhold after seeing samples.
 ## 6. Bounded messages, settlement and recovery
 
 There is one session record, one base fee and one locked variable-fee pool. Open
-freezes canonical coin denom, nonnegative per-blob integer price, completion burn
-basis points, funding kind and normalized funding payer in the challenge context.
-The amount is canonical decimal ASCII (`0` or no leading zero); denom follows the
-existing chain coin rules. For
+freezes canonical coin denom, nonnegative per-blob integer price, base fee,
+completion burn basis points, funding kind and normalized funding payer in the
+challenge context. Amounts are canonical decimal ASCII (`0` or no leading zero);
+denom follows the existing chain coin rules. Funding kinds are exactly:
+
+| Value | Name | Required payer and refund destination |
+| ---: | --- | --- |
+| 1 | `DEAL_ESCROW` | `funding_payer_raw20` and `session_owner_raw20` both equal the canonical deal owner; incomplete liability refunds to deal escrow. |
+| 2 | `REQUESTER` | `funding_payer_raw20` and `session_owner_raw20` both equal the authenticated session requester; incomplete liability refunds to that requester. |
+
+Values 0, 3 and all other values reject before effects. No missing payer may be
+inferred. For
 each obligation `j`, `blob_count_j` is the number of its frozen delivery tuples,
 and:
 
@@ -363,9 +380,18 @@ funding source; completed obligations are immutable. No provider can receive
 another provider's partition. All conservation and fail-closed payer rules from
 v2 remain in force.
 
+All checked `base_fee+L` arithmetic, deal-escrow or requester balance sufficiency,
+access authorization and capacity checks occur before debit, burn, voucher
+consumption or state. A sponsored `max_total_fee=0` means absent; otherwise
+`base_fee+L <= max_total_fee` is required. Existing access and voucher rules apply
+to every represented obligation. In particular, a provider-restricted voucher
+cannot authorize a different slot/provider. Unsupported multi-provider voucher
+combinations reject before consumption. One successful session open consumes its
+voucher authority and fees exactly once.
+
 An obligation becomes terminal only after both (a) all of its assigned sampled
-openings are accepted and (b) the owner signs one cumulative ACK after verifying
-all of its delivered blobs. An obligation with zero assigned samples satisfies
+openings are accepted and (b) the session owner signs one cumulative ACK after
+verifying all of its delivered blobs. An obligation with zero assigned samples satisfies
 (a) vacuously but still requires full delivery and its ACK. The ACK signs:
 
 ```text
@@ -377,7 +403,8 @@ SHA256(
 )
 ```
 
-Native signer or authenticated EVM caller MUST normalize to the frozen owner.
+Native signer or authenticated EVM caller MUST normalize to the frozen
+`session_owner_raw20`.
 The first compatible ACK is idempotent; exact duplicates succeed without state
 or economic effects, while a conflicting signer or transcript rejects. An ACK
 may be recorded before every proof, but settlement waits for both predicates.
@@ -391,12 +418,29 @@ cross-provider aggregation is introduced. The authenticated native signer or EVM
 caller submitting a proof MUST equal that obligation's frozen assigned provider;
 authority from another obligation cannot be reused.
 
+For every sample ordinal `i` in `[0,Q)`, the chain derives the one expected tuple
+`(i,t,mdu_index,leaf_index,slot,z)` from the frozen context. Each submitted proof
+names `i` and MUST exactly match that tuple and the signer's obligation. An
+unselected or out-of-range coordinate, wrong `z`, wrong slot/provider, or an
+ordinal repeated within one message rejects before KZG verification. After those
+cheap checks, the chain precharges verification gas for every included proof and
+verifies every KZG opening before any bitmap mutation, including an opening whose
+ordinal was accepted by an earlier message. Such an already-accepted valid tuple
+is idempotent; an invalid or rebound retry fails without mutation. The chain does
+not require different serialized proof bytes and stores no proof-byte digest.
+Settlement requires the ACK and every ordinal assigned to that obligation.
+
 Transport streams complete encoded blobs in plan order. The user-gateway may
 persist at most 64 cumulative, monotonic resume checkpoints for the session and
 must compact older checkpoints. Checkpoints contain no payment or chain claim.
 Retry resumes the same frozen provider obligation before expiry. At expiry, the
 chain releases its anchor/generation references and preserves the economic record
-needed for one refund. Durable database restart must preserve session, plan,
+needed for one refund. There is no pre-expiry cancellation or unlock: stopping
+transport, retry, or ACK leaves every incomplete liability locked. After expiry
+(`height > deadline_height`), the authenticated session owner may invoke the
+idempotent cancel/refund operation, which refunds each incomplete partition once
+to its frozen funding destination and cannot alter a completed partition. Durable
+database restart must preserve session, plan,
 bitmap, ACK, liability, funding source and expiry references. Export/import is
 unsupported until those records are explicitly included and qualified.
 

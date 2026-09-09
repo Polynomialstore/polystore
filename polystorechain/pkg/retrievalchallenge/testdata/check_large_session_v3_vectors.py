@@ -62,7 +62,7 @@ def tree_with_paths(nodes):
 
 
 def verify_path(value, position, leaf_count, siblings, expected):
-    if position >= leaf_count or leaf_count < 1: return False
+    if position < 0 or position >= leaf_count or leaf_count < 1: return False
     width, used, current = leaf_count, 0, value
     while width > 1:
         if used >= len(siblings): return False
@@ -101,7 +101,7 @@ def plan(first, last):
 
 
 def full_transcripts(integrity_root, range_start, range_length):
-    chain, owner = "polystore-test-1", bytes([0x11]) * 20
+    chain, session_owner = "polystore-test-1", bytes([0x11]) * 20
     deal, generation, record = 42, 7, 3
     nonce = 9
     first = range_start // 126976
@@ -110,17 +110,17 @@ def full_transcripts(integrity_root, range_start, range_length):
     proof_count = min(population, 132)
     user_mdus = (last + 64) // 64
     plan_hash, plan_bytes, counts = plan(first, last)
-    session_bytes = (lp("polystore/retrieval-session/v3") + u32(3) + lp(chain) + owner
+    session_bytes = (lp("polystore/retrieval-session/v3") + u32(3) + lp(chain) + session_owner
         + u64(deal) + u64(generation) + u32(record) + u64(range_start)
         + u64(range_length) + plan_hash + u64(nonce))
     session_id = sha(session_bytes)
     setup = bytes.fromhex("d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7")
     context_bytes = (lp("polystore/challenge-context/v3") + u32(3) + lp(chain) + setup
-        + session_id + owner + u64(deal) + u64(generation) + bytes([0x22]) * 32
+        + session_id + session_owner + u64(deal) + u64(generation) + bytes([0x22]) * 32
         + integrity_root + u32(record) + u64(0) + u64(range_start + range_length)
         + u64(range_start) + u64(range_length) + u8(2) + u32(8) + u32(4)
         + u64(2) + u64(user_mdus) + plan_hash + u64(population) + u64(proof_count) + u64(nonce)
-        + lp("stake") + lp("3") + lp("5") + u32(250) + u8(1) + owner
+        + lp("stake") + lp("3") + lp("5") + u32(250) + u8(1) + session_owner
         + u64(100) + u64(101) + u64(102) + u64(200) + u64(300))
     context_hash = sha(context_bytes)
     anchor_hash = bytes(range(160, 192))
@@ -209,6 +209,7 @@ def negative_checks(fixture):
     assert not verify_path(leaf(10, 0, changed), 0, 3, paths[0], root)
     assert not verify_path(leaf(10, 1, pattern(info["patterns"][0])), 0, 3, paths[0], root)
     assert not verify_path(leaves[0], 0, 3, paths[0], bytes(32))
+    assert not verify_path(leaves[0], -1, 3, paths[0], root)
     assert not verify_path(leaves[0], 0, 3, paths[0][:-1], root)
     odd_bad = list(paths[2]); odd_bad[0] = bytes(32)
     assert not verify_path(leaves[2], 2, 3, odd_bad, root)
