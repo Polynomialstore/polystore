@@ -4,6 +4,15 @@
 **Scope:** Deal root semantics, MDU #0 root-table proof shape, legacy alpha behavior, and devnet migration policy.
 **Depends on:** `notes/triple-proof.md`, `rfcs/rfc-blob-alignment-and-striping.md`, `rfcs/rfc-mode2-onchain-state.md`
 
+The [retrieval v3 large-session contract](../docs/retrieval-v3-large-session-profile.md)
+defines an inactive FAT v3 header extension. It preserves every FAT v2 256-byte
+record and all 232 path bytes, and places a SHA-256 integrity-tree root in the
+existing 116-byte header extension. That tree covers canonical encoded user-MDU
+data, parity and padding blobs only; MDU0 and witness MDUs remain authenticated by
+the PolyFS/KZG structure below, avoiding self-reference. Existing v1/v2 readers
+must reject rather than reinterpret version 3 until their v3 implementation is
+qualified.
+
 ## 1. Summary
 
 New PolyStore content commits MUST use MDU #0 as the deal trust root.

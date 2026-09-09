@@ -7,6 +7,16 @@
 
 ---
 
+## V3 large native session amendment (contract only)
+
+The [retrieval v3 large-session profile](../docs/retrieval-v3-large-session-profile.md)
+defines one funded logical-range session with at most eight systematic K8 provider
+obligations, one session-wide sample population and explicit per-obligation
+settlement. It preserves current per-blob pricing and the 64-opening envelope;
+splitting proof messages does not split the session, base fee or liability. V3 is
+disabled, adds no keeper acceptance in this RFC change, and requires independent
+contract approval before implementation. V2 below is unchanged.
+
 ## V2 SESSION integration (inactive by default)
 
 The [versioned session profile](../docs/retrieval-v2-session-profile.md) is normative

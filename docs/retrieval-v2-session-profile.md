@@ -6,6 +6,11 @@ C4 audits, native setup enforcement and prover support (#256), provider/browser
 integration (#257), and integrated resource/security qualification (#260) must
 pass first. #254 remains the authority for outstanding deployment dispositions.
 
+The separate [v3 large-session contract](retrieval-v3-large-session-profile.md)
+specifies sampled KZG plus authenticated full-byte integrity for one large logical
+range. It is an inactive contract candidate and does not reinterpret, activate or
+weaken the prove-every-blob v2 behavior documented here.
+
 ## Wire and immutable authority
 
 Native owner, sponsored and protocol opens append `challenge_version` and

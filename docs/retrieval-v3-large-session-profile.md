@@ -1,0 +1,461 @@
+# Retrieval v3 native large-session contract
+
+Status: **contract candidate only; disabled by default**. This document fixes the
+wire-independent protocol choices needed to implement issue #291. It does not
+change keeper acceptance, activate a network version, or qualify delivery.
+Retrieval v2 remains unchanged.
+
+The initial v3 profile supports canonical, untransformed FAT v3 content in
+StripeReplica K=8, M=4 only. One funded session can retrieve one logical byte
+range, including a 1 GiB range, through a bounded set of provider obligations.
+It uses one session-wide sample budget and separately authenticates every byte
+that the client accepts.
+
+Normative words MUST, MUST NOT, SHOULD and MAY have their usual RFC 2119 meaning.
+`LP(x)` is `U32BE(len(x)) || x`. All integer arithmetic is checked before state,
+allocation, signature verification, fee transfer or voucher consumption.
+
+## 1. Two independent checks
+
+V3 deliberately separates these claims:
+
+1. **Sampled KZG availability.** Fresh, unpredictable, off-domain openings test
+   a bounded sample from the frozen delivery plan. Sampling gives the quantified
+   probability in section 5. It does not prove that every byte was delivered.
+2. **Full-byte integrity.** The client hashes every complete encoded blob it
+   receives and verifies its Merkle path to an integrity root authenticated by
+   the same generation's PolyFS root. A client MUST do this before durable write,
+   decode, terminal acknowledgement or payment eligibility.
+
+A fixture-known digest, a transport checksum, a newly supplied public KZG
+evaluation, or a digest not reached from the deal's frozen PolyFS root cannot
+satisfy full-byte integrity.
+
+## 2. FAT v3 integrity header
+
+FAT v3 changes only the existing 128-byte FAT header. The 256-byte record layout,
+including its 232 path bytes, is byte-for-byte identical to FAT v2. The root table,
+31/32 scalar packing, record order, canonical path rules and deterministic zero
+tail also remain unchanged.
+
+Header bytes use the existing FAT little-endian convention:
+
+| Bytes | Value |
+| --- | --- |
+| 0..4 | `NILF` |
+| 4..6 | `3` as U16LE |
+| 6..8 | `256` as U16LE |
+| 8..12 | record count as U32LE |
+| 12 | integrity hash, exactly `1` = SHA-256 |
+| 13 | integrity tree, exactly `1` = binary duplicate-last tree |
+| 14..16 | zero |
+| 16..20 | integrity leaf bytes, exactly `131072` as U32LE |
+| 20..28 | integrity leaf count as U64LE |
+| 28..60 | integrity root, 32 bytes |
+| 60..128 | zero |
+
+The integrity tree covers encoded blobs in **user MDUs only**. It excludes MDU 0
+and all witness MDUs, avoiding self-reference. Metadata remains authenticated by
+the existing KZG root-table and witness path. For K8/M4 there are 96 leaves per
+user MDU, ordered by increasing MDU index and then existing slot-major
+`leaf_index = slot*8 + row`. Data, parity and deterministic padding blobs are all
+included. Thus:
+
+```text
+integrity_leaf_count = user_mdus * 96
+tree_position = (mdu_index - metadata_mdus) * 96 + leaf_index
+```
+
+Zero user MDUs cannot form FAT v3. The declared count MUST equal this product.
+Every encoded blob is exactly 131072 bytes. Define:
+
+```text
+leaf = SHA256(
+  LP("polystore/integrity-leaf/v3") ||
+  U64BE(mdu_index) || U32BE(leaf_index) ||
+  U32BE(131072) || encoded_blob
+)
+
+parent = SHA256(LP("polystore/integrity-node/v3") || left32 || right32)
+```
+
+At each level, pair nodes left to right. Duplicate the last node when the level
+has odd length. Repeat until one root remains. A proof supplies one 32-byte
+sibling per level; direction is derived from the current position. For an odd
+last node, the sibling MUST equal the current node. Extra, short or differently
+ordered paths fail. The PolyFS root-table limit bounds a K8/M4 tree at 6291456
+leaves and each proof at 23 siblings.
+
+The owner builds KZG commitments and this tree from the same canonical encoded
+blob vector in one proposed generation. Before that generation becomes eligible
+for v3, every one of the 12 frozen assigned providers MUST check each blob in its
+slot against both its existing KZG commitment path and the proposed integrity
+path, then submit this digest through the existing authenticated native/EVM
+provider action (no new detached-signature scheme):
+
+```text
+SHA256(
+  LP("polystore/generation-acceptance/v3") || LP(chain_id) || setup_digest32 ||
+  U64BE(deal_id) || U64BE(generation) || polyfs_root32 || integrity_root32 ||
+  U8(2) || U32BE(8) || U32BE(4) ||
+  U64BE(metadata_mdus) || U64BE(user_mdus) ||
+  U32BE(slot) || provider_raw20
+)
+```
+
+This authenticated acceptance is provider consent after an ingest check; it is
+not a succinct
+cryptographic proof that the two commitments agree. Admission MUST authenticate
+the registered provider for each slot and require exactly one acceptance per
+slot. Acceptances are keyed by the pending `(deal,generation,polyfs_root)`; final
+generation admission atomically compares every bound field with current chain
+state so a concurrent owner update fails closed. A root, generation, layout,
+assignment or setup change prevents reuse for a new admission. It does not rewrite
+an already frozen live session: its pins and old-provider liabilities remain until
+terminal completion or expiry. A provider has no v3 liability for owner-supplied
+metadata it did not accept. After acceptance, a mismatching response is
+attributable to that provider for obligation failure and nonpayment. V3 creates
+no new slashing or provider-health penalty.
+
+The leaf binds its physical coordinate and bytes, while authenticated MDU0 and
+the acceptance bind the deal and generation. An append can therefore reuse
+unchanged leaf hashes without rehashing their 128 KiB bodies. Per-slot acceptance
+does not prove global Reed-Solomon correctness, truthful FAT metadata or
+consistency among other slots. Bad owner-generated parity can impair recovery;
+this systematic-only profile neither attributes that fault to an honest provider
+nor claims to repair it.
+
+Existing FAT v1/v2 generations have no integrity root. They remain eligible only
+for their existing retrieval versions. An owner may create a new FAT v3 generation
+and obtain fresh acceptances; no gateway may synthesize a v3 root at read time.
+
+## 3. Frozen logical range and provider plan
+
+V3 supports only active FAT v3 records with no compression or encryption flags.
+The file record authenticates `start_offset` and `length`. The request supplies a
+positive file-relative `(range_start, range_length)` fully inside that length.
+The initial profile caps `range_length` at 1073741824 bytes (1 GiB). An unaligned
+1 GiB range can therefore cover at most 8458 encoded data blobs.
+Let `C=126976`, the payload bytes carried by one canonical encoded data blob, and:
+
+Before open, the user-gateway MUST verify the selected FAT record through the
+existing MDU0 KZG/PolyFS path. The owner-authenticated open then freezes those
+record fields as range authorization. V3 does not add a chain-side FAT-record
+proof: a dishonest owner can misdescribe its own logical path/range, but cannot
+redirect provider liability away from the exact encoded tuples the signed plan
+authorizes. The chain makes no logical-file truth claim beyond that owner
+authorization.
+
+```text
+a = file.start_offset + range_start
+b = a + range_length - 1
+first = floor(a / C)
+last  = floor(b / C)
+U = last - first + 1
+```
+
+Admission requires `last < user_mdus*64` after checked additions and rejects a
+zero, overflowed or out-of-generation range before charging.
+
+This is the same raw-offset-to-systematic-blob mapping used by the canonical
+31/32 encoder. For each raw blob ordinal `t` in `[first,last]`:
+
+```text
+mdu_index = metadata_mdus + floor(t / 64)
+data_blob = t mod 64
+slot = data_blob mod 8
+row = floor(data_blob / 8)
+leaf_index = slot*8 + row
+```
+
+The frozen delivery vector is these distinct `(t,mdu_index,leaf_index)` tuples in
+increasing `t`. It is derived, not stored or enumerated on chain, and is fixed
+before the anchor is known. There is one provider
+obligation for each represented systematic slot, so a small range does not create
+eight empty obligations. Each obligation freezes its provider, payee, slot and
+ordered subset of the vector. Provider assignments, file record, root, generation,
+range and plan cannot change after open.
+
+In this initial profile `payee_raw20` MUST equal `assigned_provider_raw20`.
+Deputy or alternate-payee service requires a later version and cannot add a hidden
+obligation or fee to v3.
+
+The initial profile has no parity substitution or deputy migration. Transport may
+retry the same frozen obligation before expiry. Failure uses expiry and refund; a
+different provider or plan requires explicit user authorization for a new funded
+session, nonce and future anchor. A reconnect cannot silently reroll positions,
+but base fees do not prevent a requester or proposer from grinding multiple
+sessions or anchors. Parity storage
+and independent storage audits remain required by K8/M4.
+
+Each complete encoded blob is transferred and integrity-checked even when only
+part of its payload intersects the requested range. The session records both
+`logical_range_length` and `U`. Activity and variable fees count each authorized
+encoded blob once; overlapping transport retries and samples add no coverage.
+
+## 4. Context, seed and distinct positions
+
+The v3 session ID is:
+
+```text
+SHA256(
+  LP("polystore/retrieval-session/v3") || U32BE(3) || LP(chain_id) ||
+  owner_raw20 || U64BE(deal_id) || U64BE(generation) ||
+  U32BE(file_record_index) || U64BE(range_start) || U64BE(range_length) ||
+  plan_hash32 || U64BE(nonce)
+)
+```
+
+The nonce is monotonic in the `(owner_raw20,deal_id)` scope across v3 sessions;
+provider-plan changes do not create another nonce namespace. A duplicate open is
+idempotent only when the stored session ID and complete context hash match.
+Reusing an ID with different terms, or replaying a consumed nonce, rejects before
+fees, voucher consumption or state.
+
+`plan_hash` is SHA-256 over this compact canonical descriptor; it never hashes or
+stores U tuples:
+
+```text
+LP("polystore/retrieval-plan/v3") || U64BE(first) || U64BE(last) ||
+U64BE(U) || U32BE(obligation_count) ||
+for each represented slot in ascending order:
+  U32BE(slot) || assigned_provider_raw20 || payee_raw20 ||
+  U64BE(blob_count_for_slot)
+```
+
+`1 <= obligation_count <= 8`. Counts and coordinates are derived from
+`[first,last]`; admission rejects caller-supplied disagreement in O(8) work.
+
+The canonical challenge context is SHA-256 of this exact transcript:
+
+```text
+LP("polystore/challenge-context/v3") || U32BE(3) || LP(chain_id) ||
+setup_digest32 || session_id32 || owner_raw20 ||
+U64BE(deal_id) || U64BE(generation) || polyfs_root32 || integrity_root32 ||
+U32BE(file_record_index) || U64BE(file_start_offset) || U64BE(file_length) ||
+U64BE(range_start) || U64BE(range_length) ||
+U8(2) || U32BE(8) || U32BE(4) ||
+U64BE(metadata_mdus) || U64BE(user_mdus) || plan_hash32 ||
+U64BE(U) || U64BE(Q) || U64BE(nonce) ||
+LP(price_denom) || LP(price_per_blob_amount_decimal) ||
+LP(base_fee_amount_decimal) || U32BE(completion_burn_bps) ||
+U8(funding_kind) || funding_payer_raw20 ||
+U64BE(snapshot_height) || U64BE(anchor_height) ||
+U64BE(first_response_height) || U64BE(deadline_height) || U64BE(deal_end)
+```
+
+An open at H uses snapshot H, anchor H+1 and responses H+2 through the inclusive
+deadline, no later than deal end. Seed capture reuses the authenticated committed
+block-hash mechanism of v2:
+
+```text
+seed = SHA256(LP("polystore/challenge-seed/v3") || context_hash || anchor_hash32)
+```
+
+Missing or malformed anchor hashes fail closed. This remains a trusted-devnet
+source whose proposer may grind its block hash. It does not establish an unbiased
+permissionless beacon. The plan must be funded and frozen before anchor reveal.
+
+Set `Q=min(U,132)`. Select Q positions without replacement from `[0,U)` using the
+v2 sparse tail-swap Fisher-Yates algorithm, but hash the v3 domain:
+
+```text
+LP("polystore/session-position/v3") || context_hash || seed32 ||
+U64BE(i) || U32BE(counter)
+```
+
+For ordinal i, use `n=U-i`, rejection-sample the digest to `[0,n)` exactly as v2,
+and apply the same sparse map update. The selected population position `p`
+derives `t=first+p`, then its MDU/leaf/provider through section 3; no vector lookup
+or U-sized state is needed. Distinctness is within this session only; neither global
+coordinate uniqueness nor proof-byte uniqueness is required.
+
+For every selected tuple derive z with counters 0..255:
+
+```text
+LP("polystore/blob-challenge/v3") || context_hash || seed32 ||
+U64BE(i) || U64BE(t) || U64BE(mdu_index) || U32BE(leaf_index) || U32BE(counter)
+```
+
+Interpret SHA-256 as an unsigned big-endian integer and accept only
+`0<z<Fr` and `z^4096 mod Fr != 1`, using the v2 BLS12-381 scalar modulus. No
+prover nonce, public evaluation or transaction hash enters the challenge.
+
+## 5. Assurance and threat assumptions
+
+For a frozen population U with b bad positions and Q distinct uniform samples,
+the probability that every sample misses the bad set is:
+
+```text
+Pr[miss] = C(U-b,Q) / C(U,Q)       when Q <= U-b
+Pr[miss] = 0                       otherwise
+```
+
+The standard aligned examples are:
+
+| Logical range | U | Q | Bad positions | Miss probability |
+| --- | ---: | ---: | ---: | ---: |
+| aligned 1 KiB inside one payload blob | 1 | 1 | 1 | 0 |
+| 1 KiB crossing a payload-blob boundary | 2 | 2 | 1 | 0 |
+| aligned 1 GiB | 8457 | 132 | 846 (at least 10%) | `8.088203627301511e-7` |
+| aligned 1 GiB | 8457 | 132 | 1 | `0.9843916282369635` |
+
+For the last row the exact miss probability is `8325/8457 =
+0.9843916282369635`; sampling detects that one missing blob only about 1.56% of
+the time. This is intentional and must be disclosed. If the provider attempts a
+full delivery, a missing, truncated, reordered or one-byte-corrupt blob fails the
+full-byte integrity check deterministically and cannot receive a terminal ACK.
+
+The probability statement assumes the bad set was fixed before the unpredictable
+anchor, SHA-256 behaves as a random oracle for position selection, and the
+provider cannot grind the anchor. It is per logical session over the union of all
+provider obligations. It is not a 132-sample guarantee for every provider. The
+chain records the sample count assigned to each provider so liability is limited
+to that provider's frozen tuples.
+
+Across any declared horizon of T sessions, the probability that at least one
+session misses its fixed bad set is at most `T * Pr[miss]` by the union bound;
+independence is not assumed. This bound is meaningful only while each plan is
+fixed before its anchor and anchors are unpredictable. It does not cover proposer
+grinding, requesters opening many paid sessions after learning earlier outcomes,
+or providers choosing what to withhold after seeing samples.
+
+| Threat | Contract result |
+| --- | --- |
+| Owner publishes inconsistent KZG and integrity metadata | Generation is ineligible until every assigned provider performs ingest checks and signs; unsigned providers have no v3 liability. |
+| Provider withholds at least 10% before challenge | Sample miss probability follows the exact bound above; no stronger claim under a grindable beacon. |
+| Provider loses one blob | Sampling is weak at 1 GiB; complete delivery still fails deterministically and remains unpaid without ACK. |
+| Provider returns corrupt, reordered or truncated bytes | Complete-blob length, coordinate-bound leaf and authenticated path fail before ACK. |
+| Provider replays another root, generation, range or signer | Session/context/plan and acceptance transcripts bind them; admission rejects mismatch before KZG. |
+| Client retries transport or proof messages | Frozen coordinates and accepted-sample bitmap prevent new credit or payment. |
+| One provider fails | Only its obligation remains unpaid/refundable; no other provider is cryptographically aggregated or blamed. |
+| Owner and provider collude to claim fictional delivery | KZG can establish knowledge at sampled points, but no chain-visible primitive proves client receipt of all bytes; the owner ACK is explicit payment authority and no stronger demand claim is made. |
+| Provider withholds adaptively after seeing samples | It may answer samples and withhold other data; terminal ACK still requires full-byte delivery. The confidence bound applies only to a bad set fixed before the anchor. |
+| Corruption is outside the KZG sample | The client rejects it through the integrity tree. Without an ACK, the chain does not infer which party caused noncompletion. |
+| Anchor reorg or crash/restart | Only a committed canonical anchor is usable. Durable context, seed, bitmap, ACK and liabilities reload exactly; missing or conflicting state fails closed without a fresh seed. |
+| Admission flood or huge range | One session stores at most eight obligation descriptors and 132 sample bits; coordinates derive from a compact range. Existing open and retained-session caps still apply. |
+
+## 6. Bounded messages, settlement and recovery
+
+There is one session record, one base fee and one locked variable-fee pool. Open
+freezes canonical coin denom, nonnegative per-blob integer price, completion burn
+basis points, funding kind and normalized funding payer in the challenge context.
+The amount is canonical decimal ASCII (`0` or no leading zero); denom follows the
+existing chain coin rules. For
+each obligation `j`, `blob_count_j` is the number of its frozen delivery tuples,
+and:
+
+```text
+U = sum(blob_count_j)
+L_j = blob_count_j * frozen RetrievalPricePerBlob
+L = sum(L_j)
+```
+
+Open debits and burns the base fee once and locks L. The logical byte count and
+Q never alter this fee formula. The response exposes
+`logical_requested_bytes=range_length` and
+`billed_encoded_bytes=U*131072`; metadata, chunk boundaries, retries, ACKs and
+samples add no billable blobs. On an obligation's terminal completion,
+`C_j=ceil(L_j*completion_burn_bps/10000)` is burned and `L_j-C_j` pays its
+frozen payee once. On expiry, every incomplete `L_j` returns to the recorded
+funding source; completed obligations are immutable. No provider can receive
+another provider's partition. All conservation and fail-closed payer rules from
+v2 remain in force.
+
+An obligation becomes terminal only after both (a) all of its assigned sampled
+openings are accepted and (b) the owner signs one cumulative ACK after verifying
+all of its delivered blobs. An obligation with zero assigned samples satisfies
+(a) vacuously but still requires full delivery and its ACK. The ACK signs:
+
+```text
+SHA256(
+  LP("polystore/retrieval-obligation-ack/v3") || LP(chain_id) ||
+  session_id32 || context_hash32 || plan_hash32 || U32BE(slot) ||
+  assigned_provider_raw20 || payee_raw20 || U64BE(blob_count_for_slot) ||
+  U64BE(billed_encoded_bytes_for_slot) || integrity_root32
+)
+```
+
+Native signer or authenticated EVM caller MUST normalize to the frozen owner.
+The first compatible ACK is idempotent; exact duplicates succeed without state
+or economic effects, while a conflicting signer or transcript rejects. An ACK
+may be recorded before every proof, but settlement waits for both predicates.
+Proof-before-ACK and ACK-before-proof settle the same partition exactly once.
+A proof message carries at most the existing 64
+openings. If one provider receives more than 64 of the 132 samples, it uses
+multiple messages under the same obligation. A session-wide Q-bit accepted bitmap
+deduplicates retries. Partial batches change only bitmap bits; they do not create
+coverage, payment or a second fee. KZG verification remains per opening and no
+cross-provider aggregation is introduced. The authenticated native signer or EVM
+caller submitting a proof MUST equal that obligation's frozen assigned provider;
+authority from another obligation cannot be reused.
+
+Transport streams complete encoded blobs in plan order. The user-gateway may
+persist at most 64 cumulative, monotonic resume checkpoints for the session and
+must compact older checkpoints. Checkpoints contain no payment or chain claim.
+Retry resumes the same frozen provider obligation before expiry. At expiry, the
+chain releases its anchor/generation references and preserves the economic record
+needed for one refund. Durable database restart must preserve session, plan,
+bitmap, ACK, liability, funding source and expiry references. Export/import is
+unsupported until those records are explicitly included and qualified.
+
+For K8/M4, one range creates at most eight systematic provider obligations and
+Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
+length. One proof message has at most 64 openings; batching changes envelope count,
+not sample count or liability. The existing proof gas precharge and 64,000,000 gas /
+2 MiB block-byte limits apply. At the measured reference cost of about 4.134M gas for eight openings,
+132 openings require many transactions/blocks; this contract makes no throughput
+or completion-latency claim.
+
+| Retained resource | V3 ceiling |
+| --- | ---: |
+| Opens per block | 128 |
+| Live retained sessions | 8192 |
+| Session TTL | 4096 blocks |
+| Concurrent retained generations per deal / globally | 8 / 1024 |
+| Provider obligations per session | 8 |
+| Accepted-sample bitmap bits per session | 132 |
+| Openings per proof message | 64 |
+| Maximally packed successful proof messages, excluding retries | 9 |
+| Off-chain cumulative resume checkpoints | 64 |
+
+The packed-message bound follows from partitioning 132 samples across at most
+eight obligations, filling each provider's 64-opening messages and sending no
+empty message. Smaller fragments and idempotent retries can submit more
+transactions but cannot add bitmap bits, fees or credit. Admission applies the
+shared v2 block/session/generation limits before charging and performs no U-sized
+work.
+
+## 7. Admission and activation gate
+
+V3 MUST have its own activation parameter, initially zero. Before activation,
+every native, sponsored, protocol, EVM, provider-daemon, user-gateway and browser
+route rejects v3 before charging or consuming authority. Activation requires:
+
+- independent agreement on this document and its executable vectors;
+- canonical FAT v3 production and strict parsing in Rust, Go and browser paths;
+- atomic producer generation plus all 12 authenticated provider acceptances;
+- full-byte integrity before every terminal ACK;
+- exact native/EVM parity for IDs, plans, sampling, proof admission and fees;
+- bounded expiry/refund/restart tests and retained-generation accounting; and
+- end-to-end K8 qualification under the production 64,000,000 gas and 2 MiB
+  block-byte limits.
+
+Vector success establishes byte-level agreement only. It does not qualify signer
+authority, block-hash freshness, gas, crash recovery, transport delivery or safe
+network activation. Keeper/protobuf implementation starts only after explicit
+independent approval of this contract.
+
+Run the independent standard-library oracle with:
+
+```sh
+python3 polystorechain/pkg/retrievalchallenge/testdata/check_large_session_v3_vectors.py
+```
+
+It checks exact FAT v3 header bytes, compact plan, session ID, full context,
+anchor seed, distinct positions, off-domain z values, range populations and the
+confidence fraction against
+`polystorechain/pkg/retrievalchallenge/testdata/large-session-v3-golden.json`.
+It also rejects changed bytes, changed coordinates, wrong roots, truncated paths
+and invalid odd-leaf duplication. The three-blob tree is a hashing primitive
+vector, not a complete admitted generation.
