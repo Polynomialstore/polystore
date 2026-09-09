@@ -92,16 +92,38 @@ class SustainedTest(unittest.TestCase):
             with self.subTest(k=k), self.assertRaises(ValueError):
                 workload.mode2_layout(k)
 
+        layout = workload.mode2_layout(8, 32)
+        offsets = workload.sustained_offsets(4, 4)
+        profile = workload.sustained_profile(8, 4, offsets, 5_000_000, 4, 32)
+        self.assertEqual(layout["deputy_indices"], list(range(12, 44)))
+        self.assertFalse(set(layout["deputy_indices"]) & set(range(layout["assignments"])))
+        self.assertEqual(layout["provisioned_provider_signers"], 44)
+        self.assertEqual(profile["rates"], [1.0, 2.0, 4, 8, 16])
+        self.assertEqual(profile["offered_openings_per_second"], [8.0, 16.0, 32, 64, 128])
+        self.assertEqual((profile["inventory"], profile["warmup_sessions"], profile["measured_sessions"]),
+                         (156, 32, 124))
+        self.assertEqual(profile["warmup_openings"], 32 * 8)
+        self.assertEqual((profile["deputy_signer_count"], profile["max_in_flight"]), (32, 32))
+        self.assertEqual(profile["deputy_signer_indices"], list(range(12, 44)))
+        self.assertEqual(profile["provisioned_provider_signers"], 44)
+        for deputies in (0, 9, 33, True, "32"):
+            with self.subTest(deputies=deputies), self.assertRaises(ValueError):
+                workload.mode2_layout(8, deputies)
+
     def test_fixed_rates_and_pilot_are_absolute_and_bounded(self):
-        for seconds, expected in ((4, 31), (180, 1395)):
-            values = workload.sustained_offsets(seconds)
-            self.assertEqual(len(values), expected)
-            self.assertEqual(values, sorted(set(values)))
-            self.assertEqual(values[0], 0)
-            self.assertLess(values[-1], seconds * 5 * 10**9)
+        for scale, counts in ((1, ((4, 31), (180, 1395))), (4, ((4, 124), (180, 5580)))):
+            for seconds, expected in counts:
+                values = workload.sustained_offsets(seconds, scale)
+                self.assertEqual(len(values), expected)
+                self.assertEqual(values, sorted(set(values)))
+                self.assertEqual(values[0], 0)
+                self.assertLess(values[-1], seconds * 5 * 10**9)
         for seconds in (0, 3, 181, True, 4.5):
             with self.assertRaises(ValueError):
                 workload.sustained_offsets(seconds)
+        for scale in (0, 2, 5, True, 1.0, "4"):
+            with self.assertRaises(ValueError):
+                workload.sustained_offsets(4, scale)
 
     def test_k8_operations_derive_full_row_fees_and_exporter_expectations(self):
         owner = AUDIT_ADDRESSES[0]
@@ -158,6 +180,14 @@ class SustainedTest(unittest.TestCase):
         bad["proof_expectation"]["session"]["start_blob_index"] = 0
         with self.assertRaises(ValueError):
             workload.export_inventory_request(bad, "ab" * 32, {}, "/proof", directories)
+
+        many_deputies = [f"deputy{index}" for index in range(32)]
+        warmups = workload.build_sustained_operations(
+            life, deal, providers, many_deputies, [], 10, 4000, 17, 5_000_000, 8)
+        self.assertEqual(len(warmups), 32)
+        self.assertEqual({row["phase"] for row in warmups}, {"warmup"})
+        self.assertEqual([row["proof_expectation"]["session"]["authorized_proof_provider"]
+                          for row in warmups], many_deputies)
 
     def test_sustained_mixed_outcomes_reach_assignment_accounting(self):
         outcomes = [
