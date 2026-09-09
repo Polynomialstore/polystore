@@ -46,10 +46,10 @@ func queryDealGenerationV3(ctx context.Context, deal uint64) (*types.QueryGetDea
 	return &response, height, nil
 }
 
-func validateGenerationAdmissionV3(a *types.DealGenerationAdmissionV3) (retrievalGenerationKey, [12][20]byte, error) {
+func validateGenerationAdmissionV3(a *types.DealGenerationAdmissionV3, expectedDeal uint64) (retrievalGenerationKey, [12][20]byte, error) {
 	var providers [12][20]byte
 	setup, setupErr := hex.DecodeString(types.RetrievalSetupDigest)
-	if a == nil || a.ChainId != chainID || a.Generation == 0 || a.ProposedHeight <= 0 || len(a.PolyfsRoot) != 32 || len(a.IntegrityRoot) != 32 || len(a.SetupDigest) != 32 || setupErr != nil || !bytes.Equal(a.SetupDigest, setup) || len(a.Providers) != 12 || a.MetadataMdus < 2 || a.WitnessMdus != a.MetadataMdus-1 || a.UserMdus == 0 || a.MetadataMdus > 65536 || a.UserMdus > 65536-a.MetadataMdus || a.TotalMdus != a.MetadataMdus+a.UserMdus || a.UserMdus > retrievalchallenge.MaxIntegrityLeaves/retrievalchallenge.IntegrityLeavesPerUserMDU || a.IntegrityLeafCount != a.UserMdus*retrievalchallenge.IntegrityLeavesPerUserMDU || a.AcceptedSlotsMask&^uint32(0xfff) != 0 {
+	if a == nil || a.DealId != expectedDeal || a.ChainId != chainID || a.Generation == 0 || a.ProposedHeight <= 0 || len(a.PolyfsRoot) != 32 || len(a.IntegrityRoot) != 32 || len(a.SetupDigest) != 32 || setupErr != nil || !bytes.Equal(a.SetupDigest, setup) || len(a.Providers) != 12 || a.MetadataMdus < 2 || a.WitnessMdus != a.MetadataMdus-1 || a.UserMdus == 0 || a.MetadataMdus > 65536 || a.UserMdus > 65536-a.MetadataMdus || a.TotalMdus != a.MetadataMdus+a.UserMdus || a.UserMdus > retrievalchallenge.MaxIntegrityLeaves/retrievalchallenge.IntegrityLeavesPerUserMDU || a.IntegrityLeafCount != a.UserMdus*retrievalchallenge.IntegrityLeavesPerUserMDU || a.AcceptedSlotsMask&^uint32(0xfff) != 0 {
 		return retrievalGenerationKey{}, providers, fmt.Errorf("invalid v3 generation snapshot")
 	}
 	key := retrievalGenerationKey{Chain: a.ChainId, Deal: a.DealId, Generation: a.Generation, Metadata: a.MetadataMdus, Users: a.UserMdus, Layout: retrievalchallenge.StripeK8M4, K: 8, M: 4, Version: 3}
@@ -145,6 +145,10 @@ func updatePendingSignerV3(signer string, op pendingSignerOperation, clear bool)
 	})
 }
 
+func generationAcceptanceDigestV3(generation retrievalGenerationKey, slot uint32, provider [20]byte) ([32]byte, error) {
+	return (retrievalchallenge.GenerationAcceptanceV3{ChainID: generation.Chain, SetupDigest: generation.Setup, DealID: generation.Deal, Generation: generation.Generation, PolyFSRoot: generation.Root, IntegrityRoot: generation.Integrity, MetadataMDUs: generation.Metadata, UserMDUs: generation.Users, Slot: slot, Provider: provider}).Hash()
+}
+
 func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -178,6 +182,42 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "routing provider differs from actual signing key", "")
 		return
 	}
+	lockID := "generation-v3:" + strconv.FormatUint(request.DealID, 10)
+	release, err := claimRetrievalOperations([]string{lockID}, signer)
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "provider signer busy", err.Error())
+		return
+	}
+	defer release()
+	pending, err := loadPendingSigner(signer)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "generation acceptance cleanup state unavailable", err.Error())
+		return
+	}
+	if pending != nil && pending.Kind != "generation-v3" {
+		writeJSONError(w, http.StatusConflict, "provider signer has unresolved operation", fmt.Sprintf("actual signer awaits %s reconciliation", pending.Kind))
+		return
+	}
+	if pending != nil && pending.TxHash != "" {
+		hash, waitErr := waitForCommittedTx(ctx, pending.TxHash)
+		if waitErr == nil || errors.Is(waitErr, errTxFailed) {
+			if clearErr := updatePendingSignerV3(signer, *pending, true); clearErr != nil {
+				writeJSONError(w, http.StatusConflict, "generation acceptance cleanup pending", clearErr.Error())
+				return
+			}
+		}
+		if waitErr != nil {
+			if errors.Is(waitErr, errTxFailed) {
+				writeJSONError(w, http.StatusConflict, "generation acceptance failed", waitErr.Error())
+				return
+			}
+			writeJSONError(w, http.StatusAccepted, "generation acceptance pending", waitErr.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "reconciled", "tx_hash": hash, "cleanup_status": "complete"})
+		return
+	}
 	response, height, err := queryDealGenerationV3(ctx, request.DealID)
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "v3 generation admission unavailable", err.Error())
@@ -187,7 +227,7 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	if candidate == nil {
 		candidate = response.Admitted
 	}
-	generation, providers, err := validateGenerationAdmissionV3(candidate)
+	generation, providers, err := validateGenerationAdmissionV3(candidate, request.DealID)
 	if err != nil || height == 0 || uint64(candidate.ProposedHeight) > height {
 		if err == nil {
 			err = fmt.Errorf("v3 generation query lacks a committed proposal height")
@@ -212,52 +252,34 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "provider is not assigned to the generation", "")
 		return
 	}
-	digest, err := (retrievalchallenge.GenerationAcceptanceV3{ChainID: generation.Chain, SetupDigest: generation.Setup, DealID: generation.Deal, Generation: generation.Generation, PolyFSRoot: generation.Root, IntegrityRoot: generation.Integrity, MetadataMDUs: generation.Metadata, UserMDUs: generation.Users, Slot: uint32(slot), Provider: providerRaw}).Hash()
+	digest, err := generationAcceptanceDigestV3(generation, uint32(slot), providerRaw)
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "invalid v3 generation acceptance digest", err.Error())
 		return
 	}
 	id := hex.EncodeToString(digest[:])
-	release, err := claimRetrievalOperations([]string{id}, signer)
-	if err != nil {
-		writeJSONError(w, http.StatusTooManyRequests, "provider signer busy", err.Error())
-		return
-	}
-	defer release()
 	op := pendingSignerOperation{Kind: "generation-v3", IDs: []string{id}}
 	if candidate.AcceptedSlotsMask&(1<<uint(slot)) != 0 || response.Pending == nil {
-		if pending, err := loadPendingSigner(signer); err == nil && pending != nil && pending.Kind == op.Kind && len(pending.IDs) == 1 && pending.IDs[0] == id {
-			_ = updatePendingSignerV3(signer, op, true)
+		if pending != nil && len(pending.IDs) == 1 && pending.IDs[0] == id {
+			if err := updatePendingSignerV3(signer, op, true); err != nil {
+				writeJSONError(w, http.StatusConflict, "generation acceptance cleanup pending", err.Error())
+				return
+			}
+		}
+		if pending != nil {
+			writeJSONError(w, http.StatusConflict, "provider signer has unresolved generation acceptance", "stored acceptance identity differs from current generation")
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "already_accepted", "slot": slot})
 		return
 	}
-	if pending, err := loadPendingSigner(signer); err != nil || pending != nil {
-		if err != nil || pending.Kind != op.Kind || len(pending.IDs) != 1 || pending.IDs[0] != id {
-			if err == nil {
-				err = fmt.Errorf("actual signer awaits %s reconciliation", pending.Kind)
-			}
-			writeJSONError(w, http.StatusConflict, "provider signer has unresolved operation", err.Error())
+	if pending != nil {
+		if len(pending.IDs) != 1 || pending.IDs[0] != id {
+			writeJSONError(w, http.StatusConflict, "provider signer has unresolved generation acceptance", "stored acceptance identity differs from current generation")
 			return
 		}
-		if pending.TxHash == "" {
-			writeJSONError(w, http.StatusAccepted, "generation acceptance outcome unknown", "broadcast hash was not persisted")
-			return
-		}
-		hash, waitErr := waitForCommittedTx(ctx, pending.TxHash)
-		if waitErr == nil || errors.Is(waitErr, errTxFailed) {
-			_ = updatePendingSignerV3(signer, op, true)
-		}
-		if waitErr != nil {
-			if errors.Is(waitErr, errTxFailed) {
-				writeJSONError(w, http.StatusConflict, "generation acceptance failed", waitErr.Error())
-				return
-			}
-			writeJSONError(w, http.StatusAccepted, "generation acceptance pending", waitErr.Error())
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "reconciled", "tx_hash": hash})
+		writeJSONError(w, http.StatusAccepted, "generation acceptance outcome unknown", "broadcast hash was not persisted")
 		return
 	}
 	root, err := parseManifestRoot("0x" + hex.EncodeToString(candidate.PolyfsRoot))
@@ -287,8 +309,17 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		op.TxHash = hash
 		return updatePendingSignerV3(signer, op, false)
 	}, "tx", "polystorechain", "accept-deal-generation-v3", "--deal-id", strconv.FormatUint(candidate.DealId, 10), "--slot", strconv.Itoa(slot), "--acceptance-digest", hex.EncodeToString(digest[:]), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
+	cleanup := "retained"
 	if err == nil || errors.Is(err, errTxFailed) || errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
-		_ = updatePendingSignerV3(signer, op, true)
+		if clearErr := updatePendingSignerV3(signer, op, true); clearErr != nil {
+			if err == nil {
+				err = fmt.Errorf("transaction committed but local acceptance cleanup remains pending: %w", clearErr)
+			} else {
+				err = fmt.Errorf("%w; local acceptance cleanup remains pending: %v", err, clearErr)
+			}
+		} else {
+			cleanup = "complete"
+		}
 	}
 	status := "success"
 	if err != nil {
@@ -302,5 +333,5 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		errorText = err.Error()
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"status": status, "tx_hash": hash, "slot": slot, "error": errorText})
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": status, "tx_hash": hash, "slot": slot, "cleanup_status": cleanup, "error": errorText})
 }

@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -59,6 +62,39 @@ func TestValidateFATV3MetadataUsesPackedAuthenticatedBytes(t *testing.T) {
 	if err := validateFATV3Metadata(malformed, key, true); err == nil {
 		t.Fatal("accepted nonzero FAT header reserved byte")
 	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mdu_0.bin"), malformed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	key.Version = 3
+	if _, err := prepareRetrievalMetadata(t.Context(), dir, key); err == nil || !strings.Contains(err.Error(), "frozen manifest root") {
+		t.Fatalf("parsed unauthenticated v3 header before rejecting root: %v", err)
+	}
+}
+
+func TestGenerationAcceptanceOperationIdentityBindsTranscript(t *testing.T) {
+	g := retrievalGenerationKey{Chain: "polystore-test-1", Deal: 0, Generation: 1, Metadata: 2, Users: 1}
+	g.Setup[0], g.Root[0], g.Integrity[0] = 1, 2, 3
+	provider := [20]byte{19: 4}
+	want, err := generationAcceptanceDigestV3(g, 0, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := []func(){
+		func() { g.Chain = "polystore-test-2" },
+		func() { g.Setup[0] ^= 1 },
+		func() { g.Root[0] ^= 1 },
+		func() { provider[0] ^= 1 },
+	}
+	for i, mutate := range mutations {
+		originalG, originalProvider := g, provider
+		mutate()
+		got, err := generationAcceptanceDigestV3(g, 0, provider)
+		if err != nil || got == want {
+			t.Fatalf("mutation %d did not change durable acceptance identity: %x %v", i, got, err)
+		}
+		g, provider = originalG, originalProvider
+	}
 }
 
 func TestValidateGenerationAdmissionV3BoundsAndProviderIdentity(t *testing.T) {
@@ -79,16 +115,19 @@ func TestValidateGenerationAdmissionV3BoundsAndProviderIdentity(t *testing.T) {
 		raw[19] = byte(i + 1)
 		a.Providers = append(a.Providers, sdk.AccAddress(raw).String())
 	}
-	if _, _, err := validateGenerationAdmissionV3(a); err != nil {
+	if _, _, err := validateGenerationAdmissionV3(a, 0); err != nil {
 		t.Fatalf("first deal rejected: %v", err)
 	}
+	if _, _, err := validateGenerationAdmissionV3(a, 1); err == nil {
+		t.Fatal("accepted generation for a different requested deal")
+	}
 	a.Providers[11] = a.Providers[10]
-	if _, _, err := validateGenerationAdmissionV3(a); err == nil {
+	if _, _, err := validateGenerationAdmissionV3(a, 0); err == nil {
 		t.Fatal("accepted duplicate provider assignment")
 	}
 	a.Providers[11] = sdk.AccAddress(append(make([]byte, 19), 12)).String()
 	a.SetupDigest[0] ^= 1
-	if _, _, err := validateGenerationAdmissionV3(a); err == nil {
+	if _, _, err := validateGenerationAdmissionV3(a, 0); err == nil {
 		t.Fatal("accepted mismatched setup digest")
 	}
 }
