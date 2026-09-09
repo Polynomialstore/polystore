@@ -78,7 +78,7 @@ tree_position = (mdu_index - metadata_mdus) * 96 + leaf_index
 Zero user MDUs cannot form FAT v3. The declared count MUST equal this product.
 Before using the integrity tree or authorizing an ACK, the client MUST likewise
 authenticate this header against the session's frozen `polyfs_root`, and compare
-its root and count with the frozen session root and `user_mdus * 96`. Provider
+its root and count with the session's frozen `integrity_root` and `user_mdus * 96`. Provider
 acceptance signatures do not replace the client's header authentication.
 Every encoded blob is exactly 131072 bytes. Define:
 
