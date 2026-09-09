@@ -133,10 +133,6 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 	return nil
 }
 
-func generationOperationID(a *types.DealGenerationAdmissionV3, slot uint32) string {
-	return fmt.Sprintf("%d/%d/%d/%s", a.DealId, a.Generation, slot, hex.EncodeToString(a.PolyfsRoot))
-}
-
 func updatePendingSignerV3(signer string, op pendingSignerOperation, clear bool) error {
 	if sessionDB == nil {
 		return fmt.Errorf("session DB unavailable")
@@ -169,7 +165,7 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || request.DealID == 0 {
+	if err := decoder.Decode(&request); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid v3 generation acceptance request", "")
 		return
 	}
@@ -216,7 +212,12 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "provider is not assigned to the generation", "")
 		return
 	}
-	id := generationOperationID(candidate, uint32(slot))
+	digest, err := (retrievalchallenge.GenerationAcceptanceV3{ChainID: generation.Chain, SetupDigest: generation.Setup, DealID: generation.Deal, Generation: generation.Generation, PolyFSRoot: generation.Root, IntegrityRoot: generation.Integrity, MetadataMDUs: generation.Metadata, UserMDUs: generation.Users, Slot: uint32(slot), Provider: providerRaw}).Hash()
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "invalid v3 generation acceptance digest", err.Error())
+		return
+	}
+	id := hex.EncodeToString(digest[:])
 	release, err := claimRetrievalOperations([]string{id}, signer)
 	if err != nil {
 		writeJSONError(w, http.StatusTooManyRequests, "provider signer busy", err.Error())
@@ -276,11 +277,6 @@ func SpAcceptDealGenerationV3(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "v3 generation ingest verification failed", err.Error())
-		return
-	}
-	digest, err := (retrievalchallenge.GenerationAcceptanceV3{ChainID: generation.Chain, SetupDigest: generation.Setup, DealID: generation.Deal, Generation: generation.Generation, PolyFSRoot: generation.Root, IntegrityRoot: generation.Integrity, MetadataMDUs: generation.Metadata, UserMDUs: generation.Users, Slot: uint32(slot), Provider: providerRaw}).Hash()
-	if err != nil {
-		writeJSONError(w, http.StatusConflict, "invalid v3 generation acceptance digest", err.Error())
 		return
 	}
 	if err := updatePendingSignerV3(signer, op, false); err != nil {

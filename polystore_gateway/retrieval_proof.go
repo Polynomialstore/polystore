@@ -251,6 +251,9 @@ func validateFATV3Metadata(wire []byte, key retrievalGenerationKey, requireInteg
 // Authenticate exactly the complete ordered commitment list for this user MDU.
 // The enclosing witness packaging is not cached or claimed to be authenticated.
 func (g *authenticatedGeneration) userMDU(ctx context.Context, dir string, c retrievalchallenge.Context, mduIndex uint64) (*authenticatedUserMDU, error) {
+	if _, err := c.Bytes(); err != nil {
+		return nil, err
+	}
 	return g.userMDUFor(ctx, dir, retrievalGeneration(c), mduIndex)
 }
 
