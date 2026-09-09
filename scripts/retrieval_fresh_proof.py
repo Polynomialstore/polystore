@@ -191,7 +191,7 @@ def read_json(path):
 
 
 def native_proofs(config, c, digest, seed):
-    if c["slot"] != 0:
+    if uint(c.get("slot", 0), 32) != 0:
         raise ValueError("Python known-answer fixture supports slot zero only")
     meta, _ = read_json(Path(config["fixture"]) / "fixture.json")
     payload, raw = read_json(Path(config["fixture"]) / "1.json")
