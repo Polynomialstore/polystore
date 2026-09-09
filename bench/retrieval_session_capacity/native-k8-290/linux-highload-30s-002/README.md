@@ -38,6 +38,35 @@ Proof transactions declared 5,000,000 gas each and used 4,131,317–4,134,115 ga
 
 Continuous Commit-step streams covered 124 blocks on every validator. Their conservative p95 execution upper bounds were 285.975–346.072 ms. Validator lifetime peak RSS was 381,140,992–393,928,704 bytes, measured by `wait4 ru_maxrss`; this is not CPU usage. At height 701, all twelve normal-audit assignments were finalized with one accepted sample and zero missed epochs.
 
+## Assignment distribution and carryover
+
+Measurement-only counts by pinned K8 slot are below. Submitted bundles all committed valid; every bundle carries eight openings. Warmup is excluded.
+
+| Slot | Offered bundles | Submitted / committed-valid bundles | Queue full | Committed-valid openings |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 78 | 71 | 7 | 568 |
+| 1 | 78 | 70 | 8 | 560 |
+| 2 | 77 | 70 | 7 | 560 |
+| 3 | 77 | 70 | 7 | 560 |
+| 4 | 77 | 70 | 7 | 560 |
+| 5 | 77 | 70 | 7 | 560 |
+| 6 | 77 | 70 | 7 | 560 |
+| 7 | 77 | 70 | 7 | 560 |
+| 8 | 78 | 69 | 9 | 552 |
+| 9 | 78 | 70 | 8 | 560 |
+| 10 | 78 | 70 | 8 | 560 |
+| 11 | 78 | 72 | 6 | 576 |
+
+The cross-tabulation counts committed-valid bundles by offered cohort (rows) and consensus header-time window (columns). It shows carryover explicitly; header time retains the limitations above. Multiply each cell by eight for chained openings.
+
+| Offered bundles/s | Before start | 0–30 s | 30–60 s | 60–90 s | 90–120 s | 120–150 s | After 150 s |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1 | 29 | 0 | 0 | 0 | 0 | 0 |
+| 2 | 0 | 0 | 60 | 0 | 0 | 0 | 0 |
+| 4 | 0 | 0 | 0 | 120 | 0 | 0 | 0 |
+| 8 | 0 | 0 | 0 | 7 | 222 | 11 | 0 |
+| 16 | 0 | 0 | 0 | 0 | 0 | 253 | 139 |
+
 ## Publication boundary
 
 The [summary](summary.json), [execution plan](plan.json), and [runtime provenance](runtime-provenance.json) are the only published run files. The [manifest](manifest.json) records source and published hashes plus the path substitutions. Raw evidence, block and audit streams, SQLite journals, proof inventory, logs, keyrings, generated payloads, and storage data remain private.

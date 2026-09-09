@@ -60,6 +60,73 @@
       "accounted_transactions": 842,
       "after_offered_window": 139,
       "before_measurement": 1,
+      "cohort_cross_tabulation": {
+        "columns": [
+          "before_start",
+          "0_to_30s",
+          "30_to_60s",
+          "60_to_90s",
+          "90_to_120s",
+          "120_to_150s",
+          "after_150s"
+        ],
+        "committed_valid_bundles": [
+          [
+            1,
+            29,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            60,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            120,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            7,
+            222,
+            11,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            253,
+            139
+          ]
+        ],
+        "interpretation": "Rows use scheduled client offer time; columns use consensus header.Time, not actual wall-clock Commit completion. Negative relative header times are possible.",
+        "offered_rates_bundles_per_s": [
+          1,
+          2,
+          4,
+          8,
+          16
+        ],
+        "openings_per_bundle": 8
+      },
       "interpretation": "Windows contain carryover across offered cohorts and are keyed by consensus header.Time, not actual Commit completion.",
       "thirty_second_windows": [
         {
@@ -137,6 +204,129 @@
     "classification": "driver_queue_and_declared_gas_limited_at_highest_offered_steps"
   },
   "measurement": {
+    "assignment_basis": "Pinned session snapshot slot from hash-verified preparation inventory; measurement only, excluding warmup. Submitted means worker started and transaction subsequently committed; there are no failed or unknown submissions in this run.",
+    "assignments": [
+      {
+        "committed_valid_bundles": 71,
+        "committed_valid_openings": 568,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 7,
+        "slot": 0,
+        "submitted_bundles": 71,
+        "submitted_openings": 568
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 1,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 2,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 3,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 4,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 5,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 6,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 77,
+        "offered_openings": 616,
+        "queue_full_not_submitted": 7,
+        "slot": 7,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 69,
+        "committed_valid_openings": 552,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 9,
+        "slot": 8,
+        "submitted_bundles": 69,
+        "submitted_openings": 552
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 9,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 70,
+        "committed_valid_openings": 560,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 8,
+        "slot": 10,
+        "submitted_bundles": 70,
+        "submitted_openings": 560
+      },
+      {
+        "committed_valid_bundles": 72,
+        "committed_valid_openings": 576,
+        "offered_bundles": 78,
+        "offered_openings": 624,
+        "queue_full_not_submitted": 6,
+        "slot": 11,
+        "submitted_bundles": 72,
+        "submitted_openings": 576
+      }
+    ],
     "client_completion_observations_after_150s": 156,
     "committed_valid_bundles": 842,
     "committed_valid_openings": 6736,
