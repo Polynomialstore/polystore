@@ -25,8 +25,8 @@ test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, 
   const polystoreAddress = ethToPolystoreAddress(account.address)
 
   const dealId = '1'
-  const manifestRoot = `0x${'bb'.repeat(48)}`
-  const staleManifestRoot = `0x${'cc'.repeat(48)}`
+  const manifestRoot = `0x${'bb'.repeat(32)}`
+  const staleManifestRoot = `0x${'cc'.repeat(32)}`
   const filePath = 'browser-network.txt'
   const fileBytes = Buffer.from('hello browser network')
   const staleCachedBytes = Buffer.from('stale browser cache bytes')
@@ -54,6 +54,10 @@ test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, 
             owner: polystoreAddress,
             cid: manifestRoot,
             size: String(24 * 1024 * 1024),
+            total_mdus: '3',
+            witness_mdus: '1',
+            redundancy_mode: 2,
+            mode2_profile: { k: 8, m: 4 },
             escrow_balance: '1000000',
             end_block: '1000',
             providers: ['nil1provider'],
@@ -73,6 +77,10 @@ test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, 
           owner: polystoreAddress,
           manifest_root: Buffer.from(manifestRoot.slice(2), 'hex').toString('base64'),
           size: String(24 * 1024 * 1024),
+          total_mdus: '3',
+          witness_mdus: '1',
+          redundancy_mode: 2,
+          mode2_profile: { k: 8, m: 4 },
           escrow_balance: '1000000',
           end_block: '1000',
           providers: ['nil1provider'],
@@ -415,6 +423,18 @@ test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, 
 
   await page.goto(path)
 
+  // This browser test covers UI routing and downloaded bytes. Its tiny OPFS
+  // fixture deliberately mocks the worker boundary; cachedDownload.test.ts
+  // separately exercises the same path with production WASM commitments.
+  await page.evaluate(async ({ filePath, fileSize }) => {
+    const { workerClient } = await import('/src/lib/worker-client.ts')
+    workerClient.initRetrievalWasm = async () => {}
+    workerClient.verifyRetrievalMetadata = async () => [{ path: filePath, start_offset: 0n, size_bytes: BigInt(fileSize), timestamp: 0n, flags: 0 }]
+    workerClient.verifyRetrievalWitness = async (bytes) => bytes
+    workerClient.readRetrievalCommitments = async (pin) => new Uint8Array(pin.leafCount * 48)
+    workerClient.verifyRetrievalMdu = async (_pin, bytes) => bytes
+  }, { filePath, fileSize: fileBytes.length })
+
   if (!(await page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first().isVisible())) {
     await page.getByTestId('connect-wallet').first().click({ force: true })
     await expect(page.locator('[data-testid="wallet-address"], [data-testid="wallet-address-full"]').first()).toBeVisible()
@@ -457,7 +477,7 @@ test(`Deal Explorer: ${scenario} browser cache uses the correct download gate`, 
       await writeFile('manifest.bin', new Uint8Array([1]))
       await writeFile('slab_meta.json', JSON.stringify({
         schema_version: 1, generation_id: manifestRoot.slice(2), manifest_root: manifestRoot,
-        deal_id: dealId, owner, source: 'browser_mode1_commit', created_at: new Date().toISOString(),
+        deal_id: dealId, owner, source: 'browser_mode2_commit', created_at: new Date().toISOString(),
         witness_mdus: 1, user_mdus: 1, total_mdus: 3,
         file_records: [{ path: filePath, start_offset: 0, size_bytes: cachedBytes.length, flags: 0 }],
       }))

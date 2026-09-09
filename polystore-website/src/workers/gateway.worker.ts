@@ -366,6 +366,12 @@ self.onmessage = async (event) => {
                 result = readUserCommitments(payload.pin, payload.ordinal, payload.witness, payload.cell, polyStoreWasmInstance);
                 break;
             }
+            case 'verifyRetrievalMdu': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                verifyRecoveredMdu(payload.pin, payload.bytes, payload.commitments, polyStoreWasmInstance);
+                result = payload.bytes;
+                break;
+            }
             case 'reconstructRetrievalMdu': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 result = PolyStoreWasm.reconstruct_mdu_from_shards(payload.shards, payload.pin.k, payload.pin.m);

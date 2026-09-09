@@ -129,7 +129,9 @@ export function verifyRetrievalWindow(session: FrozenSession, envelope: Retrieva
   return envelope.bytes
 }
 
-export function verifyRetrievalMetadata(bytes: Uint8Array, pin: PinnedGeneration, crypto: RetrievalCrypto) {
+export type RetrievalMetadataGeneration = Pick<PinnedGeneration, 'root' | 'userMdus'>
+
+export function verifyRetrievalMetadata(bytes: Uint8Array, pin: RetrievalMetadataGeneration, crypto: RetrievalCrypto) {
   const records = parsePolyfsRecordsFromMdu0(bytes)
   const commitments = new Uint8Array(64 * 48)
   for (let i = 0; i < 64; i++) commitments.set(crypto.commit_received_blob(bytes.subarray(i * BLOB_SIZE_BYTES, (i + 1) * BLOB_SIZE_BYTES)), i * 48)

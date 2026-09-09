@@ -4,8 +4,9 @@
 // It abstracts the message passing and Promise-based communication.
 import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from './expansionWorkers'
 import type { FrozenSession, PinnedGeneration } from './retrieval'
+import type { RecoveryGeometry } from './retrievalRecovery'
 import { readBoundedResponse } from './retrieval'
-import type { RetrievalEnvelope, verifyRetrievalMetadata } from './retrievalWire'
+import type { RetrievalEnvelope, RetrievalMetadataGeneration, verifyRetrievalMetadata } from './retrievalWire'
 import type { RetrievalOutputRequest } from './storage/retrievalOutput'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 import { recommendedUserMduKzgBatchCapForWebGpuAdapter } from './upload/userMduKzgBatch'
@@ -423,15 +424,18 @@ export const workerClient = {
     const trustedSetupBytes = await readBoundedResponse(response, 807177, signal)
     await sendMessageToWorker('initRetrievalWasm', { trustedSetupBytes }, [trustedSetupBytes.buffer])
   },
-  async verifyRetrievalMetadata(bytes: Uint8Array, pin: PinnedGeneration): Promise<ReturnType<typeof verifyRetrievalMetadata>> {
+  async verifyRetrievalMetadata(bytes: Uint8Array, pin: RetrievalMetadataGeneration): Promise<ReturnType<typeof verifyRetrievalMetadata>> {
     // Metadata remains available to the caller for generation-specific storage.
     return sendMessageToWorker('verifyRetrievalMetadata', { bytes, pin }) as Promise<ReturnType<typeof verifyRetrievalMetadata>>
   },
   async verifyRetrievalWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('verifyRetrievalWitness', { bytes, cell }, [bytes.buffer]) as Promise<Uint8Array>
   },
-  async readRetrievalCommitments(pin: PinnedGeneration, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array> {
+  async readRetrievalCommitments(pin: RecoveryGeometry, ordinal: bigint, witness: { index: bigint; bytes: Uint8Array }[], cell: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('readRetrievalCommitments', { pin, ordinal, witness, cell }, witness.map((w) => w.bytes.buffer)) as Promise<Uint8Array>
+  },
+  async verifyRetrievalMdu(pin: RecoveryGeometry, bytes: Uint8Array, commitments: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('verifyRetrievalMdu', { pin, bytes, commitments }, [bytes.buffer, commitments.buffer]) as Promise<Uint8Array>
   },
   async reconstructRetrievalMdu(pin: PinnedGeneration, shards: (Uint8Array | null)[], commitments: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('reconstructRetrievalMdu', { pin, shards, commitments }, shards.flatMap((s) => s ? [s.buffer] : [])) as Promise<Uint8Array>

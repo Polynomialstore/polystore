@@ -7,6 +7,8 @@ export interface LcdDeal {
   total_mdus?: string
   witness_mdus?: string
   current_gen?: string
+  redundancy_mode?: number
+  mode2_profile?: { k: number; m: number }
   owner: string
   escrow: string
   end_block: string
@@ -77,6 +79,11 @@ export function normalizeLcdDeal(input: unknown): LcdDeal | null {
         voucher_signer: asString(input['retrieval_policy']['voucher_signer'] ?? ''),
       }
     : undefined
+  const mode2Profile = isRecord(input['mode2_profile']) &&
+    Number.isSafeInteger(input['mode2_profile']['k']) && Number.isSafeInteger(input['mode2_profile']['m'])
+    ? { k: Number(input['mode2_profile']['k']), m: Number(input['mode2_profile']['m']) }
+    : undefined
+  const redundancyMode = Number.isSafeInteger(input['redundancy_mode']) ? Number(input['redundancy_mode']) : undefined
 
   return {
     id: asString(input['id']),
@@ -86,6 +93,8 @@ export function normalizeLcdDeal(input: unknown): LcdDeal | null {
     total_mdus: asString(input['total_mdus']),
     witness_mdus: asString(input['witness_mdus']),
     current_gen: asString(input['current_gen']),
+    redundancy_mode: redundancyMode,
+    mode2_profile: mode2Profile,
     escrow: asString(input['escrow_balance'] ?? input['escrow'] ?? ''),
     end_block: asString(input['end_block']),
     start_block: asString(input['start_block']),
