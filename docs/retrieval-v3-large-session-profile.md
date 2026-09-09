@@ -76,6 +76,10 @@ tree_position = (mdu_index - metadata_mdus) * 96 + leaf_index
 ```
 
 Zero user MDUs cannot form FAT v3. The declared count MUST equal this product.
+Before using the integrity tree or authorizing an ACK, the client MUST likewise
+authenticate this header against the session's frozen `polyfs_root`, and compare
+its root and count with the frozen session root and `user_mdus * 96`. Provider
+acceptance signatures do not replace the client's header authentication.
 Every encoded blob is exactly 131072 bytes. Define:
 
 ```text
@@ -97,9 +101,20 @@ leaves and each proof at 23 siblings.
 
 The owner builds KZG commitments and this tree from the same canonical encoded
 blob vector in one proposed generation. Before that generation becomes eligible
-for v3, every one of the 12 frozen assigned providers MUST check each blob in its
-slot against both its existing KZG commitment path and the proposed integrity
-path, then submit this digest through a new generation-acceptance action that
+for v3, every one of the 12 frozen assigned providers MUST first authenticate the
+FAT v3 header against the proposed generation's `polyfs_root`. The header lies
+in the first FAT blob (MDU0 blob index 16 under unchanged 31/32 packing): verify
+its complete encoded bytes against the KZG commitment and that commitment's
+exact Merkle membership at index 16 under the 64-leaf MDU0 root, or verify the
+complete canonical MDU0 through the existing authenticated path. Decode the
+header only from those authenticated bytes, reject invalid version/packing/header
+fields, and require its integrity root to equal the proposed `integrity_root`
+and its leaf count to equal the frozen `user_mdus * 96`. A signature binding two
+roots without this header authentication is insufficient.
+
+Each provider MUST then check each blob in its slot against both its existing
+KZG commitment path and the integrity path to that authenticated header root,
+then submit this digest through a new generation-acceptance action that
 reuses the existing native signer/EVM caller authentication machinery (no new
 detached-signature scheme):
 
@@ -513,6 +528,9 @@ every native, sponsored, protocol, EVM, provider-daemon, user-gateway and browse
 route rejects v3 before charging or consuming authority. Activation requires:
 
 - independent agreement on this document and its executable vectors;
+- reject a proposed integrity root or leaf count differing from the authenticated
+  FAT v3 header, even with otherwise valid blob paths to the proposed root; an
+  honest provider must not sign acceptance, and a client must not ACK;
 - canonical FAT v3 production and strict parsing in Rust, Go and browser paths;
 - atomic producer generation plus all 12 authenticated provider acceptances;
 - full-byte integrity before every terminal ACK;
