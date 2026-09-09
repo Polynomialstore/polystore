@@ -20,20 +20,26 @@ import { useProofs } from '../hooks/useProofs'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
+import {
+  cachedDownloadAuthority,
+  preferVerifiedCache,
+  readVerifiedCachedDownload,
+  verifiedCachedDownloadAvailability,
+  type CachedDownloadAuthority,
+} from '../lib/cachedDownload'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import {
   parsePolyfsFilesFromMdu0,
   parsePolyfsRootTableFromMdu0
 } from '../lib/polyfsLocal'
-import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch'
+import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
   deleteDealDirectory,
-  hasCachedFile,
   readManifestRoot,
   readMdu,
   readSlabMetadata,
@@ -146,6 +152,7 @@ interface DealIndexRequirement {
 interface FileRowProps {
   file: PolyfsFileEntry
   deal: LcdDeal
+  cacheAuthority: CachedDownloadAuthority | null
   manifestRoot: string
   owner: string
   browserCached: boolean
@@ -154,6 +161,8 @@ interface FileRowProps {
   isBusy: boolean
   isAnyDownloading: boolean
   retrievalUnavailable: boolean
+  retrievalUnavailableReason?: string
+  viewerOwners: readonly string[]
   isOpen: boolean
   onToggleMenu: () => void
   onCloseMenu: () => void
@@ -191,6 +200,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 function FileRow({
   file,
   deal,
+  cacheAuthority,
   manifestRoot,
   owner,
   browserCached,
@@ -199,6 +209,8 @@ function FileRow({
   isBusy,
   isAnyDownloading,
   retrievalUnavailable,
+  retrievalUnavailableReason,
+  viewerOwners,
   isOpen,
   onToggleMenu,
   onCloseMenu,
@@ -262,16 +274,29 @@ function FileRow({
     }
   }, [isOpen])
 
-  const downloadVerified = async (preference?: RoutePreference) => {
+  const downloadVerified = async (preference?: RoutePreference, preferCache = false) => {
     setFileActionError(null); setBusyFilePath(file.path)
     const dealId = String(deal.id)
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
-      const result = await fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
-        rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth })
-      downloadBlobAsFile(result.blob, file.path)
-      markDownloadPath('Verified retrieval', result.route || 'network_fetch', 'verified_file', 'pinned_generation')
+      const outcome = await preferVerifiedCache(
+        async () => {
+          if (!preferCache || !cacheAuthority) return null
+          await ensureWasmReady()
+          return readVerifiedCachedDownload({ dealId, manifestRoot, owner: requestOwner, viewerOwners, file, authority: cacheAuthority, rangeStart: downloadRangeStart, rangeLen: downloadRangeLen })
+        },
+        preferCache ? retrievalUnavailableReason : undefined,
+        () => fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
+          rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth }),
+      )
+      if (outcome.source === 'cache') {
+        downloadBlobAsFile(new Blob([outcome.bytes as BlobPart]), file.path)
+        markDownloadPath('Browser cache', 'opfs_generation', 'verified_file', 'pinned_generation')
+      } else {
+        downloadBlobAsFile(outcome.result.blob, file.path)
+        markDownloadPath('Verified retrieval', outcome.result.route || 'network_fetch', 'verified_file', 'pinned_generation')
+      }
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'success' })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -279,7 +304,7 @@ function FileRow({
       if (manifestRoot) onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'failed', error: message })
     } finally { setBusyFilePath(null); onCloseMenu() }
   }
-  const handleAutoDownload = () => downloadVerified(transportPreference)
+  const handleAutoDownload = () => downloadVerified(transportPreference, true)
   const handleOnchainRetrieval = () => downloadVerified('prefer_direct_sp')
   const handleGatewayProviderRetrieval = () => downloadVerified('gateway_only')
 
@@ -321,7 +346,7 @@ function FileRow({
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoDownload}
-          disabled={retrievalUnavailable || isAnyDownloading || isBusy || !manifestRoot}
+          disabled={(retrievalUnavailable && !browserMduAvailable) || isAnyDownloading || isBusy || !manifestRoot}
           data-testid="deal-detail-download"
           data-file-path={file.path}
           className="bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary-foreground rounded-none shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] transition-colors hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
@@ -438,9 +463,14 @@ export function DealDetail({
   const fallbackOwner = dealOwner || String(polystoreAddress || '').trim()
   const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
   const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
+  const [authoritativeCacheDeal, setAuthoritativeCacheDeal] = useState<LcdDeal>(deal)
   const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
   const requestOwner = authoritativeOwner || fallbackOwner
   const committedManifestRoot = authoritativeManifestRoot || fallbackManifestRoot
+  const cacheAuthority = useMemo(
+    () => cachedDownloadAuthority({ ...authoritativeCacheDeal, cid: committedManifestRoot }),
+    [authoritativeCacheDeal, committedManifestRoot],
+  )
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(committedManifestRoot)
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
@@ -821,20 +851,23 @@ export function DealDetail({
       const owner = String(latest?.owner || '').trim() || fallback.owner
       setAuthoritativeManifestRoot(manifestRoot)
       setAuthoritativeOwner(owner)
+      setAuthoritativeCacheDeal(latest || deal)
       return { manifestRoot, owner }
     } catch {
       setAuthoritativeManifestRoot(fallback.manifestRoot)
       setAuthoritativeOwner(fallback.owner)
+      setAuthoritativeCacheDeal(deal)
       return fallback
     } finally {
       setAuthoritativeDealLoaded(true)
     }
-  }, [deal.id, fallbackManifestRoot, fallbackOwner])
+  }, [deal, fallbackManifestRoot, fallbackOwner])
 
   useEffect(() => {
     let cancelled = false
     setAuthoritativeManifestRoot(fallbackManifestRoot)
     setAuthoritativeOwner(fallbackOwner)
+    setAuthoritativeCacheDeal(deal)
     setAuthoritativeDealLoaded(false)
     void refreshAuthoritativeDealHead().then((head) => {
       if (cancelled) return
@@ -845,7 +878,7 @@ export function DealDetail({
     return () => {
       cancelled = true
     }
-  }, [fallbackManifestRoot, fallbackOwner, refreshAuthoritativeDealHead])
+  }, [deal, fallbackManifestRoot, fallbackOwner, refreshAuthoritativeDealHead])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -896,81 +929,24 @@ export function DealDetail({
         return
       }
       const dealId = String(deal.id)
-      const entries = await Promise.all(
-        files.map(async (f) => {
-          try {
-            return [f.path, await hasCachedFile(dealId, f.path)] as const
-          } catch {
-            return [f.path, false] as const
-          }
-        }),
-      )
-
-      const nextMduAvailable: Record<string, boolean> = {}
-      const chainManifestRoot = normalizeManifestRoot(committedManifestRoot)
-      if (chainManifestRoot) {
-        try {
-          const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
-          const localMeta = await readSlabMetadata(dealId).catch(() => null)
-          const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
-          const localManifestRoot = persistedManifestRoot || metadataManifestRoot
-          const freshness = evaluateCacheFreshness(localManifestRoot, chainManifestRoot)
-          if (freshness.status === 'fresh') {
-            const mdu0 = await readMdu(dealId, 0).catch(() => null)
-            if (mdu0 && mdu0.byteLength > 0) {
-              const { slabStartIdx, maxEnd } = await inferWitnessCountFromOpfs(dealId, files)
-              const mduPresence = new Map<number, boolean>()
-              const hasMdu = async (idx: number): Promise<boolean> => {
-                if (mduPresence.has(idx)) return mduPresence.get(idx) === true
-                const present = Boolean(await readMdu(dealId, idx).catch(() => null))
-                mduPresence.set(idx, present)
-                return present
-              }
-
-              for (const fileEntry of files) {
-                const start = Math.max(0, Number(fileEntry.start_offset) || 0)
-                const size = Math.max(0, Number(fileEntry.size_bytes) || 0)
-                if (size <= 0) {
-                  nextMduAvailable[fileEntry.path] = true
-                  continue
-                }
-
-                const endExclusive = start + size
-                if (endExclusive > maxEnd) {
-                  nextMduAvailable[fileEntry.path] = false
-                  continue
-                }
-
-                const firstUserMdu = Math.floor(start / RAW_MDU_CAPACITY)
-                const lastUserMdu = Math.floor((endExclusive - 1) / RAW_MDU_CAPACITY)
-                let available = true
-                for (let userMdu = firstUserMdu; userMdu <= lastUserMdu; userMdu += 1) {
-                  const slabMdu = slabStartIdx + userMdu
-                  if (!(await hasMdu(slabMdu))) {
-                    available = false
-                    break
-                  }
-                }
-                nextMduAvailable[fileEntry.path] = available
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to compute local MDU availability for cache status', { dealId, error })
-        }
-      }
+      const verified = await verifiedCachedDownloadAvailability(files.map((file) => ({
+        dealId,
+        manifestRoot: committedManifestRoot,
+        owner: requestOwner,
+        viewerOwners: [polystoreAddress, address || ''],
+        file,
+        authority: cacheAuthority,
+      })))
 
       if (canceled) return
-      const next: Record<string, boolean> = {}
-      for (const [path, ok] of entries) next[path] = ok
-      setBrowserCachedByPath(next)
-      setBrowserMduAvailableByPath(nextMduAvailable)
+      setBrowserCachedByPath({})
+      setBrowserMduAvailableByPath(verified)
     }
     void refreshBrowserCache()
     return () => {
       canceled = true
     }
-  }, [committedManifestRoot, deal.id, files])
+  }, [address, cacheAuthority, committedManifestRoot, deal.id, files, polystoreAddress, requestOwner])
 
   function triggerBrowserDownload(url: string, filePath: string) {
     const a = document.createElement('a')
@@ -1994,6 +1970,7 @@ export function DealDetail({
                               key={`${f.path}:${f.start_offset}`}
                               file={f}
                               deal={deal}
+                              cacheAuthority={cacheAuthority}
                               manifestRoot={committedManifestRoot}
                               owner={requestOwner}
                               browserCached={!!browserCachedByPath[f.path]}
@@ -2002,6 +1979,8 @@ export function DealDetail({
                               isBusy={busyFilePath === f.path}
                               isAnyDownloading={downloading}
                               retrievalUnavailable={Boolean(unavailableReason)}
+                              retrievalUnavailableReason={unavailableReason || undefined}
+                              viewerOwners={[polystoreAddress, address || '']}
                               isOpen={openMenuFilePath === f.path}
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
                               onCloseMenu={() => setOpenMenuFilePath(null)}

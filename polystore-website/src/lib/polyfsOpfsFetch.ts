@@ -130,7 +130,7 @@ function decodeRawSliceFromMdu(opts: {
     const payloadStart = scalarBase + (isPartialScalar ? (POLYFS_SCALAR_BYTES - lastPartialLen) : 1)
     const encStart = payloadStart + offsetInScalar
 
-    out.set(mdu.slice(encStart, encStart + take), outOffset)
+    out.set(mdu.subarray(encStart, encStart + take), outOffset)
     outOffset += take
     remaining -= take
     cursor += take
@@ -192,5 +192,55 @@ export async function readPolyfsFileFromOpfs(opts: {
     remaining -= take
   }
 
+  return out
+}
+
+export async function readPolyfsFileFromVerifiedLayout(opts: {
+  dealId: string
+  file: PolyfsFileEntry
+  allFiles: PolyfsFileEntry[]
+  witnessMdus: number
+  userMdus: number
+  totalMdus: number
+  rangeStart?: number
+  rangeLen?: number
+}, readLocalMdu: typeof readMdu = readMdu): Promise<Uint8Array> {
+  const { dealId, file, allFiles, witnessMdus, userMdus, totalMdus } = opts
+  if (
+    !Number.isSafeInteger(witnessMdus) || witnessMdus < 0 ||
+    !Number.isSafeInteger(userMdus) || userMdus < 0 ||
+    totalMdus !== 1 + witnessMdus + userMdus
+  ) throw new Error('invalid committed slab layout')
+
+  const maxEnd = inferMaxEnd(allFiles)
+  if (maxEnd > userMdus * RAW_MDU_CAPACITY) throw new Error('file table exceeds committed slab layout')
+  const rangeStart = Number(opts.rangeStart || 0)
+  const requestedLength = Number(opts.rangeLen || 0)
+  if (!Number.isSafeInteger(rangeStart) || rangeStart < 0 || rangeStart > file.size_bytes) throw new Error('invalid cached file range')
+  if (!Number.isSafeInteger(requestedLength) || requestedLength < 0) throw new Error('invalid cached file range')
+  const length = requestedLength > 0 ? requestedLength : file.size_bytes - rangeStart
+  if (rangeStart + length > file.size_bytes) throw new Error('cached file range exceeds EOF')
+
+  const slabStartIdx = 1 + witnessMdus
+  let remaining = length
+  let cursor = file.start_offset + rangeStart
+  let outOffset = 0
+  const out = new Uint8Array(length)
+  while (remaining > 0) {
+    const userMduIdx = Math.floor(cursor / RAW_MDU_CAPACITY)
+    if (userMduIdx >= userMdus) throw new Error('cached file exceeds committed user MDUs')
+    const offsetInMdu = cursor % RAW_MDU_CAPACITY
+    const mduBase = userMduIdx * RAW_MDU_CAPACITY
+    const rawValidLen = Math.max(0, Math.min(RAW_MDU_CAPACITY, maxEnd - mduBase))
+    const take = Math.min(remaining, rawValidLen - offsetInMdu)
+    if (take <= 0) throw new Error('cached file range is unavailable')
+
+    const mdu = await readLocalMdu(dealId, slabStartIdx + userMduIdx)
+    if (!mdu || mdu.byteLength !== MDU_SIZE_BYTES) throw new Error('cached user MDU is incomplete')
+    out.set(decodeRawSliceFromMdu({ mdu, rawStart: offsetInMdu, rawLen: take, rawValidLen }), outOffset)
+    cursor += take
+    outOffset += take
+    remaining -= take
+  }
   return out
 }
