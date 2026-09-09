@@ -263,6 +263,9 @@ check_cors_preflight() {
     fail "$name CORS preflight expected HTTP 200/204, got ${status:-000}"
   elif [[ "$allow_origin" != "*" && "$allow_origin" != "$browser_origin" ]]; then
     fail "$name CORS preflight missing matching Access-Control-Allow-Origin"
+  # Fetch's CORS-preflight algorithm allows safelisted methods without an
+  # Allow-Methods entry, even when custom headers trigger the preflight.
+  # https://fetch.spec.whatwg.org/#cors-preflight-fetch
   elif [[ "$request_method" != "GET" && "$request_method" != "HEAD" && "$request_method" != "POST" ]] &&
        ! header_list_contains "$allow_methods" "$request_method"; then
     fail "$name CORS preflight missing $request_method"
@@ -444,7 +447,9 @@ check_public_provider() {
   status_endpoint="$(json_field "$status" '.provider.public_base' || true)"
   if [[ "$status_address" != "$address" || "$persona" != "provider-daemon" || "$chain_id" != "$EXPECTED_COSMOS_CHAIN_ID" ]]; then
     fail "Provider $address public identity mismatch: address=${status_address:-missing} persona=${persona:-missing} chain_id=${chain_id:-missing}"
-  elif ! python3 - "$public_base" "$status_endpoint" <<'PY'
+  elif ! python3 - "$public_base" "$status_endpoint" "$endpoint" <<'PY'
+import ipaddress
+import re
 import sys
 import urllib.parse
 
@@ -453,10 +458,20 @@ def canonical(raw):
     port = p.port or (443 if p.scheme == "https" else 80)
     return (p.scheme.lower(), (p.hostname or "").lower(), port, p.path.rstrip("/"))
 
-raise SystemExit(0 if canonical(sys.argv[1]) == canonical(sys.argv[2]) else 1)
+# Require the explicit public HTTPS multiaddr profile; do not duplicate the
+# gateway's discovery/override policy in the healthcheck.
+match = re.fullmatch(r"/(dns|dns4|dns6|ip4|ip6)/([^/]+)/tcp/([0-9]+)/https", sys.argv[3])
+if not match:
+    raise SystemExit("expected endpoint must be a public HTTPS multiaddr")
+kind, host, port = match.groups()
+if kind in ("ip4", "ip6"):
+    if ipaddress.ip_address(host).version != int(kind[-1]):
+        raise SystemExit("endpoint IP version mismatch")
+expected = ("https", host.lower(), int(port), "")
+raise SystemExit(0 if canonical(sys.argv[1]) == canonical(sys.argv[2]) == expected else 1)
 PY
   then
-    fail "Provider $address public /status reports unexpected public_base: ${status_endpoint:-missing}"
+    fail "Provider $address public /status or configured endpoint differs from qualified public_base: $public_base"
   else
     ok "Provider $address public /status identity and endpoint"
   fi
@@ -471,10 +486,19 @@ PY
     fail "Provider identity mismatch: expected $address, got ${actual_address:-missing}"
   elif [[ "$provider_status" != "Active" || "$draining" != "false" ]]; then
     fail "Provider $address is not active and serving: status=${provider_status:-missing} draining=${draining:-missing}"
-  elif ! jq -e --arg endpoint "$endpoint" '.provider.endpoints | index($endpoint) != null' <<<"$body" >/dev/null 2>&1; then
-    fail "Provider $address missing expected on-chain endpoint $endpoint"
+  elif ! jq -e --arg endpoint "$endpoint" '.provider.endpoints[0] == $endpoint' <<<"$body" >/dev/null 2>&1; then
+    fail "Provider $address must advertise qualified endpoint first: $endpoint"
   else
     ok "Provider $address identity and on-chain endpoint"
+  fi
+  if ! body="$(http_get "$LCD/polystorechain/polystorechain/v1/providers/$address/collateral")"; then
+    fail "Provider $address placement eligibility unreachable"
+  elif ! jq -e --arg address "$address" '
+      .collateral.provider == $address and .collateral.eligible_for_new_assignment == true
+    ' <<<"$body" >/dev/null 2>&1; then
+    fail "Provider $address is not eligible for new assignments"
+  else
+    ok "Provider $address eligible for new assignments"
   fi
 }
 

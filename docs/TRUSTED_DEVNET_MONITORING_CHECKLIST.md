@@ -7,7 +7,8 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - Run the complete public gate from an external host. The checked-in profile
   pins the public chain IDs, retrieval-v2 activation, 64M/2MiB consensus
   limits, EVM precompile, denomination metadata, active provider identities,
-  endpoint routing, TLS lifetime, browser CORS, and advancing blocks:
+  placement eligibility, first-advertised public endpoint routing, TLS lifetime,
+  browser CORS, and advancing blocks:
   - `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
   - `.github/workflows/public-devnet-health.yml` runs the same read-only gate
     every 15 minutes and supports `workflow_dispatch`; failed runs are the

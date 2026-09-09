@@ -28,6 +28,11 @@ class Handler(BaseHTTPRequestHandler):
     evm_530 = False
     inactive_precompile = False
     inactive_provider = False
+    provider_eligible = True
+    collateral_provider = ADDRESS
+    stale_endpoint_first = False
+    wrong_endpoint_port = False
+    omit_safelisted_methods = False
     missing_lcd_expose = False
     missing_lcd_height = False
     mismatched_lcd_height = False
@@ -69,17 +74,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("access-control-allow-origin", "*")
+        method = self.headers.get("Access-Control-Request-Method")
+        # Keep EVM's older, stricter probe unchanged; vary the general probe.
+        omit_method = self.omit_safelisted_methods and self.path != "/"
+        self.send_header("access-control-allow-methods", "OPTIONS" if omit_method else f"{method}, OPTIONS")
         if self.path.startswith("/sp/retrieval/mdu/"):
-            self.send_header("access-control-allow-methods", "GET, OPTIONS")
             allowed = "x-polystore-session-id"
             if not self.missing_provider_headers:
                 allowed += ", x-polystore-start-blob-index, x-polystore-blob-count"
             self.send_header("access-control-allow-headers", allowed)
         elif self.path == "/polystorechain/polystorechain/v1/params":
-            self.send_header("access-control-allow-methods", "GET, OPTIONS")
             self.send_header("access-control-allow-headers", "x-cosmos-block-height")
         else:
-            self.send_header("access-control-allow-methods", "POST, OPTIONS")
             self.send_header("access-control-allow-headers", "content-type")
         self.end_headers()
 
@@ -122,9 +128,18 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/cosmos/bank/v1beta1/denoms_metadata/aatom":
             self.send_json({"metadata": {"base": "aatom"}})
         elif self.path == f"/polystorechain/polystorechain/v1/providers/{ADDRESS}":
+            port = 443 if self.wrong_endpoint_port else self.server.server_port
+            endpoints = [f"/dns4/localhost/tcp/{port}/https"]
+            if self.stale_endpoint_first:
+                endpoints.insert(0, "/ip4/127.0.0.1/tcp/8091/http")
             self.send_json({"provider": {
-                "address": ADDRESS, "endpoints": ["/dns4/localhost/tcp/443/https"],
+                "address": ADDRESS, "endpoints": endpoints,
                 "status": "Jailed" if self.inactive_provider else "Active", "draining": False,
+            }})
+        elif self.path == f"/polystorechain/polystorechain/v1/providers/{ADDRESS}/collateral":
+            self.send_json({"collateral": {
+                "provider": self.collateral_provider,
+                "eligible_for_new_assignment": self.provider_eligible,
             }})
         elif self.path == "/polystorechain/polystorechain/v1/providers":
             providers = [{"address": ADDRESS, "status": "Active", "draining": False}]
@@ -218,6 +233,11 @@ exit 1
         Handler.evm_530 = False
         Handler.inactive_precompile = False
         Handler.inactive_provider = False
+        Handler.provider_eligible = True
+        Handler.collateral_provider = ADDRESS
+        Handler.stale_endpoint_first = False
+        Handler.wrong_endpoint_port = False
+        Handler.omit_safelisted_methods = False
         Handler.missing_lcd_expose = False
         Handler.missing_lcd_height = False
         Handler.mismatched_lcd_height = False
@@ -247,7 +267,7 @@ exit 1
             "--expected-evm-denom", "aatom", "--expected-consensus-max-gas", "64000000",
             "--expected-consensus-max-bytes", "2097152",
             "--expected-min-provider-bond", "150stake",
-            "--expected-provider", f"{ADDRESS}|{base}|/dns4/localhost/tcp/443/https",
+            "--expected-provider", f"{ADDRESS}|{base}|/dns4/localhost/tcp/{443 if Handler.wrong_endpoint_port else self.server.server_port}/https",
             "--block-wait", "1", "--tls-min-valid-days", "0",
         ]
         if chain_cli:
@@ -292,6 +312,32 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not active and serving", result.stdout)
+
+    def test_public_check_requires_explicit_matching_placement_eligibility(self):
+        for eligible, address in ((False, ADDRESS), (None, ADDRESS), ("true", ADDRESS), (True, "nil1other")):
+            with self.subTest(eligible=eligible, address=address):
+                Handler.provider_eligible = eligible
+                Handler.collateral_provider = address
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("not eligible for new assignments", result.stdout)
+
+    def test_public_check_rejects_stale_endpoint_before_qualified_endpoint(self):
+        Handler.stale_endpoint_first = True
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must advertise qualified endpoint first", result.stdout)
+
+    def test_public_check_rejects_profile_endpoint_different_from_probed_url(self):
+        Handler.wrong_endpoint_port = True
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("configured endpoint differs from qualified public_base", result.stdout)
+
+    def test_public_check_accepts_safelisted_methods_without_allow_methods_entry(self):
+        Handler.omit_safelisted_methods = True
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_public_check_rejects_inactive_precompile(self):
         Handler.inactive_precompile = True
