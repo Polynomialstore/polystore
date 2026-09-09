@@ -109,6 +109,33 @@ Cloudflare Tunnel. `cloudflared-providers.service` may still exist as a fallback
 but future agents should not assume it carries live `sp1`/`sp2`/`sp3` traffic.
 See `docs/networking/DIRECT_SP_HTTPS_RUNBOOK.md`.
 
+## Public qualification and provider certificate renewal
+
+Install these as user units so the checks continue without root systemd access:
+
+```bash
+mkdir -p ~/.config/systemd/user ~/.config/polystore
+install -d /opt/polystore/scripts
+install -m 755 scripts/{devnet_healthcheck.sh,run_public_devnet_healthcheck.sh,renew_provider_certificates.sh,chain_cli_helpers.sh} /opt/polystore/scripts/
+cp ops/systemd/polystore-public-healthcheck.{service,timer} ~/.config/systemd/user/
+cp ops/systemd/polystore-provider-cert-renewal.{service,timer} ~/.config/systemd/user/
+cp ops/systemd/env/polystore-public-healthcheck.env ~/.config/polystore/
+cp ops/systemd/env/polystore-provider-cert-renewal.env ~/.config/polystore/
+chmod 600 ~/.config/polystore/polystore-provider-cert-renewal.env
+# Edit the private renewal env, including POLYSTORE_LEGO_EMAIL and token path.
+systemctl --user daemon-reload
+systemctl --user enable --now polystore-public-healthcheck.timer polystore-provider-cert-renewal.timer
+```
+
+The public gate is read-only and also runs from GitHub Actions as an independent
+observer. The renewal unit runs lego, restores the Caddy read ACL, and reloads
+Caddy; any failed step makes the unit fail and appear in the user journal.
+Before enabling renewal, install the pinned lego v4.35.2 binary, the OS `acl`
+package (`setfacl`), and Caddy with its local admin API enabled. Preserve the
+existing lego state directory, store the Cloudflare token file with mode 0600,
+and ensure the operator can traverse the lego parent directories. The unit
+grants only the Caddy user read access to the renewed certificate and key.
+
 ## Provider quick usage
 
 Providers can run `polystore_gateway` in **provider** mode as a long-running service too:

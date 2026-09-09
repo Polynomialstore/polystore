@@ -1,0 +1,10 @@
+[Unit]
+Description=PolyStore public deployment qualification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/polystore
+ExecStart=/opt/polystore/scripts/run_public_devnet_healthcheck.sh %h/.config/polystore/polystore-public-healthcheck.env
+TimeoutStartSec=90

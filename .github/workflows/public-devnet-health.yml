@@ -1,0 +1,23 @@
+name: Public Devnet Health
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-devnet-health
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: Public endpoints and chain identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Qualify public deployment
+        run: scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env
