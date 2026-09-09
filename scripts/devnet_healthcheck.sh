@@ -103,9 +103,9 @@ header_value() {
     index(tolower($0), tolower(name) ":") == 1 {
       sub(/^[^:]+:[[:space:]]*/, "", $0)
       sub(/\r$/, "", $0)
-      print
-      exit
+      value = value (count++ ? ", " : "") $0
     }
+    END { if (count) print value }
   ' "$file"
 }
 

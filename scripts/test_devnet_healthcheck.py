@@ -52,6 +52,12 @@ class Handler(BaseHTTPRequestHandler):
     extra_provider = False
     extra_draining_provider = False
     public_base = ""
+    duplicate_origin = False
+
+    def send_header(self, keyword, value):
+        super().send_header(keyword, value)
+        if self.duplicate_origin and keyword.lower() == 'access-control-allow-origin':
+            super().send_header(keyword, value)
 
     def log_message(self, _format, *_args):
         pass
@@ -284,6 +290,7 @@ exit 1
         Handler.faucet_auth_header = True
         Handler.extra_provider = False
         Handler.extra_draining_provider = False
+        Handler.duplicate_origin = False
 
     def run_check(self, chain_cli=False):
         base = Handler.public_base
@@ -323,6 +330,14 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("got 530", result.stdout)
+
+    def test_public_check_rejects_duplicate_cors_origins(self):
+        Handler.duplicate_origin = True
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Access-Control-Allow-Origin', result.stdout)
+        self.assertIn('Gateway upload POST missing matching Access-Control-Allow-Origin', result.stdout)
+        self.assertIn(f'Provider {ADDRESS} upload POST missing matching Access-Control-Allow-Origin', result.stdout)
 
     def test_public_check_rejects_wrong_chain_id(self):
         Handler.wrong_id = True
