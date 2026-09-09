@@ -14,20 +14,28 @@ permissionless randomness, exclusive custody or guaranteed fresh delivery.
 
 The retained local capacity measurement uses four validator processes on one
 Apple workstation, finite 64M gas / 2 MiB blocks and a prepared-proof workload.
-The highest stable tested offered rate is 2 sessions/s over one 180-second step;
-4/s saturates the queue. All audit epochs intersecting the 900-second stepped
+The highest stable tested offered rate is 2 prepared session transactions/s over one 180-second step,
+with 32 fresh openings per transaction; 1,071 transactions committed inside the
+full 900-second measurement window. The 4/s step saturated the
+queue. All audit epochs intersecting the 900-second stepped
 measurement finalized 96/96 samples before interruption, and fixed Commit/RSS
 budgets passed. A later disk-guard interruption and supplementary audit recovery
 remain separately recorded. This establishes neither four-host/WAN capacity nor
 a validator hardware minimum, and is not paid delivery throughput.
 
 Hosted 1 GiB byte delivery completed with the expected hash and 1,064 terminal
-sessions, but retrieval took 2h 37m 55s. The instrumented 15.5 MiB baseline
+serial paid sessions, but retrieval took 2h 37m 55s. The instrumented 15.5 MiB baseline
 passed in 143.875s and identifies browser verification as the largest measured
-phase. Performance correction and final report review remain pending. A complete 1 GiB hash check alone does not
-qualify download performance. #260 M2b requires a measured improvement and
-bounded intermediate scaling check before another large run; #254/#260 remain open until those gates
-complete.
+phase. A complete 1 GiB hash check alone does not qualify download performance.
+This serial-session workload was retired as the representative performance
+target; #254/#260 remain closed as historical work under the revised scope.
+[#290](https://github.com/Polynomialstore/polystore/issues/290)
+owns the next milestone: committed native K8 chain throughput with concurrent
+sessions/providers and normal audits. [#291](https://github.com/Polynomialstore/polystore/issues/291)
+owns the desired native large logical session with sampled KZG challenges and
+authenticated full-byte integrity; that path is not implemented or qualified.
+Set a download target only after measuring a realistic deployment. These
+successors do not block this historical evidence.
 
 ## One-command local testnet
 

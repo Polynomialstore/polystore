@@ -33,9 +33,9 @@ The provenance gives the source, chain/native hashes and reproduction command. O
 
 [Run 34281520872](https://github.com/Polynomialstore/polystore/actions/runs/34281520872), head `9c0110463dc92838a06b7acc88689d636b2efd11`, completed successfully. The [lossless summary](large-persistent-success.json.gz) records 1,073,741,824 bytes with SHA-256 `5806efdf1f91fa2b8ab62f7b5e16541c0f866227cfe977238bd2ec9789664d9e`, 1,064 distinct sessions, 8,457 blobs and 133 user MDUs through the user-gateway. The exact harness asserts canonical COMPLETED state and pinned root/deal for every session. Normal storage audits were enabled; the fresh persistent profile and full OPFS preflight ran before retrieval.
 
-Upload took 546,308 ms; retrieval through final downloaded-byte hash took 9,475,070 ms (2h 37m 55s), approximately 110.67 KiB/s over that interval. Terminal census follows that timer. This is large-file correctness evidence, and exceeds the new 30-minute retrieval execution guardrail by 5.26 times. It does not qualify acceptable delivery performance or the subsequent instrumentation. Earlier interrupted attempts remain separate diagnostics.
+Upload took 546,308 ms; retrieval through final downloaded-byte hash took 9,475,070 ms (2h 37m 55s), approximately 110.67 KiB/s over that interval. Terminal census follows that timer. This is large-file correctness evidence; it exceeded the then-used 30-minute collection guardrail by 5.26 times and does not qualify acceptable delivery performance. Earlier interrupted attempts remain separate diagnostics.
 
-[Run/source identity](large-persistent-success-run.json) records verified source/harness hashes, original-summary hash and the independently checked artifact archive digest. Runtime executable/native/WASM hashes were not recorded for this run. Phase measurements and the small-first performance gate remain pending in #260. The large artifact records terminal sessions, not independent per-session payout transfers; exact transfer evidence belongs to the small-route and settlement bundles. Provider logs include signer/capacity contention, so enabled audits are not a claim of zero audit failures.
+[Run/source identity](large-persistent-success-run.json) records verified source/harness hashes, original-summary hash and the independently checked artifact archive digest. Runtime executable/native/WASM hashes were not recorded for this run. The large artifact records terminal sessions, not independent per-session payout transfers; exact transfer evidence belongs to the small-route and settlement bundles. Provider logs include signer/capacity contention, so enabled audits are not a claim of zero audit failures. #254/#260 remain closed as historical work after this serial-session workload was retired as the representative performance target.
 
 ## Retained-file integrity
 
@@ -56,7 +56,7 @@ PY
 
 [Run34267852521](https://github.com/Polynomialstore/polystore/actions/runs/34267852521) failed with a Chromium no-space output write after 904 proof requests and 905 window requests. [Raw summary](large-incognito-failed.json.gz) preserves the original JSON losslessly; [run/source identity](large-incognito-failed-run.json) records its hash and artifact identity. There is no completed-file hash or terminal-session census, so these counts are not completed delivery.
 
-[PR #288](https://github.com/Polynomialstore/polystore/pull/288) shares the existing disk-backed browser setup with the streamed test and runs a complete 1 GiB OPFS write/flush/hash preflight before funding. The failed run used Playwright's default incognito context; archived evidence does not distinguish which browser storage limit was reached. The replacement run completed successfully as recorded above; its latency remains outside the new execution budget.
+[PR #288](https://github.com/Polynomialstore/polystore/pull/288) shares the existing disk-backed browser setup with the streamed test and runs a complete 1 GiB OPFS write/flush/hash preflight before funding. The failed run used Playwright's default incognito context; archived evidence does not distinguish which browser storage limit was reached. The replacement run completed successfully as recorded above; its latency is retained as an observation on the retired serial-session path.
 
 ## Instrumented 15.5 MiB baseline
 
@@ -66,7 +66,7 @@ Retrieval through final hash took 143,874.596 ms (110.32 KiB/s); upload took 14,
 
 [Phase analysis](small-instrumented-phases.json): browser verification 61,051.795 ms; window transport including provider response work 18,492.490 ms; challenge readiness 19,658.390 ms; open transaction 8,885.270 ms; ACK plus provider settlement 30,142.815 ms, including owner ACK 11,195.835 ms. Decode/write plus flush totaled 276.085 ms. Nested/overlapping durations must not be added. These are wall times, not CPU samples. Browser verification is the largest measured phase; output-copy optimization cannot materially improve this baseline.
 
-At the observed aggregate rate, 1 GiB projects to about 158.4 minutes, consistent with the earlier 157.9-minute actual run. This projection is not new large-file evidence. Intermediate and large reruns remain blocked while the measured bottleneck is profiled and corrected; the 30-minute guardrail is not waived.
+At the observed aggregate rate, 1 GiB projects to about 158.4 minutes, consistent with the earlier 157.9-minute actual run. This projection is not new large-file evidence. It supported stopping further collection before the serial-session workload was retired as the representative performance target.
 
 ### Local verification component profile
 
@@ -78,6 +78,6 @@ From the repository root, after installing website dependencies:
 polystore-website/node_modules/.bin/tsx bench/retrieval_session_capacity/delivery-final-260/verification-components.mts .
 ```
 
-The next bounded experiment is existing blst fixed-base precomputation, preserving exact individual commitments and canonical-input checks. Its speedup and initialization/memory tradeoff are unproven; no production switch or larger run follows merely from this proposal.
-
 The [bounded fixed-base experiment](rejected-fixed-base/README.md) was rejected: smaller tables regressed and the 12 MiB table gave inconsistent gains too small to justify its memory and startup cost. Experimental production edits were removed.
+
+Draft PR #289's bounded two-window overlap was closed without merge because it optimized the retired serial-session workload. No further run of that workload is planned. [#290](https://github.com/Polynomialstore/polystore/issues/290) owns concurrent native K8 chain throughput with normal audits; [#291](https://github.com/Polynomialstore/polystore/issues/291) owns the desired, not-yet-implemented sampled large-session path.
