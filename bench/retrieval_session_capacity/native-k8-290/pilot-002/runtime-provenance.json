@@ -1,0 +1,120 @@
+{
+  "created_utc": "2026-09-09T02:54:15Z",
+  "status": "build complete; no workload launched",
+  "source": {
+    "worktree": "$SOURCE_CHECKOUT",
+    "branch": "e2e/retrieval-k8-capacity-290",
+    "commit": "f0f8fab53178cb37a34d21e35200ec1d6ec0fa89",
+    "commit_date": "2026-09-08T16:45:06-10:00",
+    "commit_subject": "docs: require heartbeat before sustained collection",
+    "status_porcelain": "",
+    "tree_ids": {
+      "polystore_gateway": "6d0c3bfc9147565180931347ef979113d5983b8a",
+      "polystorechain": "d002c6f58a35d9cfa80f104b413ef5a7b478c764",
+      "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c"
+    },
+    "source_sha256": {
+      "polystore_gateway/retrieval_inventory_export_test.go": "6011daa40fb3f50ed9711e1e8e52ebaa407a918e2903c765596991746cec11f2",
+      "scripts/retrieval_four_validator_workload.py": "f609f8e678b433dc8994c325d80dabc9a00e82153cde396e14e74cc10c6b01b7",
+      "scripts/retrieval_bench_artifact.py": "66e3da7fd6024874fc2650355ec429af1285c3ceba1ca07d9e73785ae67e1b6e",
+      "polystore_gateway/go.mod": "8f0b81dfc08d3fdd9ee5c4f57e85cb58aa552e38049de5f5b66339020b73700b",
+      "polystore_gateway/go.sum": "2cd0063522925eab5306c7909d5f7ef112b6245e046f1ff52d9f31e42c02035f"
+    },
+    "export_test": {
+      "package": "./polystore_gateway",
+      "name": "TestExportFrozenRetrievalInventory",
+      "git_blob": "196f391d03a1ea17e106e9adfdbfbebe54ad30b6"
+    }
+  },
+  "disk_preflight": {
+    "filesystem": "/System/Volumes/Data",
+    "available_bytes_before": 2172764160,
+    "available_bytes_after": 1959796736,
+    "decision": "sufficient for two warm-cache Go outputs of approximately 80 MB each; no Rust build or workload"
+  },
+  "host": {
+    "uname": "Darwin <redacted-host> 25.2.0 Darwin Kernel Version 25.2.0: Tue Nov 18 21:03:25 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T8122 arm64",
+    "go_version": "go version go1.25.5 darwin/arm64",
+    "rustc_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "python_version": "Python 3.9.6"
+  },
+  "builds": [
+    {
+      "artifact": "gateway",
+      "working_directory": "$SOURCE_CHECKOUT/polystore_gateway",
+      "command": "env GOMAXPROCS=2 CGO_LDFLAGS=-L$REUSED_CORE_RELEASE go build -p 2 -o $ARTIFACT_ROOT/290-polystore-gateway .",
+      "path": "$ARTIFACT_ROOT/290-polystore-gateway",
+      "sha256": "3d9578613b3fea2810c19a7019ec7d676c918cfcd83fd42fe8f159ba1bf31a6e",
+      "bytes": 79738802,
+      "file": "Mach-O 64-bit executable arm64",
+      "exit_code": 0
+    },
+    {
+      "artifact": "retrieval inventory exporter test",
+      "working_directory": "$SOURCE_CHECKOUT/polystore_gateway",
+      "command": "env GOMAXPROCS=2 CGO_LDFLAGS=-L$REUSED_CORE_RELEASE go test -c -p 2 -o $ARTIFACT_ROOT/290-retrieval-exporter.test .",
+      "path": "$ARTIFACT_ROOT/290-retrieval-exporter.test",
+      "sha256": "8f7dbb5f20b2adca24492d51c8bacb0d1786a62da2e9e1ae3a3c369f392885fc",
+      "bytes": 82303442,
+      "file": "Mach-O 64-bit executable arm64",
+      "exit_code": 0
+    }
+  ],
+  "linkage": {
+    "build_warning": "The checkout-local polystore_core target/release directory is absent; CGO_LDFLAGS supplied the retained exact library directory.",
+    "dylib_path": "$REUSED_CORE_RELEASE/libpolystore_core.dylib",
+    "loaded_install_name": "$REUSED_CORE_RELEASE/deps/libpolystore_core.dylib",
+    "sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+    "bytes": 1210128,
+    "source_tree": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "otool_checked_for": [
+      "$ARTIFACT_ROOT/290-polystore-gateway",
+      "$ARTIFACT_ROOT/290-retrieval-exporter.test"
+    ]
+  },
+  "smoke_checks": [
+    {
+      "command": "env DYLD_LIBRARY_PATH=$REUSED_CORE_RELEASE $ARTIFACT_ROOT/290-retrieval-exporter.test -test.list '^TestExportFrozenRetrievalInventory$'",
+      "result": "exit 0; listed TestExportFrozenRetrievalInventory"
+    },
+    {
+      "command": "env DYLD_LIBRARY_PATH=$REUSED_CORE_RELEASE $ARTIFACT_ROOT/290-retrieval-exporter.test -test.run '^TestExportFrozenRetrievalInventory$' -test.v",
+      "result": "exit 0; expected SKIP because POLYSTORE_RETRIEVAL_EXPORT_MANIFEST was not supplied"
+    },
+    {
+      "command": "env DYLD_LIBRARY_PATH=$REUSED_CORE_RELEASE $ARTIFACT_ROOT/290-polystore-gateway --help",
+      "result": "this is a startup smoke, not a help pass: it initialized KZG from the current checkout trusted setup and reached the LibP2P listen state; the bounded command invocation ended after startup output, and no gateway process remained",
+      "side_effect": "created ignored runtime database $SOURCE_CHECKOUT/uploads/sp-8080/sessions.db (131072 bytes); retained because cleanup was outside this task"
+    }
+  ],
+  "reused_artifacts": {
+    "provenance": "$ARTIFACT_ROOT/260-saturation-final-c6-retry1-build-provenance.json",
+    "build_source_commit": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "build_source_commit_date": "2026-09-08T06:37:11-10:00",
+    "chain": {
+      "path": "$ARTIFACT_ROOT/260-saturation-polystorechaind",
+      "sha256": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba",
+      "bytes": 179688642,
+      "build_source_tree": "0253e79d531087c16b1b879ec5960cd7ba3ec6de"
+    },
+    "cli": {
+      "path": "$ARTIFACT_ROOT/260-final-polystore_cli",
+      "sha256": "78f520b01226feef0788a3ad84aa1ba830bf9fd2031956d22dc7649e4c80b370",
+      "bytes": 5001552,
+      "build_source_tree": "4303dc86c58cbbb7f1076f1916f1de691bf7694c"
+    },
+    "library": {
+      "path": "$REUSED_CORE_RELEASE/libpolystore_core.dylib",
+      "sha256": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+      "bytes": 1210128,
+      "build_source_tree": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653"
+    },
+    "identity_note": "Chain and CLI retain their actual earlier build identity. Core and CLI source trees are unchanged at the current source; current chain changes from the build source are test-only. Gateway and exporter were rebuilt from the current source above."
+  },
+  "trusted_setup": {
+    "path": "$SOURCE_CHECKOUT/polystorechain/trusted_setup.txt",
+    "sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "scope": "Build and provenance only. No workload, secrets, or runtime logs were published. No tracked writer-worktree file was edited by this build task; the gateway startup smoke created the ignored runtime database recorded above."
+}

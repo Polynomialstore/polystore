@@ -1,0 +1,137 @@
+{
+  "schema": "polystore.issue290.k8-pilot-plan.v1",
+  "prepared_at_utc": "2026-09-09T04:26:31Z",
+  "status": "executed_once_completed_diagnostic_only",
+  "purpose": "One bounded K8 full-row proof-submission path and gas diagnostic across all assignments under normal audits; not a capacity qualification.",
+  "source": {
+    "checkout": "$SOURCE_CHECKOUT",
+    "merged_harness_source": "81ed30f6173416c3d9c001f7c22b96874ab3ea99",
+    "reviewed_head": "48889159cbf7d271dec12d9ee1dd04e6efa5985f",
+    "merged_vs_reviewed_relevant_paths": "identical",
+    "inspected_files": {
+      "scripts/retrieval_four_validator_workload.py": {
+        "git_object": "8129bc5cc3a5f0ec17aba5ec7c7c56e05efaab65",
+        "sha256": "80dd29217c5e131760995ca0ae2f9fe376bdf792d1ceab1ed1efff464ba9e48f"
+      },
+      "scripts/retrieval_bench_artifact.py": {
+        "git_object": "9d9d40a8a5e553ee0abd3340985415abe91e72be",
+        "sha256": "c1254269dd05e4cfb1256ae6cd72c07f763bbbd5f865a9dc0e9a6e98d75b4ef2"
+      },
+      "scripts/retrieval_fresh_proof.py": {
+        "git_object": "502c1d56af256203ad73f0d7c70293a9342fd3c6",
+        "sha256": "74ced497d80442a7d463872623879737b7775ad2a49ec4c5a53ced8a8650e67b"
+      }
+    }
+  },
+  "runtime_provenance": {
+    "verified_manifest": "runtime-provenance.json",
+    "gateway_and_exporter_build_source": "f0f8fab53178cb37a34d21e35200ec1d6ec0fa89",
+    "reused_chain_cli_core_build_source": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "merged_source_tree_comparison": {
+      "polystore_gateway": {
+        "merged": "6d0c3bfc9147565180931347ef979113d5983b8a",
+        "built": "6d0c3bfc9147565180931347ef979113d5983b8a",
+        "status": "exact"
+      },
+      "polystorechain": {
+        "merged": "d002c6f58a35d9cfa80f104b413ef5a7b478c764",
+        "built": "0253e79d531087c16b1b879ec5960cd7ba3ec6de",
+        "status": "runtime source unchanged; merged delta contains tests only"
+      },
+      "polystore_cli": {
+        "merged": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+        "built": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+        "status": "exact"
+      },
+      "polystore_core": {
+        "merged": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+        "built": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+        "status": "exact"
+      }
+    }
+  },
+  "invocation": {
+    "cwd": "$SOURCE_CHECKOUT",
+    "environment": {
+      "GOMAXPROCS": "2",
+      "POLYSTORE_TRUSTED_SETUP": "$SOURCE_CHECKOUT/polystorechain/trusted_setup.txt",
+      "DYLD_LIBRARY_PATH_prepend": "$REUSED_CORE_RELEASE",
+      "LD_LIBRARY_PATH_prepend": "$REUSED_CORE_RELEASE"
+    },
+    "argv": [
+      "/usr/bin/python3",
+      "$SOURCE_CHECKOUT/scripts/retrieval_four_validator_workload.py",
+      "--mode",
+      "sustained-providers",
+      "--audit-profile",
+      "normal",
+      "--sustained-k",
+      "8",
+      "--binary",
+      "$ARTIFACT_ROOT/260-saturation-polystorechaind",
+      "--library",
+      "$REUSED_CORE_RELEASE/libpolystore_core.dylib",
+      "--gateway-binary",
+      "$ARTIFACT_ROOT/290-polystore-gateway",
+      "--cli-binary",
+      "$ARTIFACT_ROOT/260-final-polystore_cli",
+      "--product-source",
+      "$SOURCE_CHECKOUT",
+      "--proof-exporter",
+      "$ARTIFACT_ROOT/290-retrieval-exporter.test",
+      "--proof-gas",
+      "20000000",
+      "--step-seconds",
+      "4",
+      "--timeout",
+      "600",
+      "--home",
+      "$ARTIFACT_ROOT/290-k8-all-assignment-4s-pilot-002"
+    ],
+    "absolute_timeout_seconds": 600,
+    "attempt_limit": 1
+  },
+  "expected_workload": {
+    "k": 8,
+    "m": 4,
+    "assignments_and_provider_daemons": 12,
+    "deputy_signers": 8,
+    "openings_per_submission_bundle": 8,
+    "warmup_bundles": 8,
+    "measured_bundles": 31,
+    "total_bundles": 39,
+    "warmup_openings": 64,
+    "measured_openings": 248,
+    "total_openings": 312,
+    "offered_bundle_rates_per_second": [
+      0.25,
+      0.5,
+      1,
+      2,
+      4
+    ],
+    "seconds_per_rate_step": 4,
+    "offered_measurement_window_seconds": 20,
+    "audit_profile": "normal",
+    "normal_audit_samples_per_epoch": 12,
+    "open_session_gas_limit_per_message": 400000,
+    "proof_submission_gas_ceiling": 20000000
+  },
+  "preflight_observation": {
+    "fresh_home": true,
+    "free_bytes": 4204896256,
+    "required_ports_bindable": "32 of 32",
+    "benchmark_or_polystore_service_load": "none observed",
+    "host_load_average": [
+      3.1,
+      3.67,
+      3.47
+    ],
+    "reproducibility_status": "unqualified_path_gas_diagnostic_only"
+  },
+  "interpretation_limits": [
+    "Four validator processes and twelve provider daemons on one local Apple workstation do not represent a realistic deployment.",
+    "The 20000000 proof gas setting and 400000 preparation gas per opening are conservative pilot ceilings, not measured requirements or capacity denominators.",
+    "This pilot cannot qualify production capacity, download targets, hardware minimums, WAN behavior, or client delivery and acknowledgement."
+  ]
+}
