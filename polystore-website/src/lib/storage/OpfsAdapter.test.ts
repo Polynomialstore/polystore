@@ -493,6 +493,12 @@ test('OpfsAdapter: verified generation metadata rejects fractional layout counts
     const opened = await OpfsAdapter.openCompleteSlabGeneration(dealId)
     assert.ok(opened)
     assert.strictEqual(await opened?.readMetadata(), null)
+    for (const invalid of [null, false, '', [], 0.5]) {
+        const bad = { ...makeMetadata({ dealId, manifestRoot: root, generationId: root.slice(2) }),
+            file_records: [{ path: 'a', start_offset: 0, size_bytes: 1, flags: invalid }] }
+        await writeMockFile(generationDir, 'slab_meta.json', JSON.stringify(bad))
+        assert.strictEqual(await opened?.readMetadata(), null, `invalid flags: ${JSON.stringify(invalid)}`)
+    }
 })
 
 test('OpfsAdapter: atomic slab generation swap survives stale cleanup failure after activation', async () => {

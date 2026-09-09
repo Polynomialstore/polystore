@@ -1598,8 +1598,8 @@ export function Dashboard() {
               </div>
             </div>
           ) : !hasFunds ? (
-            <InlineNotice tone="info" title="Uploads paused while balance is unavailable" testId="upload-balance-unavailable">
-              Existing deal files remain available. Upload controls will resume after the network confirms your wallet balance.
+            <InlineNotice tone="info" title={fundingStatus === 'unfunded' ? 'Fund your wallet to upload' : 'Checking wallet balance before uploads'} testId="upload-balance-unavailable">
+              Existing deal files remain available. Uploads require a confirmed funded balance.
             </InlineNotice>
           ) : (
             <FileSharder

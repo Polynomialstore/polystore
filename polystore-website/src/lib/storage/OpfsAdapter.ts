@@ -533,6 +533,7 @@ async function readManifestRootFromDirectory(dir: FileSystemDirectoryHandle): Pr
 }
 
 function coerceNumber(value: unknown): number | null {
+    if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value))) return null
     const n = typeof value === 'number' ? value : Number(value)
     if (!Number.isSafeInteger(n) || n < 0) return null
     return n
