@@ -1,0 +1,48 @@
+provider1.log 2026/09/09 00:56:58 provider-daemon retrieval timing session=bc421e305f6d102ac6d46c1a15b2241cadebc2a4cb7fa218dd6b8d3f1386c197 admission_ms=137.264 generation_ms=963.177 persist_ms=1.125 write_ms=0.353 total_ms=1101.921 stage=complete success=true
+provider1.log 2026/09/09 00:57:34 transaction timing tx=AA30DFEADE7914EDB68A5CE53DCCF3C522D585D366ACB634796D474C5AA02C5C cli_submission_ms=915.646 cli_success=true
+provider1.log 2026/09/09 00:57:37 transaction timing tx=AA30DFEADE7914EDB68A5CE53DCCF3C522D585D366ACB634796D474C5AA02C5C inclusion_observation_ms=3012.786 success=true
+provider1.log 2026/09/09 00:58:08 provider-daemon retrieval timing session=2a9412079ca13be267b8cba4e98d46403d696b969d77ee016bb0fa627f132b0a admission_ms=140.615 generation_ms=953.279 persist_ms=0.458 write_ms=0.363 total_ms=1094.717 stage=complete success=true
+provider1.log 2026/09/09 00:58:43 transaction timing tx=6E918D39801A04EC5EAB333B5F60FF7D0175A30C11D8200354F257947D70FA0C cli_submission_ms=428.597 cli_success=true
+provider1.log 2026/09/09 00:58:47 transaction timing tx=6E918D39801A04EC5EAB333B5F60FF7D0175A30C11D8200354F257947D70FA0C inclusion_observation_ms=4017.103 success=true
+provider11.log 2026/09/09 00:57:08 provider-daemon retrieval timing session=ce1fb74dc568875e6d6744e30fa9c3daa28da54750818d0b267394d5763517ca admission_ms=138.767 generation_ms=978.837 persist_ms=2.084 write_ms=0.367 total_ms=1120.056 stage=complete success=true
+provider11.log 2026/09/09 00:57:38 transaction timing tx=29C859B332ADD5AB06A03AE8EFBAC7698CDA76567D1F316F78AE61862F86C4FE cli_submission_ms=995.990 cli_success=true
+provider11.log 2026/09/09 00:57:42 transaction timing tx=29C859B332ADD5AB06A03AE8EFBAC7698CDA76567D1F316F78AE61862F86C4FE inclusion_observation_ms=4016.064 success=true
+provider11.log 2026/09/09 00:58:18 provider-daemon retrieval timing session=fcdbc9a575bd530de0ff96b865a8461d1a43b7cad003196928fa09cb4b11af0a admission_ms=172.709 generation_ms=916.784 persist_ms=0.552 write_ms=0.452 total_ms=1090.497 stage=complete success=true
+provider11.log 2026/09/09 00:58:47 transaction timing tx=ABFB0521F4E946F000CDF4AF875301C40BFD577CE0B916A1B8CCC3BDE0DCFAF0 cli_submission_ms=446.875 cli_success=true
+provider11.log 2026/09/09 00:58:52 transaction timing tx=ABFB0521F4E946F000CDF4AF875301C40BFD577CE0B916A1B8CCC3BDE0DCFAF0 inclusion_observation_ms=4013.137 success=true
+provider3.log 2026/09/09 00:57:03 provider-daemon retrieval timing session=aa1b3b61ff21ff75103756024b60606ef53c376b9b5483b8cf96449ddb39a701 admission_ms=139.081 generation_ms=989.565 persist_ms=1.679 write_ms=0.759 total_ms=1131.086 stage=complete success=true
+provider3.log 2026/09/09 00:57:34 transaction timing tx=9A3FE18D5CFB45F19869543DE58FCE81CFD78C114A5C8254F083E90D5F15C778 cli_submission_ms=996.688 cli_success=true
+provider3.log 2026/09/09 00:57:36 transaction timing tx=9A3FE18D5CFB45F19869543DE58FCE81CFD78C114A5C8254F083E90D5F15C778 inclusion_observation_ms=2514.248 success=true
+provider3.log 2026/09/09 00:58:12 provider-daemon retrieval timing session=06d2d0db26a8fb02793e185972d4d5aebe974c41562bd3334150eec0a17f261c admission_ms=167.405 generation_ms=953.849 persist_ms=0.472 write_ms=0.315 total_ms=1122.041 stage=complete success=true
+provider3.log 2026/09/09 00:58:43 transaction timing tx=3A3D6F5E942CDA438F121CBF63FCFDC32D9FF9C9EA98CA405286BC38BDCF2E44 cli_submission_ms=409.411 cli_success=true
+provider3.log 2026/09/09 00:58:47 transaction timing tx=3A3D6F5E942CDA438F121CBF63FCFDC32D9FF9C9EA98CA405286BC38BDCF2E44 inclusion_observation_ms=4035.448 success=true
+provider4.log 2026/09/09 00:56:48 provider-daemon retrieval timing session=51d2f665974b1a1f5f1183bfa9c643d8b3fb42c7d02c65c70419edb01f872623 admission_ms=161.724 generation_ms=976.245 persist_ms=1.457 write_ms=0.363 total_ms=1139.790 stage=complete success=true
+provider4.log 2026/09/09 00:57:34 transaction timing tx=D28BAD846D67AF0935775697A4D432A4B03CB92F0F64C444E6369578E800FC71 cli_submission_ms=1037.798 cli_success=true
+provider4.log 2026/09/09 00:57:36 transaction timing tx=D28BAD846D67AF0935775697A4D432A4B03CB92F0F64C444E6369578E800FC71 inclusion_observation_ms=2512.416 success=true
+provider4.log 2026/09/09 00:57:58 provider-daemon retrieval timing session=6ce467a0ce8b5d5ed22ffe99ec8c2e18c17b84d1e87a1b272ba221e884fd48e5 admission_ms=156.585 generation_ms=937.588 persist_ms=0.534 write_ms=0.337 total_ms=1095.044 stage=complete success=true
+provider4.log 2026/09/09 00:58:43 transaction timing tx=DFBA4E55359B2A283B3BAB2003CE0ED38DD3D10171B44A4985ED476FE2992E84 cli_submission_ms=434.258 cli_success=true
+provider4.log 2026/09/09 00:58:47 transaction timing tx=DFBA4E55359B2A283B3BAB2003CE0ED38DD3D10171B44A4985ED476FE2992E84 inclusion_observation_ms=4015.161 success=true
+provider5.log 2026/09/09 00:57:18 provider-daemon retrieval timing session=10b76ed1db27c16f40fb136b54d5a9c58500ecf5d6b85f46ce2f9aa841b761ec admission_ms=126.049 generation_ms=963.344 persist_ms=1.171 write_ms=0.390 total_ms=1090.955 stage=complete success=true
+provider5.log 2026/09/09 00:57:38 transaction timing tx=75FABA131D198B4DBF6FB6744CCE5C64AF9C1560188A3A3A6C6478BF47B6FB27 cli_submission_ms=1042.393 cli_success=true
+provider5.log 2026/09/09 00:57:41 transaction timing tx=75FABA131D198B4DBF6FB6744CCE5C64AF9C1560188A3A3A6C6478BF47B6FB27 inclusion_observation_ms=3514.209 success=true
+provider5.log 2026/09/09 00:58:27 provider-daemon retrieval timing session=a38b23071cec75671382754f93b78ae5a36a44b28fed6bcab07b27c8f38c72cc admission_ms=152.666 generation_ms=928.640 persist_ms=0.491 write_ms=0.320 total_ms=1082.118 stage=complete success=true
+provider5.log 2026/09/09 00:58:47 transaction timing tx=DFB3443382A8011C886FB3B4D63F2CD68917FB66D8BE62C9CED00BF0130813BD cli_submission_ms=476.187 cli_success=true
+provider5.log 2026/09/09 00:58:51 transaction timing tx=DFB3443382A8011C886FB3B4D63F2CD68917FB66D8BE62C9CED00BF0130813BD inclusion_observation_ms=4028.313 success=true
+provider6.log 2026/09/09 00:56:53 provider-daemon retrieval timing session=b730ccc3d8d37c4628e417383037e2ce1c3aa0c9409354360b6fb8a50b55f8da admission_ms=139.764 generation_ms=1010.178 persist_ms=1.330 write_ms=0.356 total_ms=1151.630 stage=complete success=true
+provider6.log 2026/09/09 00:57:34 transaction timing tx=200B0BD826B57E6E2714ECB3AB5AD2F85584A91A379896583EAF5A9F7D8197A7 cli_submission_ms=1051.335 cli_success=true
+provider6.log 2026/09/09 00:57:36 transaction timing tx=200B0BD826B57E6E2714ECB3AB5AD2F85584A91A379896583EAF5A9F7D8197A7 inclusion_observation_ms=2515.117 success=true
+provider6.log 2026/09/09 00:58:02 provider-daemon retrieval timing session=5f8797ca01eaea449cabfdb4c96ac22f890ebeaaf3160a4def30c1f41cf8833a admission_ms=136.294 generation_ms=938.191 persist_ms=1.250 write_ms=0.358 total_ms=1076.093 stage=complete success=true
+provider6.log 2026/09/09 00:58:43 transaction timing tx=D7F88947D050FA39BD82C065A827E94638C17F9D273201C9CF12C04271192693 cli_submission_ms=452.669 cli_success=true
+provider6.log 2026/09/09 00:58:47 transaction timing tx=D7F88947D050FA39BD82C065A827E94638C17F9D273201C9CF12C04271192693 inclusion_observation_ms=4016.200 success=true
+provider8.log 2026/09/09 00:57:23 provider-daemon retrieval timing session=92a6dffde7cea84c70692b9b4d6d4c4e4f30bcab5d696755d09f8857e273f671 admission_ms=147.378 generation_ms=968.957 persist_ms=1.213 write_ms=0.353 total_ms=1117.902 stage=complete success=true
+provider8.log 2026/09/09 00:57:38 transaction timing tx=8352AA0E7330AE1000F268EE2F71852E82C828F79A23BCED51488A761269D180 cli_submission_ms=879.224 cli_success=true
+provider8.log 2026/09/09 00:57:41 transaction timing tx=8352AA0E7330AE1000F268EE2F71852E82C828F79A23BCED51488A761269D180 inclusion_observation_ms=3513.960 success=true
+provider8.log 2026/09/09 00:58:32 provider-daemon retrieval timing session=1843d84a1fe7a8c0f81ff037cb7e7dc4ccc114a51496cfbb4c577ebf96842ac4 admission_ms=136.792 generation_ms=955.864 persist_ms=0.565 write_ms=0.386 total_ms=1093.608 stage=complete success=true
+provider8.log 2026/09/09 00:58:47 transaction timing tx=77DA23271A53987EB9C83BCC374FC899FCAAFAE8F29DC72DB3C088E6351964B7 cli_submission_ms=450.500 cli_success=true
+provider8.log 2026/09/09 00:58:51 transaction timing tx=77DA23271A53987EB9C83BCC374FC899FCAAFAE8F29DC72DB3C088E6351964B7 inclusion_observation_ms=4012.651 success=true
+provider9.log 2026/09/09 00:57:13 provider-daemon retrieval timing session=132373a31fda25ca20c6e4d869427643d332511cbe19326cdf85690feff92ade admission_ms=142.640 generation_ms=962.903 persist_ms=1.177 write_ms=0.351 total_ms=1107.072 stage=complete success=true
+provider9.log 2026/09/09 00:57:38 transaction timing tx=DEBF5B3E5D984074FA0C6490943FD35A75A2FC27309E0FCB04EE1BA4BF5D0B5D cli_submission_ms=1040.959 cli_success=true
+provider9.log 2026/09/09 00:57:42 transaction timing tx=DEBF5B3E5D984074FA0C6490943FD35A75A2FC27309E0FCB04EE1BA4BF5D0B5D inclusion_observation_ms=4016.773 success=true
+provider9.log 2026/09/09 00:58:22 provider-daemon retrieval timing session=2896fd173efaede49d8506811d2ebf3f9240963b7beb0fb87154cbf9afbd079b admission_ms=154.166 generation_ms=946.833 persist_ms=0.498 write_ms=0.497 total_ms=1101.995 stage=complete success=true
+provider9.log 2026/09/09 00:58:47 transaction timing tx=78A356870AD5F5FD0E3F7F4B5C2587AB04C8B9F7235FC095E5D94D92F677FFBF cli_submission_ms=412.249 cli_success=true
+provider9.log 2026/09/09 00:58:51 transaction timing tx=78A356870AD5F5FD0E3F7F4B5C2587AB04C8B9F7235FC095E5D94D92F677FFBF inclusion_observation_ms=4015.841 success=true
