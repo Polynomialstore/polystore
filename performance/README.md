@@ -171,10 +171,12 @@ The final evidence and its revised disposition are summarized below and in the
 [qualification report](retrieval-v2-qualification.md).
 
 For the #290 native K8 pilot, inventory preparation uses a conservative 400,000
-gas allowance per session-open message: 15.6M for 39 sessions and at most 25.6M
-for a 64-message atomic batch. Before broadcast the harness verifies that the
-SDK appended the generated gas sum. This is a pilot ceiling, not measured full
-execution cost, and does not change proof, audit or block gas limits.
+gas allowance per session-open message plus 100,000 once per transaction: 15.7M
+for 39 sessions and at most 25.7M for a 64-message atomic batch. The transaction
+allowance covers fixed transaction work that a two-message tail batch exhausted
+when only the per-message sum was declared. Before broadcast the harness verifies
+the exact generated and signed batch limit. These are conservative ceilings, not
+measured full execution costs, and do not change proof, audit or block gas limits.
 
 One [retained K8 pilot](../bench/retrieval_session_capacity/native-k8-290/pilot-002/README.md)
 completed the all-assignment path and measured proof gas. Its four-second steps

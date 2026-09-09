@@ -86,7 +86,8 @@ class SustainedTest(unittest.TestCase):
                 self.assertEqual(profile["native_message_batching"]["proof_sessions_per_submission_transaction"], 1)
                 self.assertFalse(profile["native_message_batching"]["cross_provider_crypto_aggregation"])
                 self.assertEqual(profile["native_message_batching"]["open_session_gas_limit_per_message"], 400_000)
-                self.assertEqual(profile["native_message_batching"]["open_session_batch_gas_limit_max"], 25_600_000)
+                self.assertEqual(profile["native_message_batching"]["open_session_gas_limit_per_preparation_transaction"], 100_000)
+                self.assertEqual(profile["native_message_batching"]["open_session_batch_gas_limit_max"], 25_700_000)
                 self.assertIn("not measured", profile["native_message_batching"]["open_session_gas_limit_note"])
         for k in (0, 2.0, 4, 16, True, "8"):
             with self.subTest(k=k), self.assertRaises(ValueError):
@@ -278,7 +279,9 @@ class SustainedTest(unittest.TestCase):
                         **{'@type': '/polystorechain.polystorechain.v1.MsgOpenRetrievalSession'})
                     if corruption == 'generated_nonce':
                         message['nonce'] = '999'
-                    gas = 400001 if corruption == 'generated_gas' else 400000
+                    gas = int(args[args.index('--gas') + 1])
+                    if corruption == 'generated_gas':
+                        gas += 1
                     tx = dict(body=dict(messages=[message]), auth_info=dict(fee=dict(gas_limit=str(gas))))
                     generated.append(tx)
                     return json.dumps(tx)
@@ -306,6 +309,15 @@ class SustainedTest(unittest.TestCase):
                     self.assertEqual((len(ids), height), (2, 12))
                     self.assertEqual(submit.call_count, 1)
                     self.assertEqual(life.doc['preparation_transactions'], [response])
+                    self.assertEqual([int(tx['auth_info']['fee']['gas_limit']) for tx in generated], [500_000, 400_000])
+
+    def test_open_session_batch_gas_boundaries_include_one_transaction_base(self):
+        for messages, expected in ((1, 500_000), (2, 900_000), (64, 25_700_000)):
+            with self.subTest(messages=messages):
+                self.assertEqual(workload.OPEN_SESSION_BATCH_BASE_GAS +
+                    workload.OPEN_SESSION_PREPARATION_GAS * messages, expected)
+                self.assertLessEqual(expected, workload.OPEN_SESSION_BATCH_GAS_CAP)
+                self.assertLess(expected, 64_000_000)
 
 
     def test_block_reconciliation_rejects_missing_transaction_gas_and_header_drift(self):

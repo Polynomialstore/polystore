@@ -35,8 +35,9 @@ SUSTAINED_RATES = (0.25, 0.5, 1, 2, 4)
 SUSTAINED_RATE_SCALES = (1, 4)
 SUSTAINED_DEPUTY_COUNTS = (8, 32)
 OPEN_SESSION_PREPARATION_GAS = 400_000
+OPEN_SESSION_BATCH_BASE_GAS = 100_000
 OPEN_SESSION_BATCH_MAX = 64
-OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
+OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_BATCH_BASE_GAS + OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
 
 
 def mode2_layout(k, deputy_count=8):
@@ -79,8 +80,9 @@ def sustained_profile(k, step_seconds, offsets, proof_gas, rate_scale=1, deputy_
         bundle_opening_distribution={str(openings): inventory},
         native_message_batching=dict(open_session_messages_per_preparation_transaction_max=OPEN_SESSION_BATCH_MAX,
             open_session_gas_limit_per_message=OPEN_SESSION_PREPARATION_GAS,
+            open_session_gas_limit_per_preparation_transaction=OPEN_SESSION_BATCH_BASE_GAS,
             open_session_batch_gas_limit_max=OPEN_SESSION_BATCH_GAS_CAP,
-            open_session_gas_limit_note="conservative pilot ceiling, not measured full execution cost",
+            open_session_gas_limit_note="conservative per-message and transaction-base ceilings, not measured full execution cost",
             proof_sessions_per_submission_transaction=1, cross_provider_crypto_aggregation=False),
         k=k, m=layout["m"], assignment_count=layout["assignments"], rate_scale=rate_scale,
         provider_daemon_count=layout["assignments"],
@@ -848,14 +850,18 @@ def open_session_batch(lifecycle, operations, directory, command):
     directory.mkdir(mode=0o700)
     generated_gas = 0
     with unsigned.open("x") as output:
-        for operation in operations:
-            args = operation["open-session"]["submit"] + ["--generate-only"]
+        for index, operation in enumerate(operations):
+            args = operation["open-session"]["submit"].copy()
+            gas_index = args.index("--gas") + 1
+            expected_gas = OPEN_SESSION_PREPARATION_GAS + (OPEN_SESSION_BATCH_BASE_GAS if index == 0 else 0)
+            args[gas_index] = str(expected_gas)
+            args.append("--generate-only")
             tx = json.loads(command(args))
             messages = tx["body"]["messages"]
             if len(messages) != 1 or messages[0]["@type"] != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSession":
                 raise ValueError("generated open transaction has unexpected messages")
             gas = producer.uint(tx.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
-            if gas != OPEN_SESSION_PREPARATION_GAS:
+            if gas != expected_gas:
                 raise ValueError("generated open transaction has unexpected gas limit")
             generated_gas += gas
             message, expected = messages[0], operation["proof_expectation"]["session"]
@@ -877,7 +883,8 @@ def open_session_batch(lifecycle, operations, directory, command):
     if value["body"]["messages"] != original or len(value["signatures"]) != 1:
         raise ValueError("signed batch differs from ordered open intent")
     signed_gas = producer.uint(value.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
-    if signed_gas != generated_gas or signed_gas > OPEN_SESSION_BATCH_GAS_CAP:
+    expected_batch_gas = OPEN_SESSION_BATCH_BASE_GAS + OPEN_SESSION_PREPARATION_GAS * len(operations)
+    if generated_gas != expected_batch_gas or signed_gas != expected_batch_gas or signed_gas > OPEN_SESSION_BATCH_GAS_CAP:
         raise ValueError("signed batch gas differs from bounded generated gas sum")
     job = dict(operations[0]["open-session"], kind="open-session-batch",
                submit=[str(lifecycle.binary), "tx", "broadcast", str(signed), *common,
