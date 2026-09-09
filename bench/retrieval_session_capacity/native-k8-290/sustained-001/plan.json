@@ -1,0 +1,161 @@
+{
+  "claim_limits": [
+    "No production, WAN, hardware-minimum, or deployment-capacity qualification",
+    "Eventual completion alone does not establish the stable offered-load rate",
+    "Committed-inside-300-seconds and post-window drain must be reported separately",
+    "A workload-limited 4 bundle/s plateau establishes only a tested local lower bound"
+  ],
+  "completed_at_utc": "2026-09-09T05:50:14.696450Z",
+  "completion_timestamp_basis": "private log final mtime; evidence.json finalized 0.001685s earlier",
+  "infrastructure": {
+    "fallback": "four validator processes and twelve provider daemons on one nonquiet local Apple workstation; diagnostic only",
+    "reason": "Repository configuration does not supply a dedicated multi-host four-validator and twelve-provider deployment inventory; using the explicitly authorized one-host fallback.",
+    "status": "INFRASTRUCTURE_UNAVAILABLE"
+  },
+  "invocation": {
+    "absolute_timeout_seconds": 1500,
+    "argv": [
+      "/usr/bin/python3",
+      "$SOURCE_CHECKOUT/scripts/retrieval_four_validator_workload.py",
+      "--mode",
+      "sustained-providers",
+      "--audit-profile",
+      "normal",
+      "--sustained-k",
+      "8",
+      "--binary",
+      "$ARTIFACT_ROOT/260-saturation-polystorechaind",
+      "--library",
+      "$REUSED_CORE_RELEASE/libpolystore_core.dylib",
+      "--gateway-binary",
+      "$ARTIFACT_ROOT/290-polystore-gateway",
+      "--cli-binary",
+      "$ARTIFACT_ROOT/260-final-polystore_cli",
+      "--product-source",
+      "$SOURCE_CHECKOUT",
+      "--proof-exporter",
+      "$ARTIFACT_ROOT/290-retrieval-exporter.test",
+      "--proof-gas",
+      "5000000",
+      "--step-seconds",
+      "60",
+      "--timeout",
+      "1500",
+      "--home",
+      "$ARTIFACT_ROOT/290-k8-all-assignment-60s-001"
+    ],
+    "attempt_limit": 1,
+    "cwd": "$SOURCE_CHECKOUT",
+    "disk_abort_floor_bytes": 805306368,
+    "environment": {
+      "DYLD_LIBRARY_PATH_prepend": "$REUSED_CORE_RELEASE",
+      "GOMAXPROCS": "2",
+      "LD_LIBRARY_PATH_prepend": "$REUSED_CORE_RELEASE",
+      "POLYSTORE_TRUSTED_SETUP": "$SOURCE_CHECKOUT/polystorechain/trusted_setup.txt"
+    }
+  },
+  "launched_at_utc": "2026-09-09T05:34:26Z",
+  "launcher_exit_code": 0,
+  "preflight": {
+    "free_bytes": 3128614912,
+    "fresh_home": true,
+    "host": "nonquiet",
+    "load_average": [
+      2.72607421875,
+      3.28173828125,
+      3.330078125
+    ],
+    "minimum_free_bytes": 2147483648,
+    "ports": [
+      26657,
+      26656,
+      9090,
+      1317,
+      26660,
+      26654,
+      26653,
+      9088,
+      1316,
+      26661,
+      26651,
+      26650,
+      9086,
+      1315,
+      26662,
+      26648,
+      26647,
+      9084,
+      1314,
+      26663,
+      19091,
+      19092,
+      19093,
+      19094,
+      19095,
+      19096,
+      19097,
+      19098,
+      19099,
+      19100,
+      19101,
+      19102
+    ],
+    "ports_bindable": 32,
+    "user_processes_left_untouched": true
+  },
+  "prepared_at_utc": "2026-09-09T05:34:04Z",
+  "purpose": "One bounded local K8 sustained diagnostic with normal audits; diagnostic fallback because realistic dedicated deployment infrastructure is unavailable.",
+  "runtime_provenance": {
+    "artifact_sha256": {
+      "chain": "7d6b2e136de42af5590e112668ab0538f5053ac3b16372ab3ceae5ae68e56fba",
+      "cli": "78f520b01226feef0788a3ad84aa1ba830bf9fd2031956d22dc7649e4c80b370",
+      "exporter": "8f7dbb5f20b2adca24492d51c8bacb0d1786a62da2e9e1ae3a3c369f392885fc",
+      "gateway": "3d9578613b3fea2810c19a7019ec7d676c918cfcd83fd42fe8f159ba1bf31a6e",
+      "library": "60a9ade6c13a4be8f71a1970fac2b5b1eed73751ecb91f3c4a2537187087b59b",
+      "trusted_setup": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+    },
+    "chain_cli_core_build_source": "76653383b04fbd8c971cc4839f831ca0bf15ca2c",
+    "gateway_exporter_build_source": "f0f8fab53178cb37a34d21e35200ec1d6ec0fa89",
+    "verified_manifest": "runtime-provenance.json"
+  },
+  "schema": "polystore.issue290.k8-sustained-plan.v1",
+  "source": {
+    "checkout": "$SOURCE_CHECKOUT",
+    "merged_harness_source": "81ed30f6173416c3d9c001f7c22b96874ab3ea99",
+    "origin_main": "81ed30f6173416c3d9c001f7c22b96874ab3ea99",
+    "relevant_harness_sha256": {
+      "artifact_helper": "c1254269dd05e4cfb1256ae6cd72c07f763bbbd5f865a9dc0e9a6e98d75b4ef2",
+      "driver": "80dd29217c5e131760995ca0ae2f9fe376bdf792d1ceab1ed1efff464ba9e48f",
+      "proof_helper": "74ced497d80442a7d463872623879737b7775ad2a49ec4c5a53ced8a8650e67b"
+    },
+    "tracked_runtime_status": ""
+  },
+  "status": "completed_once_diagnostic_only",
+  "summary_path": "summary.json",
+  "workload": {
+    "assignments": 12,
+    "audit_profile": "normal",
+    "deputy_signers": 8,
+    "gas_margin_over_pilot002_max": 865908,
+    "k": 8,
+    "m": 4,
+    "measured_bundles": 465,
+    "measured_openings": 3720,
+    "measured_window_seconds": 300,
+    "offered_bundle_rates_per_second": [
+      0.25,
+      0.5,
+      1,
+      2,
+      4
+    ],
+    "openings_per_bundle": 8,
+    "pilot002_max_gas_used": 4134092,
+    "proof_gas_wanted_per_tx": 5000000,
+    "seconds_per_step": 60,
+    "total_bundles": 473,
+    "total_openings": 3784,
+    "warmup_bundles": 8,
+    "warmup_openings": 64
+  }
+}
