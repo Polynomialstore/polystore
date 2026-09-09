@@ -815,7 +815,7 @@ PY
 ensure_metadata() {
   GENESIS="$CHAIN_HOME/config/genesis.json"
   if [ ! -f "$GENESIS" ]; then return; fi
-  python3 - "$GENESIS" <<'PY' || true
+  python3 - "$GENESIS" <<'PY'
 import json, os, sys
 path = sys.argv[1]
 data = json.load(open(path))
@@ -859,15 +859,24 @@ params["active_static_precompiles"] = pre
 evm["params"] = params
 data["app_state"]["evm"] = evm
 
-# Keep polystorechain EIP-712 domain chain id aligned with the local EVM chain id.
-polystorechain = data.get("app_state", {}).get("polystorechain", {})
+# Keep the chain module's EIP-712 domain chain id aligned with the local EVM
+# chain id. Current binaries use nilchain; accept the legacy genesis key too.
+app_state = data.get("app_state", {})
+module_key = "nilchain" if "nilchain" in app_state else "polystorechain"
+polystorechain = app_state.get(module_key, {})
 if isinstance(polystorechain, dict):
     nparams = polystorechain.get("params", {})
     raw = (os.getenv("EVM_CHAIN_ID") or "").strip()
     if raw.isdigit():
         nparams["eip712_chain_id"] = raw
     polystorechain["params"] = nparams
-    data["app_state"]["polystorechain"] = polystorechain
+    data["app_state"][module_key] = polystorechain
+
+assert any(m.get("base") == "aatom" for m in data["app_state"]["bank"]["denom_metadata"])
+assert addr in data["app_state"]["evm"]["params"]["active_static_precompiles"]
+raw_chain_id = (os.getenv("EVM_CHAIN_ID") or "").strip()
+if raw_chain_id:
+    assert raw_chain_id.isdigit() and nparams.get("eip712_chain_id") == raw_chain_id
 
 json.dump(data, open(path, "w"), indent=1)
 PY
