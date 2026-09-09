@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
 )
@@ -35,6 +36,12 @@ type mode2IngestResult struct {
 	sizeBytes       uint64
 	witnessMdus     uint64
 	userMdus        uint64
+	integrityRoot   [32]byte
+	integrityLeaves uint64
+}
+
+type mode2BuildOptions struct {
+	fatVersion uint16
 }
 
 type providerUploadHTTPError struct {
@@ -120,6 +127,10 @@ func mode2EnsureCompleteMarker(dir string) {
 }
 
 func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8) (*mode2IngestResult, string, error) {
+	return mode2BuildArtifactsWithOptions(ctx, filePath, dealID, hint, fileRecordPath, fileFlags, mode2BuildOptions{})
+}
+
+func mode2BuildArtifactsWithOptions(ctx context.Context, filePath string, dealID uint64, hint string, fileRecordPath string, fileFlags uint8, opts mode2BuildOptions) (*mode2IngestResult, string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -131,6 +142,17 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if stripe.mode != 2 || stripe.k == 0 || stripe.m == 0 || stripe.rows == 0 {
 		return nil, "", fmt.Errorf("deal is not Mode 2")
 	}
+	if opts.fatVersion != 0 && opts.fatVersion != 2 && opts.fatVersion != 3 {
+		return nil, "", fmt.Errorf("unsupported FAT version %d", opts.fatVersion)
+	}
+	if opts.fatVersion == 3 {
+		if stripe.k != 8 || stripe.m != 4 || stripe.rows != 8 || stripe.slotCount != 12 || stripe.leafCount != retrievalchallenge.IntegrityLeavesPerUserMDU {
+			return nil, "", fmt.Errorf("FAT v3 requires Mode 2 K=8 M=4 with 96 leaves per user MDU")
+		}
+		if fileFlags != 0 {
+			return nil, "", fmt.Errorf("FAT v3 does not support file flags")
+		}
+	}
 
 	fi, err := os.Stat(filePath)
 	if err != nil {
@@ -139,10 +161,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	fileSize := uint64(fi.Size())
 	userMdus := uint64(1)
 	if fileSize > 0 {
-		userMdus = (fileSize + RawMduCapacity - 1) / RawMduCapacity
-		if userMdus == 0 {
-			userMdus = 1
-		}
+		userMdus = 1 + (fileSize-1)/RawMduCapacity
+	}
+	if opts.fatVersion == 3 && userMdus > retrievalchallenge.MaxIntegrityLeaves/retrievalchallenge.IntegrityLeavesPerUserMDU {
+		return nil, "", fmt.Errorf("FAT v3 user MDU count exceeds integrity capacity")
 	}
 
 	fileRecordPath, err = normalizePolyfsRecordBasename(fileRecordPath, filePath)
@@ -157,6 +179,9 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	}
 	defer builder.Free()
 	witnessCount := builder.GetWitnessCount()
+	if opts.fatVersion == 3 && (witnessCount > 65536 || userMdus > 65536-witnessCount) {
+		return nil, "", fmt.Errorf("FAT v3 generation exceeds root-table capacity")
+	}
 	totalSteps := userMdus + witnessCount + 2
 	job := uploadJobFromContext(ctx)
 	if job != nil {
@@ -189,6 +214,19 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 			_ = os.RemoveAll(stagingDir)
 		}
 	}()
+
+	var integrityFile *os.File
+	if opts.fatVersion == 3 {
+		integrityFile, err = os.OpenFile(filepath.Join(stagingDir, integrityLeavesV3File), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, "", err
+		}
+		defer func() {
+			if integrityFile != nil {
+				_ = integrityFile.Close()
+			}
+		}()
+	}
 
 	userRoots := make([][]byte, userMdus)
 	witnessFlats := make([][]byte, userMdus)
@@ -258,6 +296,10 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 					witnessFlats[i] = witnessFlat
 
 					slabIndex := uint64(1) + witnessCount + i
+					var integrityBlock []byte
+					if integrityFile != nil {
+						integrityBlock = make([]byte, retrievalchallenge.IntegrityLeavesPerUserMDU*32)
+					}
 					for slot := uint64(0); slot < stripe.slotCount; slot++ {
 						if int(slot) >= len(shards) {
 							err := fmt.Errorf("missing shard for slot %d", slot)
@@ -268,6 +310,28 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 						if err := writeSparseArtifactFile(filepath.Join(stagingDir, name), shards[slot], int64(len(shards[slot])), 0o644); err != nil {
 							captureFirstNonContextError(err, &firstEncodeErr, &firstEncodeErrMu)
 							return err
+						}
+						if integrityFile != nil {
+							if len(shards[slot]) != 8*types.BLOB_SIZE {
+								return fmt.Errorf("invalid shard size for integrity leaves: slot %d has %d bytes", slot, len(shards[slot]))
+							}
+							for row := uint64(0); row < 8; row++ {
+								leaf := slot*8 + row
+								hash, err := retrievalchallenge.IntegrityLeafV3(slabIndex, uint32(leaf), shards[slot][row*types.BLOB_SIZE:(row+1)*types.BLOB_SIZE])
+								if err != nil {
+									return err
+								}
+								copy(integrityBlock[leaf*32:(leaf+1)*32], hash[:])
+							}
+						}
+					}
+					if integrityFile != nil {
+						offset := int64(i * retrievalchallenge.IntegrityLeavesPerUserMDU * 32)
+						if n, err := integrityFile.WriteAt(integrityBlock, offset); err != nil || n != len(integrityBlock) {
+							if err == nil {
+								err = io.ErrShortWrite
+							}
+							return fmt.Errorf("write integrity leaves for user MDU %d: %w", i, err)
 						}
 					}
 
@@ -292,6 +356,27 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 				return nil, "", fmt.Errorf("mode2 encoding canceled: %w", err)
 			}
 			return nil, "", fmt.Errorf("mode2 encoding failed: %w", err)
+		}
+	}
+	var integrityRoot [32]byte
+	integrityLeafCount := uint64(0)
+	if integrityFile != nil {
+		if err := integrityFile.Close(); err != nil {
+			return nil, "", fmt.Errorf("close integrity leaf vector: %w", err)
+		}
+		integrityFile = nil
+		integrityLeafCount = userMdus * retrievalchallenge.IntegrityLeavesPerUserMDU
+		leafFile, err := os.Open(filepath.Join(stagingDir, integrityLeavesV3File))
+		if err != nil {
+			return nil, "", err
+		}
+		integrityRoot, err = retrievalchallenge.IntegrityRootV3Reader(leafFile, integrityLeafCount)
+		closeErr := leafFile.Close()
+		if err != nil {
+			return nil, "", fmt.Errorf("compute integrity root: %w", err)
+		}
+		if closeErr != nil {
+			return nil, "", fmt.Errorf("close integrity leaf reader: %w", closeErr)
 		}
 	}
 	if profile != nil {
@@ -378,6 +463,16 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 	if err != nil {
 		return nil, "", err
 	}
+	if opts.fatVersion == 3 {
+		header := retrievalchallenge.FATV3Header{
+			RecordCount:   builder.GetRecordCount(),
+			LeafCount:     integrityLeafCount,
+			IntegrityRoot: integrityRoot,
+		}
+		if err := replacePackedFATHeaderV3(mdu0Bytes, header); err != nil {
+			return nil, "", err
+		}
+	}
 	if err := writeSparseArtifactFile(filepath.Join(stagingDir, "mdu_0.bin"), mdu0Bytes, int64(len(mdu0Bytes)), 0o644); err != nil {
 		return nil, "", err
 	}
@@ -462,6 +557,8 @@ func mode2BuildArtifacts(ctx context.Context, filePath string, dealID uint64, hi
 		sizeBytes:       sizeBytes,
 		witnessMdus:     witnessCount,
 		userMdus:        userMdus,
+		integrityRoot:   integrityRoot,
+		integrityLeaves: integrityLeafCount,
 	}, finalDir, nil
 }
 
@@ -1138,6 +1235,24 @@ func mode2UploadArtifactsToProviders(
 	witnessCount uint64,
 	userMdus uint64,
 ) error {
+	return mode2UploadArtifactsToProvidersWithOptions(ctx, dealID, manifestRoot, previousManifestRoot, hint, finalDir, witnessCount, userMdus, mode2UploadOptions{})
+}
+
+type mode2UploadOptions struct {
+	strictV3 bool
+}
+
+func mode2UploadArtifactsToProvidersWithOptions(
+	ctx context.Context,
+	dealID uint64,
+	manifestRoot ManifestRoot,
+	previousManifestRoot string,
+	hint string,
+	finalDir string,
+	witnessCount uint64,
+	userMdus uint64,
+	opts mode2UploadOptions,
+) error {
 	releaseGeneration, leaseErr := leaseGenerationPaths(finalDir)
 	if leaseErr != nil {
 		return leaseErr
@@ -1161,12 +1276,33 @@ func mode2UploadArtifactsToProviders(
 
 	// Upload to assigned providers as a dumb pipe: bytes-in/bytes-out.
 	resolveSlotsStarted := time.Now()
-	slots, err := resolveDealMode2Slots(ctx, dealID)
+	var slots []mode2SlotAssignment
+	if opts.strictV3 {
+		slots, err = fetchDealMode2SlotsFromLCD(ctx, dealID)
+	} else {
+		slots, err = resolveDealMode2Slots(ctx, dealID)
+	}
 	if err != nil {
 		return err
 	}
 	if len(slots) < int(stripe.slotCount) {
 		return fmt.Errorf("not enough slot assignments for Mode 2 (need %d, got %d)", stripe.slotCount, len(slots))
+	}
+	if opts.strictV3 {
+		if stripe.k != 8 || stripe.m != 4 || stripe.rows != 8 || stripe.slotCount != 12 || len(slots) != 12 {
+			return fmt.Errorf("FAT v3 requires the fixed Mode 2 K=8,M=4 profile with 12 slots")
+		}
+		seen := make(map[string]struct{}, len(slots))
+		for slot, assignment := range slots {
+			provider := strings.TrimSpace(assignment.Provider)
+			if assignment.Status != 1 || strings.TrimSpace(assignment.PendingProvider) != "" || provider == "" {
+				return fmt.Errorf("FAT v3 slot %d must be active, stable, and assigned", slot)
+			}
+			if _, exists := seen[provider]; exists {
+				return fmt.Errorf("FAT v3 slot providers must be distinct")
+			}
+			seen[provider] = struct{}{}
+		}
 	}
 	if profile != nil {
 		profile.addDuration("mode2_resolve_slots_ms", time.Since(resolveSlotsStarted))
@@ -1213,8 +1349,12 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	job := uploadJobFromContext(ctx)
-	metadataUploads := uint64(len(metadataProviders)) * (witnessCount + 2) // mdu_0..mdu_witness + manifest.bin
-	shardUploads := uint64(len(targets)) * userMdus                        // slot-local user shards only
+	metadataArtifacts := witnessCount + 2 // mdu_0..mdu_witness + manifest.bin
+	if opts.strictV3 {
+		metadataArtifacts++ // integrity leaf vector
+	}
+	metadataUploads := uint64(len(metadataProviders)) * metadataArtifacts
+	shardUploads := uint64(len(targets)) * userMdus // slot-local user shards only
 	totalUploads := metadataUploads + shardUploads
 	if job != nil {
 		job.setPhase(uploadJobPhaseUploading, "Gateway Mode 2: uploading to providers...")
@@ -1639,6 +1779,34 @@ func mode2UploadArtifactsToProviders(
 	if len(manifestGroup) > 0 {
 		metadataTaskGroups = append(metadataTaskGroups, manifestGroup)
 	}
+	if opts.strictV3 {
+		integrityPath := filepath.Join(finalDir, integrityLeavesV3File)
+		integritySizes, err := statSizes(integrityPath, int64(retrievalchallenge.MaxIntegrityLeaves*32))
+		if err != nil {
+			return err
+		}
+		if integritySizes.full != int64(userMdus*retrievalchallenge.IntegrityLeavesPerUserMDU*32) || integritySizes.send != integritySizes.full {
+			return fmt.Errorf("FAT v3 integrity leaf vector has invalid size or sparse encoding")
+		}
+		group := make([]uploadTask, 0, len(metadataProviders))
+		for _, provider := range metadataProviders {
+			base := providerBases[provider]
+			if base == "" {
+				continue
+			}
+			group = append(group, uploadTask{
+				kind:         spUploadBundleKindIntegrity,
+				providerBase: base,
+				path:         integrityPath,
+				sizeBytes:    integritySizes.full,
+				sendBytes:    integritySizes.full,
+				maxBytes:     int64(retrievalchallenge.MaxIntegrityLeaves * 32),
+			})
+		}
+		if len(group) > 0 {
+			metadataTaskGroups = append(metadataTaskGroups, group)
+		}
+	}
 
 	shardTaskGroups := make([][]uploadTask, 0, userMdus)
 	// Upload striped user shards interleaved across providers per slab index.
@@ -1696,7 +1864,7 @@ func mode2UploadArtifactsToProviders(
 	}
 
 	uploadParallelism := mode2UploadParallelism(stripe.slotCount)
-	bundleUploadsEnabled := mode2BundleUploadsEnabled()
+	bundleUploadsEnabled := opts.strictV3 || mode2BundleUploadsEnabled()
 	log.Printf(
 		"GatewayUpload mode2 upload plan: deal_id=%d providers=%d targets=%d user_mdus=%d witness_mdus=%d total_tasks=%d parallelism=%d timeout=%s sparse=%t bundle=%t",
 		dealID,
@@ -2037,7 +2205,7 @@ func mode2UploadArtifactsToProviders(
 				inFlight.Add(1)
 				defer inFlight.Add(-1)
 				err := uploadBundle(egctx, bundle)
-				if err != nil && isBundleUnsupportedErr(err) {
+				if err != nil && !opts.strictV3 && isBundleUnsupportedErr(err) {
 					if profile != nil {
 						profile.addCount("mode2_bundle_fallback_providers", 1)
 					}
