@@ -1,6 +1,61 @@
 pub const MAGIC_NILF: [u8; 4] = [0x4E, 0x49, 0x4C, 0x46]; // "NILF"
 pub const FILE_RECORD_SIZE: usize = 256;
 pub const FILE_RECORD_PATH_BYTES: usize = FILE_RECORD_SIZE - 24;
+pub const FAT_V3_INTEGRITY_LEAVES_PER_USER_MDU: u64 = 96;
+pub const FAT_V3_MAX_RECORDS: u32 = 23_807;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileTableHeaderV3 {
+    pub record_count: u32,
+    pub integrity_leaf_count: u64,
+    pub integrity_root: [u8; 32],
+}
+impl FileTableHeaderV3 {
+    pub const SIZE: usize = 128;
+    pub fn to_bytes(&self) -> Result<[u8; 128], String> {
+        if self.record_count > FAT_V3_MAX_RECORDS
+            || self.integrity_leaf_count == 0
+            || self.integrity_leaf_count > crate::integrity_v3::MAX_LEAVES
+            || self.integrity_leaf_count % FAT_V3_INTEGRITY_LEAVES_PER_USER_MDU != 0
+        {
+            return Err("invalid FAT v3 header bounds".into());
+        }
+        let mut b = [0; 128];
+        b[..4].copy_from_slice(&MAGIC_NILF);
+        b[4..6].copy_from_slice(&3u16.to_le_bytes());
+        b[6..8].copy_from_slice(&(FILE_RECORD_SIZE as u16).to_le_bytes());
+        b[8..12].copy_from_slice(&self.record_count.to_le_bytes());
+        b[12] = 1;
+        b[13] = 1;
+        b[16..20].copy_from_slice(&(crate::integrity_v3::ENCODED_BLOB_BYTES as u32).to_le_bytes());
+        b[20..28].copy_from_slice(&self.integrity_leaf_count.to_le_bytes());
+        b[28..60].copy_from_slice(&self.integrity_root);
+        Ok(b)
+    }
+    pub fn from_bytes(b: &[u8]) -> Result<Self, String> {
+        if b.len() != 128
+            || b[..4] != MAGIC_NILF
+            || u16::from_le_bytes(b[4..6].try_into().unwrap()) != 3
+            || u16::from_le_bytes(b[6..8].try_into().unwrap()) != FILE_RECORD_SIZE as u16
+            || b[12] != 1
+            || b[13] != 1
+            || b[14] != 0
+            || b[15] != 0
+            || u32::from_le_bytes(b[16..20].try_into().unwrap())
+                != crate::integrity_v3::ENCODED_BLOB_BYTES as u32
+            || b[60..].iter().any(|v| *v != 0)
+        {
+            return Err("invalid FAT v3 header".into());
+        }
+        let h = Self {
+            record_count: u32::from_le_bytes(b[8..12].try_into().unwrap()),
+            integrity_leaf_count: u64::from_le_bytes(b[20..28].try_into().unwrap()),
+            integrity_root: b[28..60].try_into().unwrap(),
+        };
+        h.to_bytes()?;
+        Ok(h)
+    }
+}
 
 pub const FLAG_ENCRYPTED: u8 = 0x80; // Bit 7
 pub const FLAG_HIDDEN: u8 = 0x40; // Bit 6

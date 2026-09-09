@@ -314,12 +314,16 @@ func hashToPoint(transcript []byte, hash func([]byte) [32]byte) ([32]byte, error
 // tail-swap Fisher-Yates variant in the RFC. It allocates O(count), never O(U).
 // The caller must authenticate hash/seed and freeze U/count before seed reveal.
 func Sample(hash [32]byte, seed []byte, population, count uint64) ([]uint64, error) {
-	if len(seed) != 32 || count > population || count > MaxSamples {
+	return sampleWithDomain(hash, seed, population, count, "polystore/audit-position/v2", MaxSamples)
+}
+
+func sampleWithDomain(hash [32]byte, seed []byte, population, count uint64, domain string, maxCount uint64) ([]uint64, error) {
+	if len(seed) != 32 || count > population || count > maxCount {
 		return nil, errors.New("invalid seed, population or bounded sample count")
 	}
 	positions := make([]uint64, count)
 	swaps := make(map[uint64]uint64, count)
-	transcript := appendLP(make([]byte, 0, 128), "polystore/audit-position/v2")
+	transcript := appendLP(make([]byte, 0, 128), domain)
 	transcript = append(transcript, hash[:]...)
 	transcript = append(transcript, seed...)
 	transcript = append(transcript, make([]byte, 12)...)
