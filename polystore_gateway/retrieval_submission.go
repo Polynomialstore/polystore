@@ -667,10 +667,14 @@ func submitRetrievalSessionProof(w http.ResponseWriter, r *http.Request, body []
 		status := "pending"
 		if errors.Is(err, errTxFailed) {
 			status = "failed"
-			// A public caller may reconcile this exact hash repeatedly, but may
-			// not make the provider spend gas on unbounded retries. Privileged
-			// operator recovery clears a committed failure after diagnosis.
-			if !requireOwnerConfirmation {
+			if requireOwnerConfirmation {
+				// Inclusion is terminal, so the signer sequence is no longer
+				// uncertain. Retain this session's hash to prevent a public
+				// rebroadcast, but release only its matching signer marker.
+				if clearErr := changeFrozenSubmissions(entries, func(*storedFrozenProof) {}, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
+					err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+				}
+			} else {
 				if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
 					err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 				}
@@ -752,14 +756,19 @@ func submitRetrievalSessionProof(w http.ResponseWriter, r *http.Request, body []
 	status := "pending"
 	if errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
 		status = "failed"
-		if !requireOwnerConfirmation {
-			if clearErr := changeFrozenSubmissions(entries, func(r *storedFrozenProof) { r.Submitting = false }, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
-				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
-			}
+		// These classifications prove that no transaction was included, so the
+		// existing frozen proof and signer may safely retry. Unknown outcomes
+		// keep the intent quarantined instead.
+		if clearErr := changeFrozenSubmissions(entries, func(r *storedFrozenProof) { r.Submitting = false }, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
+			err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 		}
 	} else if errors.Is(err, errTxFailed) {
 		status = "failed"
-		if !requireOwnerConfirmation {
+		if requireOwnerConfirmation {
+			if clearErr := changeFrozenSubmissions(entries, func(*storedFrozenProof) {}, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
+				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+			}
+		} else {
 			if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
 				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 			}

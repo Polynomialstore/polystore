@@ -287,26 +287,45 @@ func TestPublicContinuationBoundsKeyLookupsBeforeSessionAdmission(t *testing.T) 
 
 func TestPublicContinuationRetainsCommittedFailureWithoutRebroadcast(t *testing.T) {
 	submissionTestDB(t)
-	response, frozen, proofs := submissionFixture(t, 1)
-	response.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
-	if err := storeFrozenSessionProof(frozen, proofs); err != nil {
-		t.Fatal(err)
+	failedResponse, failedFrozen, failedProofs := submissionFixture(t, 1)
+	nextResponse, nextFrozen, nextProofs := submissionFixture(t, 2)
+	failedResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	nextResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	for i, entry := range []struct {
+		f      *frozenRetrievalSession
+		proofs []types.ChainedProof
+	}{{failedFrozen, failedProofs}, {nextFrozen, nextProofs}} {
+		if err := storeFrozenSessionProof(entry.f, entry.proofs); err != nil {
+			t.Fatalf("store frozen proof %d: %v", i, err)
+		}
 	}
-	id := "0x" + hex.EncodeToString(frozen.Context.ID[:])
+	id := "0x" + hex.EncodeToString(failedFrozen.Context.ID[:])
+	nextID := "0x" + hex.EncodeToString(nextFrozen.Context.ID[:])
+	nextQueryID := base64.URLEncoding.EncodeToString(nextFrozen.Context.ID[:])
 	body := fmt.Sprintf(`{"session_id":%q}`, id)
-	hash := strings.Repeat("E", 64)
+	hash, nextHash := strings.Repeat("E", 64), strings.Repeat("F", 64)
 	var broadcasts atomic.Int32
 	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		if args[0] == "keys" {
-			return []byte(response.Session.AuthorizedProofProvider), nil
+			return []byte(failedResponse.Session.AuthorizedProofProvider), nil
 		}
-		broadcasts.Add(1)
-		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, hash)), nil
+		if broadcasts.Add(1) == 1 {
+			return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, hash)), nil
+		}
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, nextHash)), nil
 	})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "retrieval-sessions/") {
 			w.Header().Set(committedHeightHeader, "12")
+			response := failedResponse
+			if strings.Contains(r.URL.Path, nextQueryID) {
+				response = nextResponse
+			}
 			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+			return
+		}
+		if strings.Contains(r.URL.Path, nextHash) {
+			fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":0}}`, nextHash)
 			return
 		}
 		fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":9,"raw_log":"proof rejected"}}`, hash)
@@ -325,9 +344,80 @@ func TestPublicContinuationRetainsCommittedFailureWithoutRebroadcast(t *testing.
 	if broadcasts.Load() != 1 {
 		t.Fatalf("public retry rebroadcast committed failure: broadcasts=%d", broadcasts.Load())
 	}
-	record, err := loadFrozenSubmission(frozen)
+	record, err := loadFrozenSubmission(failedFrozen)
 	if err != nil || !record.record.Submitting || record.record.TxHash != hash {
 		t.Fatalf("failed submission marker was not retained: record=%+v err=%v", record, err)
+	}
+	pendingSigner, err := loadPendingSigner(failedResponse.Session.AuthorizedProofProvider)
+	if err != nil || pendingSigner != nil {
+		t.Fatalf("terminal failed transaction retained global signer quarantine: marker=%+v err=%v", pendingSigner, err)
+	}
+	next := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, nextID))
+	if next.Code != http.StatusOK || !strings.Contains(next.Body.String(), nextHash) || broadcasts.Load() != 2 {
+		t.Fatalf("terminal failure blocked unrelated session: %d %s broadcasts=%d", next.Code, next.Body.String(), broadcasts.Load())
+	}
+}
+
+func TestPublicContinuationReleasesKnownRejectionForSignerAndRetry(t *testing.T) {
+	submissionTestDB(t)
+	firstResponse, firstFrozen, firstProofs := submissionFixture(t, 1)
+	secondResponse, secondFrozen, secondProofs := submissionFixture(t, 2)
+	firstResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	secondResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	for i, entry := range []struct {
+		f      *frozenRetrievalSession
+		proofs []types.ChainedProof
+	}{{firstFrozen, firstProofs}, {secondFrozen, secondProofs}} {
+		if err := storeFrozenSessionProof(entry.f, entry.proofs); err != nil {
+			t.Fatalf("store frozen proof %d: %v", i, err)
+		}
+	}
+	firstID := "0x" + hex.EncodeToString(firstFrozen.Context.ID[:])
+	secondID := "0x" + hex.EncodeToString(secondFrozen.Context.ID[:])
+	secondQueryID := base64.URLEncoding.EncodeToString(secondFrozen.Context.ID[:])
+	rejectedHash, acceptedHash := strings.Repeat("7", 64), strings.Repeat("8", 64)
+	var submissions atomic.Int32
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "keys" {
+			return []byte(firstResponse.Session.AuthorizedProofProvider), nil
+		}
+		if submissions.Add(1) == 1 {
+			return []byte(fmt.Sprintf(`{"txhash":%q,"code":7}`, rejectedHash)), nil
+		}
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, acceptedHash)), nil
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "retrieval-sessions/") {
+			w.Header().Set(committedHeightHeader, "12")
+			response := firstResponse
+			if strings.Contains(r.URL.Path, secondQueryID) {
+				response = secondResponse
+			}
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+			return
+		}
+		fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":0}}`, acceptedHash)
+	}))
+	defer server.Close()
+	oldLCD := lcdBase
+	lcdBase = server.URL
+	defer func() { lcdBase = oldLCD }()
+
+	rejected := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, firstID))
+	if rejected.Code != http.StatusConflict || !strings.Contains(rejected.Body.String(), rejectedHash) {
+		t.Fatalf("known CheckTx rejection not reported: %d %s", rejected.Code, rejected.Body.String())
+	}
+	record, err := loadFrozenSubmission(firstFrozen)
+	if err != nil || record.record.Submitting || record.record.TxHash != "" {
+		t.Fatalf("known CheckTx rejection quarantined signer: record=%+v err=%v", record, err)
+	}
+	second := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, secondID))
+	if second.Code != http.StatusOK || !strings.Contains(second.Body.String(), acceptedHash) {
+		t.Fatalf("known rejection blocked another session: %d %s", second.Code, second.Body.String())
+	}
+	retry := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, firstID))
+	if retry.Code != http.StatusOK || submissions.Load() != 3 {
+		t.Fatalf("safe public retry failed: %d %s submissions=%d", retry.Code, retry.Body.String(), submissions.Load())
 	}
 }
 
