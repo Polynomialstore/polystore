@@ -100,12 +100,13 @@ def plan(first, last):
     return sha(transcript), transcript, counts
 
 
-def full_transcripts(integrity_root, range_start, range_length):
+def full_transcripts(integrity_root, range_start, range_length, file_start_offset=0):
     chain, session_owner = "polystore-test-1", bytes([0x11]) * 20
     deal, generation, record = 42, 7, 3
     nonce = 9
-    first = range_start // 126976
-    last = (range_start + range_length - 1) // 126976
+    absolute_start = file_start_offset + range_start
+    first = absolute_start // 126976
+    last = (absolute_start + range_length - 1) // 126976
     population = last - first + 1
     proof_count = min(population, 132)
     user_mdus = (last + 64) // 64
@@ -117,7 +118,7 @@ def full_transcripts(integrity_root, range_start, range_length):
     setup = bytes.fromhex("d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7")
     context_bytes = (lp("polystore/challenge-context/v3") + u32(3) + lp(chain) + setup
         + session_id + session_owner + u64(deal) + u64(generation) + bytes([0x22]) * 32
-        + integrity_root + u32(record) + u64(0) + u64(range_start + range_length)
+        + integrity_root + u32(record) + u64(file_start_offset) + u64(range_start + range_length)
         + u64(range_start) + u64(range_length) + u8(2) + u32(8) + u32(4)
         + u64(2) + u64(user_mdus) + plan_hash + u64(population) + u64(proof_count) + u64(nonce)
         + lp("stake") + lp("3") + lp("5") + u32(250) + u8(1) + session_owner
@@ -133,7 +134,8 @@ def full_transcripts(integrity_root, range_start, range_length):
     ack_bytes = (lp("polystore/retrieval-obligation-ack/v3") + lp(chain) + session_id
         + context_hash + plan_hash + u32(slot) + assigned + payee + u64(count)
         + u64(count * 131072) + integrity_root)
-    return {"range_start": str(range_start), "range_length": str(range_length),
+    return {"file_start_offset": str(file_start_offset), "range_start": str(range_start),
+        "range_length": str(range_length), "first": first, "last": last,
         "population": population, "sample_count": proof_count,
         "plan_hex": plan_bytes.hex(), "plan_hash": plan_hash.hex(),
         "obligations": [{"slot": s, "assigned": a.hex(), "payee": p.hex(), "blob_count": c} for s, a, p, c in counts],
@@ -181,6 +183,10 @@ def make_fixture():
     integrity_root, paths = tree_with_paths(leaves)
     small_transcript, small_hash, small_seed = full_transcripts(integrity_root, 0, 17 * 126976)
     large_transcript, context_hash, seed = full_transcripts(integrity_root, 0, 1073741824)
+    offset_file_start = 61 * 126976 + 125000
+    offset_range_start, offset_range_length = 2 * 126976 + 1000, 130000
+    offset_transcript, offset_hash, offset_seed = full_transcripts(
+        integrity_root, offset_range_start, offset_range_length, offset_file_start)
     positions = sample(small_hash, small_seed, 17, 17)
     challenges = []
     for i, position in enumerate(positions):
@@ -188,6 +194,13 @@ def make_fixture():
         z, counter = challenge_z(small_hash, small_seed, i, coord)
         challenges.append({"ordinal": i, "position": position, **coord, "z": z, "counter": counter})
     large_positions = sample(context_hash, seed, 8457, 132)
+    offset_positions = sample(offset_hash, offset_seed, 3, 3)
+    offset_challenges = []
+    for i, position in enumerate(offset_positions):
+        coord = coordinate(offset_transcript["first"] + position)
+        z, counter = challenge_z(offset_hash, offset_seed, i, coord)
+        offset_challenges.append({"ordinal": i, "position": position, **coord,
+            "z": z, "counter": counter})
     bad = math.ceil(8457 / 10)
     return {"version": 3, "note": "Three-blob tree and transcript values are primitive vectors, not a complete admitted generation.",
         "fat_header": {"record_count": 2, "leaf_count": "96", "integrity_root": integrity_root.hex(),
@@ -196,6 +209,7 @@ def make_fixture():
         "small_transcript": small_transcript, "small_samples": challenges,
         "large_transcript": large_transcript,
         "large_sample": {"population": 8457, "count": 132, "first_eight": large_positions[:8], "positions_sha256": sha(b"".join(u64(v) for v in large_positions)).hex()},
+        "offset_transcript": offset_transcript, "offset_samples": offset_challenges,
         "ranges": [{"start": "0", "length": "1024", "population": 1}, {"start": "126975", "length": "1024", "population": 2}, {"start": "0", "length": "1073741824", "population": 8457}, {"start": "126975", "length": "1073741824", "population": 8458}],
         "confidence": {"population": 8457, "count": 132, "bad": bad, "miss_numerator": str(math.comb(8457-bad, 132)), "miss_denominator": str(math.comb(8457, 132)), "one_bad_numerator": "8325", "one_bad_denominator": "8457"}}
 
@@ -213,6 +227,23 @@ def negative_checks(fixture):
     assert not verify_path(leaves[0], 0, 3, paths[0][:-1], root)
     odd_bad = list(paths[2]); odd_bad[0] = bytes(32)
     assert not verify_path(leaves[2], 2, 3, odd_bad, root)
+
+    transcript = fixture["offset_transcript"]
+    assert transcript["first"] == 63 and transcript["last"] == 65
+    omitted_firsts = (int(transcript["range_start"]) // 126976,
+        int(transcript["file_start_offset"]) // 126976)
+    assert omitted_firsts == (2, 61) and transcript["first"] not in omitted_firsts
+    context_hash = bytes.fromhex(transcript["context_hash"])
+    seed = bytes.fromhex(transcript["seed"])
+    for item in fixture["offset_samples"]:
+        coord = coordinate(transcript["first"] + item["position"])
+        assert all(item[key] == coord[key] for key in ("t", "mdu_index", "leaf_index", "slot"))
+        assert challenge_z(context_hash, seed, item["ordinal"], coord) == (item["z"], item["counter"])
+        omitted_offset_coord = coordinate(item["position"])
+        assert challenge_z(context_hash, seed, item["ordinal"], omitted_offset_coord)[0] != item["z"]
+        corrupt_coord = dict(coord)
+        corrupt_coord["leaf_index"] ^= 1
+        assert challenge_z(context_hash, seed, item["ordinal"], corrupt_coord)[0] != item["z"]
 
 
 def header_checks(fixture):
@@ -233,7 +264,7 @@ def main():
     header_checks(actual)
     negative_checks(actual)
     for case in actual["ranges"]: assert range_population(int(case["start"]), int(case["length"])) == case["population"]
-    for key in ("small_samples",):
+    for key in ("small_samples", "offset_samples"):
         positions = [item["position"] for item in actual[key]]
         assert len(positions) == len(set(positions))
     large = sample(bytes.fromhex(actual["large_transcript"]["context_hash"]), bytes.fromhex(actual["large_transcript"]["seed"]), 8457, 132)
