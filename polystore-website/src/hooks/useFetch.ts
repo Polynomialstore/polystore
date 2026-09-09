@@ -6,7 +6,7 @@ import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
 import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
-import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { RetrievalFetchError, decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
@@ -234,16 +234,15 @@ export function useFetch() {
           if (job.state.pending.ordinal !== ordinal) throw new Error('saved retrieval cursor does not match file')
           await confirm(job.state.pending.sessions); return
         }
-        let fetchFailed = false
         if (windows.every((w) => pin.assignments[w.slot].active)) {
           try {
             await executeRetrievalWindows(windows, {
               open: async (wave) => { setProgress((p) => ({ ...p, phase: 'opening_session_tx' })); return payment.open(pin, wave, input.sponsoredAuth, signal, deputy, job.key) },
-              fetchAndVerify: async (session) => { try { return await fetchSession(session) } catch (error) { fetchFailed = true; throw error } },
+              fetchAndVerify: fetchSession,
               consume, flush: flushOutput, confirm,
             }, signal, 64)
             return
-          } catch (error) { signal.throwIfAborted(); if (!fetchFailed) throw error }
+          } catch (error) { signal.throwIfAborted(); if (!(error instanceof RetrievalFetchError)) throw error }
         }
         if (input.sponsoredAuth?.type === 'voucher') throw new Error('failed retrieval needs a fresh voucher for separately funded recovery')
         recoveryWindows(pin, ordinal)

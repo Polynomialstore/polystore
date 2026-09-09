@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCipheriv, createHash } from 'node:crypto'
-import { decodeRetrievalOutput, decodeRetrievalSlice, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking, type RetrievalFlow } from './retrievalFlow'
+import { RetrievalFetchError, decodeRetrievalOutput, decodeRetrievalSlice, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking, type RetrievalFlow } from './retrievalFlow'
 import { planRetrievalWindows, type PinnedGeneration, type FrozenSession, type RetrievalFile, type RetrievalWindow } from './retrieval'
 
 const pin = { layout: 2, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: 2n, userMdus: 133n, assignments: Array.from({ length: 12 }, (_, i) => ({ provider: `provider${i}`, active: true })) } as unknown as PinnedGeneration
@@ -313,3 +313,36 @@ function deferredBytes() {
   const promise = new Promise<Uint8Array>((yes, no) => { resolve = yes; reject = no })
   return { promise, resolve, reject }
 }
+
+for (const primary of ['consume', 'fetch', 'open', 'flush', 'cancel']) test(`only primary fetch failure permits paid recovery: ${primary}`, async () => {
+  const selected = Array.from(windows()).slice(0, 2), h = harness()
+  const sibling = deferredBytes(), consuming = deferredBytes()
+  const original = new Error(`${primary} failed`)
+  let fetched = 0, recovery = 0
+  h.flow.fetchAndVerify = async () => {
+    if (fetched++ === 1) return sibling.promise
+    if (primary === 'fetch') throw original
+    return new Uint8Array(1)
+  }
+  if (primary === 'open') h.flow.open = async () => { throw original }
+  h.flow.consume = async () => {
+    if (primary === 'consume') { consuming.resolve(new Uint8Array()); throw original }
+    if (primary === 'cancel') h.controller.abort(original)
+  }
+  if (primary === 'flush') h.flow.flush = async () => { throw original }
+  // Same primary-error classification as useFetch's recovery gate.
+  const work = executeRetrievalWindows(selected, h.flow, h.controller.signal).catch((error) => {
+    h.controller.signal.throwIfAborted()
+    if (!(error instanceof RetrievalFetchError)) throw error
+    assert.equal(error.cause, original); assert.equal(error.message, original.message)
+    recovery++
+  })
+  const checked = primary === 'fetch' ? work : assert.rejects(work, (error) => error === original)
+  if (primary === 'consume') {
+    await consuming.promise
+    sibling.reject(new Error('late sibling fetch failure'))
+  } else sibling.resolve(new Uint8Array(1))
+  await checked
+  assert.equal(recovery, primary === 'fetch' ? 1 : 0)
+  assert.ok(!h.events.some((event) => event.startsWith('ack:')))
+})

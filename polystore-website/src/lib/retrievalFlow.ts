@@ -65,6 +65,18 @@ export async function waitForRetrievalChallenge(lcd: string, expected: Parameter
   }
 }
 
+// Recovery eligibility belongs to the primary thrown error, never to a sibling
+// that happens to fail while outstanding work is drained.
+export class RetrievalFetchError extends Error {
+  readonly cause: unknown
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause))
+    this.cause = cause
+    this.name = 'RetrievalFetchError'
+  }
+}
+
 export interface RetrievalFlow {
   open(windows: readonly RetrievalWindow[]): Promise<readonly FrozenSession[]>
   fetchAndVerify(session: FrozenSession): Promise<Uint8Array>
@@ -100,7 +112,11 @@ export async function executeRetrievalWindows(windows: Iterable<RetrievalWindow>
         throwIfFailed()
         while (pending.length < 2 && next < sessions.length) {
           const session = sessions[next++]
-          pending.push(Promise.resolve().then(() => { signal?.throwIfAborted(); return flow.fetchAndVerify(session) }).then(
+          pending.push(Promise.resolve().then(async () => {
+            signal?.throwIfAborted()
+            try { return await flow.fetchAndVerify(session) }
+            catch (error) { signal?.throwIfAborted(); throw new RetrievalFetchError(error) }
+          }).then(
             (bytes): Result => ({ ok: true, bytes }),
             (error): Result => { state.failure ??= { error }; return { ok: false, error } },
           ))
