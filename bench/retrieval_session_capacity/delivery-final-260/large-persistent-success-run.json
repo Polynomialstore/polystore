@@ -1,0 +1,30 @@
+{
+  "conclusion": "success",
+  "createdAt": "2026-09-08T21:36:17Z",
+  "databaseId": 34281520872,
+  "event": "workflow_dispatch",
+  "headSha": "9c0110463dc92838a06b7acc88689d636b2efd11",
+  "status": "completed",
+  "url": "https://github.com/Polynomialstore/polystore/actions/runs/34281520872",
+  "workflowName": "PolyStore E2E Heavy",
+  "sourceTrees": {
+    "polystorechain": "d002c6f58a35d9cfa80f104b413ef5a7b478c764",
+    "polystore_core": "7989fed8d5a5877e74bc0e2c71aa60b6f8747653",
+    "polystore_gateway": "1a9bf50ee6f02ef2b746d2ba5fd82554ec3b5fdd",
+    "polystore-website/src": "b16e08594cbcf59ebd973804f434ad82436a2973",
+    "scripts": "7a5fd91b5428091b506460db49b221a977bbb728"
+  },
+  "harnessSha256": {
+    ".github/workflows/e2e_heavy_nightly.yml": "feeb19e41d553b12bc0278fc738cb090dcb8fb222d294468d1ed4cb70b061a60",
+    "scripts/e2e_mode2_stripe_multi_sp.sh": "82d9e54f798c906a0d964ca328a6b622a0cde920a007dfa0ffdc33bae899387a",
+    "polystore-website/tests/mode2-stripe.spec.ts": "84d53e7ecbef1c20984656941f1018ab00ca77d2d792364235996da45bfa98a4",
+    "polystore-website/tests/retrieval-v2-browser.spec.ts": "bf9798b07850f3098f7354d67a49ae7c719299f0e290033e30e3382200d51435",
+    "polystore-website/tests/utils/persistentBrowser.ts": "9b0e66edfae7980334d237f952fba59c0487e349306d14ce2bd63a6649daf298"
+  },
+  "provenanceScope": "GitHub run and checkout/harness source only. Running executable/native/WASM hashes were not recorded.",
+  "summarySha256": "e9d688592b30e318d218f0d04aa591220b021e06477b99bbad73cffcf6aeb79c",
+  "artifactId": 10083040139,
+  "artifactArchiveSha256": "d0b98e9e274117df1c0d23bd40481221a212bf9c2b291f64574f826a870db3c6",
+  "artifactArchiveBytes": 520295,
+  "artifactDigestVerifiedLocally": true
+}

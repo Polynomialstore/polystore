@@ -31,7 +31,11 @@ The provenance gives the source, chain/native hashes and reproduction command. O
 
 ## Large live delivery
 
-Pending the complete hosted 1 GiB result. Earlier interrupted runs are diagnostic evidence and are not substituted for a completed download.
+[Run 34281520872](https://github.com/Polynomialstore/polystore/actions/runs/34281520872), head `9c0110463dc92838a06b7acc88689d636b2efd11`, completed successfully. The [lossless summary](large-persistent-success.json.gz) records 1,073,741,824 bytes with SHA-256 `5806efdf1f91fa2b8ab62f7b5e16541c0f866227cfe977238bd2ec9789664d9e`, 1,064 distinct sessions, 8,457 blobs and 133 user MDUs through the user-gateway. The exact harness asserts canonical COMPLETED state and pinned root/deal for every session. Normal storage audits were enabled; the fresh persistent profile and full OPFS preflight ran before retrieval.
+
+Upload took 546,308 ms; retrieval through final downloaded-byte hash took 9,475,070 ms (2h 37m 55s), approximately 110.67 KiB/s over that interval. Terminal census follows that timer. This is large-file correctness evidence, and exceeds the new 30-minute retrieval execution guardrail by 5.26 times. It does not qualify acceptable delivery performance or the subsequent instrumentation. Earlier interrupted attempts remain separate diagnostics.
+
+[Run/source identity](large-persistent-success-run.json) records verified source/harness hashes, original-summary hash and the independently checked artifact archive digest. Runtime executable/native/WASM hashes were not recorded for this run. Phase measurements and the small-first performance gate remain pending in #260. The large artifact records terminal sessions, not independent per-session payout transfers; exact transfer evidence belongs to the small-route and settlement bundles. Provider logs include signer/capacity contention, so enabled audits are not a claim of zero audit failures.
 
 ## Retained-file integrity
 
@@ -52,4 +56,4 @@ PY
 
 [Run34267852521](https://github.com/Polynomialstore/polystore/actions/runs/34267852521) failed with a Chromium no-space output write after 904 proof requests and 905 window requests. [Raw summary](large-incognito-failed.json.gz) preserves the original JSON losslessly; [run/source identity](large-incognito-failed-run.json) records its hash and artifact identity. There is no completed-file hash or terminal-session census, so these counts are not completed delivery.
 
-[PR #288](https://github.com/Polynomialstore/polystore/pull/288) shares the existing disk-backed browser setup with the streamed test and runs a complete 1 GiB OPFS write/flush/hash preflight before funding. The failed run used Playwright's default incognito context; archived evidence does not distinguish which browser storage limit was reached. The replacement [run34281520872](https://github.com/Polynomialstore/polystore/actions/runs/34281520872) remains pending.
+[PR #288](https://github.com/Polynomialstore/polystore/pull/288) shares the existing disk-backed browser setup with the streamed test and runs a complete 1 GiB OPFS write/flush/hash preflight before funding. The failed run used Playwright's default incognito context; archived evidence does not distinguish which browser storage limit was reached. The replacement run completed successfully as recorded above; its latency remains outside the new execution budget.
