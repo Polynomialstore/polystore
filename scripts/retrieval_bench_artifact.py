@@ -1289,19 +1289,19 @@ class FourValidatorLifecycle:
                 reservation.bind(("127.0.0.1", node[name]))
                 reservation.listen(1)
 
-    def prepare(self, *, audit_profile="normal"):
+    def prepare(self, *, audit_profile="normal", provider_count=12):
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
+        provider_count = integer(provider_count, "provider signer count", 12, 20)
         self.cli(self.home / "bootstrap", "multi-node", "--v", "4", "--output-dir", self.home / "nodes",
                  "--node-dir-prefix", "validator", "--chain-id", self.chain,
                  "--starting-ip-address", "127.0.0.1", "--list-ports", "26657,26654,26651,26648",
                  "--validators-stake-amount", "100000000,100000000,100000000,100000000",
                  "--keyring-backend", "test")
         first = Path(self.nodes[0]["home"])
-        # Sixteen independent owners can offer full lifecycle traffic while twelve
-        # providers cover the default RS(8,12) placement. Control transactions
-        # use their own signer and cannot race workload account sequences.
-        names = [f"owner{i}" for i in range(16)] + [f"provider{i}" for i in range(12)] + ["control"]
+        # Storage providers and deputy proof submitters use disjoint identities,
+        # so provider-daemon audits cannot race workload account sequences.
+        names = [f"owner{i}" for i in range(16)] + [f"provider{i}" for i in range(provider_count)] + ["control"]
         for name in names:
             self.cli(first, "keys", "add", name, "--keyring-backend", "test", "--output", "json")
             address = self.cli(first, "keys", "show", name, "-a", "--keyring-backend", "test")

@@ -11,11 +11,48 @@ from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
 import retrieval_four_validator_workload as workload
-from test_retrieval_four_validator_workload import fixture_state
+from test_retrieval_four_validator_workload import AUDIT_ADDRESSES, fixture_state
 from test_bench_retrieval_sessions import OPEN_RESPONSE_DATA
 
 
 class SustainedTest(unittest.TestCase):
+    def test_native_layout_and_reported_denominators_cannot_drift(self):
+        offsets = workload.sustained_offsets(4)
+        expected = {
+            2: dict(m=1, assignments=3, openings=32, bytes=4 * 1024 * 1024,
+                    rates=[8.0, 16.0, 32, 64, 128]),
+            8: dict(m=4, assignments=12, openings=8, bytes=1024 * 1024,
+                    rates=[2.0, 4.0, 8, 16, 32]),
+        }
+        for k, want in expected.items():
+            with self.subTest(k=k):
+                layout = workload.mode2_layout(k)
+                profile = workload.sustained_profile(k, 4, offsets, 20_000_000)
+                self.assertEqual((layout["m"], layout["assignments"], layout["openings_per_bundle"],
+                                  layout["bytes_per_bundle"]),
+                                 (want["m"], want["assignments"], want["openings"], want["bytes"]))
+                self.assertEqual(len(layout["deputy_indices"]), 8)
+                self.assertFalse(set(layout["deputy_indices"]) & set(range(layout["assignments"])))
+                self.assertEqual(layout["deputy_indices"], list(range(want["assignments"], want["assignments"] + 8)))
+                self.assertEqual(profile["openings_per_bundle"], want["openings"])
+                self.assertEqual(profile["proofs_per_session"], want["openings"])
+                self.assertEqual(profile["offered_openings_per_second"], want["rates"])
+                self.assertEqual(profile["proofs_per_session_unit"], "individual chained openings (legacy field name)")
+                self.assertEqual(profile["warmup_openings"], 8 * want["openings"])
+                self.assertEqual(profile["measured_openings"], 31 * want["openings"])
+                self.assertEqual(profile["bundle_opening_distribution"], {str(want["openings"]): 39})
+                self.assertEqual(profile["deputy_signer_indices"], layout["deputy_indices"])
+                self.assertEqual(profile["provider_daemon_count"], want["assignments"])
+                self.assertEqual(profile["provisioned_provider_signers"], max(12, want["assignments"] + 8))
+                self.assertEqual(profile["proof_gas_limit_per_submission_transaction"], 20_000_000)
+                self.assertEqual(profile["proof_gas_limit_per_opening"],
+                                 dict(gas=20_000_000, openings=want["openings"]))
+                self.assertEqual(profile["native_message_batching"]["proof_sessions_per_submission_transaction"], 1)
+                self.assertFalse(profile["native_message_batching"]["cross_provider_crypto_aggregation"])
+        for k in (0, 4, 16, True, "8"):
+            with self.subTest(k=k), self.assertRaises(ValueError):
+                workload.mode2_layout(k)
+
     def test_fixed_rates_and_pilot_are_absolute_and_bounded(self):
         for seconds, expected in ((4, 31), (180, 1395)):
             values = workload.sustained_offsets(seconds)
@@ -26,6 +63,31 @@ class SustainedTest(unittest.TestCase):
         for seconds in (0, 3, 181, True, 4.5):
             with self.assertRaises(ValueError):
                 workload.sustained_offsets(seconds)
+
+    def test_k8_operations_derive_full_row_fees_and_exporter_expectations(self):
+        owner = AUDIT_ADDRESSES[0]
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1",
+            deadline=artifact.monotonic_ns() + 60 * 10**9,
+            nodes=[dict(home="/home/validator0", rpc=26657)], env={},
+            signers={"owner0": owner})
+        deal = dict(id="7", manifest_root=base64.b64encode(bytes([8]) * 32).decode(),
+                    current_gen="1", end_block="5000")
+        providers = {0: AUDIT_ADDRESSES[1]}
+        deputies = AUDIT_ADDRESSES[2:10]
+        operations = workload.build_sustained_operations(
+            life, deal, providers, deputies, [0, 250_000_000], 10, 4000, 17, 9_000_000, 8)
+        self.assertEqual(len(operations), 10)
+        for index, operation in enumerate(operations):
+            session = operation["proof_expectation"]["session"]
+            snapshot = operation["proof_expectation"]["snapshot"]
+            submit = operation["open-session"]["submit"]
+            self.assertEqual((session["blob_count"], session["total_bytes"], session["locked_fee"]), (8, 1024 * 1024, "136"))
+            self.assertEqual((snapshot["k"], snapshot["m"], snapshot["slot"]), (8, 4, 0))
+            self.assertEqual(session["authorized_proof_provider"], deputies[index % 8])
+            self.assertEqual(submit[submit.index("--blob-count") + 1], "8")
+            self.assertEqual(operation["submit-proof"]["submit"][
+                operation["submit-proof"]["submit"].index("--gas") + 1], "9000000")
+        self.assertEqual([row["phase"] for row in operations], ["warmup"] * 8 + ["measurement"] * 2)
 
     def test_atomic_response_count_order_type_and_uniqueness(self):
         second = OPEN_RESPONSE_DATA[:-64] + '31' * 32
