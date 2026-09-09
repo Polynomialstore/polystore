@@ -336,6 +336,7 @@ or providers choosing what to withhold after seeing samples.
 | Provider withholds at least 10% before challenge | Sample miss probability follows the exact bound above; no stronger claim under a grindable beacon. |
 | Provider loses one blob | Sampling is weak at 1 GiB; complete delivery still fails deterministically and remains unpaid without ACK. |
 | Provider returns corrupt, reordered or truncated bytes | Complete-blob length, coordinate-bound leaf and authenticated path fail before ACK. |
+| Provider substitutes an arbitrary polynomial with a valid fresh opening | Chained membership authenticates its commitment and MDU root back to the frozen PolyFS root before accepting any sample. |
 | Provider replays another root, generation, range or signer | Session/context/plan and acceptance transcripts bind them; admission rejects mismatch before KZG. |
 | Client retries transport or proof messages | Frozen coordinates and accepted-sample bitmap prevent new credit or payment. |
 | One provider fails | Only its obligation remains unpaid/refundable; no other provider is cryptographically aggregated or blamed. |
@@ -423,9 +424,29 @@ For every sample ordinal `i` in `[0,Q)`, the chain derives the one expected tupl
 names `i` and MUST exactly match that tuple and the signer's obligation. An
 unselected or out-of-range coordinate, wrong `z`, wrong slot/provider, or an
 ordinal repeated within one message rejects before KZG verification. After those
-cheap checks, the chain precharges verification gas for every included proof and
-verifies every KZG opening before any bitmap mutation, including an opening whose
-ordinal was accepted by an earlier message. Such an already-accepted valid tuple
+cheap checks, the chain validates every chained-proof field length and exact
+Merkle path/index shape, then precharges verification gas for every included
+proof. Each sample MUST pass the existing PolyFS chained verification against the
+session's frozen 32-byte `polyfs_root`:
+
+1. Authenticate the root-table DU commitment through its Merkle path under
+   `polyfs_root` (64 MDU0 leaves). Derive its DU index as
+   `floor((mdu_index - 1) / 4096)` and its cell as `(mdu_index - 1) % 4096`.
+2. Verify the root-table KZG opening at that fixed cell with the canonical
+   encoding of the submitted target MDU root as its expected value. This is the
+   existing `verify_mdu0_root_table_proof` contract, not a standalone manifest
+   commitment supplied by the provider.
+3. Authenticate the submitted blob commitment through its exact Merkle path
+   under that authenticated MDU root, at the derived `leaf_index` among the
+   frozen K8/M4 layout's 96 leaves.
+4. Verify the fresh data KZG opening for that authenticated blob commitment at
+   the derived `z` and submitted canonical `y`.
+
+All checks MUST succeed for every included sample before any bitmap mutation,
+including an opening whose ordinal was accepted by an earlier message. Existing
+strict point/scalar encodings, allocated-user-MDU bounds and exact sibling
+consumption rules apply. Neither generation acceptance nor a valid opening for
+an unauthenticated commitment substitutes for these membership checks. Such an already-accepted valid tuple
 is idempotent; an invalid or rebound retry fails without mutation. The chain does
 not require different serialized proof bytes and stores no proof-byte digest.
 Settlement requires the ACK and every ordinal assigned to that obligation.
@@ -482,6 +503,9 @@ route rejects v3 before charging or consuming authority. Activation requires:
 - atomic producer generation plus all 12 authenticated provider acceptances;
 - full-byte integrity before every terminal ACK;
 - exact native/EVM parity for IDs, plans, sampling, proof admission and fees;
+- reject a valid fresh opening for an unrelated commitment, substituted MDU root,
+  wrong root-table cell, and truncated/extended/reindexed membership paths,
+  including retries of already-accepted ordinals; no bitmap or balance mutation;
 - bounded expiry/refund/restart tests and retained-generation accounting; and
 - end-to-end K8 qualification under the production 64,000,000 gas and 2 MiB
   block-byte limits.
