@@ -1179,6 +1179,41 @@ class PreparedRetrievalProofTest(unittest.TestCase):
                 self.assertFalse(row["proof_state_verified"])
                 self.assertTrue(row["state_evidence_error"])
 
+    def test_progress_counts_only_final_unique_verified_lifecycle_outcomes(self):
+        progress = []
+        one, two = self.operation("first"), self.operation("second")
+        def same_hash(job):
+            result = self.submit(job)
+            result["txhash"] = "AB" * 32
+            return result
+        with patch.object(artifact, "scheduled_transaction", side_effect=same_hash):
+            self.run_operations([one, two], progress_callback=progress.append)
+        self.assertEqual(progress[-1]["completed_submissions"], 2)
+        self.assertEqual(progress[-1]["committed_valid_submissions"], 1)
+        self.assertEqual([row["outcome"] for row in self.rows("transactions")],
+                         ["committed_success", "duplicate"])
+
+        progress.clear()
+        with patch.object(artifact, "scheduled_transaction",
+                          return_value=dict(outcome="committed_failure", height=104,
+                                            txhash="CD" * 32, code=7)):
+            self.run_operations([self.operation("failure")], progress_callback=progress.append)
+        self.assertEqual(progress[-1]["committed_valid_submissions"], 0)
+        self.assertEqual(progress[-1]["committed_height"], 0)
+
+        progress.clear()
+        def invalid_state(operation, sid, height, deadline):
+            value = self.read(operation, sid, height, deadline)
+            if height is not None:
+                value["view"]["session"]["status"] = 1
+            return value
+        with patch.object(artifact, "scheduled_transaction", side_effect=self.submit):
+            self.run_operations([self.operation("state-error")], reader=invalid_state,
+                                progress_callback=progress.append)
+        self.assertEqual(progress[-1]["committed_valid_submissions"], 0)
+        self.assertEqual(progress[-1]["committed_height"], 0)
+        self.assertFalse(self.rows("transactions")[0]["proof_state_verified"])
+
     def test_rejection_unknown_and_duplicate_session_are_not_proof_success(self):
         for outcome in ("checktx_rejected", "unknown", "committed_failure"):
             with patch.object(artifact, "scheduled_transaction", return_value=dict(outcome=outcome, txhash="AB" * 32)):

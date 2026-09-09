@@ -910,12 +910,6 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
                 item["original_outcome"], item["outcome"] = item["outcome"], "duplicate"
             else:
                 seen_hashes.add(item["txhash"])
-        if item["kind"] == "submit-proof":
-            completed_submissions += 1
-            committed_submissions += item["outcome"] == "committed_success"
-            if item["outcome"] in ("committed_success", "committed_failure"):
-                committed_height = max(committed_height, integer(item["height"], "committed height", 1))
-                last_progress_ns = item["finished_ns"]
         item["queue_latency_ns"] = None if started is None else started - item["offered_ns"]
         item["terminal_latency_ns"] = item["finished_ns"] - item["offered_ns"]
         if _lifecycle is not None:
@@ -929,6 +923,15 @@ def schedule_transactions(jobs, *, max_in_flight, max_queued, max_queued_per_sig
             next_job = _lifecycle.record(job, item)
             if next_job is not None:
                 followups.append(next_job)
+        if progress_callback is not None and item["kind"] == "submit-proof":
+            completed_submissions += 1
+            committed_valid = item["outcome"] == "committed_success" and (
+                _lifecycle is None or _lifecycle.mode != "prepared-proof-only" or
+                item.get("proof_state_verified") is True)
+            committed_submissions += committed_valid
+            if committed_valid:
+                committed_height = max(committed_height, integer(item["height"], "committed height", 1))
+                last_progress_ns = item["finished_ns"]
         if record_transaction is not None:
             record_transaction(dict(item))
 
