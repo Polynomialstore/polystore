@@ -2024,9 +2024,12 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         epoch = (height - 1) // epoch_length + 2
         def audits(at, finalized, observed_epoch=None):
             selected_epoch = epoch if observed_epoch is None else observed_epoch
+            observation = dict(height=at, epoch=selected_epoch, finalized=finalized, nodes=[])
+            doc["current_audit_observation"] = observation
             rows = []
-            for node in lifecycle.nodes:
+            for node_index, node in enumerate(lifecycle.nodes):
                 values = []
+                observation["nodes"].append(dict(node_index=node_index, audits=values))
                 for address in providers.values():
                     values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
                 checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain,
