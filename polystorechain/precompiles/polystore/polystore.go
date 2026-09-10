@@ -280,10 +280,80 @@ const polystoreABIJSON = `[
     "inputs":[{"name":"sessionIds","type":"bytes32[]"}],
     "outputs":[{"name":"ok","type":"bool"}]
   },
+  {
+    "type":"function","name":"proposeDealGenerationV3","stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},{"name":"previousPolyfsRoot","type":"bytes"},
+      {"name":"polyfsRoot","type":"bytes"},{"name":"integrityRoot","type":"bytes"},
+      {"name":"size","type":"uint64"},{"name":"totalMdus","type":"uint64"},
+      {"name":"witnessMdus","type":"uint64"},{"name":"integrityLeafCount","type":"uint64"},
+      {"name":"expectedCurrentGeneration","type":"uint64"}
+    ],"outputs":[{"name":"generation","type":"uint64"}]
+  },
+  {
+    "type":"function","name":"acceptDealGenerationV3","stateMutability":"nonpayable",
+    "inputs":[{"name":"dealId","type":"uint64"},{"name":"slot","type":"uint32"},{"name":"acceptanceDigest","type":"bytes"}],
+    "outputs":[{"name":"accepted","type":"bool"}]
+  },
+  {
+    "type":"function","name":"finalizeDealGenerationV3","stateMutability":"nonpayable",
+    "inputs":[{"name":"dealId","type":"uint64"},{"name":"generation","type":"uint64"},{"name":"polyfsRoot","type":"bytes"}],
+    "outputs":[{"name":"success","type":"bool"}]
+  },
+  {
+    "type":"function","name":"openRetrievalSessionV3","stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},{"name":"generation","type":"uint64"},
+      {"name":"range","type":"tuple","components":[
+        {"name":"fileRecordIndex","type":"uint32"},{"name":"fileStartOffset","type":"uint64"},
+        {"name":"fileLength","type":"uint64"},{"name":"rangeStart","type":"uint64"},{"name":"rangeLength","type":"uint64"}
+      ]},
+      {"name":"nonce","type":"uint64"},{"name":"deadlineHeight","type":"uint64"}
+    ],
+    "outputs":[{"name":"sessionId","type":"bytes32"},{"name":"logicalRequestedBytes","type":"uint64"},{"name":"billedEncodedBytes","type":"uint64"},{"name":"sampleCount","type":"uint64"}]
+  },
+  {
+    "type":"function","name":"openRetrievalSessionV3Sponsored","stateMutability":"nonpayable",
+    "inputs":[
+      {"name":"dealId","type":"uint64"},{"name":"generation","type":"uint64"},
+      {"name":"range","type":"tuple","components":[
+        {"name":"fileRecordIndex","type":"uint32"},{"name":"fileStartOffset","type":"uint64"},
+        {"name":"fileLength","type":"uint64"},{"name":"rangeStart","type":"uint64"},{"name":"rangeLength","type":"uint64"}
+      ]},
+      {"name":"nonce","type":"uint64"},{"name":"deadlineHeight","type":"uint64"},{"name":"maxTotalFee","type":"uint256"},
+      {"name":"authType","type":"uint8"},{"name":"allowlistLeafIndex","type":"uint32"},{"name":"allowlistMerklePath","type":"bytes32[]"},
+      {"name":"voucherRedeemer","type":"string"},{"name":"voucherManifestRoot","type":"bytes"},
+      {"name":"voucherProvider","type":"string"},{"name":"voucherStartMduIndex","type":"uint64"},
+      {"name":"voucherStartBlobIndex","type":"uint32"},{"name":"voucherBlobCount","type":"uint64"},
+      {"name":"voucherExpiresAt","type":"uint64"},{"name":"voucherNonce","type":"uint64"},{"name":"voucherSignature","type":"bytes"}
+    ],
+    "outputs":[{"name":"sessionId","type":"bytes32"},{"name":"logicalRequestedBytes","type":"uint64"},{"name":"billedEncodedBytes","type":"uint64"},{"name":"sampleCount","type":"uint64"}]
+  },
+  {
+    "type":"function","name":"submitRetrievalSessionProofV3","stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionId","type":"bytes32"},{"name":"slot","type":"uint32"},{"name":"proofs","type":"tuple[]","components":[
+      {"name":"ordinal","type":"uint64"},{"name":"proof","type":"tuple","components":[
+        {"name":"mduIndex","type":"uint64"},{"name":"mduRootFr","type":"bytes"},{"name":"manifestOpening","type":"bytes"},
+        {"name":"rootTableDuCommitment","type":"bytes"},{"name":"rootTableDuMerklePath","type":"bytes[]"},
+        {"name":"blobCommitment","type":"bytes"},{"name":"merklePath","type":"bytes[]"},{"name":"blobIndex","type":"uint32"},
+        {"name":"zValue","type":"bytes"},{"name":"yValue","type":"bytes"},{"name":"kzgOpeningProof","type":"bytes"}
+      ]}
+    ]}],"outputs":[{"name":"newlyAccepted","type":"uint32"},{"name":"settled","type":"bool"}]
+  },
+  {
+    "type":"function","name":"acknowledgeRetrievalObligationV3","stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionId","type":"bytes32"},{"name":"slot","type":"uint32"},{"name":"ackDigest","type":"bytes"}],
+    "outputs":[{"name":"settled","type":"bool"}]
+  },
+  {
+    "type":"function","name":"refundRetrievalSessionV3","stateMutability":"nonpayable",
+    "inputs":[{"name":"sessionId","type":"bytes32"}],"outputs":[{"name":"refunded","type":"bool"}]
+  },
   {"type":"event","name":"DealCreated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true}]},
   {"type":"event","name":"DealContentUpdated","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"manifestRoot","type":"bytes","indexed":false},{"name":"sizeBytes","type":"uint64","indexed":false}]},
   {"type":"event","name":"DealSetupSlotBumped","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"slot","type":"uint32","indexed":true},{"name":"oldProvider","type":"string","indexed":false},{"name":"newProvider","type":"string","indexed":false}]},
   {"type":"event","name":"RetrievalProved","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"filePath","type":"string","indexed":false},{"name":"bytesServed","type":"uint64","indexed":false},{"name":"nonce","type":"uint64","indexed":false}]},
+  {"type":"event","name":"RetrievalSessionV3Opened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"requester","type":"address","indexed":true},{"name":"sessionId","type":"bytes32","indexed":false}]},
   {"type":"event","name":"RetrievalSessionOpened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"provider","type":"string","indexed":false},{"name":"sessionId","type":"bytes32","indexed":false}]},
   {"type":"event","name":"RetrievalSessionConfirmed","inputs":[{"name":"sessionId","type":"bytes32","indexed":true},{"name":"owner","type":"address","indexed":true}]},
 {
@@ -741,6 +811,9 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 	if err != nil {
 		return nil, fmt.Errorf("polystore precompile: unknown selector: %w", err)
 	}
+	if method.StateMutability == "nonpayable" && contract.Value() != nil && !contract.Value().IsZero() {
+		return nil, errors.New("polystore precompile: nonpayable method")
+	}
 
 	if err := validateABIAdmission(method.Inputs, input[4:]); err != nil {
 		return nil, fmt.Errorf("polystore precompile: invalid ABI envelope: %w", err)
@@ -785,6 +858,22 @@ func (p *Precompile) runNative(ctx sdk.Context, evm *vm.EVM, contract *vm.Contra
 		return p.runCancelRetrievalSession(ctx, evm, contract, method, input[4:])
 	case "confirmRetrievalSessions":
 		return p.runConfirmRetrievalSessions(ctx, evm, contract, method, input[4:])
+	case "proposeDealGenerationV3":
+		return p.runProposeDealGenerationV3(ctx, contract, method, input[4:])
+	case "acceptDealGenerationV3":
+		return p.runAcceptDealGenerationV3(ctx, contract, method, input[4:])
+	case "finalizeDealGenerationV3":
+		return p.runFinalizeDealGenerationV3(ctx, contract, method, input[4:])
+	case "openRetrievalSessionV3":
+		return p.runOpenRetrievalSessionV3(ctx, evm, contract, method, input[4:])
+	case "openRetrievalSessionV3Sponsored":
+		return p.runOpenRetrievalSessionV3Sponsored(ctx, evm, contract, method, input[4:])
+	case "submitRetrievalSessionProofV3":
+		return p.runSubmitRetrievalSessionProofV3(ctx, contract, method, input[4:])
+	case "acknowledgeRetrievalObligationV3":
+		return p.runAcknowledgeRetrievalObligationV3(ctx, contract, method, input[4:])
+	case "refundRetrievalSessionV3":
+		return p.runRefundRetrievalSessionV3(ctx, contract, method, input[4:])
 	default:
 		return nil, fmt.Errorf("polystore precompile: unsupported method %q", method.Name)
 	}
