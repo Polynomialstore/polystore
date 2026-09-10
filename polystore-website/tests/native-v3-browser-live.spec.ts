@@ -436,8 +436,10 @@ test.describe('native V3 browser qualification', () => {
         evmTransactions.push(tx)
         evmReceipts.push(committed)
       }
-      const obligationSlots = (obligations as JsonObject[]).map((row) => Number(row.slot)).sort((a, b) => a - b)
-      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(obligationSlots)
+      const sampledObligationSlots = (obligations as JsonObject[])
+        .filter((row) => BigInt(String(row.sample_count)) > 0n)
+        .map((row) => Number(row.slot)).sort((a, b) => a - b)
+      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(sampledObligationSlots)
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject
         expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)
@@ -1088,8 +1090,10 @@ test.describe('native V3 browser qualification', () => {
         evmTransactions.push(tx)
         evmReceipts.push(committed)
       }
-      const obligationSlots = obligations.map((row) => Number(row.slot)).sort((a, b) => a - b)
-      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(obligationSlots)
+      const sampledObligationSlots = obligations
+        .filter((row) => BigInt(String(row.sample_count)) > 0n)
+        .map((row) => Number(row.slot)).sort((a, b) => a - b)
+      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(sampledObligationSlots)
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject, body = row.body as JsonObject, timing = body.timing as JsonObject
         expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)

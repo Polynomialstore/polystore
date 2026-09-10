@@ -26,14 +26,15 @@ test('v3 slot end uses the final matching systematic coordinate', () => {
   assert.equal(retrievalV3SlotEnd({ last: 8456n }, 0), 8456n)
 })
 
-test('v3 flow pipelines two verified chunks but durably advances in order before ACK', async () => {
+for (const sampleCount of [9n, 0n]) test(`v3 flow durably verifies all chunks before ACK with ${sampleCount} samples`, async () => {
   const initial = session(), events: string[] = [], cursors: Partial<Record<number, bigint>> = {}
+  initial.obligations[0].sampleCount = sampleCount
   let active = initial, fetches = 0, observations = 0
   const result = await executeRetrievalV3(initial, { cursors, output: { async write() { events.push('write') }, async flush() { events.push('flush') } },
     advance(slot, through) { events.push(`cursor:${through}`); cursors[slot] = through }, refresh(value) { active = value } }, {
     async fetch(chunk) { fetches++; events.push(`fetch:${chunk.entries[chunk.entries.length - 1].t}`); return { metadata: {}, bytes: new Uint8Array(chunk.entries.length * 131_072) } as never },
     async verify(chunk) { events.push(`verify:${chunk.entries[chunk.entries.length - 1].t}`); return new Uint8Array(chunk.entries.length * 131_072) },
-    async acknowledge(value, slot) { events.push(`ack:${slot}`); return { ...value, ackedMask: 1 } },
+    async acknowledge(value, slot) { events.push(`ack:${slot}`); return { ...value, ackedMask: 1, ...(sampleCount === 0n ? { settledMask: 1, lockedFee: 0n } : {}) } },
     async requestProof(value) { events.push('proof'); return { state: 'accepted', sessionId: value.sessionId, slot: 0, proofCount: 9, remaining: 0 } },
     async observe(value) { observations++; return value.ackedMask ? { ...value, settledMask: 1, lockedFee: 0n } : value },
   })
@@ -43,7 +44,13 @@ test('v3 flow pipelines two verified chunks but durably advances in order before
   assert.ok(events.indexOf('cursor:64') < events.indexOf('ack:0'))
   assert.equal(active.lockedFee, 0n)
   assert.equal(result.session.settledMask, 1)
-  assert.equal(observations, 2, 'fresh chain state is observed after proof submission')
+  assert.equal(events.filter((event) => event === 'write').length, 9)
+  assert.equal(events.filter((event) => event === 'flush').length, 2)
+  assert.ok(events.indexOf('verify:56') < events.indexOf('write'))
+  assert.ok(events.indexOf('verify:64') < events.indexOf('cursor:64'))
+  assert.ok(events.lastIndexOf('flush') < events.indexOf('ack:0'))
+  assert.equal(events.filter((event) => event === 'proof').length, sampleCount === 0n ? 0 : 1)
+  assert.equal(observations, sampleCount === 0n ? 1 : 2)
 })
 
 test('prefetched rejection is handled and drained without ACK or cursor beyond durable bytes', async () => {
