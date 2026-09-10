@@ -107,14 +107,28 @@ async function ensureDealIndex(page: Page): Promise<void> {
   await expect(fileMenu).toBeVisible({ timeout: 120_000 })
 }
 
-async function mountDealDetail(page: Page, prepareRetrieval = true): Promise<string> {
+async function mountDealDetail(page: Page, prepareRetrieval = true, rejectNextWalletTransaction = false): Promise<string> {
   await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
-  const mounted = await page.evaluate(async ({ dealId, payer }) => {
+  const mounted = await page.evaluate(async ({ dealId, payer, rejectNextWalletTransaction }) => {
+    if (rejectNextWalletTransaction) {
+      const provider = (window as unknown as {
+        ethereum: { request: (args: { method: string; params?: unknown }) => Promise<unknown> }
+      }).ethereum
+      const original = provider.request.bind(provider)
+      let reject = true
+      provider.request = async (args) => {
+        if (reject && args.method === 'eth_sendTransaction') {
+          reject = false
+          throw Object.assign(new Error('qualification wallet rejection'), { code: 4001 })
+        }
+        return original(args)
+      }
+    }
     const modulePath = '/tests/utils/nativeV3DealDetail.tsx'
     const driver = await import(/* @vite-ignore */ modulePath) as typeof import('./utils/nativeV3DealDetail')
     await driver.mountNativeV3DealDetail(dealId, payer)
     return true
-  }, { dealId, payer })
+  }, { dealId, payer, rejectNextWalletTransaction })
   expect(mounted).toBe(true)
   const driver = page.getByTestId('native-v3-live-driver')
   await expect(driver).toHaveAttribute('data-ready', 'true', { timeout: 120_000 })
@@ -404,23 +418,7 @@ test.describe('native V3 browser qualification', () => {
         aatom: await balance(page, payer, 'aatom'),
         nonce: await latestNonce(page),
       }
-      await mountDealDetail(page)
-      if (fault === 'wallet 4001') {
-        await page.evaluate(() => {
-          const provider = (window as unknown as {
-            ethereum: { request: (args: { method: string; params?: unknown }) => Promise<unknown> }
-          }).ethereum
-          const original = provider.request.bind(provider)
-          let reject = true
-          provider.request = async (args) => {
-            if (reject && args.method === 'eth_sendTransaction') {
-              reject = false
-              throw Object.assign(new Error('qualification wallet rejection'), { code: 4001 })
-            }
-            return original(args)
-          }
-        })
-      }
+      await mountDealDetail(page, true, fault === 'wallet 4001')
       const button = await openDownload(page)
       await button.click()
       await expect(page.locator('div').filter({ hasText: /^Download failed:/ }).first()).toBeVisible({ timeout: 120_000 })
