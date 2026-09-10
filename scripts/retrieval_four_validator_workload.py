@@ -2338,7 +2338,7 @@ def run_native_v3_browser_expiry(lifecycle, *, source, deal, browser_ports, payl
 def prepare_native_v3_browser_expiry(lifecycle, *, main_deal, providers, send, wait, command, curl):
     """Create and admit the isolated 180-block fixture after the main fence."""
     created = send("owner0", ["create-deal", "180", "100000000", "10000000",
-        "--service-hint", "native-v3-browser-expiry"])
+        "--service-hint", "General:rs=8+4"])
     wait(created["height"] + 1)
     owned = [row for row in lifecycle.query(lifecycle.nodes[0], API + "/deals", created["height"])["deals"]
              if row["owner"] == lifecycle.signers["owner0"] and str(row.get("id", "0")) != str(main_deal["id"])]

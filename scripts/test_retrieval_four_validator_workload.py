@@ -390,7 +390,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                  patch.object(workload, "set_public_retrieval_policy", return_value={"public": True}) as policy:
                 fixture = workload.prepare_native_v3_browser_expiry(lifecycle, main_deal={"id": "7"},
                     providers=providers, send=send, wait=wait, command=command, curl="/curl")
-            self.assertEqual(send.call_args.args[1][:2], ["create-deal", "180"])
+            self.assertEqual(send.call_args.args[1], ["create-deal", "180", "100000000", "10000000",
+                "--service-hint", "General:rs=8+4"])
             self.assertEqual(fixture["payload"]["bytes"], 1024)
             self.assertTrue(command.call_args.args[0][-1].startswith(
                 "http://127.0.0.1:19092/sp/retrieval/upload?deal_id=8&"))
