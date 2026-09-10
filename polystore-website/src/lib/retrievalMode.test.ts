@@ -15,10 +15,17 @@ import {
 
 test('connected gateway persistence binds the attestation to its trusted probed base', () => {
   const values = new Map<string, string>()
+  let observeLivenessPublication = false
+  let baseAtLivenessPublication: string | undefined
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: {
     getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value) },
+    setItem: (key: string, value: string) => {
+      values.set(key, value)
+      if (observeLivenessPublication && key === LOCAL_GATEWAY_CONNECTED_KEY && value === '1') {
+        baseAtLivenessPublication = readLocalGatewayConnectedBase()
+      }
+    },
     removeItem: (key: string) => { values.delete(key) },
   } } })
   try {
@@ -29,7 +36,10 @@ test('connected gateway persistence binds the attestation to its trusted probed 
     persistLocalGatewayConnection()
     assert.equal(values.get(LOCAL_GATEWAY_CONNECTED_KEY), '0')
     assert.equal(values.has(LOCAL_GATEWAY_CONNECTED_BASE_KEY), false)
+    persistLocalGatewayConnection('http://127.0.0.1:8080')
+    observeLivenessPublication = true
     persistLocalGatewayLiveness()
+    assert.equal(baseAtLivenessPublication, undefined)
     assert.equal(readLocalGatewayConnectedHint(), true)
     assert.equal(readLocalGatewayConnectedBase(), undefined)
   } finally {
