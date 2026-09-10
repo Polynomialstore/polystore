@@ -96,7 +96,7 @@ async function observeV3Checkpoint(page: Page): Promise<V3CheckpointObservation>
   }, { dealId, payer })
 }
 
-function mutateV3Multipart(body: Buffer, contentType: string, kind: 'corrupt' | 'wrong-order' | 'truncate', blob = 0): Buffer {
+function mutateV3Multipart(body: Buffer, contentType: string, kind: 'corrupt' | 'multipart-order' | 'truncate', blob = 0): Buffer {
   const boundary = /(?:^|;)\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.slice(1).find(Boolean)
   if (!boundary) throw new Error('missing v3 multipart boundary')
   const opening = Buffer.from(`--${boundary}\r\n`), middle = Buffer.from(`\r\n--${boundary}\r\n`)
@@ -106,7 +106,7 @@ function mutateV3Multipart(body: Buffer, contentType: string, kind: 'corrupt' | 
   if (!body.subarray(0, opening.length).equals(opening) || split < 0 || close < 0 || secondHeader < 0) {
     throw new Error('unexpected v3 multipart framing')
   }
-  if (kind === 'wrong-order') {
+  if (kind === 'multipart-order') {
     const first = body.subarray(opening.length, split), second = body.subarray(split + middle.length, close)
     return Buffer.concat([opening, second, middle, first, body.subarray(close)])
   }
@@ -261,6 +261,7 @@ test.describe('native V3 browser qualification', () => {
     const evmTransactions: JsonObject[] = []
     const evmReceipts: JsonObject[] = []
     const gatewayMduResponses: Array<{ url: string; kind: 'metadata' | 'data'; bodyBytes: number }> = []
+    const gatewayMduCanceled: Array<{ url: string; kind: 'metadata' | 'data'; error: string }> = []
     const directSpMduRequests: string[] = []
     const retrievalResponseTasks: Promise<void>[] = []
     const retrievalObserverErrors: string[] = []
@@ -303,11 +304,16 @@ test.describe('native V3 browser qualification', () => {
         const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(responseUrl.pathname)
         if (response.ok() && gatewayMdu) {
           const task = (async () => {
-            if (await response.finished()) return
+            const kind = responseUrl.searchParams.has('committed_height') ? 'metadata' as const : 'data' as const
+            const finishedError = await response.finished()
+            if (finishedError) {
+              gatewayMduCanceled.push({ url: response.url(), kind, error: finishedError.message })
+              return
+            }
             const sizes = await response.request().sizes()
             gatewayMduResponses.push({
               url: response.url(),
-              kind: responseUrl.searchParams.has('committed_height') ? 'metadata' : 'data',
+              kind,
               bodyBytes: sizes.responseBodySize,
             })
           })().catch((error: unknown) => {
@@ -419,14 +425,16 @@ test.describe('native V3 browser qualification', () => {
       expect(directSpMduRequests).toHaveLength(0)
       const retrievalHttp = {
         gateway: {
-          metadata: { count: metadataResponses.length,
-            bodyBytes: metadataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
-            urls: metadataResponses.map(({ url }) => url) },
-          data: { count: dataResponses.length,
-            bodyBytes: dataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
-            urls: dataResponses.map(({ url }) => url) },
+          metadata: { completedCount: metadataResponses.length,
+            completedPayloadBytes: metadataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
+            completedUrls: metadataResponses.map(({ url }) => url) },
+          data: { completedCount: dataResponses.length,
+            completedPayloadBytes: dataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
+            completedUrls: dataResponses.map(({ url }) => url) },
+          canceled: { count: gatewayMduCanceled.length, urls: gatewayMduCanceled.map(({ url }) => url),
+            responses: gatewayMduCanceled },
         },
-        directSpMdu: { count: 0, bodyBytes: 0, urls: [] as string[] },
+        directSpMdu: { requestCount: 0, urls: [] as string[] },
       }
       Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid, retrievalHttp })
       const paidTransactions = rawTransactions
@@ -763,17 +771,20 @@ test.describe('native V3 browser qualification', () => {
     const evmResponseHashes: string[] = []
     const evmTransactions: JsonObject[] = []
     const evmReceipts: JsonObject[] = []
+    const providerProofOutcomes: unknown[] = []
     const durableStages: string[] = []
-    const faultDeliveries = { corrupt: 0, 'wrong-order': 0, truncate: 0 }
+    const faultDeliveries = { corrupt: 0, 'multipart-order': 0, truncate: 0 }
+    const faultFailures: Record<string, string> = {}
     let segment = 'initial'
     let rawTransactions = 0
-    let suppressOpenResponse = true
+    let rawTransactionAttempts = 0
+    let unknownOpenRaw = ''
     let unknownOpenHash = ''
     let holdAckEstimate = false
     let heldAckEstimate = false
     let releaseHeldAck: (() => void) | undefined
     let activePage = page
-    let faultMode: 'corrupt' | 'wrong-order' | 'truncate' | 'pass' = 'corrupt'
+    let faultMode: 'corrupt' | 'multipart-order' | 'truncate' | 'pass' = 'corrupt'
     let planned: V3CheckpointObservation | undefined
     let targetChunk: V3PlannedChunk | undefined
     let targetT = ''
@@ -782,7 +793,7 @@ test.describe('native V3 browser qualification', () => {
     let targetRequests = 0
     const summary: Record<string, unknown> = {
       success: false, dealId, payer, filePath, expectedBytes, expectedHash, diagnostics,
-      evmResponseHashes, evmTransactions, evmReceipts, faultDeliveries,
+      evmResponseHashes, evmTransactions, evmReceipts, providerProofOutcomes, faultDeliveries,
       resultDurability: { atomicReplace: true, verifiedStages: durableStages },
     }
     let saved: Promise<void> = Promise.resolve()
@@ -813,6 +824,17 @@ test.describe('native V3 browser qualification', () => {
       }
       scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3FaultDiagnostic(event) }
     })
+    context.on('response', (response: Response) => {
+      if (new URL(response.url()).pathname !== '/gateway/session-proof' || !response.ok()) return
+      void response.json().then((body: unknown) => {
+        if (!body || typeof body !== 'object') return
+        const outcome = body as JsonObject
+        const timing = outcome.timing
+        if (timing && typeof timing === 'object' && (timing as JsonObject).schema === 'polystore-v3-provider-timing-v1') {
+          providerProofOutcomes.push({ url: response.url(), txHash: outcome.tx_hash, body: outcome })
+        }
+      }).catch(() => undefined)
+    })
 
     await context.route(evm, async (route) => {
       const request = route.request()
@@ -827,6 +849,13 @@ test.describe('native V3 browser qualification', () => {
         return
       }
       if (rpc.method !== 'eth_sendRawTransaction') return route.continue()
+      rawTransactionAttempts++
+      const raw = typeof rpc.params?.[0] === 'string' ? rpc.params[0] : ''
+      expect(raw).toMatch(/^0x[0-9a-f]+$/i)
+      if (unknownOpenRaw && raw === unknownOpenRaw) {
+        await route.abort('failed')
+        return
+      }
       rawTransactions++
       const upstream = await route.fetch()
       const body = await upstream.body()
@@ -835,8 +864,8 @@ test.describe('native V3 browser qualification', () => {
       expect(payload.result).toMatch(/^0x[0-9a-f]{64}$/i)
       const hash = String(payload.result)
       evmResponseHashes.push(hash)
-      if (suppressOpenResponse) {
-        suppressOpenResponse = false
+      if (!unknownOpenRaw) {
+        unknownOpenRaw = raw
         unknownOpenHash = hash
         await route.abort('failed')
         return
@@ -892,32 +921,38 @@ test.describe('native V3 browser qualification', () => {
       const unknownFailure = await waitForRetrievalFailure(page)
       expect(unknownOpenHash).toMatch(/^0x[0-9a-f]{64}$/i)
       expect(rawTransactions).toBe(1)
+      expect(rawTransactionAttempts).toBeGreaterThanOrEqual(rawTransactions)
       expect(evmResponseHashes).toEqual([unknownOpenHash])
       await expect.poll(() => unfinishedLocalState(page)).toEqual({
         checkpoints: 1, unbound: 1, journals: [{ state: 'broadcasting', hasHash: false }],
       })
+      const includedNonce = (BigInt(before.nonce.nonce) + 1n).toString()
+      await expect.poll(async () => (await latestNonce(page)).nonce, { timeout: 120_000 }).toBe(includedNonce)
+      await expect.poll(async () => (await balance(page, payer, 'stake')) < before.stake, { timeout: 120_000 }).toBe(true)
       const afterUnknown = {
         stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom'),
         nonce: await latestNonce(page),
       }
       expect(afterUnknown.stake).toBeLessThan(before.stake)
       expect(afterUnknown.aatom).toBeLessThan(before.aatom)
-      expect(BigInt(afterUnknown.nonce.nonce)).toBe(BigInt(before.nonce.nonce) + 1n)
-      Object.assign(summary, { stage: 'unknown-open', before, afterUnknown, gatewayUrl, unknownFailure, unknownOpenHash })
+      expect(afterUnknown.nonce).toEqual({ found: true, nonce: includedNonce })
+      Object.assign(summary, { stage: 'unknown-open', before, afterUnknown, gatewayUrl, unknownFailure, unknownOpenHash,
+        rawTransactions, rawTransactionAttempts })
       await durable('unknown-open')
 
-      const recoveryButton = () => activePage.getByTestId('deal-detail-file-row').filter({
-        has: activePage.getByTestId('v3-frozen-recovery'),
-      }).getByTestId('deal-detail-download')
+      const recoveryButton = () => activePage.locator(
+        `[data-testid="deal-detail-download"][data-file-path="${filePath}"]`,
+      ).last()
       const faultSnapshots: Record<string, V3CheckpointObservation> = {}
-      for (const kind of ['corrupt', 'wrong-order', 'truncate'] as const) {
+      for (const kind of ['corrupt', 'multipart-order', 'truncate'] as const) {
         segment = kind
         faultMode = kind
         await expect(recoveryButton()).toBeVisible({ timeout: 120_000 })
         await recoveryButton().click()
         await expect.poll(() => faultDeliveries[kind], { timeout: 120_000 }).toBeGreaterThan(0)
-        await waitForRetrievalFailure(activePage)
         await expect(recoveryButton()).toBeEnabled({ timeout: 120_000 })
+        faultFailures[kind] = await waitForRetrievalFailure(activePage)
+        expect(faultFailures[kind]).toMatch(kind === 'corrupt' ? /integrity verification/i : /multipart/i)
         const snapshot = await observeV3Checkpoint(activePage)
         faultSnapshots[kind] = snapshot
         expect(snapshot.sessionId).toBe(planned!.sessionId)
@@ -933,7 +968,8 @@ test.describe('native V3 browser qualification', () => {
         expect(diagnostics.some((event) => event.phase === 'acked_obligation' && event.slot === targetChunk!.slot)).toBe(false)
         expect(rawTransactions).toBe(1 + diagnostics.filter((event) => event.phase === 'acked_obligation').length)
         expect((await latestNonce(activePage)).nonce).toBe(afterUnknown.nonce.nonce)
-        Object.assign(summary, { stage: kind, planned, targetT, targetChunk, targetBlob, faultSnapshots, dataRequests, targetRequests })
+        Object.assign(summary, { stage: kind, planned, targetT, targetChunk, targetBlob, faultSnapshots, faultFailures,
+          dataRequests, targetRequests })
         await durable(kind)
       }
 
@@ -975,6 +1011,7 @@ test.describe('native V3 browser qualification', () => {
       expect(BigInt(String(session.refunded_slots_mask))).toBe(0n)
       expect(BigInt(String(session.locked_fee))).toBe(0n)
       expect(rawTransactions).toBe(1 + obligations.length)
+      expect(rawTransactionAttempts).toBeGreaterThanOrEqual(rawTransactions)
       expect(evmResponseHashes).toHaveLength(rawTransactions)
       expect(new Set(evmResponseHashes).size).toBe(rawTransactions)
       expect(evmResponseHashes[0]).toBe(unknownOpenHash)
@@ -989,6 +1026,17 @@ test.describe('native V3 browser qualification', () => {
         expect(committed.status).toBe('0x1')
         evmTransactions.push(tx)
         evmReceipts.push(committed)
+      }
+      await expect.poll(() => providerProofOutcomes.length).toBeGreaterThan(0)
+      for (const observed of providerProofOutcomes) {
+        const row = observed as JsonObject, body = row.body as JsonObject, timing = body.timing as JsonObject
+        expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)
+        expect(body.session_id).toBe(String(session.session_id))
+        expect(Number(body.slot)).toBeGreaterThanOrEqual(0)
+        expect(Number(body.proof_count)).toBeGreaterThan(0)
+        expect(timing.schema).toBe('polystore-v3-provider-timing-v1')
+        expect(Array.isArray(timing.submission_attempts)).toBe(true)
+        expect((timing.submission_attempts as unknown[]).length).toBeGreaterThan(0)
       }
       const variableFee = obligations.reduce((sum, row) =>
         sum + BigInt(String(row.blob_count)) * BigInt(String(session.price_per_blob)), 0n)
@@ -1019,8 +1067,9 @@ test.describe('native V3 browser qualification', () => {
       expect(phaseGuards).toEqual({ openedSessions: 1, acknowledgedObligations: obligations.length, targetVerifiedChunks: 1 })
       Object.assign(summary, {
         success: true, stage: 'settled-cache', session, before, afterUnknown, after, rawTransactions,
+        rawTransactionAttempts,
         downloaded, cached, chargedStake: String(chargedStake), requestsBeforeCache, dataRequests, targetRequests,
-        phaseGuards, localState: await unfinishedLocalState(activePage),
+        paidDiagnosticCount: diagnostics.length, phaseGuards, localState: await unfinishedLocalState(activePage),
       })
       await durable('settled-cache')
     } finally {
