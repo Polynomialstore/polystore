@@ -142,6 +142,87 @@ test('useFetch reaches the legacy path when the real generation-v3 query returns
   assert.equal(v3Payments, 0)
 })
 
+for (const row of [
+  { configured: 'http://localhost:8080', probed: 'http://127.0.0.1:8080' },
+  { configured: 'http://localhost:18080', probed: 'http://127.0.0.1:8080' },
+] as const) {
+  test(`useFetch submits v3 proof through probed ${row.probed} instead of configured ${row.configured}`, async () => {
+    const root = `0x${'34'.repeat(32)}`, sessionId = `0x${'12'.repeat(32)}`
+    const file = { path: 'file.bin', start_offset: 0n, size_bytes: 4n, flags: 0 }
+    const authority = { chainId: 'chain', dealId: 1n, generation: 2n, owner: 'owner', polyfsRoot: root,
+      providers: ['provider'], metadataMdus: 2n, userMdus: 1n, totalMdus: 3n, witnessMdus: 1n }
+    const session = { sessionId, authority, owner: 'owner', lockedFee: 1n,
+      obligations: [{ slot: 0, payee: 'provider' }] }
+    const proofBases: string[] = []
+    let refIndex = 0
+    const active = { current: null as AbortController | null }
+    const saved = { current: null as { url: string; cleanup: () => Promise<void> } | null }
+    const checkpoint = {
+      state: {} as { session?: typeof session }, cursors: {},
+      output: { file: async () => new Blob(['data']) },
+      bind(value: typeof session) { this.state.session = value }, refresh: () => {}, retain: async () => {},
+      handoff: async () => async () => {},
+    }
+    const payment = {
+      requireWallet: () => ({ owner: 'owner' }), scope: () => ['owner'], unavailableReason: undefined,
+      openV3: async () => session, readyV3: async (value: typeof session) => value,
+      observeV3: async (value: typeof session) => value, acknowledgeV3: async (value: typeof session) => value,
+      forgetV3: async () => {}, discardUnboundV3: async () => {},
+    }
+    const modules: Record<string, unknown> = {
+      '../lib/retrievalDiagnostics': { retrievalDiagnostic: () => {}, timeRetrieval: (_name: string, work: () => unknown) => work() },
+      react: { useEffect: () => {}, useRef: () => refIndex++ === 0 ? active : saved, useState: (initial: unknown) => [initial, () => {}] },
+      '../api/providerClient': {},
+      '../config': { appConfig: { cosmosChainId: 'chain', lcdBase: 'https://lcd.example', gatewayDisabled: false,
+        gatewayBase: row.configured, spBase: '' } },
+      '../domain/polyfsLayout': {}, '../lib/providerDiscovery': {},
+      '../lib/retrieval': { account: (value: string) => value, u64: (value: string) => BigInt(value) },
+      '../lib/retrievalFlow': { validateRetrievalAllocation: () => {} }, '../lib/retrievalRecovery': {},
+      '../lib/retrievalMode': { readLocalGatewayConnectedBase: () => row.probed, readLocalGatewayConnectedHint: () => true },
+      '../lib/retrievalSettlement': {}, '../lib/transport/mode': await import('./transport/mode'),
+      '../lib/walletErrors': { classifyWalletError: (error: unknown) => ({ message: error instanceof Error ? error.message : String(error) }) },
+      '../lib/worker-client': { workerClient: { initRetrievalWasm: async () => {}, verifyRetrievalDataV3: async () => {} } },
+      '../lib/retrievalCheckpoint': {},
+      '../lib/retrievalDownloadPublication': { handoffOwnedDownload: async (_signal: AbortSignal, _owns: () => boolean, _url: string,
+        handoff: () => Promise<unknown>, publish: (cleanup: unknown) => unknown) => publish(await handoff()) },
+      '../lib/retrievalV3': {
+        fetchActiveGenerationV3: async () => authority,
+        generationAsPinnedV2Shape: () => ({}),
+        planV3Chunks: () => [{ slot: 0 }][Symbol.iterator](),
+      },
+      '../lib/retrievalV3Checkpoint': {
+        retrievalV3DownloadCheckpointKey: async () => `output-v3:${'12'.repeat(32)}`,
+        readRetrievalV3Checkpoint: () => undefined, hasSettledRetrievalV3Cache: () => false,
+        openRetrievalV3Checkpoint: async () => checkpoint,
+      },
+      '../lib/retrievalV3Flow': { executeRetrievalV3: async (_session: unknown, _checkpoint: unknown,
+        options: { requestProof: (current: typeof session, slot: number) => Promise<unknown> }) => {
+        const outcome = await options.requestProof(session, 0)
+        return { session: { ...session, lockedFee: 0n }, outcomes: [outcome] }
+      } },
+      '../lib/retrievalV3Recovery': {},
+      '../lib/retrievalV3Settlement': { requestRetrievalProofV3: async (base: string) => {
+        proofBases.push(base)
+        return { state: 'accepted', sessionId }
+      } },
+      './useRetrievalSessions': { useRetrievalSessions: () => payment },
+      './useTransportRouter': { useTransportRouter: () => ({ allowsV3Direct: () => false,
+        fetchV3Metadata: async () => ({ data: [file] }) }) },
+    }
+    const source = readFileSync(new URL('../hooks/useFetch.ts', import.meta.url), 'utf8')
+    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+    const exports: { useFetch?: typeof import('../hooks/useFetch').useFetch } = {}
+    const localUrl = { createObjectURL: () => 'blob:1', revokeObjectURL: () => {} }
+    new Function('require', 'exports', 'URL', code)((name: string) => {
+      if (!(name in modules)) throw new Error('unexpected hook dependency: ' + name)
+      return modules[name]
+    }, exports, localUrl)
+    const result = await exports.useFetch!().fetchFile({ dealId: '1', generation: '2', manifestRoot: root, owner: 'owner', filePath: file.path })
+    assert.equal(result.url, 'blob:1')
+    assert.deepEqual(proofBases, [row.probed])
+  })
+}
+
 test('saved v3 recovery refreshes state after acquiring its checkpoint lock', async () => {
   const f = fixture(true)
   const pending = f.fetch()

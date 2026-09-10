@@ -15,7 +15,7 @@ import { workerClient } from '../lib/worker-client'
 import { BLOB_SIZE_BYTES } from '../domain/polyfsLayout'
 import { accountBytes } from '../lib/retrieval'
 import { discardUnboundRetrievalV3Checkpoint } from '../lib/retrievalV3Checkpoint'
-import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 import { isGatewayTransportEnabled } from '../lib/transport/mode'
 
 let lastBrowserNonce = 0n
@@ -158,8 +158,9 @@ export function useRetrievalSessions() {
         const transaction = await settleBrowserTransaction({
           key: ownerDeal, store, signal: deadline,
           prepare: async () => {
-            if (!isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase,
-              localGatewayConnected: readLocalGatewayConnectedHint() })) {
+            const proofBase = readLocalGatewayConnectedBase()
+            if (!isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: proofBase || '',
+              localGatewayConnected: Boolean(proofBase) })) {
               throw new Error('Starting a new native V3 retrieval requires a connected trusted user-gateway for proof submission')
             }
             const current = await fetchActiveGenerationV3(appConfig.lcdBase, authority.chainId, authority.dealId.toString(), deadline)

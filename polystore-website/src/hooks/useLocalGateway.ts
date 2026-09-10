@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { appConfig } from '../config';
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
+import { persistLocalGatewayConnection } from '../lib/retrievalMode';
 
 type GatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -28,7 +29,6 @@ const GATEWAY_STATUS_ENDPOINT = '/status';
 const GATEWAY_HEALTH_ENDPOINT = '/health';
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
 const HIDDEN_POLL_INTERVAL_MS = 300_000;
-const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected';
 const DEFAULT_LOCAL_GATEWAY_BASE = 'http://127.0.0.1:8080';
 
 function swapLoopbackHost(baseUrl: string): string | null {
@@ -76,15 +76,6 @@ function normalizeGatewaySeed(value: string | null | undefined): string {
   return DEFAULT_LOCAL_GATEWAY_BASE;
 }
 
-function persistLocalGatewayConnected(connected: boolean) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_KEY, connected ? '1' : '0');
-  } catch {
-    // best-effort only
-  }
-}
-
 function parseGatewayPersona(details: LocalGatewayDetails | null): string {
   if (!details) return '';
   return String(details.persona || '').trim().toLowerCase();
@@ -117,18 +108,18 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       statusRef.current = 'disconnected';
       errorRef.current = 'Gateway disabled';
       detailsRef.current = null;
-      persistLocalGatewayConnected(false);
+      persistLocalGatewayConnection();
       return;
     }
 
     // Reset to disconnected on each hook initialization; a successful probe flips this back to connected.
-    persistLocalGatewayConnected(false);
+    persistLocalGatewayConnection();
 
     const updateStatus = (next: GatewayStatus) => {
       if (statusRef.current === next) return;
       statusRef.current = next;
       setStatus(next);
-      persistLocalGatewayConnected(next === 'connected');
+      if (next !== 'connected') persistLocalGatewayConnection();
     };
     const updateError = (next: string | null) => {
       if (errorRef.current === next) return;
@@ -154,6 +145,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
     };
 
     let inFlight = false;
+    let disposed = false;
+    let probeController: AbortController | null = null;
     let timer: number | null = null;
     let probePath: '/status' | '/health' = '/status';
 
@@ -169,6 +162,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
     const checkGatewayStatus = async () => {
       if (inFlight) return;
       inFlight = true;
+      probeController = new AbortController();
       if (statusRef.current !== 'connected') {
         updateStatus('connecting');
       }
@@ -184,11 +178,13 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
           try {
             const response = await fetch(`${baseUrl}${probePath}`, {
               method: 'GET',
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.any([probeController.signal, AbortSignal.timeout(3000)]),
             });
+            if (disposed) return;
 
             if (response.ok) {
               const payload = await response.json().catch(() => null);
+              if (disposed) return;
               if (payload && typeof payload === 'object') {
                 const parsed = payload as LocalGatewayDetails;
                 const persona = parseGatewayPersona(parsed);
@@ -205,6 +201,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
                 updateDetails(null);
               }
               updateActiveUrl(baseUrl);
+              persistLocalGatewayConnection(baseUrl);
               updateStatus('connected');
               return;
             }
@@ -217,11 +214,13 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
             const fallbackPath = probePath === GATEWAY_STATUS_ENDPOINT ? GATEWAY_HEALTH_ENDPOINT : GATEWAY_STATUS_ENDPOINT;
             const healthRes = await fetch(`${baseUrl}${fallbackPath}`, {
               method: 'GET',
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.any([probeController.signal, AbortSignal.timeout(3000)]),
             });
+            if (disposed) return;
             if (healthRes.ok) {
               probePath = fallbackPath;
               updateActiveUrl(baseUrl);
+              persistLocalGatewayConnection(baseUrl);
               updateStatus('connected');
               updateDetails(null);
               return;
@@ -236,6 +235,7 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
           }
         }
 
+        if (disposed) return;
         updateStatus('disconnected');
         updateDetails(null);
         if (lastHttpStatus !== null) {
@@ -264,6 +264,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
         updateActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
       } finally {
         inFlight = false;
+        probeController = null;
+        if (disposed) return;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
           schedule(HIDDEN_POLL_INTERVAL_MS);
         } else {
@@ -286,6 +288,8 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
     }
 
     return () => {
+      disposed = true;
+      probeController?.abort();
       if (timer !== null) {
         window.clearTimeout(timer);
       }

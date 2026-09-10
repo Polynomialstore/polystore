@@ -2,6 +2,7 @@ import { appConfig } from '../config'
 import { isTrustedLocalGatewayBase } from './transport/mode'
 
 export const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
+export const LOCAL_GATEWAY_CONNECTED_BASE_KEY = 'polystore_local_gateway_connected_base'
 
 export interface GatewayModeInput {
   preference?: string
@@ -21,6 +22,32 @@ export function readLocalGatewayConnectedHint(): boolean {
     return window.localStorage.getItem(LOCAL_GATEWAY_CONNECTED_KEY) === '1'
   } catch {
     return false
+  }
+}
+
+export function readLocalGatewayConnectedBase(): string | undefined {
+  if (!readLocalGatewayConnectedHint() || typeof window === 'undefined') return undefined
+  try {
+    const base = String(window.localStorage.getItem(LOCAL_GATEWAY_CONNECTED_BASE_KEY) || '').trim().replace(/\/$/, '')
+    return isTrustedLocalGatewayBase(base) ? base : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function persistLocalGatewayConnection(base?: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const clean = String(base || '').trim().replace(/\/$/, '')
+    if (isTrustedLocalGatewayBase(clean)) {
+      window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_BASE_KEY, clean)
+      window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_KEY, '1')
+    } else {
+      window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_KEY, '0')
+      window.localStorage.removeItem(LOCAL_GATEWAY_CONNECTED_BASE_KEY)
+    }
+  } catch {
+    // best-effort only
   }
 }
 

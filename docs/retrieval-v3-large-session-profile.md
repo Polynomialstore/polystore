@@ -766,9 +766,10 @@ journal. Checkpoint and owner/deal locks prevent another tab from opening a
 replacement payment. An unfinished checkpoint may be discarded only while its
 payment journal is absent, explicitly rejected/prepared, or proven reverted;
 broadcasting, committed and malformed records remain for reconciliation. The
-current browser client requires a connected trusted loopback user-gateway proof
-route before preparing a new native V3 open transaction, including when data is
-fetched directly from providers. Existing broadcasting or committed journals,
+current browser client requires the exact trusted loopback user-gateway route
+from its latest successful probe before preparing a new native V3 open
+transaction, including when data is fetched directly from providers. Existing
+broadcasting or committed journals,
 settled output caches and expiry refunds remain available without that route.
 This precondition prevents locking a new retrieval fee when the client cannot
 request provider proof submission; it does not qualify public activation. The

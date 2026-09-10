@@ -16,7 +16,7 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
   const hash = `0x${'12'.repeat(32)}` as const, address = '0x1111111111111111111111111111111111111111'
   const precompile = '0x2222222222222222222222222222222222222222'
   let estimates = 0, sends = 0, nonceQueries = 0, generationQueries = 0, failEstimate = false, loseHash = false, loseReceipt = false, reverted = false, changedContext = false
-  let gatewayDisabled = false, gatewayConnected = true
+  let gatewayDisabled = false, gatewayBase = 'http://localhost:8080', gatewayProofBase: string | undefined = 'http://127.0.0.1:8080'
   const pin = { dealId: 1n, owner: 'owner', root: hash, generation: 1n, layout: 'mode2', k: 2, m: 1,
     metadataMdus: 2n, userMdus: 1n, endHeight: 1000n, height: 10n, assignments: [{ active: true, provider: 'provider' }] }
   const window = { slot: 0, provider: 'provider', mduIndex: 2n, startBlobIndex: 0, blobCount: 1 }
@@ -56,7 +56,7 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
     wagmi: { useAccount: () => ({ address }), usePublicClient: () => client, useWalletClient: () => ({ data: wallet }) },
     '@tanstack/react-query': { useQuery: () => ({ data: null }) },
     '../config': { appConfig: { chainId: 1, cosmosChainId: 'chain', polystorePrecompile: precompile,
-      gatewayBase: 'http://127.0.0.1:8080', get gatewayDisabled() { return gatewayDisabled } } },
+      get gatewayBase() { return gatewayBase }, get gatewayDisabled() { return gatewayDisabled } } },
     '../lib/address': { ethToPolystoreAddress: () => 'owner' },
     '../lib/polystorePrecompile': { encodeRetrievalV2Data: () => '0x1234', encodeConfirmRetrievalSessionsData: () => '0x1234',
       encodeOpenRetrievalSessionV3Data: () => '0x1234', encodeOpenRetrievalSessionV3SponsoredData: () => '0x1234',
@@ -81,7 +81,7 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
       retrievalIntentKey: async () => 'test', retrievalV3OpenTransactionKey: async () => 'open-v3:test',
       withRetrievalLock: (_key: string, work: () => unknown) => work() },
     '../lib/retrievalV3Checkpoint': { discardUnboundRetrievalV3Checkpoint: async () => {} },
-    '../lib/retrievalMode': { readLocalGatewayConnectedHint: () => gatewayConnected },
+    '../lib/retrievalMode': { readLocalGatewayConnectedBase: () => gatewayProofBase },
     '../lib/transport/mode': transportMode,
   }
   const source = readFileSync(new URL('../hooks/useRetrievalSessions.ts', import.meta.url), 'utf8')
@@ -99,7 +99,8 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
     set failEstimate(value: boolean) { failEstimate = value }, set loseHash(value: boolean) { loseHash = value },
     set loseReceipt(value: boolean) { loseReceipt = value }, set changedContext(value: boolean) { changedContext = value },
     set nonceSessionId(value: typeof hash | null) { nonceSessionId = value },
-    set gatewayDisabled(value: boolean) { gatewayDisabled = value }, set gatewayConnected(value: boolean) { gatewayConnected = value },
+    set gatewayDisabled(value: boolean) { gatewayDisabled = value }, set gatewayBase(value: string) { gatewayBase = value },
+    set gatewayProofBase(value: string | undefined) { gatewayProofBase = value },
     advanceGeneration() { activeAuthorityV3 = { ...authorityV3, generation: 2n, polyfsRoot: `0x${'34'.repeat(32)}` } as retrievalV3.FrozenGenerationV3; return activeAuthorityV3 },
     set reverted(value: boolean) { reverted = value },
     runOpenV3,
@@ -182,7 +183,7 @@ test('openV3: lost receipt resumes the frozen journal after the active generatio
     [0, 0n, 131_072n, 1n, f.sessionId])
   f.advanceGeneration()
   f.nonceSessionId = f.sessionId
-  f.gatewayConnected = false
+  f.gatewayProofBase = undefined
 
   const session = await f.run()
   assert.ok(session && !Array.isArray(session))
@@ -195,15 +196,16 @@ test('openV3: lost receipt resumes the frozen journal after the active generatio
 })
 
 for (const row of [
-  { name: 'unbound disabled', state: undefined, disabled: true, connected: true },
-  { name: 'prepared disconnected', state: 'prepared', disabled: false, connected: false },
-  { name: 'reverted disabled', state: 'reverted', disabled: true, connected: true },
+  { name: 'unbound disabled', state: undefined, disabled: true, proofBase: 'http://127.0.0.1:8080' },
+  { name: 'prepared disconnected', state: 'prepared', disabled: false, proofBase: undefined },
+  { name: 'reverted disabled', state: 'reverted', disabled: true, proofBase: 'http://127.0.0.1:8080' },
+  { name: 'stale untrusted route', state: undefined, disabled: false, proofBase: 'http://127.0.0.1:18081' },
 ] as const) {
   test(`openV3: ${row.name} proof route fails before nonce or payment preparation`, async () => {
     const f = fixture('openV3')
     if (row.state) f.store.put(f.key, { state: row.state, data: '0x1234', intent: {} })
     f.gatewayDisabled = row.disabled
-    f.gatewayConnected = row.connected
+    f.gatewayProofBase = row.proofBase
 
     await assert.rejects(f.run(), /requires a connected trusted user-gateway for proof submission/)
     assert.equal(f.generationQueries, 0)
@@ -213,11 +215,26 @@ for (const row of [
   })
 }
 
+for (const row of [
+  { configured: 'http://localhost:8080', probed: 'http://127.0.0.1:8080' },
+  { configured: 'http://localhost:18080', probed: 'http://127.0.0.1:8080' },
+] as const) {
+  test(`openV3: probed ${row.probed} authorizes configured ${row.configured}`, async () => {
+    const f = fixture('openV3')
+    f.gatewayBase = row.configured
+    f.gatewayProofBase = row.probed
+    await f.run()
+    assert.equal(f.nonceQueries, 1)
+    assert.equal(f.estimates, 1)
+    assert.equal(f.sends, 1)
+  })
+}
+
 test('openV3: an unknown broadcast reconciles while the proof route is unavailable', async () => {
   const f = fixture('openV3')
   f.loseHash = true
   await assert.rejects(f.run(), /outcome is unresolved/)
-  f.gatewayConnected = false
+  f.gatewayProofBase = undefined
   f.nonceSessionId = f.sessionId
 
   const session = await f.run()

@@ -29,6 +29,7 @@ import { executeWithFallback, TransportTraceError } from '../lib/transport/route
 import type { DecisionTrace, RoutePreference, TransportCandidate, TransportOutcome } from '../lib/transport/types'
 import { v3RetrievalCandidates } from '../lib/transport/v3Candidates'
 import { workerClient } from '../lib/worker-client'
+import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
 
@@ -647,8 +648,7 @@ export function useTransportRouter() {
     }
   }, [recordTrace, resolveDirectBase, resolvePreference])
 
-  const v3GatewayBase = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
-    ? appConfig.gatewayBase : undefined
+  const v3GatewayBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
   const allowsV3Direct = useCallback((requested?: RoutePreference) => allowNonGatewayBackends(resolvePreference(requested)), [resolvePreference])
 
   const fetchV3Metadata = useCallback(async (req: V3TransportRequest) => {

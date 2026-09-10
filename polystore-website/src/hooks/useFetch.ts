@@ -7,7 +7,7 @@ import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/
 import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
-import { readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { readLocalGatewayConnectedBase, readLocalGatewayConnectedHint } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
@@ -258,8 +258,9 @@ export function useFetch() {
         const chunks = planV3Chunks(session)
         while (!chunks.next().done) chunkCount++
         setProgress((progress) => ({ ...progress, chunkCount, bytesTotal: Number(length), receiptsTotal }))
-        const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase,
-          localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
+        const connectedProofBase = readLocalGatewayConnectedBase()
+        const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: connectedProofBase || '',
+          localGatewayConnected: Boolean(connectedProofBase) }) ? connectedProofBase : undefined
         let route: string | undefined
         const result: RetrievalV3Execution = await executeRetrievalV3(session, checkpointV3, {
           fetch: async (chunk, chunkSignal) => {
