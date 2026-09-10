@@ -34,8 +34,9 @@ per provider. Each transaction carried the provider's full assigned set of 15,
 
 The two derived scheduler rates divide the 360 client-observed committed
 successes and 5,940 authoritative openings by the complete 182.066769129-second
-scheduler interval, including 2.066769129 seconds of drain. They are measurements
-of this fixed offered workload. They are not a chain maximum. CometBFT header
+scheduler interval, including 2.066769129 seconds of drain and the final 4.604 ms
+orchestration tail after the last terminal observation. They are measurements of
+this fixed offered workload. They are not a chain maximum. CometBFT header
 time is a consensus timestamp rather than a wall-clock Commit completion time,
 so this artifact does not derive a separate per-window commit rate from headers.
 
@@ -70,7 +71,9 @@ Per transaction, used gas ranged from 7,710,824 to 8,725,999 with median
 8,725,836. The proof-count distribution was 18 transactions with 15 openings,
 144 with 16, and 198 with 17. The aggregate used-gas ratio was approximately
 513,464.86 per accepted opening. These are native-v3 message costs from this
-profile, not a claim that openings execute independently.
+profile, not a claim that openings execute independently. Across the reconciled
+block range, the largest transaction-payload total was 53,717 bytes at height
+408; the separate peak-used-gas block is recorded in [`summary.json`](summary.json).
 
 All four exact raw Commit streams recompute to 215 fenced block observations.
 Their Commit-step p95 execution upper bounds were 360.593–395.595 ms, below the

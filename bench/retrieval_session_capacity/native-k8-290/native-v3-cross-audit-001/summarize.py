@@ -282,8 +282,9 @@ def main():
             "reconciled blocks differ from measured successful proof receipts")
     for block in blocks:
         require(block["gas_wanted"] == sum(tx["gas_wanted"] for tx in block["transactions"]) and
-                block["gas_used"] == sum(tx["gas_used"] for tx in block["transactions"]),
-                "reconciled block gas totals differ")
+                block["gas_used"] == sum(tx["gas_used"] for tx in block["transactions"]) and
+                block["tx_payload_bytes"] == sum(tx["bytes"] for tx in block["transactions"]),
+                "reconciled block gas/byte totals differ")
 
     # Recompute Commit summaries from exact raw streams plus the independently fenced endpoints.
     phase = doc["commit_step_metrics"]["phases"]
@@ -314,6 +315,10 @@ def main():
     schedule_doc = doc["v3_http_schedules"]["cross-audit-measured"]
     require(schedule_doc["offered"] == schedule_doc["completed"] == 360 and schedule_doc["queued"] == schedule_doc["in_flight"] == 0 and
             schedule_doc["terminal_error"] is None, "HTTP scheduler did not fully drain")
+    require(schedule_doc["offered_window_ns"] == 180_000_000_000 and
+            schedule_doc["elapsed_ns"] == schedule_doc["monotonic_end_ns"] - schedule_doc["monotonic_start_ns"] == 182_066_769_129 and
+            max(row["request_finished_ns"] for row in successful) <= schedule_doc["monotonic_end_ns"],
+            "HTTP scheduler monotonic boundaries or offered window differ")
     cpu = native["measured_window"]["validator_cpu_delta"]
     require(cpu == harness.validator_cpu_delta(native["measured_window"]["validator_cpu_before"],
                                                 native["measured_window"]["validator_cpu_after"]),
@@ -335,8 +340,14 @@ def main():
     initial_dispatch = [row["initial_dispatch_ns"] - row["offered_ns"] for row in successful]
     request = [row["request_finished_ns"] - row["request_started_ns"] for row in successful]
     gas_used = sorted(row["gas_used"] for row in native["measured_proof_transactions"])
+    gas_wanted_total = sum(row["gas_wanted"] for row in native["measured_proof_transactions"])
+    gas_used_total = sum(gas_used)
+    require((gas_wanted_total, gas_used_total) ==
+            (native["measured_gas_wanted"], native["measured_gas_used"]),
+            "measured gas totals differ from successful proof receipts")
     proof_counts = Counter(len(row["ordinals"]) for row in native["measured_proof_transactions"])
     block_peak = max(blocks, key=lambda row: row["gas_used"])
+    byte_peak = max(blocks, key=lambda row: row["tx_payload_bytes"])
     summary = {
         "schema": "polystore.native-v3-cross-audit-retained.v1",
         "status": "passed",
@@ -359,7 +370,7 @@ def main():
                    "scheduler_drain_seconds": (schedule_doc["elapsed_ns"] - schedule_doc["offered_window_ns"]) / 1e9,
                    "committed_valid_transactions_per_scheduler_second": 360 / (schedule_doc["elapsed_ns"] / 1e9),
                    "authoritative_openings_per_scheduler_second": 5940 / (schedule_doc["elapsed_ns"] / 1e9),
-                   "rate_denominator": "all 360 client-observed committed successes over scheduler start through final terminal observation, including drain",
+                   "rate_denominator": "all 360 client-observed committed successes over scheduler start through recorded completion after terminal observation, including drain and the final orchestration tail",
                    "maximum_queued": schedule_doc["max_queued"], "maximum_in_flight": schedule_doc["max_in_flight"],
                    "maximum_dispatch_lag_ms": schedule_doc["max_dispatch_lag_ns"] / 1e6,
                    "http_attempts": {"scheduled_requests": 360, "total_attempts": 373,
@@ -375,13 +386,15 @@ def main():
                    "reconciled_block_span": {"first_height": 217, "last_height": 434, "blocks": 218,
                                                "committed_measured_proof_transactions": 360,
                                                "all_four_headers_agree": True, "all_four_results_agree": True},
-                   "measured_gas": {"wanted_total": native["measured_gas_wanted"], "used_total": native["measured_gas_used"],
+                   "measured_gas": {"wanted_total": gas_wanted_total, "used_total": gas_used_total,
                                     "proof_count_distribution": {str(key): proof_counts[key] for key in sorted(proof_counts)},
-                                    "used_per_authoritative_opening": native["measured_gas_used"] / 5940,
+                                    "used_per_authoritative_opening": gas_used_total / 5940,
                                     "used_per_transaction_min": gas_used[0], "used_per_transaction_median": statistics.median(gas_used),
                                     "used_per_transaction_max": gas_used[-1],
                                     "peak_block_height_by_used_gas": block_peak["height"],
-                                    "peak_block_gas_wanted": block_peak["gas_wanted"], "peak_block_gas_used": block_peak["gas_used"]},
+                                    "peak_block_gas_wanted": block_peak["gas_wanted"], "peak_block_gas_used": block_peak["gas_used"],
+                                    "peak_block_height_by_tx_payload_bytes": byte_peak["height"],
+                                    "peak_block_tx_payload_bytes": byte_peak["tx_payload_bytes"]},
                    "audits": {"epochs": native["crossed_audit_epochs"], "transactions": 24,
                               "all_assignments_accepted": True, "missed": 0},
                    "refunds": {"sessions_expired": 46, "refund_transactions": 46, "all_verified": True},

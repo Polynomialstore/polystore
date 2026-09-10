@@ -218,7 +218,9 @@
     "measured_gas": {
       "peak_block_gas_used": 35516833,
       "peak_block_gas_wanted": 57742085,
+      "peak_block_height_by_tx_payload_bytes": 408,
       "peak_block_height_by_used_gas": 408,
+      "peak_block_tx_payload_bytes": 53717,
       "proof_count_distribution": {
         "15": 18,
         "16": 144,
@@ -246,7 +248,7 @@
       "last_height": 425,
       "second_anchor": 401
     },
-    "rate_denominator": "all 360 client-observed committed successes over scheduler start through final terminal observation, including drain",
+    "rate_denominator": "all 360 client-observed committed successes over scheduler start through recorded completion after terminal observation, including drain and the final orchestration tail",
     "reconciled_block_span": {
       "all_four_headers_agree": true,
       "all_four_results_agree": true,
