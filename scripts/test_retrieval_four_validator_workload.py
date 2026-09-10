@@ -71,6 +71,36 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_transaction_verification_uses_fenced_blocks_not_tx_indexes(self):
+        raw = b"signed transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
+        fenced = [False]
+        lifecycle = SimpleNamespace(
+            chain="polystore_291-1", nodes=[{"node_id": str(i)} for i in range(4)])
+        def wait_height(height):
+            self.assertEqual(height, 20)
+            fenced[0] = True
+            return height
+        def query(node, route):
+            self.assertTrue(fenced[0])
+            self.assertNotIn("/tx?hash", route)
+            if route == "/block?height=19":
+                return {"block_id": {"hash": "11" * 32}, "block": {
+                    "header": {"height": "19", "chain_id": lifecycle.chain,
+                               "app_hash": "22" * 32, "time": "2026-01-01T00:00:00Z"},
+                    "data": {"txs": [base64.b64encode(raw).decode()]}}}
+            if route == "/block_results?height=19":
+                return {"height": "19", "txs_results": [
+                    {"code": 0, "gas_wanted": "500000", "gas_used": "400000"}]}
+            self.fail("unexpected query " + route)
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        lifecycle.query = Mock(side_effect=query)
+        rows = workload.verify_transaction_nodes(lifecycle, dict(
+            txhash=txhash, height=19, code=0, gas_wanted=500000, gas_used=400000))
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(lifecycle.query.call_count, 8)
+        lifecycle.wait_height.assert_called_once_with(20)
+
     def test_commit_captures_share_phase_deadline_and_never_qualify(self):
         sample = dict(chain_id="polystore_260-1", count=12, sum_seconds="0.15",
                       wall_time_ns=123, monotonic_start_ns=456, monotonic_end_ns=789)

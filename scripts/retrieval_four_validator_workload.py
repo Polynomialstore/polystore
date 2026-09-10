@@ -1081,15 +1081,21 @@ def verify_transaction_nodes(lifecycle, result):
     if len(lifecycle.nodes) != 4 or len({node["node_id"] for node in lifecycle.nodes}) != 4:
         raise ValueError("four distinct validators required")
     expected = artifact.committed_tx(result, result["txhash"])
+    height = producer.uint(expected["height"])
+    # A node can report the committed transaction before its peers' transaction
+    # indexes expose it. Fence every validator, then read the authoritative block
+    # bytes/results rather than polling eventually consistent secondary indexes.
+    lifecycle.wait_height(height + 1)
     observed = []
     for node in lifecycle.nodes:
-        response = lifecycle.query(node, "/tx?hash=0x" + expected["txhash"])
-        raw = base64.b64decode(response["tx"], validate=True)
-        if not raw or len(raw) > 1048576 or hashlib.sha256(raw).hexdigest().upper() != expected["txhash"].upper():
-            raise ValueError("validator returned different committed transaction bytes")
-        row = dict(txhash=response["hash"], height=response["height"], **{
-            key: response["tx_result"].get(key, 0) if key == "code" else response["tx_result"][key]
-            for key in ("code", "gas_wanted", "gas_used")})
+        summary = artifact.committed_block_summary(
+            lifecycle.query(node, f"/block?height={height}"),
+            lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+        matches = [tx for tx in summary["transactions"]
+                   if tx["txhash"].upper() == expected["txhash"].upper()]
+        if len(matches) != 1:
+            raise ValueError("validator block does not contain the exact committed transaction")
+        row = dict(matches[0], height=height)
         artifact.committed_tx(row, expected["txhash"])
         if any(producer.uint(row[key]) != producer.uint(expected[key]) for key in ("height", "code", "gas_wanted", "gas_used")):
             raise ValueError("validators disagree on committed transaction outcome/gas")
