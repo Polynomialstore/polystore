@@ -2,6 +2,7 @@
 import base64
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import sqlite3
@@ -9,6 +10,7 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
+import urllib.error
 from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
@@ -71,6 +73,48 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    FUTURE_HEIGHT = json.dumps({"code": 2, "message": "codespace sdk code 26: invalid height: cannot query with height in the future; please provide a valid height", "details": []}).encode()
+
+    @staticmethod
+    def query_response(value, height="7"):
+        response = io.BytesIO(json.dumps(value).encode())
+        response.status = 200
+        response.headers = {"x-cosmos-block-height": height}
+        return response
+
+    @classmethod
+    def query_error(cls, body=None):
+        return urllib.error.HTTPError("http://node/query", 500, "Internal Server Error", {}, io.BytesIO(body or cls.FUTURE_HEIGHT))
+
+    def query_lifecycle(self):
+        lifecycle = object.__new__(artifact.FourValidatorLifecycle)
+        lifecycle.deadline = 100 * 10**9
+        lifecycle.remaining = Mock(return_value=1)
+        return lifecycle
+
+    def test_fixed_height_query_retries_only_future_height_error(self):
+        lifecycle = self.query_lifecycle()
+        delayed = [self.query_error(), self.query_response({"session": {"id": "ready"}})]
+        with patch.object(artifact.urllib.request, "urlopen", side_effect=delayed) as opened, \
+                patch.object(artifact, "monotonic_ns", return_value=0), patch.object(artifact.time, "sleep") as sleep:
+            self.assertEqual(lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7), {"session": {"id": "ready"}})
+        self.assertEqual(opened.call_count, 2)
+        sleep.assert_called_once()
+
+        for body in (b'{"code":2,"message":"other","details":[]}', b"not-json"):
+            with self.subTest(body=body), patch.object(artifact.urllib.request, "urlopen", side_effect=[self.query_error(body)]) as opened:
+                with self.assertRaisesRegex(ValueError, "node query HTTP 500"):
+                    lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
+                opened.assert_called_once()
+
+    def test_fixed_height_query_future_height_retry_is_bounded(self):
+        lifecycle = self.query_lifecycle()
+        with patch.object(artifact.urllib.request, "urlopen", side_effect=[self.query_error()]) as opened, \
+                patch.object(artifact, "monotonic_ns", side_effect=[0, 5 * 10**9]):
+            with self.assertRaisesRegex(ValueError, "invalid height: cannot query with height in the future"):
+                lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
+        opened.assert_called_once()
+
     def test_transaction_verification_uses_fenced_blocks_not_tx_indexes(self):
         raw = b"signed transaction"
         txhash = hashlib.sha256(raw).hexdigest().upper()
