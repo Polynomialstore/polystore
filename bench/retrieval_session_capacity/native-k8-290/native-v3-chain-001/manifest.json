@@ -1,0 +1,652 @@
+{
+  "exclusions": [
+    "raw evidence and block transaction rows",
+    "proof inventory and gas simulation payloads",
+    "provider and validator logs",
+    "keyrings and generated file payloads"
+  ],
+  "private_source_artifacts": {
+    "native-v3-chain-retained-001.guard.json": {
+      "bytes": 4574,
+      "sha256": "41346c60ff9f12f2ed06595dee28188ee40eb1cbca57755d9b7898ea1bb87825"
+    },
+    "native-v3-chain-retained-001.log": {
+      "bytes": 881,
+      "sha256": "320e3b6909d36aee36750d833d211292e0e63a1218fbeb9347e161eaa42806c0"
+    },
+    "native-v3-chain-retained-001.plan.json": {
+      "bytes": 4524,
+      "sha256": "2a3382e717e7ec21e7548a0af67452814c5ff1e21f482aec3c08af60c8c1e63d"
+    },
+    "native-v3-chain-retained-001/evidence.json": {
+      "bytes": 969823,
+      "sha256": "8a1ef8084df97121a39d752fb41e063880c11ef8f3c13e9569704b3836f08091"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-blocks.jsonl": {
+      "bytes": 16870,
+      "sha256": "458f3ab31f51a6aa1e46f688a542e3fd7745ecd40025c8e7d0b72c0003bdd3ba"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-0.json": {
+      "bytes": 21252,
+      "sha256": "1ad8bb89d03ad48fceb9bf69c40ec6100a0df0f135c569311cc74ef2fee00ec8"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "90e521bfa91064a253a29f63018d8f13b619d40e83ad4d9d7638453649278992"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-1.json": {
+      "bytes": 21256,
+      "sha256": "4e063a74b9b76ae68d9c6d83c0d8f38bc8c36fc967becacea108871db8260455"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "69cb77aa807afe0e9ad3db128a8c569ae88146e614ad3f5a2cf611e56c5ff2d2"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-2.json": {
+      "bytes": 21250,
+      "sha256": "cb89d1825038f8d7a22a82cd06777dae9561bd27c5c31900c941146e27408bd0"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "02eacb24a06d73a3f1435eabcef7c3a883a7ad88e6f5f5f753e2102d40e742a7"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-3.json": {
+      "bytes": 21249,
+      "sha256": "0e024b12223bab1d2b5f9dd567e0513b45d93e5133435f262ad91778b2178069"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "96bf3dd2c7abe2c0cf4138f6c7af605073905794b71932018885cb0b27bcd976"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-4.json": {
+      "bytes": 20011,
+      "sha256": "b9565b417989353226f8f300881a9fcc82729444034eec7510ae54f4d15c35a9"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "18c9374a57e1b5f7913cf0613f0f7a6851792ec39808809cc219189b6f6923b1"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-5.json": {
+      "bytes": 21251,
+      "sha256": "74dd6183553c87cfd8c98ae9cf0b3b7adb9aa4ce05c13c0e678bb43548e314fa"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "73413cd651e372a091766ae08ad4d205a094fd548beda5d25b7222020a90f100"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-6.json": {
+      "bytes": 21250,
+      "sha256": "cfe4013ab9b2b31b7a69678590e6363d38e11feac4d2367e8674388cefcef7b5"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "578bb8eaff0bb3eed516ec1ee919838d0912f6b061fd1a8e6c4198a998e22a1f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-7.json": {
+      "bytes": 21253,
+      "sha256": "45f8d0ea34677aa5bc20f5d277c9c103c226c5aa3e3abb8ae7dcd6e99d28490c"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "66cef67afdfbbef7029005101b5d78efb6bdc335c99aae6be926aeb159d560ae"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0.manifest.json": {
+      "bytes": 24702,
+      "sha256": "d20c3012469c3c1c4e0f756d66591cd1a477997a700189d912ed87774c0b1c8a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-0.manifest.json.result.json": {
+      "bytes": 4497,
+      "sha256": "d6b6d5e59194b88274ba3128d2e9d89d89312e50014dc3a8a2adcac9c2a024df"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-0.json": {
+      "bytes": 21261,
+      "sha256": "8cc5ba5f108fe7ac86a8b05384f698902c3d25bf1b939e89f9f4df33c42c969c"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "2ea72be951a2d4c22f32e8b8832d29a9e3155f3c50c6cf50a1d131a91794dd2b"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-1.json": {
+      "bytes": 21262,
+      "sha256": "a548adf3d3f7c00d0fc38f316a45e9749d4372ed3dc0ac7d9e8c95c9b1974f5e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "59c8f2103f016a3fc444eea0142e8bd38dbb5e92d7ca85cfb80ba6821cc5ad3f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-2.json": {
+      "bytes": 21263,
+      "sha256": "8bdfebab4b38bbf062ba92203c6c41fa002269249f397a19aeb0bdca5c3495a3"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "bd0a243b11c9bef53b8512bb7f0406a591d8fb9f20b50f751c35be3dff683809"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-3.json": {
+      "bytes": 20021,
+      "sha256": "1c136aca68cb574060d8fd9234329e643062b1d3680a333588053648516a2737"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "30a0db577e3024d55a70a57f22a9099d91b7f7545da05a13d2a90f5293f31dab"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-4.json": {
+      "bytes": 21270,
+      "sha256": "28df55aa87438453e651e93e78fa3f31fbb4c9c1acb0af5d866a4cc36a594c40"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "f5a1698435de3b32d26bbf0a12e34a330dc7dbdb6c30f87a8593a18f28042682"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-5.json": {
+      "bytes": 20019,
+      "sha256": "335bf5b53270f47cde523d045d3c39a1e9e4359851cc1f2b716c8a17dc0bde30"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "b6a2b7ce959ec161127eaa0fac26f70701c1a5fb4878ece01765d553b86f7a32"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-6.json": {
+      "bytes": 21268,
+      "sha256": "345d4da45af58cfc75b5c24eed24f2c253e6223647aa0755706d93f8f6622cd5"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "7d454e2c7bebd6bcd71cf65f781a248d9e4a9b6a44343d7a843054be5ea50413"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-7.json": {
+      "bytes": 21263,
+      "sha256": "1cc4d10a158534313c3730ed7f8d652f4c2a95d450e2fb905ca108708c686cce"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "e01310c95d692e91e50b24b5c3f1c28b5c917637ab6042c564eaf24e17a04bf4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1.manifest.json": {
+      "bytes": 24702,
+      "sha256": "a85dcc29fcb05426218677e5321fd13352cef0050a9f47ccfb1d6587dcda1ba5"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-1.manifest.json.result.json": {
+      "bytes": 4496,
+      "sha256": "1f97bbdaec291f10e877dbf543e1cfd8bf3959fa674b71bb11d0fe8ae799d3f8"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-0.json": {
+      "bytes": 21272,
+      "sha256": "a515591f02d76d11cdca7b474940998106afa2300661bd97f0a35dd4b0a4fa53"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "770be93468d5dafd9ff26a6c156c5ac9bc39f9c375b829b08ee959e53beb9833"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-1.json": {
+      "bytes": 21271,
+      "sha256": "0576977e0872ca76d467049720533b46101f57fef45dff5278d3d680f216ed75"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "31eeff38f1e9cd75197162db0cf135b576d9e92f8b90121a6f777c1bee6c23cf"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-2.json": {
+      "bytes": 21270,
+      "sha256": "8d681f3ae827872b1abeb0cf8d8790966c3eb442139e795d78df040aa1495e0d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "484ca3f5a2307dbf6e737e587678a61f92399e61bafecc43381b5caf5931e593"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-3.json": {
+      "bytes": 21271,
+      "sha256": "9be9e239eb189deb581c333556244ca6f2eac93c7ddd76a2e24665a721e44fc6"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "ba5ba7bccdf4b7c633df4911ebaac2a51e45dfeb9d8b206b6d5b262dd3f7c88f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-4.json": {
+      "bytes": 21272,
+      "sha256": "ac22632eb36721dcbd76609ef61df2f0e98ef28ff56060e79fe6ab2662cb50a9"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "d7ecce9ba3e706d1cc9b5edaec60d98ae2a1f5e0922601c313fb523e775afee0"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-5.json": {
+      "bytes": 21267,
+      "sha256": "cf45ab29095b0a95a39f5a1c2384302d59295d537c2f82b3be4339ea91418444"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "9057359a15d6b7ac5a0b357374c7b6c472df045d6b3d02665ca5ad79224f6d90"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-6.json": {
+      "bytes": 20025,
+      "sha256": "59bd3adc230082f8516d9be21a7acd7b946dc6dd507e04289d700f04157c9334"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "3ae828648246c7e91aeda4c71114085c42af04fef7db3b25b8c09a046315d414"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-7.json": {
+      "bytes": 20027,
+      "sha256": "4d8f863c3de3943b9f512d1a6e21f5a38a90702276bc5b3da8a9bea1f17268b4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "0495bab270eafdead67682e193f74c41c35a10ff760a1d7185e0bb266be24a07"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2.manifest.json": {
+      "bytes": 24702,
+      "sha256": "c3f3f528c790c30863167ee427540ce1fc06bc0d1ccfb239f72db226df03c401"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-2.manifest.json.result.json": {
+      "bytes": 4505,
+      "sha256": "b61c8cac7845c486aa7f31a6d08302ada8050e741a3adcaa914d18484bc55e37"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-0.json": {
+      "bytes": 21269,
+      "sha256": "df91ddde7586e9ac184623601b46563ab1eec8b93e47f84579454658c38969e6"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "66984c9c7280f1f204220439197ce53b9c49c1e60921dbc4a3c41309dcc80a96"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-1.json": {
+      "bytes": 21269,
+      "sha256": "eb37255e16d57e2b94252e5b0fbbb3a0b0add772ae4acfff890d572cceab9d15"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "3f840d8381e339c947b4e3858446a516eb8ae75eb1b20e5b276d25610ace50c9"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-2.json": {
+      "bytes": 21269,
+      "sha256": "eee35fb86683d52edc0f0b6a59810baca113c1c68ee11023ea47c03a3cfa317a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "3ed2f8a6ccf537af2eba070b05cba5cbf77dd0c92dd24e948e6e3227c5ba225e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-3.json": {
+      "bytes": 21270,
+      "sha256": "bd91d2d132d06e2b87d6449f11f4685ac8a20b2d31d48fbf42db696beda53f26"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "67ded7fa7528d694ef9920ecb5174a86560807cf0ac6fc606aa2c45e4d6cd331"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-4.json": {
+      "bytes": 21267,
+      "sha256": "792a1f38cb3ff58d25ea3a7c90f709798dbe2e9bb15c26b4111f0911c653c584"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "06c1cf74211b34f02a9cff61cd6ea7aede189932f67586f81887565a16f1e023"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-5.json": {
+      "bytes": 21275,
+      "sha256": "b2a77832501fbbc7c1fca829d4696c1d658fbaa39e6d6db143dd0331b204b9f7"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "75ff9d196bc14864bc09a2c97c605519ccdb8ae92c250b882d234ef346061af5"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-6.json": {
+      "bytes": 21268,
+      "sha256": "c75c93488ff1282eeefcd0797f11f66a4eb3ffacde7249c78c4b5c407b893dc3"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "61ed42bca7274cb0b2a996eddee401d06ecbbf4d31b1d21b7932c1d2bb6e8a2b"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-7.json": {
+      "bytes": 21270,
+      "sha256": "686a61bbcf74368ae2d36ebd512df5a91f34182205cd3ecdcfa34efd1af0e651"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "e81de4d28918dc4a4332d1190a6cefda4d87bca2e97dc91f325c4c4120582edd"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3.manifest.json": {
+      "bytes": 24702,
+      "sha256": "d960f083c9b42b122fcdb7388e179630a213ed094d11a711ea0d70abe2d7deae"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-3.manifest.json.result.json": {
+      "bytes": 4507,
+      "sha256": "dd18740b7639ab20dba2413be53952d41305fbd901fa02dc847932ef2a841b2f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-0.json": {
+      "bytes": 20025,
+      "sha256": "27658d6949f8ddd13a0412f881d73c9eb501c9051bed3d679cb01a54316cac12"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "d647c3239891e4b7aecb2a9a5d15272b9e8c73b0d7ccf93ab02f42679c46d0f7"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-1.json": {
+      "bytes": 21270,
+      "sha256": "efa4f829e80215677ce4688956a2dbfb0a1d3d769966de0c31d883f0d2dbc743"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "03fa1022a0095fa539638a0f4c2d75bd9312c9216780e07c76a6d60d1897a767"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-2.json": {
+      "bytes": 20031,
+      "sha256": "ae64774b4a87354ab16523712b2fe5c8b840197320e456262c9d9b3e7885dc53"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "6a80b9806f39dded2e7018cf7766973e732dbb33089d3885ca2f8c0cfb17d779"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-3.json": {
+      "bytes": 21272,
+      "sha256": "15430f77c09b31ba51cf2062c1f844b3c03cd9567fe917877f3e4fe9ea6cb461"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "91ae3a29ac4428fb69d3ff07d335928f2cdd2fdffc085f96f84353d9512252cf"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-4.json": {
+      "bytes": 21269,
+      "sha256": "f074c9d071addf02496d8289e631337aff98e579d876982b035667bce34fb398"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "3f040d11ae2ee5ca98ec5d2c48cb6302a7b42bf77df29ea3624590559cd586bb"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-5.json": {
+      "bytes": 21267,
+      "sha256": "d89740d7cf2ccfaca3d2010633db95124e1c7ed76f94db2facb759c6b92d9b89"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "a1efabf330b03027974583507a47145d3ee7e5acacb4001ee7f76c5b4173aca3"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-6.json": {
+      "bytes": 21271,
+      "sha256": "f6381d4ae4f99cabc86345d4681699415d9d828e0e4facd98e32d42c5b55f806"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "a4c156253bd47055a16292d77bc5d95337d9ec143d0123173cd06c4f778be3d3"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-7.json": {
+      "bytes": 21271,
+      "sha256": "a90ddf3030164d738db63646de71146de515090320056ebae88202877b3e572d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "92815585df792a4b84d8250a41e745eddb3936b1e481a44ca77ae3bb814f67d4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4.manifest.json": {
+      "bytes": 24702,
+      "sha256": "6a7af817ae3993b57da8466740452908e26f89c2fc7b2ca365bbf6990b09113d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-4.manifest.json.result.json": {
+      "bytes": 4506,
+      "sha256": "1d8c7bdac5ab36ff0c32c8c688429769834d707a4c8aa2c72987d857b4f6abbf"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-0.json": {
+      "bytes": 20028,
+      "sha256": "04a04e15a92f8dcd544c4ae24ed6e35ab1e3c9c9aec1e7e20ebcae451eb6cfee"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-0.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "40d7fa8af2ff41f6d0629df2f86323237cb4dde60550e5720c953ad086b465da"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-1.json": {
+      "bytes": 18783,
+      "sha256": "17394caf94bef7b1c0f70a59478b6fc8633adc173ca702249d3d679b7f23b761"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-1.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "e8ef8345ebdfef4ab6196f3c502b958813e197f5cfea38efba6461fd62cb3d16"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-2.json": {
+      "bytes": 20028,
+      "sha256": "68d7a28df8c2f540748f9b54a6245a39a17262590c4a2142533452e349292400"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-2.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "cc33974bd6c2dd6877cf8721da574ae1cd4a1a17aaab7b616d489d8d1a0372a8"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-3.json": {
+      "bytes": 20030,
+      "sha256": "397794c015eb48032aa173c76b5c337a01a63fc35bd295fb531e8ece0f477150"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-3.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "e263a4737cd38d4d48a8586df1e7a21637b7f6e3a3f1e56641a6e4a10e3db9f4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-4.json": {
+      "bytes": 20027,
+      "sha256": "cbbbbd7b9d8ff78ba1209893ab2e3a7f368e46924abd99af39881cd1d7dcb586"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-4.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "4eca70a0a1b0f07af521e380040b0b30df36a48f2e80b10d8858a65ef8650efa"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-5.json": {
+      "bytes": 20028,
+      "sha256": "c68cf5b13a6306c698dc91edc0dc3e4d85ca02bf61719d3a3e9bb386316f965d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-5.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "9935fc3240b5ff422b87f47aff049c001bd40bbbdbf5287c1dd2b0650cf3a2be"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-6.json": {
+      "bytes": 20028,
+      "sha256": "a5fb84f697900512cf0e39ceac63b9c2e029e8208e7b7df7279275c9bddc8539"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-6.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "b0753d8370763ba3de00278d75bd7fd0480c8248ea36b8adc37d9927c3b2602e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-7.json": {
+      "bytes": 20026,
+      "sha256": "a50170975dbf26481aa45a834ffad3b08aa80213c7166e7495da7f247fb19ab0"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5-session-7.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "e62c284a76b61439104b15e94de955339749d67e059c31e56ad62eeaad16aced"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5.manifest.json": {
+      "bytes": 24703,
+      "sha256": "ba554c2171e903b4eb2f30acd18086e16b0e2c88c554e906a083c421877425cd"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-5.manifest.json.result.json": {
+      "bytes": 4487,
+      "sha256": "dd09a77b5a3ec30a24e0fcc2bf81be5d3b59adf3081d149c675b8007c61177b6"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-0.json": {
+      "bytes": 20030,
+      "sha256": "7717df69012658bace816291a307da4183028eab5b16030e8fa78595b07c2d87"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-0.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "a214b2aa831cab9150a53b970e89fee1a05d8f588c5cf048755b4749982a7062"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-1.json": {
+      "bytes": 20028,
+      "sha256": "302f60ddc34e729b93ebc726dc8eada11e1b4a5413911f58c20a015354297b36"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-1.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "2a205d565e5e39a475af301b820bbb2678f2d33a3b048c73d49648b4b3a44595"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-2.json": {
+      "bytes": 20024,
+      "sha256": "bca7491e3cf3cdabfe8ad295bed3cb61fec351155162726a864dd0540d728cef"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-2.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "8f8fde6ba5ff8a2f6af45bb44e32da00e128626173597ebb2a69e3d4b3378529"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-3.json": {
+      "bytes": 20025,
+      "sha256": "98b8ab7f12d54c29a8d04d793cdbc5a2b3f9276d2055e78bdcd8d0db45c0f7be"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-3.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "49dac3c8779fc4a7e656f98feada53522611cc170450daa1220985229c543a1c"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-4.json": {
+      "bytes": 20024,
+      "sha256": "92da9efbdf147bc213d68a46949757c0124df9b4dc7651df93b2f885dbb25547"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-4.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "0da6cfa6291efe34093d8e0dc9384fbf2df26d3fb2a338245cb6fc1c8969729e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-5.json": {
+      "bytes": 20028,
+      "sha256": "353afcb3024cd4ea6b8c1b4294b4b740d15e0364dc0376b12231abe298fa706e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-5.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "50da419212ccb1b6f888e800d45aa7093001e4b48d443bc36734c95f35e3fe7f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-6.json": {
+      "bytes": 20027,
+      "sha256": "ebc5d927da7fa7a3644b81eee45dd544b937df3076000e15e2f00159e1b058c6"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-6.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "e9a916709674f55ee69fd3f7dc915e25df7777934e2a60b02f3ebefd7222bee4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-7.json": {
+      "bytes": 20028,
+      "sha256": "294f69ae1004d88e5aaf11cdccd18dba93efecaffaba77158fedd043bb04ef83"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6-session-7.json.gas-simulation.json": {
+      "bytes": 9793,
+      "sha256": "7f9a11e70c2e3fa9f035758af392af6c28ad6efd95fa24f05eba0dbf24f0887d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6.manifest.json": {
+      "bytes": 24702,
+      "sha256": "cc4550bf41e233145425898edcee8a668c1b5cc4ff61e5acc17934d2be5ccd17"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-6.manifest.json.result.json": {
+      "bytes": 4484,
+      "sha256": "e11d6e87b64fa35bf618f06a8909514f58bdb39f7bb857ce03cd44e76421d12e"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-0.json": {
+      "bytes": 20027,
+      "sha256": "2acf8ccc1d28272aec8f50092a022a8d545de1f5c158165d58fc401c16dc1201"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-0.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "093032515f07cca0ce6969d8ae75288c8130e0d64a77c707cf6f2793499c686b"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-1.json": {
+      "bytes": 20025,
+      "sha256": "2905b9b791069170aa4e28b24888148f0cd66af1335d5d1012ff880e01a5554a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-1.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "c4b40fb796bbfd495cf1cedfc63597f55927d349dc6f9fbf2b22786bfa79cf5a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-2.json": {
+      "bytes": 20029,
+      "sha256": "8c4acbe1593e3b70059b33a6a52ee83188c064f8061618887e40a19efd3eb5f5"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-2.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "7702a3fd975d2a730e793d3acc5d7994f313121c1e7c02485d0b3bcc63d49ec6"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-3.json": {
+      "bytes": 20026,
+      "sha256": "5014c1bc38e6796f217bd33efc355b04f1114b4f2887aba1495698630db405ce"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-3.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "0d182a226eb924430178eed25653c525c6bb6011d8a91ac18977b63d212f200b"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-4.json": {
+      "bytes": 20025,
+      "sha256": "ced44ab97a8f1f21e1e771bc58bc51b405e49f20ff1f426645192aa6c540c56f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-4.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "4aad71d1e0a09f6ab1b43ee53ae3f4453e878d049e2b38e9bd0fb9660417e5e4"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-5.json": {
+      "bytes": 20029,
+      "sha256": "f056b1ee51bc7719ed9ad9c65272a1462e03c06f3c1f5c7645d8514b03c96250"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-5.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "7d1c1d7a251fd8a7b1d23678a3c4f2220534f57b37341f16ee19ac28405e965a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-6.json": {
+      "bytes": 20027,
+      "sha256": "ce2433f77c348afe78e6b024383790b2c1d0909684e794c25a40736f31858c4f"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-6.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "971ac8a6a65e009b2f7d2706922dd0ec5dc002a5cb26191408163a79485fa040"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-7.json": {
+      "bytes": 20026,
+      "sha256": "d2f6ba4da6417d064bb58cf2f5bb99ae19502a39645001f3579213e6d3ad976d"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7-session-7.json.gas-simulation.json": {
+      "bytes": 9795,
+      "sha256": "4d292002a03080ccf77edfaa00a51d499b2192cffa1ded883bc86e6f47d1eb2a"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7.manifest.json": {
+      "bytes": 24703,
+      "sha256": "170f4b530b48897918500331a87f5666c83563d6306000df63894add70acff61"
+    },
+    "native-v3-chain-retained-001/native-v3-chain-inventory/provider-7.manifest.json.result.json": {
+      "bytes": 4484,
+      "sha256": "8dfcd9407c78a2d2af5cd5e479fdccf2a747aa03eeb3782fb212bf6e1f1e7aa4"
+    },
+    "runtime-parent-a2dec4e6.json": {
+      "bytes": 5127,
+      "sha256": "1f24298e645c99f45c0284bed6510ff3fca901fc139ed1458bd02fa08c0ae936"
+    },
+    "runtime-parent-b7ea3a10.json": {
+      "bytes": 2258,
+      "sha256": "a09ca3d02a456f3c8737b00395e4ed6d01f1f547a92e70f912d0fd8468e0b3cb"
+    },
+    "runtime-provenance.json": {
+      "bytes": 2869,
+      "sha256": "ebeae99ac4760b34899868013434a12757844f290325548d27a17a77c2157c74"
+    }
+  },
+  "published_files": {
+    "README.md": {
+      "bytes": 7565,
+      "sha256": "8104dd6b5abae600ea1b25616147a26de7447536b9d06932a49a7f21a5ebb735"
+    },
+    "check.py": {
+      "bytes": 3955,
+      "sha256": "c57bf0925c2ff2abc1951a4640feeb0d829a2876f32ae83103be2dca8a880ba7"
+    },
+    "plan.json": {
+      "bytes": 3896,
+      "sha256": "44f2de9f3a8077996e2fde9934b59fc28be3b4310dd083d4e53c27fe34a4d5eb"
+    },
+    "runtime-provenance.json": {
+      "bytes": 9999,
+      "sha256": "d990aec75376bf818d5fb4d8379f620fb8a2108a4a9add342cc04ff942cb67a7"
+    },
+    "summarize.py": {
+      "bytes": 19861,
+      "sha256": "c0e2be11c52b2b4493df61fd4b6bb2735f78e34f03078029cd98ece316569adc"
+    },
+    "summary.json": {
+      "bytes": 29188,
+      "sha256": "480849528c9ddbdb0d620d90a4c24e3d0f0faa41086a6983246f55fe9759f3cd"
+    }
+  },
+  "qualification": false,
+  "schema": "polystore.retained-publication.v1",
+  "transformations": [
+    "summary.json derives from retained evidence and reconciled blocks using summarize.py; replace only inputs.harness with $HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
+    "plan.json uses the completed guard record, replaces inline runtime manifest with a reference, and adds observed host, launcher environment, bounds and collected harness provenance",
+    "runtime-provenance.json combines the current build and both retained unchanged-component parent manifests",
+    "plan and runtime provenance replace /home/mikers/polystore-bench-290 with $BENCH_ROOT"
+  ]
+}

@@ -1,0 +1,851 @@
+{
+  "audits": {
+    "before_height": 102,
+    "finalized_height": 201,
+    "measurement_epoch": 3,
+    "next_anchor": 301,
+    "profile": "normal",
+    "verified_assignments": 12
+  },
+  "cohorts": [
+    {
+      "all_client_completions_observed_in_step": 8,
+      "client_observed_by_step_end_from_this_cohort": 8,
+      "end_fence_backlog": 0,
+      "end_fence_in_flight": 0,
+      "end_fence_queued": 0,
+      "eventually_committed_valid": 8,
+      "offered": 8,
+      "offered_rate_tx_s": 1.0,
+      "seconds": [
+        0,
+        8
+      ]
+    },
+    {
+      "all_client_completions_observed_in_step": 13,
+      "client_observed_by_step_end_from_this_cohort": 13,
+      "end_fence_backlog": 3,
+      "end_fence_in_flight": 3,
+      "end_fence_queued": 0,
+      "eventually_committed_valid": 16,
+      "offered": 16,
+      "offered_rate_tx_s": 2.0,
+      "seconds": [
+        8,
+        16
+      ]
+    },
+    {
+      "all_client_completions_observed_in_step": 22,
+      "client_observed_by_step_end_from_this_cohort": 19,
+      "end_fence_backlog": 13,
+      "end_fence_in_flight": 8,
+      "end_fence_queued": 5,
+      "eventually_committed_valid": 32,
+      "offered": 32,
+      "offered_rate_tx_s": 4.0,
+      "seconds": [
+        16,
+        24
+      ]
+    }
+  ],
+  "commit_step_metrics": {
+    "boundary": "commit-step execution upper bound",
+    "limitation": "Two wide scrapes do not establish p95 or reconcile workload block boundaries; trailing observations may be missing",
+    "phases": {
+      "native_v3_chain_after": [
+        {
+          "node_id": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163866323787,
+                  "monotonic_start_ns": 516163863438150,
+                  "sum_seconds": "15.963191646999997",
+                  "wall_time_ns": 1789013535253316393
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163871823799,
+                  "monotonic_start_ns": 516163869114503,
+                  "sum_seconds": "15.963191646999997",
+                  "wall_time_ns": 1789013535258995366
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+              "process_initial_height": 0,
+              "status_heights": [
+                257,
+                257,
+                257
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 257,
+            "count": 257,
+            "monotonic_end_ns": 516163871823799,
+            "monotonic_start_ns": 516163869114503,
+            "sum_seconds": "15.963191646999997",
+            "wall_time_ns": 1789013535258995366
+          }
+        },
+        {
+          "node_id": "7251131bc88d2038871ef869594f3c54348f5528",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163917598122,
+                  "monotonic_start_ns": 516163914393952,
+                  "sum_seconds": "14.422772720999996",
+                  "wall_time_ns": 1789013535304271675
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163923259636,
+                  "monotonic_start_ns": 516163920436099,
+                  "sum_seconds": "14.422772720999996",
+                  "wall_time_ns": 1789013535310316802
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "7251131bc88d2038871ef869594f3c54348f5528",
+              "process_initial_height": 0,
+              "status_heights": [
+                257,
+                257,
+                257
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 257,
+            "count": 257,
+            "monotonic_end_ns": 516163923259636,
+            "monotonic_start_ns": 516163920436099,
+            "sum_seconds": "14.422772720999996",
+            "wall_time_ns": 1789013535310316802
+          }
+        },
+        {
+          "node_id": "2f74eb37ed7617743898db4502fcb6637244df75",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163966953820,
+                  "monotonic_start_ns": 516163964140493,
+                  "sum_seconds": "14.581750939",
+                  "wall_time_ns": 1789013535354019186
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516163972385651,
+                  "monotonic_start_ns": 516163969679095,
+                  "sum_seconds": "14.581750939",
+                  "wall_time_ns": 1789013535359559918
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "2f74eb37ed7617743898db4502fcb6637244df75",
+              "process_initial_height": 0,
+              "status_heights": [
+                257,
+                257,
+                257
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 257,
+            "count": 257,
+            "monotonic_end_ns": 516163972385651,
+            "monotonic_start_ns": 516163969679095,
+            "sum_seconds": "14.581750939",
+            "wall_time_ns": 1789013535359559918
+          }
+        },
+        {
+          "node_id": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516164013865234,
+                  "monotonic_start_ns": 516164011032577,
+                  "sum_seconds": "14.201538144",
+                  "wall_time_ns": 1789013535400911460
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 257,
+                  "monotonic_end_ns": 516164019267405,
+                  "monotonic_start_ns": 516164016550259,
+                  "sum_seconds": "14.201538144",
+                  "wall_time_ns": 1789013535406431102
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+              "process_initial_height": 0,
+              "status_heights": [
+                257,
+                257,
+                257
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 257,
+            "count": 257,
+            "monotonic_end_ns": 516164019267405,
+            "monotonic_start_ns": 516164016550259,
+            "sum_seconds": "14.201538144",
+            "wall_time_ns": 1789013535406431102
+          }
+        }
+      ],
+      "native_v3_chain_before": [
+        {
+          "node_id": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135683348322,
+                  "monotonic_start_ns": 516135680371164,
+                  "sum_seconds": "10.203064558999996",
+                  "wall_time_ns": 1789013507070249587
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135688917255,
+                  "monotonic_start_ns": 516135686137879,
+                  "sum_seconds": "10.203064558999996",
+                  "wall_time_ns": 1789013507076018602
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+              "process_initial_height": 0,
+              "status_heights": [
+                236,
+                236,
+                236
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 236,
+            "count": 236,
+            "monotonic_end_ns": 516135688917255,
+            "monotonic_start_ns": 516135686137879,
+            "sum_seconds": "10.203064558999996",
+            "wall_time_ns": 1789013507076018602
+          }
+        },
+        {
+          "node_id": "7251131bc88d2038871ef869594f3c54348f5528",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135733766460,
+                  "monotonic_start_ns": 516135730863162,
+                  "sum_seconds": "8.649934542999999",
+                  "wall_time_ns": 1789013507120741885
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135739139050,
+                  "monotonic_start_ns": 516135736489105,
+                  "sum_seconds": "8.649934542999999",
+                  "wall_time_ns": 1789013507126369908
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "7251131bc88d2038871ef869594f3c54348f5528",
+              "process_initial_height": 0,
+              "status_heights": [
+                236,
+                236,
+                236
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 236,
+            "count": 236,
+            "monotonic_end_ns": 516135739139050,
+            "monotonic_start_ns": 516135736489105,
+            "sum_seconds": "8.649934542999999",
+            "wall_time_ns": 1789013507126369908
+          }
+        },
+        {
+          "node_id": "2f74eb37ed7617743898db4502fcb6637244df75",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135781667473,
+                  "monotonic_start_ns": 516135778911817,
+                  "sum_seconds": "8.741062506",
+                  "wall_time_ns": 1789013507168791180
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135787020773,
+                  "monotonic_start_ns": 516135784359718,
+                  "sum_seconds": "8.741062506",
+                  "wall_time_ns": 1789013507174240561
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "2f74eb37ed7617743898db4502fcb6637244df75",
+              "process_initial_height": 0,
+              "status_heights": [
+                236,
+                236,
+                236
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 236,
+            "count": 236,
+            "monotonic_end_ns": 516135787020773,
+            "monotonic_start_ns": 516135784359718,
+            "sum_seconds": "8.741062506",
+            "wall_time_ns": 1789013507174240561
+          }
+        },
+        {
+          "node_id": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+          "sample": {
+            "boundary_fence": {
+              "captures": [
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135829144232,
+                  "monotonic_start_ns": 516135826223805,
+                  "sum_seconds": "8.493331378",
+                  "wall_time_ns": 1789013507216102548
+                },
+                {
+                  "chain_id": "polystore_260-1",
+                  "count": 236,
+                  "monotonic_end_ns": 516135834565474,
+                  "monotonic_start_ns": 516135831861348,
+                  "sum_seconds": "8.493331378",
+                  "wall_time_ns": 1789013507221742171
+                }
+              ],
+              "fully_observed": true,
+              "node_id": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+              "process_initial_height": 0,
+              "status_heights": [
+                236,
+                236,
+                236
+              ]
+            },
+            "chain_id": "polystore_260-1",
+            "committed_height": 236,
+            "count": 236,
+            "monotonic_end_ns": 516135834565474,
+            "monotonic_start_ns": 516135831861348,
+            "sum_seconds": "8.493331378",
+            "wall_time_ns": 1789013507221742171
+          }
+        }
+      ]
+    },
+    "qualification": false
+  },
+  "consensus": {
+    "block_packing": [
+      {
+        "gas_used": 8725846,
+        "gas_wanted": 13935430,
+        "gas_wanted_fraction_of_64m": 0.21774109375,
+        "height": 237,
+        "transaction_count": 1,
+        "tx_payload_bytes": 13176,
+        "tx_payload_fraction_of_2mib": 0.006282806396484375,
+        "workload_gas_used": 8725846,
+        "workload_gas_wanted": 13935430,
+        "workload_transaction_count": 1,
+        "workload_tx_payload_bytes": 13176
+      },
+      {
+        "gas_used": 8725954,
+        "gas_wanted": 13935526,
+        "gas_wanted_fraction_of_64m": 0.21774259375,
+        "height": 238,
+        "transaction_count": 1,
+        "tx_payload_bytes": 13182,
+        "tx_payload_fraction_of_2mib": 0.006285667419433594,
+        "workload_gas_used": 8725954,
+        "workload_gas_wanted": 13935526,
+        "workload_transaction_count": 1,
+        "workload_tx_payload_bytes": 13182
+      },
+      {
+        "gas_used": 17451923,
+        "gas_wanted": 27871052,
+        "gas_wanted_fraction_of_64m": 0.4354851875,
+        "height": 239,
+        "transaction_count": 2,
+        "tx_payload_bytes": 26364,
+        "tx_payload_fraction_of_2mib": 0.012571334838867188,
+        "workload_gas_used": 17451923,
+        "workload_gas_wanted": 27871052,
+        "workload_transaction_count": 2,
+        "workload_tx_payload_bytes": 26364
+      },
+      {
+        "gas_used": 8725954,
+        "gas_wanted": 13935526,
+        "gas_wanted_fraction_of_64m": 0.21774259375,
+        "height": 240,
+        "transaction_count": 1,
+        "tx_payload_bytes": 13182,
+        "tx_payload_fraction_of_2mib": 0.006285667419433594,
+        "workload_gas_used": 8725954,
+        "workload_gas_wanted": 13935526,
+        "workload_transaction_count": 1,
+        "workload_tx_payload_bytes": 13182
+      },
+      {
+        "gas_used": 7710824,
+        "gas_wanted": 12311318,
+        "gas_wanted_fraction_of_64m": 0.19236434375,
+        "height": 241,
+        "transaction_count": 1,
+        "tx_payload_bytes": 11669,
+        "tx_payload_fraction_of_2mib": 0.005564212799072266,
+        "workload_gas_used": 7710824,
+        "workload_gas_wanted": 12311318,
+        "workload_transaction_count": 1,
+        "workload_tx_payload_bytes": 11669
+      },
+      {
+        "gas_used": 16436813,
+        "gas_wanted": 26246876,
+        "gas_wanted_fraction_of_64m": 0.4101074375,
+        "height": 242,
+        "transaction_count": 2,
+        "tx_payload_bytes": 24853,
+        "tx_payload_fraction_of_2mib": 0.011850833892822266,
+        "workload_gas_used": 16436813,
+        "workload_gas_wanted": 26246876,
+        "workload_transaction_count": 2,
+        "workload_tx_payload_bytes": 24853
+      },
+      {
+        "gas_used": 17451785,
+        "gas_wanted": 27870908,
+        "gas_wanted_fraction_of_64m": 0.4354829375,
+        "height": 243,
+        "transaction_count": 2,
+        "tx_payload_bytes": 26355,
+        "tx_payload_fraction_of_2mib": 0.01256704330444336,
+        "workload_gas_used": 17451785,
+        "workload_gas_wanted": 27870908,
+        "workload_transaction_count": 2,
+        "workload_tx_payload_bytes": 26355
+      },
+      {
+        "gas_used": 17451933,
+        "gas_wanted": 27871068,
+        "gas_wanted_fraction_of_64m": 0.4354854375,
+        "height": 244,
+        "transaction_count": 2,
+        "tx_payload_bytes": 26365,
+        "tx_payload_fraction_of_2mib": 0.01257181167602539,
+        "workload_gas_used": 17451933,
+        "workload_gas_wanted": 27871068,
+        "workload_transaction_count": 2,
+        "workload_tx_payload_bytes": 26365
+      },
+      {
+        "gas_used": 24655232,
+        "gas_wanted": 39370322,
+        "gas_wanted_fraction_of_64m": 0.61516128125,
+        "height": 245,
+        "transaction_count": 3,
+        "tx_payload_bytes": 37280,
+        "tx_payload_fraction_of_2mib": 0.0177764892578125,
+        "workload_gas_used": 24655232,
+        "workload_gas_wanted": 39370322,
+        "workload_transaction_count": 3,
+        "workload_tx_payload_bytes": 37280
+      },
+      {
+        "gas_used": 25162654,
+        "gas_wanted": 40182274,
+        "gas_wanted_fraction_of_64m": 0.62784803125,
+        "height": 246,
+        "transaction_count": 3,
+        "tx_payload_bytes": 38027,
+        "tx_payload_fraction_of_2mib": 0.018132686614990234,
+        "workload_gas_used": 25162654,
+        "workload_gas_wanted": 40182274,
+        "workload_transaction_count": 3,
+        "workload_tx_payload_bytes": 38027
+      },
+      {
+        "gas_used": 17451933,
+        "gas_wanted": 27871068,
+        "gas_wanted_fraction_of_64m": 0.4354854375,
+        "height": 247,
+        "transaction_count": 2,
+        "tx_payload_bytes": 26365,
+        "tx_payload_fraction_of_2mib": 0.01257181167602539,
+        "workload_gas_used": 17451933,
+        "workload_gas_wanted": 27871068,
+        "workload_transaction_count": 2,
+        "workload_tx_payload_bytes": 26365
+      },
+      {
+        "gas_used": 25162792,
+        "gas_wanted": 40182418,
+        "gas_wanted_fraction_of_64m": 0.62785028125,
+        "height": 248,
+        "transaction_count": 3,
+        "tx_payload_bytes": 38036,
+        "tx_payload_fraction_of_2mib": 0.018136978149414062,
+        "workload_gas_used": 25162792,
+        "workload_gas_wanted": 40182418,
+        "workload_transaction_count": 3,
+        "workload_tx_payload_bytes": 38036
+      },
+      {
+        "gas_used": 33888603,
+        "gas_wanted": 54117768,
+        "gas_wanted_fraction_of_64m": 0.845590125,
+        "height": 249,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51207,
+        "tx_payload_fraction_of_2mib": 0.024417400360107422,
+        "workload_gas_used": 33888603,
+        "workload_gas_wanted": 54117768,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51207
+      },
+      {
+        "gas_used": 33888751,
+        "gas_wanted": 54117928,
+        "gas_wanted_fraction_of_64m": 0.845592625,
+        "height": 250,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51217,
+        "tx_payload_fraction_of_2mib": 0.024422168731689453,
+        "workload_gas_used": 33888751,
+        "workload_gas_wanted": 54117928,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51217
+      },
+      {
+        "gas_used": 33888593,
+        "gas_wanted": 54117752,
+        "gas_wanted_fraction_of_64m": 0.845589875,
+        "height": 251,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51206,
+        "tx_payload_fraction_of_2mib": 0.02441692352294922,
+        "workload_gas_used": 33888593,
+        "workload_gas_wanted": 54117752,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51206
+      },
+      {
+        "gas_used": 33888771,
+        "gas_wanted": 54117960,
+        "gas_wanted_fraction_of_64m": 0.845593125,
+        "height": 252,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51219,
+        "tx_payload_fraction_of_2mib": 0.02442312240600586,
+        "workload_gas_used": 33888771,
+        "workload_gas_wanted": 54117960,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51219
+      },
+      {
+        "gas_used": 33888623,
+        "gas_wanted": 54117800,
+        "gas_wanted_fraction_of_64m": 0.845590625,
+        "height": 253,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51209,
+        "tx_payload_fraction_of_2mib": 0.024418354034423828,
+        "workload_gas_used": 33888623,
+        "workload_gas_wanted": 54117800,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51209
+      },
+      {
+        "gas_used": 33888761,
+        "gas_wanted": 54117944,
+        "gas_wanted_fraction_of_64m": 0.845592875,
+        "height": 254,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51218,
+        "tx_payload_fraction_of_2mib": 0.024422645568847656,
+        "workload_gas_used": 33888761,
+        "workload_gas_wanted": 54117944,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51218
+      },
+      {
+        "gas_used": 33888633,
+        "gas_wanted": 54117816,
+        "gas_wanted_fraction_of_64m": 0.845590875,
+        "height": 255,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51210,
+        "tx_payload_fraction_of_2mib": 0.02441883087158203,
+        "workload_gas_used": 33888633,
+        "workload_gas_wanted": 54117816,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51210
+      },
+      {
+        "gas_used": 33888731,
+        "gas_wanted": 54117896,
+        "gas_wanted_fraction_of_64m": 0.845592125,
+        "height": 256,
+        "transaction_count": 4,
+        "tx_payload_bytes": 51215,
+        "tx_payload_fraction_of_2mib": 0.024421215057373047,
+        "workload_gas_used": 33888731,
+        "workload_gas_wanted": 54117896,
+        "workload_transaction_count": 4,
+        "workload_tx_payload_bytes": 51215
+      },
+      {
+        "gas_used": 8218404,
+        "gas_wanted": 13123446,
+        "gas_wanted_fraction_of_64m": 0.20505384375,
+        "height": 257,
+        "transaction_count": 1,
+        "tx_payload_bytes": 12427,
+        "tx_payload_fraction_of_2mib": 0.005925655364990234,
+        "workload_gas_used": 8218404,
+        "workload_gas_wanted": 13123446,
+        "workload_transaction_count": 1,
+        "workload_tx_payload_bytes": 12427
+      }
+    ],
+    "header_interblock_time": {
+      "count": 20,
+      "max_ms": 1506.801931,
+      "median_ms": 1330.994362,
+      "min_ms": 1290.788018,
+      "p50_ms": 1329.799815,
+      "p95_ms": 1416.295925,
+      "p99_ms": 1506.801931,
+      "percentile_method": "nearest rank; median uses the conventional midpoint"
+    },
+    "header_span_note": "First-to-last reconciled block header timestamps; no exact wall-clock commit-completion rate is implied.",
+    "header_span_workload_transactions": 56,
+    "header_timestamp_span_seconds": 26.789303144,
+    "payload_note": "tx_payload_bytes excludes headers, evidence, and serialization framing.",
+    "reconciled_height_range": [
+      237,
+      257
+    ]
+  },
+  "counts": {
+    "measured": 56,
+    "measured_ordinals": 924,
+    "total": 64,
+    "total_ordinals": 1056
+  },
+  "finite_eventual_valid_rate_tx_s": 2.0009194738075067,
+  "inputs": {
+    "evidence_sha256": "8a1ef8084df97121a39d752fb41e063880c11ef8f3c13e9569704b3836f08091",
+    "harness": "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
+    "harness_sha256": "7efd7fa4e8bec5f90f8ac09742220f6fa3f961316fb0ac3edfb20e67974cb662",
+    "reconciled_blocks_sha256": "458f3ab31f51a6aa1e46f688a542e3fd7745ecd40025c8e7d0b72c0003bdd3ba"
+  },
+  "latencies": {
+    "offer_to_terminal_observation": {
+      "count": 56,
+      "max_ms": 4236.801498,
+      "median_ms": 1970.7792745,
+      "min_ms": 847.654084,
+      "p50_ms": 1944.754641,
+      "p95_ms": 4053.467129,
+      "p99_ms": 4236.801498,
+      "percentile_method": "nearest rank; median uses the conventional midpoint"
+    },
+    "offer_to_worker_start": {
+      "count": 56,
+      "max_ms": 2053.4831,
+      "median_ms": 0.0769555,
+      "min_ms": 0.022611,
+      "p50_ms": 0.076851,
+      "p95_ms": 1803.49811,
+      "p99_ms": 2053.4831,
+      "percentile_method": "nearest rank; median uses the conventional midpoint"
+    },
+    "worker_start_to_checktx_observation": {
+      "count": 56,
+      "max_ms": 392.319853,
+      "median_ms": 91.467261,
+      "min_ms": 69.612079,
+      "p50_ms": 90.83202,
+      "p95_ms": 256.330226,
+      "p99_ms": 392.319853,
+      "percentile_method": "nearest rank; median uses the conventional midpoint"
+    },
+    "worker_start_to_client_commit_observation": {
+      "count": 56,
+      "max_ms": 3857.983195,
+      "median_ms": 1862.8792615,
+      "min_ms": 846.770484,
+      "p50_ms": 1842.412317,
+      "p95_ms": 3420.883308,
+      "p99_ms": 3857.983195,
+      "percentile_method": "nearest rank; median uses the conventional midpoint"
+    }
+  },
+  "preparation": {
+    "declared_gas_sum": 865885824,
+    "gas_simulations": 64,
+    "proof_transactions": 64,
+    "summed_per_message_generation_ms": 89196.13573200001,
+    "timing_note": "Generation is summed per-message elapsed time across eight parallel exporters, not wall time. Gas simulation duration was not retained. Both occur before the measured scheduler."
+  },
+  "scheduler_plus_drain_seconds": 27.987133282,
+  "scope": {
+    "excludes": [
+      "sustained capacity",
+      "WAN or provider delivery",
+      "ACK",
+      "exact submit-to-inclusion latency"
+    ],
+    "latency_note": "Queue, CheckTx, and client commit-observation timings are client-side observations; block header.Time is not commit completion.",
+    "qualification": false,
+    "run_scope": "landed-retained-diagnostic",
+    "scope_note": "finite landed chain-only diagnostic; no sustained capacity qualification"
+  },
+  "validator_cpu": {
+    "aggregate_average_cores": 0.7956969955585134,
+    "measurement_note": "Average cores use each validator's exact /proc CPU snapshot window and include consensus and enabled audits.",
+    "validators": [
+      {
+        "average_cpu_cores": 0.21044702756352238,
+        "percent_of_one_core": 21.044702756352237,
+        "pid": 1342513,
+        "system_cpu_seconds": 0.12,
+        "user_cpu_seconds": 5.77,
+        "validator": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+        "window_seconds": 27.98804083
+      },
+      {
+        "average_cpu_cores": 0.19365414081397136,
+        "percent_of_one_core": 19.365414081397137,
+        "pid": 1342514,
+        "system_cpu_seconds": 0.0,
+        "user_cpu_seconds": 5.42,
+        "validator": "7251131bc88d2038871ef869594f3c54348f5528",
+        "window_seconds": 27.98804083
+      },
+      {
+        "average_cpu_cores": 0.19615520905326622,
+        "percent_of_one_core": 19.615520905326623,
+        "pid": 1342515,
+        "system_cpu_seconds": 0.0,
+        "user_cpu_seconds": 5.49,
+        "validator": "2f74eb37ed7617743898db4502fcb6637244df75",
+        "window_seconds": 27.98804083
+      },
+      {
+        "average_cpu_cores": 0.19544061812775337,
+        "percent_of_one_core": 19.544061812775336,
+        "pid": 1342516,
+        "system_cpu_seconds": 0.0,
+        "user_cpu_seconds": 5.47,
+        "validator": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+        "window_seconds": 27.98804083
+      }
+    ]
+  },
+  "validator_lifetime_resources": [
+    {
+      "measurement_scope": "whole validator process lifetime",
+      "node_id": "0e2f0ca880af4a75e15b266a143bb50c4c49465d",
+      "peak_rss_bytes": 293093376,
+      "phase": "initial",
+      "pid": 1342513,
+      "raw_ru_maxrss": 286224,
+      "raw_unit": "KiB",
+      "returncode": 0,
+      "source": "wait4 rusage",
+      "system_cpu_seconds": 1.086756,
+      "user_cpu_seconds": 19.517042
+    },
+    {
+      "measurement_scope": "whole validator process lifetime",
+      "node_id": "7251131bc88d2038871ef869594f3c54348f5528",
+      "peak_rss_bytes": 292261888,
+      "phase": "initial",
+      "pid": 1342514,
+      "raw_ru_maxrss": 285412,
+      "raw_unit": "KiB",
+      "returncode": 0,
+      "source": "wait4 rusage",
+      "system_cpu_seconds": 0.884467,
+      "user_cpu_seconds": 12.575561
+    },
+    {
+      "measurement_scope": "whole validator process lifetime",
+      "node_id": "2f74eb37ed7617743898db4502fcb6637244df75",
+      "peak_rss_bytes": 293314560,
+      "phase": "initial",
+      "pid": 1342515,
+      "raw_ru_maxrss": 286440,
+      "raw_unit": "KiB",
+      "returncode": 0,
+      "source": "wait4 rusage",
+      "system_cpu_seconds": 0.827085,
+      "user_cpu_seconds": 12.784147
+    },
+    {
+      "measurement_scope": "whole validator process lifetime",
+      "node_id": "8b7bb1c5ff04f6d5e7715fde2e45c2ad294ce7ab",
+      "peak_rss_bytes": 294899712,
+      "phase": "initial",
+      "pid": 1342516,
+      "raw_ru_maxrss": 287988,
+      "raw_unit": "KiB",
+      "returncode": 0,
+      "source": "wait4 rusage",
+      "system_cpu_seconds": 0.8372109999999999,
+      "user_cpu_seconds": 12.639108
+    }
+  ]
+}
