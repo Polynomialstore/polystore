@@ -1499,6 +1499,8 @@ class FourValidatorLifecycle:
                 if not chunk:
                     break
                 body.extend(chunk)
+            if deadline is not None and monotonic_ns() >= deadline:
+                raise TimeoutError("node query future-height retry deadline exceeded")
             self.remaining()
             return bytes(body)
 
