@@ -205,6 +205,17 @@ exec(compile(code, "<benchmark home>", "exec"))
 
 
 class BenchmarkArtifactTest(unittest.TestCase):
+    def test_reusable_loopback_reservation_excludes_a_live_listener(self):
+        reservation = artifact.reserve_loopback_port(0)
+        self.addCleanup(reservation.close)
+        port = reservation.getsockname()[1]
+        self.assertNotEqual(reservation.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
+        with self.assertRaises(OSError):
+            artifact.reserve_loopback_port(port)
+        reservation.close()
+        replacement = artifact.reserve_loopback_port(port)
+        replacement.close()
+
     def test_browser_memory_wrapper_retains_kernel_peak_and_child_status(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -279,6 +290,44 @@ class BenchmarkArtifactTest(unittest.TestCase):
                     path.write_text(json.dumps(value))
                     with self.assertRaises(ValueError):
                         artifact.read_browser_memory(path)
+
+    def test_browser_executor_handoff_validates_artifacts_and_late_descendants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            env = {key: "enabled" for key in artifact.BROWSER_EXECUTOR_ENV}
+            env.update(VITE_LCD_BASE="http://127.0.0.1:1317",
+                VITE_GATEWAY_BASE="http://127.0.0.1:8080", VITE_SP_BASE="http://127.0.0.1:19091",
+                VITE_EVM_RPC="http://127.0.0.1:8545", E2E_BASE_URL="http://127.0.0.1:4173",
+                VITE_CHAIN_ID="262144", VITE_E2E="1", E2E_NATIVE_V3_BROWSER="1",
+                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES="1024")
+            request_path = root / "browser-executor-request.json"
+            request = artifact.create_browser_executor_request(request_path, source=source,
+                source_head="ab" * 20, source_status="", env=env, timeout_seconds=600,
+                browser_bytes=1024, faults=False)
+            paths = {key: root / name for key, name in request["artifacts"].items()}
+            paths["result"].write_text('{"success":true}\n')
+            paths["stdout"].write_text("passed\n")
+            paths["stderr"].write_text("")
+            paths["memory"].write_text(json.dumps({"schema": artifact.DARWIN_BROWSER_MEMORY_SCHEMA,
+                "peak_rss_bytes": 4096, "samples": 3, "interval_ms": 250,
+                "scope": artifact.DARWIN_BROWSER_MEMORY_SCOPE}) + "\n")
+            response = {"schema": artifact.BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"],
+                "head": request["head"], "returncode": 0, "scope": artifact.BROWSER_EXECUTOR_SCOPE,
+                "topology": {"ssh_target": "runner@server", "forwards": [4173, 8080, 1317, 8545]},
+                "artifacts": {key: {"bytes": path.stat().st_size, "sha256": artifact.sha256(path)}
+                              for key, path in paths.items()}}
+            artifact.write_new_json(root / "browser-executor-response.json", response)
+            result, memory, observed = artifact.read_browser_executor_response(request_path)
+            self.assertEqual((result.returncode, result.stdout, memory["peak_rss_bytes"]), (0, "passed\n", 4096))
+            self.assertEqual(observed["topology"]["ssh_target"], "runner@server")
+
+            first = {10: (1, 1024, "root-start"), 20: (10, 2048, "child-start")}
+            retained = artifact.darwin_owned_processes(10, first)
+            second = dict(first)
+            second[30] = (20, 4096, "late-grandchild")
+            self.assertEqual(artifact.darwin_owned_processes(10, second, retained)[30], "late-grandchild")
 
     def test_committed_block_pairs_real_payload_hash_with_ordered_results(self):
         block = dict(block_id=dict(hash="ab" * 32), block=dict(header=dict(height="7", chain_id="bench", app_hash="cd" * 32, time="2026-09-08T00:00:00Z"), data=dict(txs=[base64.b64encode(b"transaction").decode()])))

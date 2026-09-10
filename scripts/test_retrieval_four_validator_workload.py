@@ -222,6 +222,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
                     "session": {"session_id": base64.b64encode(bytes(32)).decode()},
                     "evmReceipts": [], "evmTransactions": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
+                    "cacheMduRequests": {"before": {"gatewayMetadata": 1, "gatewayData": 1,
+                        "directMetadata": 0, "directData": 0}, "after": {"gatewayMetadata": 1,
+                        "gatewayData": 1, "directMetadata": 0, "directData": 0}},
                     "diagnostics": [dict(phase="transport", edge="start", atMs=1), dict(phase="transport", edge="end", atMs=2)]}))
                 self.assertEqual(cwd, website)
                 self.assertEqual(memory_output, home / "browser-memory.json")
@@ -249,6 +252,26 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
+    def test_browser_executor_handoff_publishes_fixed_request_and_retains_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            response_path = home / "browser-executor-response.json"
+            response_path.write_text("{}")
+            lifecycle = SimpleNamespace(home=home, doc={"provenance": {
+                "product_source_commit": "ab" * 20, "product_source_status": ""},
+                "payload": {"bytes": 1024}}, remaining=Mock(return_value=300), save=Mock())
+            completed = subprocess.CompletedProcess(["playwright", "test"], 0, "passed", "")
+            with patch.object(artifact, "create_browser_executor_request",
+                    return_value={"id": "cd" * 16, "head": "ab" * 20}) as create, \
+                 patch.object(artifact, "read_browser_executor_response",
+                    return_value=(completed, {"peak_rss_bytes": 4096}, {"returncode": 0})):
+                result, memory = workload.run_browser_executor_handoff(lifecycle, source=Path("/source"),
+                    browser_env={"fixed": "environment"}, faults=False, check_providers=Mock())
+            self.assertIs(result, completed)
+            self.assertEqual(memory["peak_rss_bytes"], 4096)
+            self.assertNotIn("mac_source", lifecycle.doc["browser_executor"])
+            self.assertEqual(create.call_args.kwargs["source_head"], "ab" * 20)
+
     def test_browser_fault_result_is_one_durable_paid_session(self):
         sid = "12" * 32
         encoded = base64.b64encode(bytes.fromhex(sid)).decode()
@@ -275,6 +298,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             requestsBeforeCache={"data": 24, "target": 4, "raw": 3},
             downloaded={"bytes": 16_777_217, "sha256": "ab" * 32},
             cached={"bytes": 16_777_217, "sha256": "ab" * 32},
+            cacheMduRequests={"before": {"gatewayMetadata": 2, "gatewayData": 21,
+                "directMetadata": 0, "directData": 0}, "after": {"gatewayMetadata": 2,
+                "gatewayData": 21, "directMetadata": 0, "directData": 0}},
             localState={"checkpoints": 1, "unbound": 0, "journals": []},
             resultDurability={"atomicReplace": True, "verifiedStages": ["unknown-open", "corrupt",
                 "multipart-order", "truncate", "durable-before-reopen", "settled-cache"]})
@@ -284,6 +310,16 @@ class FourValidatorWorkloadTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "canonical open"):
             workload.validate_native_v3_browser_fault_outcome(
                 outcome, session, {"bytes": 16_777_217, "sha256": "ab" * 32})
+
+    def test_browser_cache_requires_equal_nonnegative_exact_transport_counters(self):
+        counters = {"gatewayMetadata": 1, "gatewayData": 2, "directMetadata": 0, "directData": 0}
+        self.assertEqual(workload.validate_browser_cache_mdu_requests(
+            {"cacheMduRequests": {"before": counters, "after": dict(counters)}})["before"], counters)
+        for after in (dict(counters, gatewayData=3), dict(counters, directData=True),
+                      dict(counters, unexpected=0)):
+            with self.subTest(after=after), self.assertRaisesRegex(ValueError, "additional MDU"):
+                workload.validate_browser_cache_mdu_requests(
+                    {"cacheMduRequests": {"before": counters, "after": after}})
 
     def test_browser_expiry_launcher_reuses_stack_with_separate_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1954,15 +1990,17 @@ class HealthyAuditViewsTest(unittest.TestCase):
         common = ["diagnostic", "--mode", "native-v3-browser", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
                   "--cli-binary", "/native-cli", "--product-source", "/source"]
-        for extra, expected_bytes in (([], 1024), (["--browser-bytes", "1073741824"], 1_073_741_824)):
-            with self.subTest(expected_bytes=expected_bytes), patch.object(workload.sys, "argv", common + extra), \
+        for extra, expected_browser in (([], {"file_bytes": 1024}),
+                (["--browser-bytes", "1073741824"], {"file_bytes": 1_073_741_824}),
+                (["--browser-executor-handoff"], {"file_bytes": 1024, "executor_handoff": True})):
+            with self.subTest(expected_browser=expected_browser), patch.object(workload.sys, "argv", common + extra), \
                  patch.object(artifact, "FourValidatorLifecycle") as constructor, \
                  patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
                 workload.main()
                 constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
                     timeout=600, browser_evm=True)
                 run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
-                    native_browser=dict(file_bytes=expected_bytes), audit_profile="normal")
+                    native_browser=expected_browser, audit_profile="normal")
         invalid = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
                    "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
                    "--cli-binary", "/native-cli", "--product-source", "/source",

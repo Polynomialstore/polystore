@@ -18,11 +18,14 @@ from pathlib import Path
 import platform
 import re
 import selectors
+import secrets
 import signal
+import shutil
 import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -45,6 +48,19 @@ MAX_RESPONSE_DATA_BYTES = 16 * 1024
 BROWSER_MEMORY_SCHEMA = "polystore-browser-cgroup-memory-v1"
 BROWSER_MEMORY_SOURCE = "Linux cgroup v2 memory.peak"
 BROWSER_MEMORY_SCOPE = "aggregate charged memory for the Playwright worker and owned Chromium process tree"
+DARWIN_BROWSER_MEMORY_SCHEMA = "polystore-browser-darwin-sampled-rss-v1"
+DARWIN_BROWSER_MEMORY_SCOPE = ("sampled RSS sum for the Playwright worker and discovered Chromium descendants; "
+                               "excludes remote server services, may double-count shared pages and miss between-sample peaks")
+BROWSER_EXECUTOR_REQUEST_SCHEMA = "polystore-native-v3-browser-mac-request-v1"
+BROWSER_EXECUTOR_RESPONSE_SCHEMA = "polystore-native-v3-browser-mac-response-v1"
+BROWSER_EXECUTOR_SCOPE = "Mac LAN browser with cohosted server validators; no WAN or distributed qualification"
+BROWSER_EXECUTOR_ENV = frozenset({
+    "VITE_E2E", "VITE_ENABLE_FAUCET", "VITE_DISABLE_GATEWAY", "VITE_P2P_ENABLED", "VITE_LCD_BASE",
+    "VITE_GATEWAY_BASE", "VITE_SP_BASE", "VITE_EVM_RPC", "VITE_CHAIN_ID", "VITE_COSMOS_CHAIN_ID",
+    "E2E_BASE_URL", "E2E_NATIVE_V3_BROWSER", "E2E_NATIVE_V3_DEAL_ID", "E2E_NATIVE_V3_PAYER",
+    "E2E_NATIVE_V3_FILE", "E2E_NATIVE_V3_BYTES", "E2E_NATIVE_V3_SHA256", "E2E_NATIVE_V3_EXPIRY",
+    "E2E_NATIVE_V3_FAULTS",
+})
 SYSTEMD_RUN = Path("/usr/bin/systemd-run")
 PROC_SELF_CGROUP = Path("/proc/self/cgroup")
 CGROUP_ROOT = Path("/sys/fs/cgroup")
@@ -183,6 +199,32 @@ def sha256(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def reserve_loopback_port(port):
+    reservation = socket.socket()
+    try:
+        reservation.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        reservation.bind(("127.0.0.1", port))
+        reservation.listen(1)
+        return reservation
+    except BaseException:
+        reservation.close()
+        raise
+
+
+def write_new_json(path, value):
+    path = Path(path)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}")
+    try:
+        with temporary.open("x") as stream:
+            json.dump(value, stream, indent=1)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def committed_tx(value, expected_hash):
@@ -396,6 +438,311 @@ def run_bounded_browser_command(argv, deadline, memory_output, *, env=None, cwd=
     if result.returncode == 0 and measurement is None:
         raise ValueError("successful browser command did not retain cgroup memory evidence")
     return result, measurement
+
+
+def browser_executor_artifacts(faults):
+    suffix = "-faults" if faults else ""
+    return {"result": f"native-v3-browser{suffix}-result.json",
+            "memory": f"browser{suffix}-memory.json",
+            "stdout": f"playwright{suffix}.stdout.log", "stderr": f"playwright{suffix}.stderr.log"}
+
+
+def validate_browser_executor_request(value):
+    if not isinstance(value, dict) or value.get("schema") != BROWSER_EXECUTOR_REQUEST_SCHEMA:
+        raise ValueError("invalid browser executor request")
+    faults, env = value.get("faults"), value.get("env")
+    if (type(faults) is not bool or value.get("artifacts") != browser_executor_artifacts(faults) or
+            value.get("scope") != BROWSER_EXECUTOR_SCOPE or value.get("spec") != "tests/native-v3-browser-live.spec.ts" or
+            not re.fullmatch(r"[0-9a-f]{32}", value.get("id", "")) or
+            not re.fullmatch(r"[0-9a-f]{40,64}", value.get("head", "")) or
+            not isinstance(env, dict) or set(env) != BROWSER_EXECUTOR_ENV or
+            any(not isinstance(item, str) or not item or "\0" in item for item in env.values())):
+        raise ValueError("invalid fixed browser executor contract")
+    integer(value.get("pid"), "coordinator pid", 1)
+    integer(value.get("timeout"), "browser timeout", 1, 3600)
+    size = integer(value.get("bytes"), "browser bytes", 1, 1 << 30)
+    source = value.get("source")
+    if not isinstance(source, str) or not re.fullmatch(r"/[A-Za-z0-9._/-]+", source) or ".." in Path(source).parts:
+        raise ValueError("invalid coordinator source")
+    expected = {"VITE_LCD_BASE": "http://127.0.0.1:1317", "VITE_GATEWAY_BASE": "http://127.0.0.1:8080",
+        "VITE_SP_BASE": "http://127.0.0.1:19091", "VITE_EVM_RPC": "http://127.0.0.1:8545",
+        "E2E_BASE_URL": "http://127.0.0.1:4173", "VITE_CHAIN_ID": "262144", "VITE_E2E": "1",
+        "E2E_NATIVE_V3_BROWSER": "1", "E2E_NATIVE_V3_EXPIRY": "0",
+        "E2E_NATIVE_V3_FAULTS": "1" if faults else "0", "E2E_NATIVE_V3_BYTES": str(size)}
+    if any(env.get(key) != item for key, item in expected.items()):
+        raise ValueError("browser executor request changed its fixed endpoints or mode")
+    return value
+
+
+def create_browser_executor_request(path, *, source, source_head, source_status, env,
+                                    timeout_seconds, browser_bytes, faults):
+    if source_status:
+        raise ValueError("browser executor requires a clean relevant source tree")
+    request = {"schema": BROWSER_EXECUTOR_REQUEST_SCHEMA, "id": secrets.token_hex(16), "head": source_head,
+        "source": str(Path(source).resolve(strict=True)), "pid": os.getpid(),
+        "timeout": integer(timeout_seconds, "browser timeout", 1, 3600),
+        "bytes": integer(browser_bytes, "browser bytes", 1, 1 << 30), "faults": faults,
+        "spec": "tests/native-v3-browser-live.spec.ts", "env": {key: env[key] for key in BROWSER_EXECUTOR_ENV},
+        "artifacts": browser_executor_artifacts(faults), "scope": BROWSER_EXECUTOR_SCOPE}
+    validate_browser_executor_request(request)
+    write_new_json(path, request)
+    return request
+
+
+def write_browser_executor_cancel(request_path, reason):
+    path = Path(request_path).with_name("browser-executor-cancel.json")
+    if not path.exists():
+        write_new_json(path, {"reason": str(reason)[-8192:]})
+
+
+def read_browser_executor_response(request_path):
+    request_path = Path(request_path)
+    request = validate_browser_executor_request(json.loads(request_path.read_text()))
+    response = json.loads(request_path.with_name("browser-executor-response.json").read_text())
+    topology = response.get("topology") if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("schema") != BROWSER_EXECUTOR_RESPONSE_SCHEMA or
+            response.get("id") != request["id"] or response.get("head") != request["head"] or
+            response.get("scope") != BROWSER_EXECUTOR_SCOPE or not isinstance(topology, dict) or
+            not re.fullmatch(r"[A-Za-z0-9._-]+@[A-Za-z0-9.-]+", topology.get("ssh_target", "")) or
+            topology.get("forwards") != [4173, 8080, 1317, 8545]):
+        raise ValueError("browser executor response identity mismatch")
+    returncode = integer(response.get("returncode"), "browser return code", 0, 255)
+    paths = {key: request_path.parent / name for key, name in request["artifacts"].items()}
+    manifests = response.get("artifacts")
+    required = {"stdout", "stderr"} | ({"result", "memory"} if returncode == 0 else set())
+    if not isinstance(manifests, dict) or not required <= set(manifests) <= set(paths):
+        raise ValueError("browser executor response artifacts are incomplete")
+    for key, row in manifests.items():
+        if (not isinstance(row, dict) or set(row) != {"bytes", "sha256"} or
+                integer(row.get("bytes"), f"{key} bytes") != paths[key].stat().st_size or
+                row.get("sha256") != sha256(paths[key])):
+            raise ValueError("browser executor artifact manifest mismatch")
+    stdout, stderr = paths["stdout"].read_text(), paths["stderr"].read_text(errors="replace")
+    if len(stdout.encode()) + len(stderr.encode()) > MAX_COMMAND_OUTPUT_BYTES:
+        raise ValueError("browser executor output exceeds byte limit")
+    memory = json.loads(paths["memory"].read_text()) if "memory" in manifests else None
+    if memory is not None and (memory.get("schema") != DARWIN_BROWSER_MEMORY_SCHEMA or
+            memory.get("scope") != DARWIN_BROWSER_MEMORY_SCOPE or
+            integer(memory.get("peak_rss_bytes"), "peak RSS", 1) < 1 or
+            integer(memory.get("samples"), "RSS samples", 1) < 1 or memory.get("interval_ms") != 250):
+        raise ValueError("invalid Darwin RSS evidence")
+    command = ["playwright", "test", request["spec"], "--workers=1", "--retries=0", "--max-failures=1"]
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr), memory, response
+
+
+def darwin_process_table():
+    result = subprocess.run(["ps", "-axo", "pid=,ppid=,rss=,lstart="], capture_output=True, text=True, timeout=5)
+    if result.returncode:
+        raise ValueError("Darwin process snapshot failed")
+    table = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 8 and all(field.isdigit() for field in fields[:3]):
+            table[int(fields[0])] = (int(fields[1]), int(fields[2]) * 1024, " ".join(fields[3:]))
+    return table
+
+
+def darwin_owned_processes(root, table, retained=None):
+    retained = dict(retained or {})
+    frontier = {root} | {pid for pid, started in retained.items()
+                         if pid in table and table[pid][2] == started}
+    visited = set()
+    while frontier:
+        parent = frontier.pop()
+        if parent in visited:
+            continue
+        visited.add(parent)
+        for pid, (ppid, _rss, started) in table.items():
+            if ppid == parent:
+                if pid not in retained:
+                    retained[pid] = started
+                if retained[pid] == started:
+                    frontier.add(pid)
+    if root in table:
+        retained[root] = table[root][2]
+    return retained
+
+
+def run_darwin_browser(argv, deadline, memory_path, *, env, cwd, tunnel):
+    if platform.system() != "Darwin":
+        raise ValueError("browser-executor requires macOS")
+    stdout_path, stderr_path = Path(str(memory_path) + ".stdout"), Path(str(memory_path) + ".stderr")
+    retained, peak, samples, last_progress = {}, 0, 0, monotonic_ns()
+    with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
+        process = subprocess.Popen(argv, stdout=stdout, stderr=stderr, start_new_session=True, env=env, cwd=cwd)
+        try:
+            while process.poll() is None:
+                if monotonic_ns() >= deadline:
+                    raise subprocess.TimeoutExpired(argv, 0)
+                if tunnel.poll() is not None:
+                    raise ValueError("SSH forwarding ended before Playwright")
+                table = darwin_process_table()
+                retained = darwin_owned_processes(process.pid, table, retained)
+                peak = max(peak, sum(table[pid][1] for pid, started in retained.items()
+                                     if pid in table and table[pid][2] == started))
+                samples += 1
+                stdout.flush(); stderr.flush()
+                if stdout.tell() + stderr.tell() > MAX_COMMAND_OUTPUT_BYTES:
+                    raise ValueError("browser executor output exceeds byte limit")
+                if monotonic_ns() - last_progress >= 60 * 10**9:
+                    stdout.flush()
+                    lines = stdout_path.read_text(errors="replace").splitlines()
+                    heartbeat = next((line for line in reversed(lines)
+                                      if "[native-v3-browser heartbeat]" in line), None)
+                    print(json.dumps({"phase": "mac-playwright",
+                        "progress": heartbeat[-4096:] if heartbeat else None,
+                        "stdout_bytes": stdout.tell()}, sort_keys=True), flush=True)
+                    last_progress = monotonic_ns()
+                time.sleep(0.25)
+        finally:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                table = darwin_process_table()
+                for pid, started in retained.items():
+                    if pid in table and table[pid][2] == started:
+                        try: os.kill(pid, sig)
+                        except ProcessLookupError: pass
+                signal_owned_process_group(process.pid, sig)
+                if sig == signal.SIGTERM: time.sleep(1)
+            process.wait(timeout=5)
+    memory = {"schema": DARWIN_BROWSER_MEMORY_SCHEMA, "peak_rss_bytes": integer(peak, "peak RSS", 1),
+              "samples": integer(samples, "RSS samples", 1), "interval_ms": 250, "scope": DARWIN_BROWSER_MEMORY_SCOPE}
+    write_new_json(memory_path, memory)
+    return subprocess.CompletedProcess(argv, process.returncode, stdout_path.read_text(), stderr_path.read_text()), memory
+
+
+def browser_executor_publish(target, local, remote, request_id, deadline):
+    incoming = f"{remote}.incoming-{request_id}"
+    for command in (["scp", "-q", "-oBatchMode=yes", str(local), f"{target}:{incoming}"],
+                    ["ssh", "-oBatchMode=yes", target, "mv", "--", incoming, remote]):
+        result = run_bounded_command(command, deadline)
+        if result.returncode:
+            raise ValueError("browser executor SSH handoff failed: " + result.stderr[-2048:])
+
+
+def browser_executor_preflight():
+    checks = []
+    for port, path in ((4173, "/"), (8080, "/status"),
+                       (1317, "/polystorechain/polystorechain/v1/params")):
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
+            value = response.read(1_048_577)
+            if response.status != 200 or not value or len(value) > 1_048_576:
+                raise ValueError("Mac LAN forwarded endpoint failed")
+        if port == 8080:
+            status = json.loads(value)
+            if status.get("persona") != "user-gateway" or status.get("allowed_route_families") != ["gateway"]:
+                raise ValueError("Mac LAN forward reached the wrong gateway persona")
+        checks.append(f"127.0.0.1:{port}")
+    request = urllib.request.Request("http://127.0.0.1:8545", method="POST",
+        headers={"Content-Type": "application/json"},
+        data=b'{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}')
+    with urllib.request.urlopen(request, timeout=5) as response:
+        if json.load(response).get("result") != "0x40000":
+            raise ValueError("Mac LAN forward reached the wrong EVM chain")
+    return checks + ["127.0.0.1:8545"]
+
+
+def browser_executor_main(args):
+    parser = argparse.ArgumentParser(description="Run the fixed native V3 browser qualification on macOS")
+    parser.add_argument("--ssh", required=True)
+    parser.add_argument("--remote-request", required=True)
+    parser.add_argument("--source", required=True)
+    parser.add_argument("--chrome", required=True)
+    options = parser.parse_args(args)
+    if platform.system() != "Darwin" or not re.fullmatch(r"[A-Za-z0-9._-]+@[A-Za-z0-9.-]+", options.ssh):
+        raise ValueError("browser-executor requires macOS and a user@host SSH target")
+    remote = options.remote_request
+    if not re.fullmatch(r"/[A-Za-z0-9._/-]+", remote) or ".." in Path(remote).parts:
+        raise ValueError("invalid remote browser request path")
+    source, chrome = Path(options.source).resolve(strict=True), Path(options.chrome).resolve(strict=True)
+    website, temporary_root = source / "polystore-website", None
+    playwright = website / "node_modules/.bin/playwright"
+    if not chrome.is_file() or not playwright.is_file() or not shutil.which("ssh") or not shutil.which("scp"):
+        raise ValueError("browser-executor requires Chrome, Playwright, ssh and scp")
+    bootstrap = monotonic_ns() + 60 * 10**9
+    with tempfile.TemporaryDirectory(prefix="polystore-291-browser-") as directory:
+        temporary_root = Path(directory)
+        request_path = temporary_root / "request.json"
+        fetched = run_bounded_command(["scp", "-q", "-oBatchMode=yes", f"{options.ssh}:{remote}", str(request_path)], bootstrap)
+        if fetched.returncode:
+            raise ValueError("browser executor could not fetch its request")
+        request = validate_browser_executor_request(json.loads(request_path.read_text()))
+        paths = {key: temporary_root / name for key, name in request["artifacts"].items()}
+        actual_head = ""
+        response = None
+        tunnel = None
+        try:
+            actual_head = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], check=True,
+                capture_output=True, text=True).stdout.strip()
+            dirty = subprocess.run(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no", "--",
+                "polystore-website", "scripts/retrieval_bench_artifact.py", "scripts/retrieval_four_validator_workload.py",
+                "scripts/test_bench_retrieval_sessions.py", "scripts/test_retrieval_four_validator_workload.py"],
+                check=True, capture_output=True, text=True).stdout
+            if actual_head != request["head"] or dirty:
+                raise ValueError("Mac executor requires the exact clean requested Git head")
+            if shutil.disk_usage(temporary_root).free < 2 * request["bytes"] + 512 * 1024 * 1024:
+                raise ValueError("Mac executor lacks its persistent-profile disk budget")
+            version = run_bounded_command([str(chrome), "--version"], bootstrap)
+            if version.returncode:
+                raise ValueError("Chrome version check failed")
+            cancel = str(Path(remote).with_name("browser-executor-cancel.json"))
+            published = str(Path(remote).with_name("browser-executor-response.json"))
+            gate = (f"while kill -0 {request['pid']} 2>/dev/null && test ! -e {cancel} && "
+                    f"test ! -e {published}; do sleep 1; done")
+            forwards = [part for port in (4173, 8080, 1317, 8545)
+                        for part in ("-L", f"127.0.0.1:{port}:127.0.0.1:{port}")]
+            tunnel = subprocess.Popen(["ssh", "-oBatchMode=yes", "-oExitOnForwardFailure=yes",
+                "-oServerAliveInterval=15", "-oServerAliveCountMax=3", *forwards, options.ssh, gate],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            deadline = monotonic_ns() + request["timeout"] * 10**9
+            while True:
+                if tunnel.poll() is not None:
+                    raise ValueError("SSH forwarding ended during Mac preflight")
+                try:
+                    preflight = browser_executor_preflight(); break
+                except (OSError, ValueError, urllib.error.URLError, json.JSONDecodeError):
+                    if monotonic_ns() >= min(deadline, bootstrap):
+                        raise ValueError("Mac LAN forwards did not pass their fixed endpoint preflight")
+                    time.sleep(0.25)
+            env = dict(os.environ, **request["env"], E2E_NATIVE_V3_RESULT=str(paths["result"]),
+                       PLAYWRIGHT_CHROMIUM_EXECUTABLE=str(chrome))
+            argv = [str(playwright), "test", request["spec"], "--workers=1", "--retries=0",
+                    "--max-failures=1", "--output", str(temporary_root / "results")]
+            result, _memory = run_darwin_browser(argv, deadline, paths["memory"], env=env, cwd=website, tunnel=tunnel)
+            shutil.copyfile(Path(str(paths["memory"]) + ".stdout"), paths["stdout"])
+            shutil.copyfile(Path(str(paths["memory"]) + ".stderr"), paths["stderr"])
+            if result.returncode == 0 and not paths["result"].is_file():
+                raise ValueError("successful browser test did not retain its result")
+            response = {"schema": BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"], "head": request["head"],
+                "returncode": 0 if result.returncode == 0 else 1, "process_returncode": result.returncode,
+                "preflight": preflight, "chrome": version.stdout.strip(),
+                "scope": BROWSER_EXECUTOR_SCOPE, "topology": {"ssh_target": options.ssh,
+                    "forwards": [4173, 8080, 1317, 8545]}}
+        except BaseException as error:
+            raw_stdout, raw_stderr = Path(str(paths["memory"]) + ".stdout"), Path(str(paths["memory"]) + ".stderr")
+            if raw_stdout.is_file(): shutil.copyfile(raw_stdout, paths["stdout"])
+            else: paths["stdout"].touch(exist_ok=True)
+            if raw_stderr.is_file(): shutil.copyfile(raw_stderr, paths["stderr"])
+            with paths["stderr"].open("a") as stream: stream.write(str(error)[-8192:] + "\n")
+            response = {"schema": BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"], "head": request["head"],
+                        "returncode": 1, "observed_head": actual_head, "scope": BROWSER_EXECUTOR_SCOPE,
+                        "topology": {"ssh_target": options.ssh, "forwards": [4173, 8080, 1317, 8545]}}
+        finally:
+            if tunnel is not None:
+                try: signal_owned_process_group(tunnel.pid, signal.SIGTERM); tunnel.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    signal_owned_process_group(tunnel.pid, signal.SIGKILL); tunnel.wait(timeout=5)
+        response["artifacts"] = {key: {"bytes": path.stat().st_size, "sha256": sha256(path)}
+                                 for key, path in paths.items() if path.is_file()}
+        transfer_deadline = monotonic_ns() + 60 * 10**9
+        for key in ("stdout", "stderr", "memory", "result"):
+            if key in response["artifacts"]:
+                browser_executor_publish(options.ssh, paths[key], str(Path(remote).parent / request["artifacts"][key]),
+                                         request["id"], transfer_deadline)
+        response_path = temporary_root / "response.json"
+        write_new_json(response_path, response)
+        browser_executor_publish(options.ssh, response_path,
+            str(Path(remote).with_name("browser-executor-response.json")), request["id"], transfer_deadline)
+        return response["returncode"]
 
 
 def scheduled_environment(job):
@@ -1798,6 +2145,8 @@ def main():
         if len(args) < 3 or args[1] != "--":
             raise ValueError("browser-memory-wrapper requires OUTPUT -- COMMAND")
         raise SystemExit(browser_memory_wrapper(args[0], args[2:]))
+    elif action == "browser-executor":
+        raise SystemExit(browser_executor_main(args))
     elif action == "arithmetic":
         if args:
             raise ValueError("arithmetic takes no arguments: it reports the frozen C3/C6 planning profile")

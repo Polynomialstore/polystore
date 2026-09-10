@@ -2009,8 +2009,44 @@ def browser_http_preflight(lifecycle, origin):
     return dict(origin=origin, checks=checks)
 
 
+def run_browser_executor_handoff(lifecycle, *, source, browser_env, faults, check_providers):
+    """Publish and await the fixed Mac LAN browser request while the server stack stays owned."""
+    request_path = lifecycle.home / "browser-executor-request.json"
+    request = artifact.create_browser_executor_request(request_path, source=source,
+        source_head=lifecycle.doc["provenance"]["product_source_commit"],
+        source_status=lifecycle.doc["provenance"]["product_source_status"], env=browser_env,
+        timeout_seconds=max(1, min(3600, int(lifecycle.remaining()))),
+        browser_bytes=lifecycle.doc["payload"]["bytes"], faults=faults)
+    response_path = request_path.with_name("browser-executor-response.json")
+    lifecycle.doc["browser_executor"] = dict(request=str(request_path), request_id=request["id"],
+        source_head=request["head"], qualification_scope=artifact.BROWSER_EXECUTOR_SCOPE)
+    lifecycle.save()
+    print(json.dumps({"phase": "browser-executor-await", "request": str(request_path),
+                      "source_head": request["head"]}, sort_keys=True), flush=True)
+    last_heartbeat = artifact.monotonic_ns()
+    try:
+        while not response_path.is_file():
+            check_providers()
+            lifecycle.remaining()
+            now = artifact.monotonic_ns()
+            if now - last_heartbeat >= 60 * 10**9:
+                heartbeat = {"phase": "browser-executor-await", "request_id": request["id"]}
+                lifecycle.doc.setdefault("progress", []).append(heartbeat)
+                lifecycle.save()
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = now
+            time.sleep(min(0.25, lifecycle.remaining()))
+        result, memory, response = artifact.read_browser_executor_response(request_path)
+        lifecycle.doc["browser_executor"]["response"] = response
+        lifecycle.save()
+        return result, memory
+    except BaseException as error:
+        artifact.write_browser_executor_cancel(request_path, error)
+        raise
+
+
 def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, command,
-                          processes, check_providers, faults=False):
+                          processes, check_providers, faults=False, executor_handoff=False):
     """Run one real sponsored DealDetail retrieval through the owned browser stack."""
     website = source / "polystore-website"
     vite = website / "node_modules/.bin/vite"
@@ -2087,8 +2123,12 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     argv = [str(playwright), "test", "tests/native-v3-browser-live.spec.ts", "--workers=1", "--retries=0",
             "--max-failures=1",
             "--output", str(lifecycle.home / f"browser{suffix}-results")]
-    result, memory = artifact.run_bounded_browser_command(argv, lifecycle.deadline,
-        lifecycle.home / f"browser{suffix}-memory.json", env=browser_env, cwd=website)
+    if executor_handoff:
+        result, memory = run_browser_executor_handoff(lifecycle, source=source,
+            browser_env=browser_env, faults=faults, check_providers=check_providers)
+    else:
+        result, memory = artifact.run_bounded_browser_command(argv, lifecycle.deadline,
+            lifecycle.home / f"browser{suffix}-memory.json", env=browser_env, cwd=website)
     stdout = lifecycle.home / f"playwright{suffix}.stdout.log"
     stderr = lifecycle.home / f"playwright{suffix}.stderr.log"
     stdout.write_text(result.stdout)
@@ -2101,6 +2141,7 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     outcome = json.loads(result_path.read_text())
     if not isinstance(outcome, dict) or outcome.get("success") is not True:
         raise ValueError("browser test did not retain successful qualification evidence")
+    validate_browser_cache_mdu_requests(outcome)
     sid = producer.b64(outcome["session"]["session_id"], 32).hex()
     after = browser_v3_snapshot(lifecycle, observed, deal, session_id=sid)
     if faults:
@@ -2142,7 +2183,8 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     evidence = dict(gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
-        playwright=dict(command=argv, stdout=str(stdout), stderr=str(stderr), result=str(result_path), outcome=outcome,
+        playwright=dict(command=getattr(result, "args", argv), stdout=str(stdout), stderr=str(stderr),
+                        result=str(result_path), outcome=outcome,
                         memory=memory),
         economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
         evm_rpc_transactions=rpc_transactions, proof_transactions=proof_transactions,
@@ -2151,6 +2193,17 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         evidence["browser_phases"] = browser_phases
     lifecycle.doc["native_v3_browser_faults" if faults else "native_v3_browser"] = evidence
     lifecycle.save()
+    return evidence
+
+
+def validate_browser_cache_mdu_requests(outcome):
+    evidence = outcome.get("cacheMduRequests") if isinstance(outcome, dict) else None
+    keys = {"gatewayMetadata", "gatewayData", "directMetadata", "directData"}
+    if (not isinstance(evidence, dict) or set(evidence) != {"before", "after"} or
+            not all(isinstance(row, dict) and set(row) == keys and
+                    all(type(value) is int and value >= 0 for value in row.values())
+                    for row in evidence.values()) or evidence["before"] != evidence["after"]):
+        raise ValueError("settled cache retrieval performed additional MDU requests")
     return evidence
 
 
@@ -3861,6 +3914,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         raise ValueError("native v3 diagnostic and sustained v2 workload are distinct modes")
     browser_bytes = artifact.integer(native_browser["file_bytes"], "browser fixture bytes", 1,
                                      1_073_741_824) if native_browser is not None else None
+    browser_executor_handoff = bool(native_browser.get("executor_handoff", False)) if native_browser is not None else False
     if browser_bytes is not None and browser_bytes not in V3_BROWSER_SIZES:
         raise ValueError("browser fixture size is outside the retained qualification matrix")
     v3_bytes = browser_bytes if browser_bytes is not None else V3_PILOT_BYTES
@@ -3919,7 +3973,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                   if native_cross_audit else
                   "one 16 MiB FAT v3 K8 deal; twelve production provider-daemons; two preopened native sessions"
                   if native_v3 else f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch"),
-        qualification=False, limits=(["One owned local-host production browser path; no WAN or public activation qualification"]
+        qualification=False, limits=([artifact.BROWSER_EXECUTOR_SCOPE if browser_executor_handoff else
+                                      "One owned local-host production browser path; no WAN or public activation qualification"]
             if native_browser is not None else ["No capacity or delivered retrieval qualification"])+[
             ("Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
              if native_v3 else "No deputy retrieval yet"),
@@ -3988,32 +4043,26 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         browser_ports = None
         if native_browser is not None:
             gateway_port = None
-            for candidate in (8080, 18080):
+            for candidate in ((8080,) if browser_executor_handoff else (8080, 18080)):
                 try:
-                    reservation = socket.socket()
-                    reservation.bind(("127.0.0.1", candidate))
-                    reservation.listen(1)
+                    reservation = artifact.reserve_loopback_port(candidate)
                     reservations.append(reservation)
                     gateway_port = candidate
                     break
                 except OSError:
-                    reservation.close()
+                    pass
             if gateway_port is None:
                 raise ValueError("browser qualification requires an owned user-gateway on port 8080 or 18080")
-            reservation = socket.socket()
-            reservation.bind(("127.0.0.1", 4173))
-            reservation.listen(1)
+            reservation = artifact.reserve_loopback_port(4173)
             reservations.append(reservation)
             browser_ports = dict(gateway=gateway_port, website=4173,
                                  gateway_reservation=reservations[-2],
                                  website_reservation=reservations[-1])
         provider_reservations = []
         for i in range(layout["assignments"]):
-            reservation = socket.socket()
+            reservation = artifact.reserve_loopback_port(19091 + i)
             reservations.append(reservation)
             provider_reservations.append(reservation)
-            reservation.bind(("127.0.0.1", 19091 + i))
-            reservation.listen(1)
         doc["provenance"] = dict(source_checkout=command(["git", "-C", str(lifecycle.root), "rev-parse", "HEAD"]).strip(),
             binary=str(lifecycle.binary), native_library=str(lifecycle.library),
             binary_sha256=artifact.sha256(lifecycle.binary), native_library_sha256=artifact.sha256(lifecycle.library),
@@ -4242,7 +4291,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 lifecycle.save()
                 run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
-                    check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1)
+                    check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1,
+                    executor_handoff=browser_executor_handoff)
                 if browser_bytes == 1024:
                     expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
                         send=send, wait=wait, command=command, curl=curl)
@@ -4300,6 +4350,8 @@ def main():
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--browser-bytes", type=int, choices=V3_BROWSER_SIZES,
                         help="Retained browser fixture size; only used by native-v3-browser")
+    parser.add_argument("--browser-executor-handoff", action="store_true",
+                        help="Run the fixed Playwright worker on the Mac LAN client; native-v3-browser only")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
@@ -4313,6 +4365,9 @@ def main():
     sustained_rate_scale = options.pop("sustained_rate_scale")
     sustained_deputies = options.pop("sustained_deputies")
     browser_bytes = options.pop("browser_bytes")
+    browser_executor_handoff = options.pop("browser_executor_handoff")
+    if browser_executor_handoff and mode != "native-v3-browser":
+        parser.error("browser executor options require native-v3-browser")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
@@ -4331,8 +4386,11 @@ def main():
         if (not gateway or not cli or not source or k8 or k2 or proof_only or
                 options["timeout"] > 3600 or audit_profile != "normal"):
             parser.error("native-v3-browser requires product binaries/source, normal audits, timeout <= 3600, and excludes fixtures/--proof-only")
+        native_browser = dict(file_bytes=browser_bytes or V3_BROWSER_DEFAULT_BYTES)
+        if browser_executor_handoff:
+            native_browser["executor_handoff"] = True
         print(run_healthy(artifact.FourValidatorLifecycle(**options, browser_evm=True), gateway, cli, source,
-                          native_browser=dict(file_bytes=browser_bytes or V3_BROWSER_DEFAULT_BYTES), audit_profile="normal"))
+                          native_browser=native_browser, audit_profile="normal"))
     elif (exporter or proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
           sustained_rate_scale != 1 or sustained_deputies != 8 or browser_bytes is not None):
         parser.error("exporter, proof gas, sustained K and pilot duration require sustained-providers")
