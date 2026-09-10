@@ -1286,6 +1286,37 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         capture.assert_not_called()
         self.assertNotIn("measured_window", lifecycle.doc["native_v3_cross_audit"])
 
+    def test_cross_audit_post_load_state_freezes_before_slow_receipt_decoding(self):
+        events = []
+        latest = [250]
+        providers = {0: AUDIT_ADDRESSES[0]}
+        views = {epoch: {0: {"audit": {"sample_count": "1", "accepted_count": "1"}}}
+                 for epoch in (2, 3)}
+        lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}}, save=Mock())
+
+        def quiescence(_lifecycle, _providers):
+            events.append(("quiescence", latest[0]))
+            return {"second_height": latest[0], "sequences": {}}
+
+        def audits(height, final, epoch):
+            events.append(("audits", height, final, epoch))
+            return views[epoch]
+
+        with patch.object(workload, "require_provider_quiescence", side_effect=quiescence):
+            post, height, final = workload.freeze_cross_audit_post_load(
+                lifecycle, audits, providers, 1, [2, 3], 100, views)
+            # The historical RPC/CLI receipt loop is outside the load window and may be slow.
+            # Advancing the live tip must not change the already-frozen query height or audits.
+            for _ in range(workload.V3_CROSS_AUDIT_MEASURED):
+                latest[0] += 1
+
+        self.assertEqual(events, [("quiescence", 250), ("audits", 250, False, 2),
+                                  ("audits", 250, False, 3)])
+        self.assertEqual((height, post["second_height"], final), (250, 250, views))
+        self.assertEqual(lifecycle.doc["native_v3_cross_audit"]["post_load_fence"],
+            {"height": 250, "provider_quiescence": post, "audits": views})
+        lifecycle.save.assert_called_once_with()
+
     def test_cross_audit_transaction_classification_binds_committed_system_proof(self):
         providers = dict(enumerate(AUDIT_ADDRESSES))
         raw = b"production-shaped-crossed-audit-transaction"

@@ -1100,6 +1100,26 @@ def close_cross_audit_measurement(lifecycle, audits, providers, deal_id, expecte
     return crossed, audit_views
 
 
+def freeze_cross_audit_post_load(lifecycle, audits, providers, ready_epoch, expected_epochs,
+                                 epoch_length, crossed_views):
+    """Freeze quiescent two-epoch state before slow historical receipt decoding."""
+    post_quiescence = require_provider_quiescence(lifecycle, providers)
+    final_height = post_quiescence["second_height"]
+    if (final_height - 1) // epoch_length + 1 != ready_epoch + V3_CROSS_AUDIT_EPOCHS:
+        raise ValueError("cross-audit profile did not cross exactly two epochs")
+    final_views = {}
+    for epoch in expected_epochs:
+        views = audits(final_height, False, epoch)
+        if views != crossed_views[epoch]:
+            raise ValueError("crossed audit evidence changed after provider quiescence")
+        final_views[epoch] = views
+    evidence = dict(height=final_height, provider_quiescence=post_quiescence,
+                    audits=final_views)
+    lifecycle.doc["native_v3_cross_audit"]["post_load_fence"] = evidence
+    lifecycle.save()
+    return post_quiescence, final_height, final_views
+
+
 def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, audits,
                               epoch_length, command):
     """Fixed provider-route operating point spanning exactly two normal audit anchors."""
@@ -1224,6 +1244,12 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         stream_key="native_v3_cross_audit_commit_streams",
         before_phase="native_v3_cross_audit_before", after_phase="native_v3_cross_audit_after")
 
+    # Freeze the post-load state before the historical per-receipt queries below. Those
+    # queries are intentionally outside the measured window, but 360 CLI/RPC lookups can
+    # take long enough for another audit anchor to pass at the live tip.
+    post_quiescence, final_height, final_views = freeze_cross_audit_post_load(
+        lifecycle, audits, providers, ready_epoch, expected_epochs, epoch_length, crossed_views)
+
     grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
     for outcome in outcomes:
         grouped[schedule[outcome["request_index"]]["session_index"]].append(outcome)
@@ -1249,16 +1275,6 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         transactions, receipt_fence)
     lifecycle.save()
 
-    post_quiescence = require_provider_quiescence(lifecycle, providers)
-    final_height = post_quiescence["second_height"]
-    if (final_height - 1) // epoch_length + 1 != ready_epoch + V3_CROSS_AUDIT_EPOCHS:
-        raise ValueError("cross-audit profile did not cross exactly two epochs")
-    final_views = {}
-    for epoch in expected_epochs:
-        views = audits(final_height, False, epoch)
-        if views != crossed_views[epoch]:
-            raise ValueError("crossed audit evidence changed after provider quiescence")
-        final_views[epoch] = views
     before_metrics = lifecycle.doc["commit_step_metrics"]["phases"]["native_v3_cross_audit_before"]
     first_height = min(row["sample"]["committed_height"] for row in before_metrics["nodes"]) + 1
     proof_hashes = {row["txhash"].upper() for row in transactions}
