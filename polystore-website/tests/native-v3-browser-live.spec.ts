@@ -339,7 +339,8 @@ test.describe('native V3 browser qualification', () => {
         if (!observed) return
         void (async () => {
           const response = await request.response()
-          if (!response?.ok()) return
+          if (!response) throw new Error(`gateway MDU request completed without a response: ${observed.url}`)
+          if (!response.ok()) throw new Error(`gateway MDU request returned HTTP ${response.status()}: ${observed.url}`)
           const sizes = await request.sizes()
           gatewayMduResponses.push({ ...observed, bodyBytes: sizes.responseBodySize })
         })().catch((error: unknown) => {
@@ -404,6 +405,9 @@ test.describe('native V3 browser qualification', () => {
       expect(BigInt(String(session.acked_slots_mask))).toBe(expectedMask)
       expect(BigInt(String(session.settled_slots_mask))).toBe(expectedMask)
       expect(BigInt(String(session.locked_fee))).toBe(0n)
+      const completedHeight = String(session.updated_height)
+      expect(completedHeight).toMatch(/^[1-9][0-9]*$/)
+      progress.completed(sessionId!, completedHeight)
       const variableFee = (obligations as JsonObject[]).reduce((sum, row) =>
         sum + BigInt(String(row.blob_count)) * BigInt(String(session.price_per_blob)), 0n)
       const chargedStake = BigInt(String(session.base_fee)) + variableFee
