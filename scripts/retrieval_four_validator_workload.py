@@ -864,6 +864,27 @@ def wait_for_crossed_audits(lifecycle, audits, epoch_length, expected_epoch, dea
     raise TimeoutError("crossed audit coverage did not complete within 30 seconds: " + str(last_error))
 
 
+def close_cross_audit_measurement(lifecycle, audits, epoch_length, expected_epoch,
+                                  deadline_height, before_cpu, measured_end_height):
+    """Close the CPU fence only after the crossed audit is complete on all validators."""
+    crossed = wait_for_crossed_audits(
+        lifecycle, audits, epoch_length, expected_epoch, deadline_height)
+    after_cpu = validator_cpu_snapshot(lifecycle)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
+    lifecycle.doc["native_v3_cross_audit"]["measured_window"] = dict(
+        monotonic_start_ns=before_cpu["monotonic_ns"],
+        monotonic_end_ns=after_cpu["monotonic_ns"],
+        elapsed_ns=after_cpu["monotonic_ns"] - before_cpu["monotonic_ns"],
+        proof_phase_end_height=measured_end_height,
+        crossed_audit_completion_height=crossed["height"],
+        validator_cpu_before=before_cpu,
+        validator_cpu_after=after_cpu,
+        validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
+        scope=("fixed HTTP offer, bounded drain, and crossed-audit completion; includes proof generation, "
+               "local verification, gas simulation, signing, broadcast and commit observation; no RSS phase peak"))
+    return crossed
+
+
 def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, audits, epoch_length):
     """Fixed provider-route load spanning exactly one normal storage-audit anchor."""
     doc = lifecycle.doc["native_v3_cross_audit"] = dict(qualification=False)
@@ -958,15 +979,9 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
     before_cpu = validator_cpu_snapshot(lifecycle)
     outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
-    after_cpu = validator_cpu_snapshot(lifecycle)
     measured_end_height = lifecycle.wait_height(1)
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
-    doc["measured_window"] = dict(monotonic_start_ns=before_cpu["monotonic_ns"],
-        monotonic_end_ns=after_cpu["monotonic_ns"],
-        elapsed_ns=after_cpu["monotonic_ns"]-before_cpu["monotonic_ns"],
-        committed_end_height=measured_end_height, validator_cpu_before=before_cpu,
-        validator_cpu_after=after_cpu, validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
-        scope="fixed HTTP offer and bounded drain; includes proof generation, local verification, gas simulation, signing, broadcast and commit observation; no RSS phase peak")
+    crossed = close_cross_audit_measurement(lifecycle, audits, epoch_length, ready_epoch + 1,
+        deadline_height, before_cpu, measured_end_height)
     grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
     for outcome in outcomes:
         grouped[schedule[outcome["request_index"]]["session_index"]].append(outcome)
@@ -987,7 +1002,6 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     if len(transactions) != V3_CROSS_AUDIT_MEASURED:
         raise ValueError("measured provider phase omitted a proof transaction")
     lifecycle.save()
-    crossed = wait_for_crossed_audits(lifecycle, audits, epoch_length, ready_epoch + 1, deadline_height)
     post_quiescence = require_provider_quiescence(lifecycle, providers)
     final_height = post_quiescence["second_height"]
     if (final_height - 1) // epoch_length + 1 != ready_epoch + 1:
@@ -1012,6 +1026,8 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
             audit_transactions.append(row)
     reconcile_transaction_blocks(lifecycle, transactions, first_height, final_height,
         lifecycle.home / "native-v3-cross-audit-blocks.jsonl", observe_transaction=observe_transaction)
+    if any(row["height"] > crossed["height"] for row in audit_transactions):
+        raise ValueError("crossed audit transaction committed after the CPU measurement fence")
     final_sequences = provider_sequences(lifecycle, providers, final_height)
     doc["audit_transactions"] = audit_transactions
     doc["provider_sequence_reconciliation"] = reconcile_cross_audit_sequences(

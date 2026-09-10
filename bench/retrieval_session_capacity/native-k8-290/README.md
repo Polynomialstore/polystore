@@ -193,8 +193,10 @@ route failure remains diagnostic evidence rather than being relabeled as a
 successful 2 transactions/s result. A successful run additionally verifies all
 128 warmup and measured proof transactions, all 2,112 accepted ordinals, the
 crossed audit coverage and its unique transactions, provider account sequences,
-raw blocks/results on all four validators, Linux validator CPU ticks, and all
-sixteen expiry/refund paths. It does not send an ACK or verify delivery.
+raw blocks/results on all four validators, Linux validator CPU ticks covering
+the fixed HTTP schedule, drain, and crossed-audit completion, and all sixteen
+expiry/refund paths. Scheduler HTTP duration remains a separate measurement. It
+does not send an ACK or verify delivery.
 
 ```sh
 python3 scripts/retrieval_four_validator_workload.py \

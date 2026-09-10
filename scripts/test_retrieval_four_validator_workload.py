@@ -951,6 +951,49 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.reconcile_cross_audit_sequences(
                 before, after, providers, proofs, audit_transactions[:-1], views)
 
+    def test_cross_audit_cpu_fence_waits_for_delayed_audit_completion(self):
+        events = []
+        before = {"monotonic_ns": 10, "validators": []}
+        after = {"monotonic_ns": 30, "validators": []}
+        lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
+
+        def wait_for_audits(*args):
+            events.append("audit-complete")
+            return {"height": 303, "audits": {}}
+
+        def cpu_snapshot(*args):
+            events.append("cpu-after")
+            return after
+
+        def capture(*args, **kwargs):
+            events.append("metrics-after")
+
+        with patch.object(workload, "wait_for_crossed_audits", side_effect=wait_for_audits), \
+                patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot), \
+                patch.object(workload, "capture_workload_metrics", side_effect=capture), \
+                patch.object(workload, "validator_cpu_delta", return_value={"cpu": "delta"}):
+            crossed = workload.close_cross_audit_measurement(
+                lifecycle, Mock(), 100, 4, 500, before, 299)
+
+        self.assertEqual(events, ["audit-complete", "cpu-after", "metrics-after"])
+        self.assertEqual(crossed["height"], 303)
+        window = lifecycle.doc["native_v3_cross_audit"]["measured_window"]
+        self.assertEqual(window["crossed_audit_completion_height"], 303)
+        self.assertEqual(window["proof_phase_end_height"], 299)
+        self.assertIn("crossed-audit completion", window["scope"])
+
+    def test_cross_audit_cpu_fence_is_not_closed_after_audit_failure(self):
+        lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
+        with patch.object(workload, "wait_for_crossed_audits", side_effect=TimeoutError("delayed audit")), \
+                patch.object(workload, "validator_cpu_snapshot") as cpu_snapshot, \
+                patch.object(workload, "capture_workload_metrics") as capture, \
+                self.assertRaisesRegex(TimeoutError, "delayed audit"):
+            workload.close_cross_audit_measurement(
+                lifecycle, Mock(), 100, 4, 500, {"monotonic_ns": 10}, 299)
+        cpu_snapshot.assert_not_called()
+        capture.assert_not_called()
+        self.assertNotIn("measured_window", lifecycle.doc["native_v3_cross_audit"])
+
     def test_cross_audit_transaction_classification_binds_committed_system_proof(self):
         providers = dict(enumerate(AUDIT_ADDRESSES))
         raw = b"production-shaped-crossed-audit-transaction"
