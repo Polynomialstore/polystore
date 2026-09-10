@@ -1379,10 +1379,11 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                     genesis = {"consensus": {"params": {"block": {}}}, "app_state": {
                         "bank": {"denom_metadata": []}, "nilchain": {"params": {
                             "retrieval_v2_activation_height": "0", "retrieval_v3_activation_height": "0",
-                            "unchanged_fee": "17"}}}}
+                            "unchanged_fee": "17"}}, "evm": {"params": {"active_static_precompiles": []}},
+                        "feemarket": {"params": {"min_gas_price": "0.000000000000000000"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
                     (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
-                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\n')
+                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\nenabled-unsafe-cors = false\\n[mempool]\\nmax-txs = -1\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
                         "priv_key": "NEVER RETAIN THIS SECRET"}))
@@ -1533,6 +1534,37 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                 genesis = json.loads((Path(runner.nodes[0]["home"]) / "config/genesis.json").read_text())
                 self.assertEqual(genesis["app_state"]["nilchain"]["params"]["retrieval_v3_activation_height"],
                                  "1" if enabled else "0")
+
+    def test_browser_evm_genesis_enables_precompile_and_nonzero_gas_floor_only_when_requested(self):
+        for browser_evm in (False, True):
+            with self.subTest(browser_evm=browser_evm):
+                runner = artifact.FourValidatorLifecycle(self.binary, self.library,
+                    self.root / ("browser-evm" if browser_evm else "native"), browser_evm=browser_evm)
+                runner.home.mkdir(mode=0o700)
+                runner.prepare(browser_payer="nil1" + "z" * 35 if browser_evm else None)
+                genesis = json.loads((Path(runner.nodes[0]["home"]) / "config/genesis.json").read_text())
+                self.assertEqual(genesis["app_state"]["evm"]["params"]["active_static_precompiles"],
+                                 [artifact.BROWSER_EVM_PRECOMPILE] if browser_evm else [])
+                self.assertEqual(genesis["app_state"]["feemarket"]["params"]["min_gas_price"],
+                                 artifact.BROWSER_EVM_MIN_GAS_PRICE if browser_evm else "0.000000000000000000")
+                if browser_evm:
+                    self.assertEqual(runner.doc["profile"]["browser_evm_fee_policy"], {
+                        "native_minimum_gas_prices": artifact.BROWSER_EVM_NATIVE_GAS_PRICES,
+                        "evm_min_gas_price_aatom": artifact.BROWSER_EVM_MIN_GAS_PRICE,
+                    })
+                else:
+                    self.assertNotIn("browser_evm_fee_policy", runner.doc["profile"])
+                runner.doc["provenance"] = {
+                    "binary_sha256": artifact.sha256(self.binary),
+                    "native_library_sha256": artifact.sha256(self.library),
+                    "trusted_setup_sha256": artifact.sha256(runner.env["POLYSTORE_TRUSTED_SETUP"]),
+                }
+                with patch.object(artifact.subprocess, "Popen") as popen:
+                    runner.start("gas-policy")
+                for call in popen.call_args_list:
+                    argv = call.args[0]
+                    self.assertEqual(argv[argv.index("--minimum-gas-prices") + 1],
+                                     artifact.BROWSER_EVM_NATIVE_GAS_PRICES if browser_evm else "0.001aatom")
 
     def test_prepare_provisions_bounded_high_load_signer_population(self):
         self.runner.home.mkdir(mode=0o700)

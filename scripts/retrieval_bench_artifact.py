@@ -1337,6 +1337,9 @@ def set_toml_value(text, section, key, value):
 
 
 BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
+BROWSER_EVM_PRECOMPILE = "0x0000000000000000000000000000000000000900"
+BROWSER_EVM_MIN_GAS_PRICE = "1.000000000000000000"
+BROWSER_EVM_NATIVE_GAS_PRICES = "1aatom"
 
 
 def configure_four_validator_app(text, api_address, *, browser_evm=False):
@@ -1472,6 +1475,17 @@ class FourValidatorLifecycle:
             {"denom": "aatom", "exponent": 0, "aliases": ["uatom"]},
             {"denom": "atom", "exponent": 18, "aliases": []}], "base": "aatom", "display": "atom",
             "name": "Atom", "symbol": "ATOM", "uri": "", "uri_hash": ""})
+        if self.browser_evm:
+            evm_params = genesis["app_state"]["evm"]["params"]
+            precompiles = evm_params["active_static_precompiles"]
+            if not isinstance(precompiles, list):
+                raise ValueError("generated EVM precompile configuration is malformed")
+            evm_params["active_static_precompiles"] = sorted(set(precompiles + [BROWSER_EVM_PRECOMPILE]))
+            fee_params = genesis["app_state"]["feemarket"]["params"]
+            if fee_params["min_gas_price"] != "0.000000000000000000":
+                raise ValueError("generated EVM minimum gas price changed")
+            # One aatom is the smallest effective integer EVM gas price.
+            fee_params["min_gas_price"] = BROWSER_EVM_MIN_GAS_PRICE
         frozen = json.dumps(genesis, sort_keys=True, indent=1) + "\n"
         for node in self.nodes:
             home = Path(node["home"])
@@ -1504,7 +1518,11 @@ class FourValidatorLifecycle:
                         profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"],
-                                 "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1})
+                                 "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1,
+                                 **({"browser_evm_fee_policy": {
+                                     "native_minimum_gas_prices": BROWSER_EVM_NATIVE_GAS_PRICES,
+                                     "evm_min_gas_price_aatom": BROWSER_EVM_MIN_GAS_PRICE,
+                                 }} if self.browser_evm else {})})
 
     def start(self, phase):
         for field, path in (("binary_sha256", self.binary), ("native_library_sha256", self.library),
@@ -1532,7 +1550,8 @@ class FourValidatorLifecycle:
                          "--json-rpc.api", "eth,net,web3"]
             else:
                 argv += ["--json-rpc.enable=false"]
-            argv += ["--minimum-gas-prices", "0.001aatom"]
+            argv += ["--minimum-gas-prices",
+                     BROWSER_EVM_NATIVE_GAS_PRICES if self.browser_evm else "0.001aatom"]
             self.doc["commands"].append(argv)
             with (home / f"{phase}.log").open("xb") as log:
                 process = subprocess.Popen(argv, env=self.env, stdout=log, stderr=subprocess.STDOUT,
