@@ -121,7 +121,7 @@ func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		release, claimed, err := claimRetrievalPreparation(ctx, gateKey)
+		finish, claimed, err := claimRetrievalPreparation(ctx, gateKey)
 		if err != nil {
 			return nil, err
 		}
@@ -131,8 +131,8 @@ func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key 
 		// Callers are already admitted. The synchronous owner keeps native
 		// preparation inside its own admission and generation lease. A live waiter
 		// rechecks the cache and becomes the next owner if this owner is canceled.
-		value, err := func() (*authenticatedGeneration, error) {
-			defer release()
+		value, err := func() (value *authenticatedGeneration, err error) {
+			defer func() { finish(err) }()
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}

@@ -455,17 +455,67 @@ func TestAuthenticatedRetrievalMetadataConcurrentCancellationOwnership(t *testin
 		}
 	})
 
-	t.Run("authentication error is not retried", func(t *testing.T) {
+	t.Run("concurrent authentication error is prepared once", func(t *testing.T) {
 		dir := t.TempDir()
 		key := retrievalGenerationKey{Chain: "metadata-authentication-error", Root: [32]byte{3}, Generation: 1, Version: 3}
+		t.Cleanup(func() { cleanup(key.Chain) })
 		corrupt := errors.New("corrupt authenticated metadata")
+		started, failPreparation := make(chan struct{}), make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		var failOnce sync.Once
+		defer func() {
+			cancelWorkers()
+			failOnce.Do(func() { close(failPreparation) })
+			workers.Wait()
+		}()
 		var calls atomic.Int32
-		_, err := authenticatedRetrievalMetadataForWith(t.Context(), dir, key, func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error) {
-			calls.Add(1)
-			return nil, corrupt
-		})
-		if !errors.Is(err, corrupt) || calls.Load() != 1 {
-			t.Fatalf("authentication error was retried: err=%v calls=%d", err, calls.Load())
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) == 1 {
+				close(started)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-failPreparation:
+				return nil, corrupt
+			}
+		}
+		baselineResponses := len(retrievalResponses)
+		results := make(chan error, maxRetrievalResponses)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(workerCtx, dir, key, prepare, nil)
+			results <- err
+		}()
+		waitIntegrityIndexV3Signal(t, started, "failed metadata owner")
+
+		for i := 1; i < maxRetrievalResponses; i++ {
+			observed := make(chan struct{})
+			held := make(chan struct{})
+			waiterCtx := &observedDoneContextV3{Context: workerCtx, observed: observed}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				_, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, held)
+				results <- err
+			}()
+			waitIntegrityIndexV3Signal(t, held, "failed metadata waiter resources")
+			waitIntegrityIndexV3Signal(t, observed, "failed metadata waiter gate entry")
+		}
+		if refs := generationRefsV3Test(t, dir); refs != maxRetrievalResponses || len(retrievalResponses) != baselineResponses+maxRetrievalResponses {
+			t.Fatalf("failed metadata waiters did not retain independent resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
+		failOnce.Do(func() { close(failPreparation) })
+		for i := 0; i < maxRetrievalResponses; i++ {
+			if err := waitIntegrityIndexV3Result(t, results, "shared metadata failure"); !errors.Is(err, corrupt) {
+				t.Fatalf("metadata waiter returned %v", err)
+			}
+		}
+		workers.Wait()
+		if calls.Load() != 1 || generationRefsV3Test(t, dir) != 0 || len(retrievalResponses) != baselineResponses {
+			t.Fatalf("authentication failure was rebuilt or retained resources: calls=%d refs=%d responses=%d", calls.Load(), generationRefsV3Test(t, dir), len(retrievalResponses)-baselineResponses)
 		}
 	})
 }

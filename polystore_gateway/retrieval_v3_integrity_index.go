@@ -23,38 +23,49 @@ const (
 )
 
 var integrityIndexV3Magic = [8]byte{'N', 'I', 'L', 'I', 'V', '3', 'I', '1'}
+
+type retrievalPreparation struct {
+	done chan struct{}
+	err  error
+}
+
 var retrievalPreparations = struct {
 	sync.Mutex
-	active map[string]chan struct{}
-}{active: make(map[string]chan struct{})}
+	active map[string]*retrievalPreparation
+}{active: make(map[string]*retrievalPreparation)}
 
 // claimRetrievalPreparation lets a canceled waiter leave without delaying the
 // current owner. An active waiter rechecks the prepared artifact after wake;
 // if the owner was canceled, one waiter becomes the next synchronous owner.
-func claimRetrievalPreparation(ctx context.Context, key string) (release func(), claimed bool, err error) {
+// Permanent owner failures are returned to every active waiter without rebuilds.
+func claimRetrievalPreparation(ctx context.Context, key string) (finish func(error), claimed bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
 	retrievalPreparations.Lock()
-	if done := retrievalPreparations.active[key]; done != nil {
+	if preparation := retrievalPreparations.active[key]; preparation != nil {
 		retrievalPreparations.Unlock()
 		select {
 		case <-ctx.Done():
 			return nil, false, ctx.Err()
-		case <-done:
+		case <-preparation.done:
 			if err := ctx.Err(); err != nil {
 				return nil, false, err
+			}
+			if preparation.err != nil && !errors.Is(preparation.err, context.Canceled) && !errors.Is(preparation.err, context.DeadlineExceeded) {
+				return nil, false, preparation.err
 			}
 			return nil, false, nil
 		}
 	}
-	done := make(chan struct{})
-	retrievalPreparations.active[key] = done
+	preparation := &retrievalPreparation{done: make(chan struct{})}
+	retrievalPreparations.active[key] = preparation
 	retrievalPreparations.Unlock()
-	return func() {
+	return func(err error) {
 		retrievalPreparations.Lock()
+		preparation.err = err
 		delete(retrievalPreparations.active, key)
-		close(done)
+		close(preparation.done)
 		retrievalPreparations.Unlock()
 	}, true, nil
 }
@@ -254,15 +265,15 @@ func ensureIntegrityIndexV3WithBuilder(ctx context.Context, dir string, key retr
 			}
 			buildKey = fmt.Sprintf("integrity-index-v3:%s:%#v", abs, key)
 		}
-		release, claimed, err := claimRetrievalPreparation(ctx, buildKey)
+		finish, claimed, err := claimRetrievalPreparation(ctx, buildKey)
 		if err != nil {
 			return "", err
 		}
 		if !claimed {
 			continue
 		}
-		value, err := func() (string, error) {
-			defer release()
+		value, err := func() (value string, err error) {
+			defer func() { finish(err) }()
 			if err := ctx.Err(); err != nil {
 				return "", err
 			}
