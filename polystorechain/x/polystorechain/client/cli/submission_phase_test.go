@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -55,7 +56,9 @@ func TestSubmissionPhaseRealSDKLocalAndBroadcastFailures(t *testing.T) {
 			marker, err := os.ReadFile(path)
 			require.NoError(t, err)
 			if mode == "network" {
-				require.Empty(t, marker)
+				var timing submissionTiming
+				require.NoError(t, json.Unmarshal(marker, &timing))
+				require.Equal(t, submissionTimingSchema, timing.Schema)
 			} else {
 				require.Equal(t, submissionNotBroadcast, string(marker))
 			}

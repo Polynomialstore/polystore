@@ -551,6 +551,65 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.validate_v3_committed_message(duplicate, kind="session-proof",
                 creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
 
+    def test_provider_phase_timing_is_separate_bounded_and_receipt_bound(self):
+        provider = AUDIT_ADDRESSES[0]
+        txhash = "AB" * 32
+        timing = dict(schema=workload.V3_PROVIDER_TIMING_SCHEMA,
+            authority_ns=100, proof_preparation_ns=200,
+            submission_attempts=[dict(attempt=1, pre_broadcast_ns=300,
+                broadcast_tx_sync_ns=400, check_tx_code=0)],
+            commit_observation_ns=500, provider_total_ns=1600)
+        outcome = dict(status="success", request_id="measured-1-0", provider=provider,
+            session_id="0x" + self.SESSION, slot=0, tx_hash=txhash, timing=timing)
+        transaction = dict(operation_id="measured-1-0", provider=provider, creator=provider,
+            session_id="0x" + self.SESSION, slot=0, txhash=txhash,
+            outcome="committed_success", validators=[{"node_id": str(i)} for i in range(4)])
+        summary = workload.validate_v3_provider_phase_timings([outcome], [transaction])
+        self.assertTrue(summary["qualification"])
+        self.assertEqual(summary["percentiles_ns"]["proof_preparation_ns"],
+                         {"p50": 200, "p95": 200, "p99": 200})
+        self.assertEqual(summary["observations"], [
+            {"operation_id": "measured-1-0", "unattributed_ns": 100}])
+
+        retry = copy.deepcopy(outcome)
+        retry["timing"]["submission_attempts"] = [
+            dict(attempt=1, pre_broadcast_ns=100, broadcast_tx_sync_ns=200, check_tx_code=32),
+            dict(attempt=2, pre_broadcast_ns=300, broadcast_tx_sync_ns=400, check_tx_code=0)]
+        retry["timing"]["provider_total_ns"] = 1800
+        summary = workload.validate_v3_provider_phase_timings([retry], [transaction])
+        self.assertTrue(summary["qualification"])
+        self.assertEqual(summary["sequence_retry_attempts"], 1)
+
+        cases = {}
+        cases["missing"] = copy.deepcopy(outcome)
+        del cases["missing"]["timing"]
+        cases["negative"] = copy.deepcopy(outcome)
+        cases["negative"]["timing"]["authority_ns"] = -1
+        cases["overflow"] = copy.deepcopy(outcome)
+        cases["overflow"]["timing"]["submission_attempts"][0]["pre_broadcast_ns"] = 1 << 64
+        cases["bad_code"] = copy.deepcopy(outcome)
+        cases["bad_code"]["timing"]["submission_attempts"][0]["check_tx_code"] = 32
+        cases["bool_attempt"] = copy.deepcopy(outcome)
+        cases["bool_attempt"]["timing"]["submission_attempts"][0]["attempt"] = True
+        cases["bad_slot"] = copy.deepcopy(outcome)
+        cases["bad_slot"]["slot"] = "not-an-integer"
+        cases["identity"] = copy.deepcopy(outcome)
+        cases["identity"]["provider"] = AUDIT_ADDRESSES[1]
+        for name, changed in cases.items():
+            with self.subTest(name=name):
+                result = workload.validate_v3_provider_phase_timings([changed], [transaction])
+                self.assertFalse(result["qualification"])
+                self.assertNotIn("percentiles_ns", result)
+        duplicate = workload.validate_v3_provider_phase_timings(
+            [outcome, copy.deepcopy(outcome)], [transaction, dict(transaction,
+                operation_id="measured-1-1", txhash="CD" * 32)])
+        self.assertFalse(duplicate["qualification"])
+        malformed_id = copy.deepcopy(outcome)
+        malformed_id["request_id"] = []
+        self.assertFalse(workload.validate_v3_provider_phase_timings(
+            [malformed_id], [transaction])["qualification"])
+        self.assertFalse(workload.validate_v3_provider_phase_timings([], [])["qualification"])
+
     def test_committed_v3_http_transaction_normalizes_rpc_numbers_and_reconciles_raw_block(self):
         provider = AUDIT_ADDRESSES[0]
         raw = b"production-shaped-signed-transaction"

@@ -679,3 +679,36 @@ func TestRetrievalV3MalformedCommittedMarkerRemainsQuarantined(t *testing.T) {
 		t.Fatalf("malformed committed marker was cleared: %+v %v", got, err)
 	}
 }
+
+func TestRetrievalV3ProviderTimingIsSuccessOnlyAndBounded(t *testing.T) {
+	submission := txSubmissionTiming{Complete: true, CommitObservationNS: 30,
+		Attempts: []submissionAttemptTiming{{Attempt: 1, PreBroadcastNS: 10, BroadcastTxSyncNS: 20, CheckTxCode: 0}}}
+	if !validV3SubmissionTiming(submission) {
+		t.Fatal("valid submission timing rejected")
+	}
+	bad := submission
+	bad.Attempts = append([]submissionAttemptTiming(nil), submission.Attempts...)
+	bad.Attempts[0].CheckTxCode = 32
+	if validV3SubmissionTiming(bad) {
+		t.Fatal("non-terminal CheckTx code accepted")
+	}
+
+	w := httptest.NewRecorder()
+	timing := &retrievalV3ProviderTiming{Schema: "polystore-v3-provider-timing-v1", AuthorityNS: 1,
+		ProofPreparationNS: 2, SubmissionAttempts: submission.Attempts,
+		CommitObservationNS: 30, ProviderTotalNS: 63}
+	writeRetrievalV3Outcome(w, "success", "0x"+strings.Repeat("a", 64), strings.Repeat("B", 64), 0, 1, 0, "complete", timing, nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"timing":{"schema":"polystore-v3-provider-timing-v1"`) {
+		t.Fatal("successful v3 outcome omitted timing", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	writeRetrievalV3Outcome(w, "reconciled", "0x"+strings.Repeat("a", 64), "", 0, 0, 0, "complete", nil, nil)
+	if strings.Contains(w.Body.String(), `"timing"`) {
+		t.Fatal("non-submission reconciliation invented timing", w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	writeRetrievalV3Outcome(w, "pending", "0x"+strings.Repeat("a", 64), strings.Repeat("B", 64), 0, 1, 0, "retained", timing, errTxPending)
+	if strings.Contains(w.Body.String(), `"timing"`) {
+		t.Fatal("error outcome exposed partial timing", w.Body.String())
+	}
+}
