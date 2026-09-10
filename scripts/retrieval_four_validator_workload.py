@@ -2077,7 +2077,8 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     before = browser_v3_snapshot(lifecycle, before_height, deal)
     argv = [str(playwright), "test", "tests/native-v3-browser-live.spec.ts", "--workers=1", "--retries=0",
             "--output", str(lifecycle.home / "browser-results")]
-    result = artifact.run_bounded_command(argv, lifecycle.deadline, env=browser_env, cwd=website)
+    result, memory = artifact.run_bounded_browser_command(argv, lifecycle.deadline,
+        lifecycle.home / "browser-memory.json", env=browser_env, cwd=website)
     (lifecycle.home / "playwright.stdout.log").write_text(result.stdout)
     (lifecycle.home / "playwright.stderr.log").write_text(result.stderr)
     if result.returncode:
@@ -2118,7 +2119,8 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
         playwright=dict(command=argv, stdout=str(lifecycle.home / "playwright.stdout.log"),
-                        stderr=str(lifecycle.home / "playwright.stderr.log"), result=str(result_path), outcome=outcome),
+                        stderr=str(lifecycle.home / "playwright.stderr.log"), result=str(result_path), outcome=outcome,
+                        memory=memory),
         economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
         proof_transactions=proof_transactions, provider_phases=phases, browser_phases=browser_phases)
     lifecycle.doc["native_v3_browser"] = evidence

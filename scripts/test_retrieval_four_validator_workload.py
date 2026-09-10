@@ -202,20 +202,23 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 if argv[-1].endswith("/status"):
                     return json.dumps({"persona": "user-gateway", "allowed_route_families": ["gateway"]})
                 return "ready"
-            def playwright(argv, deadline, *, env=None, cwd=None):
+            memory = {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 123456,
+                "source": artifact.BROWSER_MEMORY_SOURCE, "measurement_scope": artifact.BROWSER_MEMORY_SCOPE}
+            def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
                     "session": {"session_id": base64.b64encode(bytes(32)).decode()},
                     "evmReceipts": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
                     "diagnostics": [dict(phase="transport", edge="start", atMs=1), dict(phase="transport", edge="end", atMs=2)]}))
                 self.assertEqual(cwd, website)
+                self.assertEqual(memory_output, home / "browser-memory.json")
                 self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
                     ("1", "262144", workload.V3_BROWSER_PAYER))
-                return SimpleNamespace(returncode=0, stdout="passed", stderr="")
+                return SimpleNamespace(returncode=0, stdout="passed", stderr=""), memory
             ports = {"gateway": 18080, "website": 4173,
                      "gateway_reservation": Mock(), "website_reservation": Mock()}
             processes = []
             with patch.object(workload.subprocess, "Popen", side_effect=popen), \
-                 patch.object(artifact, "run_bounded_command", side_effect=playwright), \
+                 patch.object(artifact, "run_bounded_browser_command", side_effect=playwright), \
                  patch.object(workload, "collect_issuance", return_value=17), \
                  patch.object(workload, "browser_v3_snapshot", return_value={"bank": {"height": 19}, "retrieval": {"sessions": {"00" * 32: {"sample_count": 0}}}}), \
                  patch.object(workload, "browser_v3_committed_receipts", return_value=[]), \
@@ -227,6 +230,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             self.assertEqual([row[0][0] for row in launched], ["/gateway", str(website / "node_modules/.bin/vite")])
             self.assertEqual(result["gateway"]["status"]["persona"], "user-gateway")
             self.assertEqual(result["economics"]["issued_stake"], 17)
+            self.assertEqual(result["playwright"]["memory"], memory)
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
