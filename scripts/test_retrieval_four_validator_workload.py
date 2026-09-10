@@ -469,6 +469,29 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(lifecycle.doc["native_v3"]["sessions"], [])
             lifecycle.save.assert_called()
 
+    def test_first_generation_empty_root_is_canonical_cli_hex(self):
+        candidate = dict(deal_id="7", expected_current_generation="0",
+            previous_polyfs_root="", polyfs_root="0x" + self.ROOT,
+            integrity_root="0x" + self.INTEGRITY, size_bytes=str(workload.V3_PILOT_BYTES),
+            total_mdus="5", witness_mdus="1", integrity_leaf_count="288",
+            commit_action="propose-deal-generation-v3", required_acceptances="12")
+        lifecycle = SimpleNamespace(signers={"owner0": AUDIT_ADDRESSES[8]},
+            nodes=[{"home": "/home", "rpc": 26657}], env={}, deadline=artifact.monotonic_ns() + 10**9,
+            binary=Path("/chain"), chain="polystore_291-1")
+        for spelling in ("", "0x"):
+            candidate["previous_polyfs_root"] = spelling
+            captured = []
+            def send(name, args):
+                captured.append(workload.transaction_job(lifecycle, lifecycle.signers[name], args))
+                raise ValueError("stop after scheduled proposal")
+            with self.subTest(spelling=spelling), self.assertRaisesRegex(ValueError, "stop after scheduled proposal"):
+                workload.admit_native_v3_generation(lifecycle,
+                    uploaded={"generation_candidate": copy.deepcopy(candidate)}, deal_id="7",
+                    providers=dict(enumerate(AUDIT_ADDRESSES)), send=send, curl="/curl")
+            argv = captured[0]["submit"]
+            self.assertNotIn("", argv)
+            self.assertEqual(argv[argv.index("--previous-polyfs-root") + 1], "0x")
+
 
 
 class HealthyAuditViewsTest(unittest.TestCase):

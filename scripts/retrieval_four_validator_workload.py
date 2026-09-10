@@ -520,7 +520,7 @@ def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send,
     owner = lifecycle.signers["owner0"]
     proposed = send("owner0", ["propose-deal-generation-v3", "--deal-id", deal_id,
         "--expected-current-generation", candidate["expected_current_generation"],
-        "--previous-polyfs-root", candidate["previous_polyfs_root"],
+        "--previous-polyfs-root", candidate["previous_polyfs_root"] or "0x",
         "--polyfs-root", candidate["polyfs_root"], "--integrity-root", candidate["integrity_root"],
         "--size", candidate["size_bytes"], "--total-mdus", candidate["total_mdus"],
         "--witness-mdus", candidate["witness_mdus"],
