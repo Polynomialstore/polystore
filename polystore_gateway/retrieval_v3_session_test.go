@@ -305,6 +305,33 @@ func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testin
 	}
 }
 
+func TestBuildProviderProofBatchV3FromDirectoryRetainsProductionAuthentication(t *testing.T) {
+	frozen, _, dir := buildProviderV3ArtifactFixture(t)
+	signer := frozen.Session.Obligations[0].AssignedProvider
+	slot, proofs, remaining, err := buildProviderProofBatchV3FromDirectory(t.Context(), frozen, signer, dir)
+	if err != nil || slot != 0 || len(proofs) != 1 || remaining != 0 {
+		t.Fatalf("unexpected explicit-directory proof batch slot=%d proofs=%d remaining=%d err=%v", slot, len(proofs), remaining, err)
+	}
+	bad := filepath.Join(t.TempDir(), "generation")
+	if err := os.CopyFS(bad, os.DirFS(dir)); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(bad, fmt.Sprintf("mdu_%d_slot_0.bin", frozen.Context.MetadataMDUs))
+	f, err := os.OpenFile(path, os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte{0xff}, 19); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := buildProviderProofBatchV3FromDirectory(t.Context(), frozen, signer, bad); err == nil {
+		t.Fatal("explicit-directory builder accepted corrupted authenticated bytes")
+	}
+}
+
 func TestGenerationAcceptanceV3RejectsUnsampledIntegrityLeaf(t *testing.T) {
 	_, key, dir := buildProviderV3ArtifactFixture(t)
 	metadata, err := authenticatedRetrievalMetadataFor(t.Context(), dir, key)

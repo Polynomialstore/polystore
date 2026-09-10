@@ -175,3 +175,34 @@ genesis. A retained result can establish production-route correctness and a
 bounded offered/committed diagnostic. A longer reviewed profile is required
 before quoting stable throughput, and delivered-file performance remains a
 separate measurement.
+
+## Native v3 chain-only diagnostic
+
+`native-v3-chain` keeps the same 16 MiB FAT v3 generation and normal audits,
+then opens eight sessions. Eight bounded exporter processes prepare and natively
+verify the 64 provider messages before measurement. The CLI simulates each exact
+message with `--generate-only --gas auto --gas-adjustment 1.6`; the measured
+submissions use those explicit gas limits, so proof generation and gas
+simulation are outside the clock. One warmup per systematic provider precedes
+56 transactions offered for eight seconds each at 1, 2, and 4 tx/s.
+
+The run requires complete current-epoch audit coverage, two blocks of signer
+sequence quiescence, and 60-block margins to the next audit anchor and session
+expiry. It retains exact blocks/results from all four validators, authoritative
+session bitmaps, signer sequences, gas, and Linux validator CPU ticks for the
+measured scheduler window. It sends no ACK and checks expiry/refund. The result
+is a finite local chain diagnostic; it does not qualify delivery, WAN behavior,
+steady-state capacity, or a phase RSS peak. Pre-merge runs are correctness
+smokes. Performance evidence is retained only from the reviewed landed harness.
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-chain --audit-profile normal --timeout 600 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --proof-exporter "$RETRIEVAL_BIN/polystore_gateway.test" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-chain-001"
+```

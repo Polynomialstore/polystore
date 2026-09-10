@@ -651,9 +651,75 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertNotIn("", argv)
             self.assertEqual(argv[argv.index("--previous-polyfs-root") + 1], "0x")
 
+    def test_native_chain_fixed_profile_proc_accounting_and_identity(self):
+        offsets = workload.native_v3_chain_offsets()
+        self.assertEqual((len(offsets), offsets[:2], offsets[7:10], offsets[-1]),
+                         (56, [0, 10**9], [7*10**9, 8*10**9, 8_500_000_000], 23_750_000_000))
+        fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 4
+        fields[11], fields[12] = "101", "17"
+        parsed = workload.parse_proc_stat("42 (validator worker) name) " + " ".join(fields), expected_pid=42)
+        self.assertEqual(parsed, dict(pid=42, user_ticks=101, system_ticks=17, starttime_ticks=999))
+        with self.assertRaises(ValueError):
+            workload.parse_proc_stat("42 (validator) " + " ".join(fields), expected_pid=43)
+        before = dict(monotonic_ns=10, clock_ticks_per_second=100,
+                      validators=[dict(node_id="n", pid=42, starttime_ticks=999, user_ticks=101, system_ticks=17)])
+        after = copy.deepcopy(before)
+        after.update(monotonic_ns=20)
+        after["validators"][0].update(user_ticks=121, system_ticks=22)
+        delta = workload.validator_cpu_delta(before, after)
+        self.assertEqual((delta["validators"][0]["user_cpu_seconds"], delta["validators"][0]["system_cpu_seconds"]), (.2, .05))
+        after["validators"][0]["starttime_ticks"] += 1
+        with self.assertRaisesRegex(ValueError, "identity"):
+            workload.validator_cpu_delta(before, after)
+        after = copy.deepcopy(before)
+        after.update(monotonic_ns=20)
+        after["validators"][0]["user_ticks"] -= 1
+        with self.assertRaisesRegex(ValueError, "backwards"):
+            workload.validator_cpu_delta(before, after)
+
+    def test_generate_only_preflight_pins_exact_default_emitting_message_and_explicit_gas(self):
+        message = dict(creator=AUDIT_ADDRESSES[0], session_id=base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                       slot=0, proofs=[dict(ordinal="0", proof=dict(mdu_index="0", blob_index="0"))])
+        unsigned = dict(body=dict(messages=[dict(**{"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"}, **message)]),
+                        auth_info=dict(fee=dict(gas_limit="13530000")))
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1", deadline=10**18,
+            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "message.json"
+            path.write_text(json.dumps(message))
+            result = SimpleNamespace(returncode=0, stdout=json.dumps(unsigned), stderr="")
+            with patch.object(artifact, "run_bounded_command", return_value=result) as run:
+                job, evidence = workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
+            self.assertEqual(evidence["gas_limit"], 13_530_000)
+            self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
+            self.assertEqual(run.call_args.args[0][-1], "--generate-only")
+            changed = copy.deepcopy(unsigned)
+            changed["body"]["messages"][0]["slot"] = 1
+            with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                    returncode=0, stdout=json.dumps(changed), stderr="")), self.assertRaisesRegex(ValueError, "differs"):
+                workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
+
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_chain_cli_requires_exporter_and_fixed_profile(self):
+        common = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli",
+                    "--product-source", "/source", "--proof-exporter", "/exporter"]
+        for extra in ([], required + ["--proof-gas", "100"], required + ["--audit-profile", "c6"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit):
+                    workload.main()
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_chain=dict(exporter="/exporter"), audit_profile="normal")
+
     def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]
