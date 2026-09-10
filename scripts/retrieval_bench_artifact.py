@@ -1264,6 +1264,16 @@ def set_toml_value(text, section, key, value):
     return "".join(lines)
 
 
+BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
+
+
+def configure_four_validator_app(text, api_address, *, browser_evm=False):
+    text = set_toml_value(text, "api", "address", f'"{api_address}"')
+    if browser_evm:
+        text = set_toml_value(text, "mempool", "max-txs", str(BROWSER_EVM_MEMPOOL_MAX_TXS))
+    return text
+
+
 class FourValidatorLifecycle:
     """Owned local startup/persistence evidence, not a transaction load driver."""
 
@@ -1403,8 +1413,8 @@ class FourValidatorLifecycle:
                 config = set_toml_value(config, section, key, value)
             path.write_text(config)
             app_path = home / "config/app.toml"
-            app_path.write_text(set_toml_value(app_path.read_text(), "api", "address",
-                                              f'"tcp://127.0.0.1:{node["api"]}"'))
+            app_path.write_text(configure_four_validator_app(app_path.read_text(),
+                f'tcp://127.0.0.1:{node["api"]}', browser_evm=self.browser_evm))
             node["node_id"] = self.cli(home, "comet", "show-node-id")
             if not re.fullmatch(r"[0-9a-f]{40}", node["node_id"]):
                 raise ValueError("invalid generated node identity")
@@ -1420,7 +1430,8 @@ class FourValidatorLifecycle:
         self.doc.update(genesis_sha256=sha256(first / "config/genesis.json"), frozen_module_params=params,
                         profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
-                                 "GOMAXPROCS": self.env["GOMAXPROCS"]})
+                                 "GOMAXPROCS": self.env["GOMAXPROCS"],
+                                 "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1})
 
     def start(self, phase):
         for field, path in (("binary_sha256", self.binary), ("native_library_sha256", self.library),

@@ -101,6 +101,14 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             metadata_mdus=2, user_mdus=133, total_mdus=135, witness_mdus=1,
             integrity_leaf_count=12_768))
 
+    def test_browser_profile_enables_bounded_app_mempool_without_changing_existing_profile(self):
+        generated = '[api]\naddress = "tcp://localhost:1317"\n[mempool]\nmax-txs = -1\n'
+        existing = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317")
+        browser = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317", browser_evm=True)
+        self.assertIn('[mempool]\nmax-txs = -1\n', existing)
+        self.assertIn(f'[mempool]\nmax-txs = {artifact.BROWSER_EVM_MEMPOOL_MAX_TXS}\n', browser)
+        self.assertEqual(artifact.BROWSER_EVM_MEMPOOL_MAX_TXS, 5000)
+
     def test_public_policy_uses_one_signed_owner_message_and_committed_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
