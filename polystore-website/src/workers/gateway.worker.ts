@@ -13,7 +13,7 @@ import {
 } from '../lib/kzgCommitBackend'
 import init, { PolyStoreWasm, WasmMdu0Builder } from '../lib/polystoreCoreRuntime.js'
 import { readUserCommitments, verifyWitnessMdu, verifyRecoveredMdu } from '../lib/retrievalRecovery'
-import { verifyRetrievalMetadata, verifyRetrievalWindow } from '../lib/retrievalWire'
+import { verifyRetrievalDataV3, verifyRetrievalMetadata, verifyRetrievalMetadataV3, verifyRetrievalWindow } from '../lib/retrievalWire'
 import { retrievalOutput } from '../lib/storage/retrievalOutput'
 import {
   committedExpansionToUserMduBrowserKzgResult,
@@ -353,6 +353,16 @@ self.onmessage = async (event) => {
             case 'verifyRetrievalMetadata': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 result = verifyRetrievalMetadata(payload.bytes, payload.pin, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalMetadataV3': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalMetadataV3(payload.bytes, payload.authority, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalDataV3': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalDataV3(payload.authority, payload.envelope, polyStoreWasmInstance);
                 break;
             }
             case 'verifyRetrievalWitness': {

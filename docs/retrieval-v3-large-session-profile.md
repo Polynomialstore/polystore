@@ -5,8 +5,9 @@ This document fixes the wire-independent protocol choices for issue #291. The
 shared primitives, native generation admission, owner/sponsored session opening,
 sampled proof submission, provider data delivery, per-provider ACK/settlement
 and expiry refunds are implemented. The EVM precompile exposes the same eight
-native v3 actions. Browser orchestration and end-to-end activation qualification
-remain incomplete.
+native v3 actions. Browser WASM exposes the shared context, challenge, FAT v3
+and full-byte integrity primitives. Session orchestration and end-to-end
+activation qualification remain incomplete.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -738,6 +739,24 @@ guards. The build is deduplicated, cancellation-aware, disk-reserved and
 atomically published. A hot chunk reads only its path. The index is never an
 authority: each returned blob is rehashed and its path is checked against the
 frozen root before response headers are written.
+
+The browser worker accepts caller-supplied frozen v3 authority and verifies the
+same multipart bytes. It checks the complete MDU0 against the frozen PolyFS root
+before parsing the FAT v3 header, then binds the header's integrity root and
+leaf count to that authority. For data chunks it derives every MDU, slot, leaf
+and integrity-tree position from the expected logical `t`, requires exact
+response coordinates, and verifies every complete encoded blob with the shared
+Rust duplicate-last Merkle primitive before returning bytes. The worker also
+exposes canonical context hash, seed and fixed-width challenge derivation from
+the shared golden transcript.
+
+These primitives require already-authenticated frozen authority. They do not
+query a session, select providers, open or acknowledge a session, or obtain an
+authoritative session nonce. Checked range and plan bytes, session-ID derivation
+and the obligation ACK digest are exposed as thin bindings; using them in the
+session lifecycle remains in the next client slice. That client must allow the
+existing bounded 5 minute 30 second first-request window for provider cold
+index preparation.
 
 The future native-v3 browser client must keep a first cold user-gateway request
 alive for up to 5 minutes 30 seconds, including the provider-daemon's 5-minute

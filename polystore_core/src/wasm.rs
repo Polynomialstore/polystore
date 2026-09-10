@@ -7,8 +7,9 @@ use crate::kzg::KzgContext;
 use crate::kzg::{
     set_pippenger_window_override, set_wasm_msm_basis_mode, BLOBS_PER_MDU, BLOB_SIZE,
 };
-use crate::layout::FileRecordV1;
+use crate::layout::{FileRecordV1, FileTableHeaderV3};
 use js_sys::{BigInt, Date, JsString, Uint8Array};
+use sha2::Digest;
 use wasm_bindgen::prelude::*;
 
 fn compute_mdu_root_from_witness_flat_bytes(
@@ -41,6 +42,221 @@ pub struct PolyStoreWasm {
 
 #[wasm_bindgen]
 impl PolyStoreWasm {
+    pub fn checked_retrieval_v3_range(
+        file_start: BigInt,
+        file_length: BigInt,
+        range_start: BigInt,
+        range_length: BigInt,
+        user_mdus: BigInt,
+    ) -> Result<Uint8Array, JsValue> {
+        let range = crate::retrieval_v3::checked_range(
+            checked_metadata_u64(file_start)?,
+            checked_metadata_u64(file_length)?,
+            checked_metadata_u64(range_start)?,
+            checked_metadata_u64(range_length)?,
+            checked_metadata_u64(user_mdus)?,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let mut out = Vec::with_capacity(24);
+        out.extend(range.first.to_be_bytes());
+        out.extend(range.last.to_be_bytes());
+        out.extend(range.population.to_be_bytes());
+        Ok(Uint8Array::from(out.as_slice()))
+    }
+
+    pub fn retrieval_v3_plan(
+        first: BigInt,
+        last: BigInt,
+        population: BigInt,
+        providers_flat: &[u8],
+    ) -> Result<Uint8Array, JsValue> {
+        if providers_flat.len() != 8 * 20 {
+            return Err(JsValue::from_str(
+                "v3 plan requires eight 20-byte providers",
+            ));
+        }
+        let providers = std::array::from_fn(|i| {
+            let mut provider = [0u8; 20];
+            provider.copy_from_slice(&providers_flat[i * 20..(i + 1) * 20]);
+            provider
+        });
+        let plan = crate::retrieval_v3::Plan::build(
+            crate::retrieval_v3::Range {
+                first: checked_metadata_u64(first)?,
+                last: checked_metadata_u64(last)?,
+                population: checked_metadata_u64(population)?,
+            },
+            providers,
+        )
+        .and_then(|plan| plan.bytes())
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(plan.as_slice()))
+    }
+
+    pub fn retrieval_v3_session_id(
+        chain: JsString,
+        owner: &[u8],
+        deal: BigInt,
+        generation: BigInt,
+        record: f64,
+        range_start: BigInt,
+        range_length: BigInt,
+        plan_hash: &[u8],
+        nonce: BigInt,
+    ) -> Result<Uint8Array, JsValue> {
+        let owner: [u8; 20] = owner
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 owner must be 20 bytes"))?;
+        let plan_hash: [u8; 32] = plan_hash
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 plan hash must be 32 bytes"))?;
+        let id = crate::retrieval_v3::session_id(
+            &checked_metadata_text(chain, 50, "v3 chain ID")?,
+            &owner,
+            checked_metadata_u64(deal)?,
+            checked_metadata_u64(generation)?,
+            checked_metadata_number(record, u32::MAX as usize)? as u32,
+            checked_metadata_u64(range_start)?,
+            checked_metadata_u64(range_length)?,
+            &plan_hash,
+            checked_metadata_u64(nonce)?,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(id.as_slice()))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn retrieval_v3_obligation_ack_hash(
+        chain: JsString,
+        session: &[u8],
+        context: &[u8],
+        plan: &[u8],
+        slot: f64,
+        assigned: &[u8],
+        payee: &[u8],
+        blob_count: BigInt,
+        billed_encoded_bytes: BigInt,
+        integrity: &[u8],
+    ) -> Result<Uint8Array, JsValue> {
+        let session: [u8; 32] = session
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 session ID must be 32 bytes"))?;
+        let context: [u8; 32] = context
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 context hash must be 32 bytes"))?;
+        let plan: [u8; 32] = plan
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 plan hash must be 32 bytes"))?;
+        let assigned: [u8; 20] = assigned
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 assigned provider must be 20 bytes"))?;
+        let payee: [u8; 20] = payee
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 payee must be 20 bytes"))?;
+        let integrity: [u8; 32] = integrity
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 integrity root must be 32 bytes"))?;
+        let obligation = crate::retrieval_v3::Obligation {
+            slot: checked_metadata_number(slot, 7)? as u32,
+            assigned,
+            payee,
+            blob_count: checked_metadata_u64(blob_count)?,
+        };
+        let bytes = crate::retrieval_v3::obligation_ack(
+            &checked_metadata_text(chain, 50, "v3 chain ID")?,
+            &session,
+            &context,
+            &plan,
+            &obligation,
+            checked_metadata_u64(billed_encoded_bytes)?,
+            &integrity,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(sha2::Sha256::digest(bytes).as_slice()))
+    }
+
+    pub fn retrieval_v3_context_hash(bytes: &[u8]) -> Result<Uint8Array, JsValue> {
+        let context = crate::retrieval_v3::Context::parse(bytes)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(context.hash().as_slice()))
+    }
+
+    pub fn retrieval_v3_seed(bytes: &[u8], anchor: &[u8]) -> Result<Uint8Array, JsValue> {
+        let context = crate::retrieval_v3::Context::parse(bytes)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let anchor: [u8; 32] = anchor
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 anchor must be 32 bytes"))?;
+        Ok(Uint8Array::from(context.seed(&anchor).as_slice()))
+    }
+
+    pub fn derive_retrieval_v3_challenges(
+        bytes: &[u8],
+        seed: &[u8],
+    ) -> Result<Uint8Array, JsValue> {
+        let context = crate::retrieval_v3::Context::parse(bytes)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let seed: [u8; 32] = seed
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 seed must be 32 bytes"))?;
+        let flat = context
+            .challenges_flat(&seed)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Uint8Array::from(flat.as_slice()))
+    }
+
+    pub fn verify_fat_v3_header(
+        &self,
+        bytes: &[u8],
+        expected_integrity_root: &[u8],
+        expected_leaf_count: BigInt,
+    ) -> Result<u32, JsValue> {
+        let root: [u8; 32] = expected_integrity_root
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 integrity root must be 32 bytes"))?;
+        let header = FileTableHeaderV3::from_bytes(bytes).map_err(|e| JsValue::from_str(&e))?;
+        if header.integrity_root != root
+            || header.integrity_leaf_count != checked_metadata_u64(expected_leaf_count)?
+        {
+            return Err(JsValue::from_str(
+                "FAT v3 header does not match frozen authority",
+            ));
+        }
+        Ok(header.record_count)
+    }
+
+    pub fn verify_integrity_v3_blob(
+        &self,
+        mdu_index: BigInt,
+        leaf_index: f64,
+        position: BigInt,
+        leaf_count: BigInt,
+        blob: &[u8],
+        path_flat: &[u8],
+        expected_root: &[u8],
+    ) -> Result<bool, JsValue> {
+        let leaf_index = checked_metadata_number(leaf_index, 95)? as u32;
+        let expected: [u8; 32] = expected_root
+            .try_into()
+            .map_err(|_| JsValue::from_str("v3 integrity root must be 32 bytes"))?;
+        if path_flat.len() > 23 * 32 || path_flat.len() % 32 != 0 {
+            return Err(JsValue::from_str("invalid v3 integrity path"));
+        }
+        let siblings = path_flat
+            .chunks_exact(32)
+            .map(|value| value.try_into().unwrap())
+            .collect::<Vec<[u8; 32]>>();
+        let value = crate::integrity_v3::leaf(checked_metadata_u64(mdu_index)?, leaf_index, blob)
+            .map_err(|e| JsValue::from_str(&e))?;
+        Ok(crate::integrity_v3::verify_path(
+            value,
+            checked_metadata_u64(position)?,
+            checked_metadata_u64(leaf_count)?,
+            &siblings,
+            expected,
+        ))
+    }
+
     pub fn verify_polyfs_session_batch(&self, input: &[u8]) -> Result<bool, JsValue> {
         self.kzg_ctx
             .verify_polyfs_session_batch(input)
@@ -1081,6 +1297,22 @@ fn checked_metadata_u64(value: BigInt) -> Result<u64, JsValue> {
         return Err(JsValue::from_str("metadata u64 input must be a BigInt"));
     }
     u64::try_from(value).map_err(|_| JsValue::from_str("metadata BigInt exceeds u64 range"))
+}
+
+fn checked_metadata_text(value: JsString, max_bytes: usize, name: &str) -> Result<String, JsValue> {
+    let raw: &JsValue = value.as_ref();
+    if !raw.is_string()
+        || value.length() == 0
+        || value.length() as usize > max_bytes
+        || !value.is_valid_utf16()
+    {
+        return Err(JsValue::from_str(&format!("invalid {name}")));
+    }
+    let value = String::from(value);
+    if value.len() > max_bytes {
+        return Err(JsValue::from_str(&format!("invalid {name}")));
+    }
+    Ok(value)
 }
 
 // Receive the original JavaScript code units rather than wasm-bindgen's lossy

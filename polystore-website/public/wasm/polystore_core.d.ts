@@ -4,6 +4,15 @@
 export class PolyStoreWasm {
   free(): void;
   [Symbol.dispose](): void;
+  static checked_retrieval_v3_range(file_start: bigint, file_length: bigint, range_start: bigint, range_length: bigint, user_mdus: bigint): Uint8Array;
+  static retrieval_v3_plan(first: bigint, last: bigint, population: bigint, providers_flat: Uint8Array): Uint8Array;
+  static retrieval_v3_session_id(chain: string, owner: Uint8Array, deal: bigint, generation: bigint, record: number, range_start: bigint, range_length: bigint, plan_hash: Uint8Array, nonce: bigint): Uint8Array;
+  static retrieval_v3_obligation_ack_hash(chain: string, session: Uint8Array, context: Uint8Array, plan: Uint8Array, slot: number, assigned: Uint8Array, payee: Uint8Array, blob_count: bigint, billed_encoded_bytes: bigint, integrity: Uint8Array): Uint8Array;
+  static retrieval_v3_context_hash(bytes: Uint8Array): Uint8Array;
+  static retrieval_v3_seed(bytes: Uint8Array, anchor: Uint8Array): Uint8Array;
+  static derive_retrieval_v3_challenges(bytes: Uint8Array, seed: Uint8Array): Uint8Array;
+  verify_fat_v3_header(bytes: Uint8Array, expected_integrity_root: Uint8Array, expected_leaf_count: bigint): number;
+  verify_integrity_v3_blob(mdu_index: bigint, leaf_index: number, position: bigint, leaf_count: bigint, blob: Uint8Array, path_flat: Uint8Array, expected_root: Uint8Array): boolean;
   verify_polyfs_session_batch(input: Uint8Array): boolean;
   static challenge_context_hash(bytes: Uint8Array): Uint8Array;
   static derive_challenges(bytes: Uint8Array, seed: Uint8Array): Uint8Array;
@@ -66,6 +75,15 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_polystorewasm_free: (a: number, b: number) => void;
+  readonly polystorewasm_checked_retrieval_v3_range: (a: any, b: any, c: any, d: any, e: any) => [number, number, number];
+  readonly polystorewasm_retrieval_v3_plan: (a: any, b: any, c: any, d: number, e: number) => [number, number, number];
+  readonly polystorewasm_retrieval_v3_session_id: (a: any, b: number, c: number, d: any, e: any, f: number, g: any, h: any, i: number, j: number, k: any) => [number, number, number];
+  readonly polystorewasm_retrieval_v3_obligation_ack_hash: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: any, n: any, o: number, p: number) => [number, number, number];
+  readonly polystorewasm_retrieval_v3_context_hash: (a: number, b: number) => [number, number, number];
+  readonly polystorewasm_retrieval_v3_seed: (a: number, b: number, c: number, d: number) => [number, number, number];
+  readonly polystorewasm_derive_retrieval_v3_challenges: (a: number, b: number, c: number, d: number) => [number, number, number];
+  readonly polystorewasm_verify_fat_v3_header: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number];
+  readonly polystorewasm_verify_integrity_v3_blob: (a: number, b: any, c: number, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number];
   readonly polystorewasm_verify_polyfs_session_batch: (a: number, b: number, c: number) => [number, number, number];
   readonly polystorewasm_challenge_context_hash: (a: number, b: number) => [number, number, number];
   readonly polystorewasm_derive_challenges: (a: number, b: number, c: number, d: number) => [number, number, number];

@@ -6,7 +6,7 @@ import { DEFAULT_EXPANSION_HARDWARE_CONCURRENCY, pickExpansionWorkerCount } from
 import type { FrozenSession, PinnedGeneration } from './retrieval'
 import type { RecoveryGeometry } from './retrievalRecovery'
 import { readBoundedResponse } from './retrieval'
-import type { RetrievalEnvelope, RetrievalMetadataGeneration, verifyRetrievalMetadata } from './retrievalWire'
+import type { RetrievalEnvelope, RetrievalMetadataGeneration, RetrievalV3ChunkAuthority, RetrievalV3Envelope, RetrievalV3GenerationAuthority, verifyRetrievalMetadata, verifyRetrievalMetadataV3 } from './retrievalWire'
 import type { RetrievalOutputRequest } from './storage/retrievalOutput'
 import type { UserMduBrowserKzgResult, UserMduUncommittedExpansion } from './upload/userMduBrowserKzg'
 import { recommendedUserMduKzgBatchCapForWebGpuAdapter } from './upload/userMduKzgBatch'
@@ -427,6 +427,12 @@ export const workerClient = {
   async verifyRetrievalMetadata(bytes: Uint8Array, pin: RetrievalMetadataGeneration): Promise<ReturnType<typeof verifyRetrievalMetadata>> {
     // Metadata remains available to the caller for generation-specific storage.
     return sendMessageToWorker('verifyRetrievalMetadata', { bytes, pin }) as Promise<ReturnType<typeof verifyRetrievalMetadata>>
+  },
+  async verifyRetrievalMetadataV3(bytes: Uint8Array, authority: RetrievalV3GenerationAuthority): Promise<ReturnType<typeof verifyRetrievalMetadataV3>> {
+    return sendMessageToWorker('verifyRetrievalMetadataV3', { bytes, authority }) as Promise<ReturnType<typeof verifyRetrievalMetadataV3>>
+  },
+  async verifyRetrievalDataV3(authority: RetrievalV3ChunkAuthority, envelope: RetrievalV3Envelope): Promise<Uint8Array> {
+    return sendMessageToWorker('verifyRetrievalDataV3', { authority, envelope }, [envelope.bytes.buffer]) as Promise<Uint8Array>
   },
   async verifyRetrievalWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('verifyRetrievalWitness', { bytes, cell }, [bytes.buffer]) as Promise<Uint8Array>

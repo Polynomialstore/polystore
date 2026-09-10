@@ -209,6 +209,177 @@ export class PolyStoreWasm {
         wasm.__wbg_polystorewasm_free(ptr, 0);
     }
     /**
+     * @param {bigint} file_start
+     * @param {bigint} file_length
+     * @param {bigint} range_start
+     * @param {bigint} range_length
+     * @param {bigint} user_mdus
+     * @returns {Uint8Array}
+     */
+    static checked_retrieval_v3_range(file_start, file_length, range_start, range_length, user_mdus) {
+        const ret = wasm.polystorewasm_checked_retrieval_v3_range(file_start, file_length, range_start, range_length, user_mdus);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {bigint} first
+     * @param {bigint} last
+     * @param {bigint} population
+     * @param {Uint8Array} providers_flat
+     * @returns {Uint8Array}
+     */
+    static retrieval_v3_plan(first, last, population, providers_flat) {
+        const ptr0 = passArray8ToWasm0(providers_flat, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_retrieval_v3_plan(first, last, population, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {string} chain
+     * @param {Uint8Array} owner
+     * @param {bigint} deal
+     * @param {bigint} generation
+     * @param {number} record
+     * @param {bigint} range_start
+     * @param {bigint} range_length
+     * @param {Uint8Array} plan_hash
+     * @param {bigint} nonce
+     * @returns {Uint8Array}
+     */
+    static retrieval_v3_session_id(chain, owner, deal, generation, record, range_start, range_length, plan_hash, nonce) {
+        const ptr0 = passArray8ToWasm0(owner, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(plan_hash, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_retrieval_v3_session_id(chain, ptr0, len0, deal, generation, record, range_start, range_length, ptr1, len1, nonce);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {string} chain
+     * @param {Uint8Array} session
+     * @param {Uint8Array} context
+     * @param {Uint8Array} plan
+     * @param {number} slot
+     * @param {Uint8Array} assigned
+     * @param {Uint8Array} payee
+     * @param {bigint} blob_count
+     * @param {bigint} billed_encoded_bytes
+     * @param {Uint8Array} integrity
+     * @returns {Uint8Array}
+     */
+    static retrieval_v3_obligation_ack_hash(chain, session, context, plan, slot, assigned, payee, blob_count, billed_encoded_bytes, integrity) {
+        const ptr0 = passArray8ToWasm0(session, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(context, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArray8ToWasm0(plan, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passArray8ToWasm0(assigned, wasm.__wbindgen_malloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passArray8ToWasm0(payee, wasm.__wbindgen_malloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passArray8ToWasm0(integrity, wasm.__wbindgen_malloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_retrieval_v3_obligation_ack_hash(chain, ptr0, len0, ptr1, len1, ptr2, len2, slot, ptr3, len3, ptr4, len4, blob_count, billed_encoded_bytes, ptr5, len5);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @returns {Uint8Array}
+     */
+    static retrieval_v3_context_hash(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_retrieval_v3_context_hash(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @param {Uint8Array} anchor
+     * @returns {Uint8Array}
+     */
+    static retrieval_v3_seed(bytes, anchor) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(anchor, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_retrieval_v3_seed(ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @param {Uint8Array} seed
+     * @returns {Uint8Array}
+     */
+    static derive_retrieval_v3_challenges(bytes, seed) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(seed, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_derive_retrieval_v3_challenges(ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * @param {Uint8Array} bytes
+     * @param {Uint8Array} expected_integrity_root
+     * @param {bigint} expected_leaf_count
+     * @returns {number}
+     */
+    verify_fat_v3_header(bytes, expected_integrity_root, expected_leaf_count) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(expected_integrity_root, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_verify_fat_v3_header(this.__wbg_ptr, ptr0, len0, ptr1, len1, expected_leaf_count);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] >>> 0;
+    }
+    /**
+     * @param {bigint} mdu_index
+     * @param {number} leaf_index
+     * @param {bigint} position
+     * @param {bigint} leaf_count
+     * @param {Uint8Array} blob
+     * @param {Uint8Array} path_flat
+     * @param {Uint8Array} expected_root
+     * @returns {boolean}
+     */
+    verify_integrity_v3_blob(mdu_index, leaf_index, position, leaf_count, blob, path_flat, expected_root) {
+        const ptr0 = passArray8ToWasm0(blob, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(path_flat, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passArray8ToWasm0(expected_root, wasm.__wbindgen_malloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.polystorewasm_verify_integrity_v3_blob(this.__wbg_ptr, mdu_index, leaf_index, position, leaf_count, ptr0, len0, ptr1, len1, ptr2, len2);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0] !== 0;
+    }
+    /**
      * @param {Uint8Array} input
      * @returns {boolean}
      */
