@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Download, type Page, type Response, type Route } from '@playwright/test'
+import { expect, type APIRequestContext, type Download, type Page, type Request, type Response, type Route } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 
@@ -282,7 +282,7 @@ test.describe('native V3 browser qualification', () => {
       gatewayMetadata: 0, gatewayData: 0, directMetadata: 0, directData: 0,
     }
     const snapshotMduRequests = (): MduRequestCounts => ({ ...mduNetworkRequests })
-    const retrievalResponseTasks: Promise<void>[] = []
+    const pendingGatewayMduRequests = new Map<Request, { url: string; kind: 'metadata' | 'data' }>()
     const retrievalObserverErrors: string[] = []
     let rawTransactions = 0
     let failure: Error | undefined
@@ -321,6 +321,12 @@ test.describe('native V3 browser qualification', () => {
           else if (gatewayMdu) mduNetworkRequests.gatewayMetadata++
           else if (data) mduNetworkRequests.directData++
           else mduNetworkRequests.directMetadata++
+          if (gatewayMdu) {
+            pendingGatewayMduRequests.set(request, {
+              url: request.url(),
+              kind: data ? 'data' : 'metadata',
+            })
+          }
         }
         if (directMdu) {
           directSpMduRequests.push(request.url())
@@ -328,28 +334,27 @@ test.describe('native V3 browser qualification', () => {
         if (request.method() !== 'POST') return
         try { if (JSON.parse(request.postData() || '{}').method === 'eth_sendRawTransaction') rawTransactions++ } catch { /* evidence remains countable */ }
       })
+      page.on('requestfinished', (request) => {
+        const observed = pendingGatewayMduRequests.get(request)
+        if (!observed) return
+        void (async () => {
+          const response = await request.response()
+          if (!response?.ok()) return
+          const sizes = await request.sizes()
+          gatewayMduResponses.push({ ...observed, bodyBytes: sizes.responseBodySize })
+        })().catch((error: unknown) => {
+          retrievalObserverErrors.push(error instanceof Error ? error.message : String(error))
+        }).finally(() => {
+          pendingGatewayMduRequests.delete(request)
+        })
+      })
+      page.on('requestfailed', (request) => {
+        const observed = pendingGatewayMduRequests.get(request)
+        if (!observed) return
+        gatewayMduCanceled.push({ ...observed, error: request.failure()?.errorText || 'request failed' })
+        pendingGatewayMduRequests.delete(request)
+      })
       page.on('response', (response: Response) => {
-        const responseUrl = new URL(response.url())
-        const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(responseUrl.pathname)
-        if (response.ok() && gatewayMdu) {
-          const task = (async () => {
-            const kind = responseUrl.searchParams.has('committed_height') ? 'metadata' as const : 'data' as const
-            const finishedError = await response.finished()
-            if (finishedError) {
-              gatewayMduCanceled.push({ url: response.url(), kind, error: finishedError.message })
-              return
-            }
-            const sizes = await response.request().sizes()
-            gatewayMduResponses.push({
-              url: response.url(),
-              kind,
-              bodyBytes: sizes.responseBodySize,
-            })
-          })().catch((error: unknown) => {
-            retrievalObserverErrors.push(error instanceof Error ? error.message : String(error))
-          })
-          retrievalResponseTasks.push(task)
-        }
         if (response.request().method() === 'POST' && response.url().startsWith(evm)) {
           let request: EvmRpcRequest
           try { request = JSON.parse(response.request().postData() || '{}') as EvmRpcRequest } catch { request = {} }
@@ -444,7 +449,7 @@ test.describe('native V3 browser qualification', () => {
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'start')).toBe(true)
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'end')).toBe(true)
       }
-      await Promise.all(retrievalResponseTasks)
+      await expect.poll(() => pendingGatewayMduRequests.size).toBe(0)
       expect(retrievalObserverErrors).toEqual([])
       const metadataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'metadata')
       const dataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'data')
