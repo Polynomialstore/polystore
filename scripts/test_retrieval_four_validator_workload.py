@@ -221,12 +221,13 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
                     "session": {"session_id": base64.b64encode(bytes(32)).decode()},
-                    "evmReceipts": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
+                    "evmReceipts": [], "evmTransactions": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
                     "diagnostics": [dict(phase="transport", edge="start", atMs=1), dict(phase="transport", edge="end", atMs=2)]}))
                 self.assertEqual(cwd, website)
                 self.assertEqual(memory_output, home / "browser-memory.json")
                 self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
                     ("1", "262144", workload.V3_BROWSER_PAYER))
+                self.assertEqual((env["E2E_NATIVE_V3_EXPIRY"], env["E2E_NATIVE_V3_FAULTS"]), ("0", "0"))
                 return SimpleNamespace(returncode=0, stdout="passed", stderr=""), memory
             ports = {"gateway": 18080, "website": 4173,
                      "gateway_reservation": Mock(), "website_reservation": Mock()}
@@ -247,6 +248,42 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             self.assertEqual(result["playwright"]["memory"], memory)
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
+
+    def test_browser_fault_result_is_one_durable_paid_session(self):
+        sid = "12" * 32
+        encoded = base64.b64encode(bytes.fromhex(sid)).decode()
+        obligations = [dict(slot=str(slot)) for slot in (0, 1)]
+        session = dict(session_id=encoded, obligations=obligations)
+        chunks = [dict(id=str(index), slot=index % 2, entries=[str(index)]) for index in range(21)]
+        chunks[0]["entries"] = ["132"]
+        planned = dict(sessionId="0x" + sid, nonce="7", population="133", sampleCount="132",
+                       chunks=chunks, unsampled=["132"])
+        checkpoints = {key: dict(planned) for key in ("corrupt", "multipart-order", "truncate")}
+        hashes = ["0x" + str(index) * 64 for index in (1, 2, 3)]
+        outcome = dict(success=True, stage="settled-cache", session=session, planned=planned,
+            targetT="132", targetChunk=chunks[0], targetBlob=0,
+            faultDeliveries={key: 1 for key in checkpoints},
+            faultSnapshots=checkpoints, durableCheckpoint=dict(planned),
+            evmReceipts=[{"transactionHash": value} for value in hashes],
+            evmTransactions=[{"hash": value} for value in hashes], rawTransactions=3,
+            rawTransactionAttempts=4, phaseGuards={"openedSessions": 1, "acknowledgedObligations": 2,
+                                                   "targetVerifiedChunks": 1},
+            before={"nonce": {"found": True, "nonce": "4"}},
+            afterUnknown={"nonce": {"found": True, "nonce": "5"}},
+            after={"nonce": {"found": True, "nonce": "5"}}, dataRequests=24, targetRequests=4,
+            requestsBeforeReopen={"data": 16, "target": 4},
+            requestsBeforeCache={"data": 24, "target": 4, "raw": 3},
+            downloaded={"bytes": 16_777_217, "sha256": "ab" * 32},
+            cached={"bytes": 16_777_217, "sha256": "ab" * 32},
+            localState={"checkpoints": 1, "unbound": 0, "journals": []},
+            resultDurability={"atomicReplace": True, "verifiedStages": ["unknown-open", "corrupt",
+                "multipart-order", "truncate", "durable-before-reopen", "settled-cache"]})
+        workload.validate_native_v3_browser_fault_outcome(
+            outcome, session, {"bytes": 16_777_217, "sha256": "ab" * 32})
+        outcome["rawTransactions"] = 4
+        with self.assertRaisesRegex(ValueError, "canonical open"):
+            workload.validate_native_v3_browser_fault_outcome(
+                outcome, session, {"bytes": 16_777_217, "sha256": "ab" * 32})
 
     def test_browser_expiry_launcher_reuses_stack_with_separate_evidence(self):
         with tempfile.TemporaryDirectory() as tmp:

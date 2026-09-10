@@ -2010,7 +2010,7 @@ def browser_http_preflight(lifecycle, origin):
 
 
 def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, command,
-                          processes, check_providers):
+                          processes, check_providers, faults=False):
     """Run one real sponsored DealDetail retrieval through the owned browser stack."""
     website = source / "polystore-website"
     vite = website / "node_modules/.bin/vite"
@@ -2064,8 +2064,10 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         E2E_BASE_URL=f"http://127.0.0.1:{website_port}", E2E_NATIVE_V3_BROWSER="1",
         E2E_NATIVE_V3_DEAL_ID=str(deal["id"]), E2E_NATIVE_V3_PAYER=V3_BROWSER_PAYER,
         E2E_NATIVE_V3_FILE="payload.bin", E2E_NATIVE_V3_BYTES=str(lifecycle.doc["payload"]["bytes"]),
-        E2E_NATIVE_V3_SHA256=lifecycle.doc["payload"]["sha256"])
-    result_path = lifecycle.home / "native-v3-browser-result.json"
+        E2E_NATIVE_V3_SHA256=lifecycle.doc["payload"]["sha256"], E2E_NATIVE_V3_EXPIRY="0",
+        E2E_NATIVE_V3_FAULTS="1" if faults else "0")
+    suffix = "-faults" if faults else ""
+    result_path = lifecycle.home / f"native-v3-browser{suffix}-result.json"
     browser_env["E2E_NATIVE_V3_RESULT"] = str(result_path)
     browser_ports["website_reservation"].close()
     with (lifecycle.home / "website.log").open("xb") as log:
@@ -2084,11 +2086,13 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     before = browser_v3_snapshot(lifecycle, before_height, deal)
     argv = [str(playwright), "test", "tests/native-v3-browser-live.spec.ts", "--workers=1", "--retries=0",
             "--max-failures=1",
-            "--output", str(lifecycle.home / "browser-results")]
+            "--output", str(lifecycle.home / f"browser{suffix}-results")]
     result, memory = artifact.run_bounded_browser_command(argv, lifecycle.deadline,
-        lifecycle.home / "browser-memory.json", env=browser_env, cwd=website)
-    (lifecycle.home / "playwright.stdout.log").write_text(result.stdout)
-    (lifecycle.home / "playwright.stderr.log").write_text(result.stderr)
+        lifecycle.home / f"browser{suffix}-memory.json", env=browser_env, cwd=website)
+    stdout = lifecycle.home / f"playwright{suffix}.stdout.log"
+    stderr = lifecycle.home / f"playwright{suffix}.stderr.log"
+    stdout.write_text(result.stdout)
+    stderr.write_text(result.stderr)
     if result.returncode:
         raise ValueError("native V3 browser qualification failed: " + (result.stderr + result.stdout)[-8192:])
     check_providers()
@@ -2099,8 +2103,17 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         raise ValueError("browser test did not retain successful qualification evidence")
     sid = producer.b64(outcome["session"]["session_id"], 32).hex()
     after = browser_v3_snapshot(lifecycle, observed, deal, session_id=sid)
+    if faults:
+        validate_native_v3_browser_fault_outcome(outcome, after["retrieval"]["sessions"][sid],
+            lifecycle.doc["payload"])
     issued = collect_issuance(lifecycle, before, after)
     receipts = browser_v3_committed_receipts(lifecycle, outcome["evmReceipts"])
+    rpc_transactions = outcome.get("evmTransactions")
+    if (not isinstance(rpc_transactions, list) or len(rpc_transactions) != len(receipts) or
+            any(not isinstance(row, dict) or not isinstance(row.get("hash"), str) for row in rpc_transactions) or
+            {row["hash"].lower() for row in rpc_transactions} !=
+            {row["receipt"]["transactionHash"].lower() for row in receipts}):
+        raise ValueError("browser Ethereum transactions differ from committed receipts")
     proof_transactions, proof_outcomes = [], []
     for index, observed_proof in enumerate(outcome["providerProofOutcomes"]):
         row = dict(observed_proof["body"], request_id=f"browser-proof-{index}")
@@ -2121,19 +2134,87 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         raise ValueError("browser proof receipts do not cover each sampled ordinal exactly once")
     economics = verify_browser_v3_economics(before, after, session_id=sid, receipts=receipts,
                                            issued_stake=issued, signers=lifecycle.signers)
-    paid_count = artifact.integer(outcome["paidDiagnosticCount"], "paid diagnostic count", 1, len(outcome["diagnostics"]))
-    browser_phases = browser_phase_intervals(outcome["diagnostics"][:paid_count])
+    browser_phases = None
+    if not faults:
+        paid_count = artifact.integer(outcome["paidDiagnosticCount"], "paid diagnostic count", 1,
+                                      len(outcome["diagnostics"]))
+        browser_phases = browser_phase_intervals(outcome["diagnostics"][:paid_count])
     evidence = dict(gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
-        playwright=dict(command=argv, stdout=str(lifecycle.home / "playwright.stdout.log"),
-                        stderr=str(lifecycle.home / "playwright.stderr.log"), result=str(result_path), outcome=outcome,
+        playwright=dict(command=argv, stdout=str(stdout), stderr=str(stderr), result=str(result_path), outcome=outcome,
                         memory=memory),
         economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
-        proof_transactions=proof_transactions, provider_phases=phases, browser_phases=browser_phases)
-    lifecycle.doc["native_v3_browser"] = evidence
+        evm_rpc_transactions=rpc_transactions, proof_transactions=proof_transactions,
+        provider_phases=phases)
+    if browser_phases is not None:
+        evidence["browser_phases"] = browser_phases
+    lifecycle.doc["native_v3_browser_faults" if faults else "native_v3_browser"] = evidence
     lifecycle.save()
     return evidence
+
+
+def validate_native_v3_browser_fault_outcome(outcome, session, payload):
+    """Validate the retained one-session fault, resume and cache evidence."""
+    planned = outcome.get("planned")
+    keys = {"corrupt", "multipart-order", "truncate"}
+    deliveries = outcome.get("faultDeliveries")
+    snapshots = outcome.get("faultSnapshots")
+    expected_file = {"bytes": 16 * 1024 * 1024 + 1, "sha256": payload["sha256"]}
+    if (outcome.get("stage") != "settled-cache" or payload.get("bytes") != expected_file["bytes"] or
+            outcome.get("downloaded") != expected_file or outcome.get("cached") != expected_file or
+            outcome.get("session") != session or not isinstance(planned, dict) or
+            [planned.get("population"), planned.get("sampleCount")] != ["133", "132"] or
+            not isinstance(planned.get("chunks"), list) or len(planned["chunks"]) != 21 or
+            not isinstance(planned.get("unsampled"), list) or len(planned["unsampled"]) != 1 or
+            outcome.get("targetT") != planned["unsampled"][0] or
+            not isinstance(outcome.get("targetChunk"), dict) or outcome["targetChunk"] not in planned["chunks"] or
+            not isinstance(outcome["targetChunk"].get("entries"), list) or
+            outcome["targetT"] not in outcome["targetChunk"]["entries"] or
+            outcome.get("targetBlob") != outcome["targetChunk"]["entries"].index(outcome["targetT"]) or
+            not isinstance(deliveries, dict) or
+            set(deliveries) != keys or any(producer.uint(value) < 1 for value in deliveries.values()) or
+            not isinstance(snapshots, dict) or set(snapshots) != keys):
+        raise ValueError("browser fault result lacks the bounded planner, fault or payload evidence")
+    sid = producer.b64(session["session_id"], 32).hex()
+    nonce = planned.get("nonce")
+    checkpoints = [planned, outcome.get("durableCheckpoint"), *snapshots.values()]
+    planned_sid = planned.get("sessionId")
+    if (not isinstance(planned_sid, str) or planned_sid.removeprefix("0x").lower() != sid or
+            any(not isinstance(row, dict) or row.get("sessionId") != planned["sessionId"] or
+                row.get("nonce") != nonce for row in checkpoints)):
+        raise ValueError("browser fault recovery changed the frozen session or nonce")
+    receipts, transactions = outcome.get("evmReceipts"), outcome.get("evmTransactions")
+    obligations = session.get("obligations")
+    raw = outcome.get("rawTransactions")
+    guards = outcome.get("phaseGuards")
+    if (not isinstance(obligations, list) or not isinstance(receipts, list) or
+            not isinstance(transactions, list) or raw != len(obligations) + 1 or
+            type(raw) is not int or len(receipts) != raw or len(transactions) != raw or
+            any(not isinstance(row, dict) for row in receipts + transactions) or
+            {row.get("hash", "").lower() for row in transactions} !=
+            {row.get("transactionHash", "").lower() for row in receipts} or
+            producer.uint(outcome.get("rawTransactionAttempts", 0)) < raw or
+            guards != {"openedSessions": 1, "acknowledgedObligations": len(obligations),
+                       "targetVerifiedChunks": 1}):
+        raise ValueError("browser fault result lacks one canonical open and obligation ACK lifecycle")
+    before_nonce = producer.uint(outcome.get("before", {}).get("nonce", {}).get("nonce", ""), 256)
+    after_unknown = outcome.get("afterUnknown", {}).get("nonce")
+    if (after_unknown != outcome.get("after", {}).get("nonce") or
+            not isinstance(after_unknown, dict) or not after_unknown.get("found") or
+            producer.uint(after_unknown.get("nonce", ""), 256) != before_nonce + 1):
+        raise ValueError("browser fault recovery opened more than one paid session")
+    final_counts = {"data": outcome.get("dataRequests"), "target": outcome.get("targetRequests"), "raw": raw}
+    before_reopen = outcome.get("requestsBeforeReopen")
+    durability = outcome.get("resultDurability")
+    if (outcome.get("requestsBeforeCache") != final_counts or not isinstance(before_reopen, dict) or
+            before_reopen.get("target") != final_counts["target"] or
+            producer.uint(before_reopen.get("data", 0)) > producer.uint(final_counts["data"]) or
+            outcome.get("localState") != {"checkpoints": 1, "unbound": 0, "journals": []} or
+            not isinstance(durability, dict) or durability.get("atomicReplace") is not True or
+            durability.get("verifiedStages") != ["unknown-open", "corrupt", "multipart-order", "truncate",
+                                                   "durable-before-reopen", "settled-cache"]):
+        raise ValueError("browser fault result lacks durable resume or zero-I/O cache evidence")
 
 
 def run_native_v3_browser_expiry(lifecycle, *, source, deal, browser_ports, payload,
@@ -4161,7 +4242,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 lifecycle.save()
                 run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
-                    check_providers=check_providers)
+                    check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1)
                 if browser_bytes == 1024:
                     expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
                         send=send, wait=wait, command=command, curl=curl)
