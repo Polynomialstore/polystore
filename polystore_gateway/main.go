@@ -756,31 +756,40 @@ func execPolystoreCli(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
+	out, _, _, err := runTxWithRetryTiming(ctx, args...)
+	return out, err
+}
+
+func runTxWithRetryTiming(ctx context.Context, args ...string) ([]byte, []submissionAttemptTiming, bool, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	maxRetries := 5
 	var out []byte
 	var err error
+	var timings []submissionAttemptTiming
+	timingComplete := true
 
 	for i := 0; i < maxRetries; i++ {
 		if ctx.Err() != nil {
 			// Earlier attempts, if any, were explicitly rejected CheckTx results.
-			return nil, fmt.Errorf("%w: %w", errTxNotSubmitted, ctx.Err())
+			return nil, timings, false, fmt.Errorf("%w: %w", errTxNotSubmitted, ctx.Err())
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 		var cmdOut []byte
 		var cmdErr error
-		cmdOut, cmdErr = execTrackedSubmission(attemptCtx, args...)
+		var phase submissionPhaseTiming
+		var phaseValid bool
+		cmdOut, phase, phaseValid, cmdErr = execTrackedSubmissionTiming(attemptCtx, args...)
 		cancel()
 		out = cmdOut
 		err = cmdErr
 		if errors.Is(err, errTxNotSubmitted) {
-			return out, err
+			return out, timings, false, err
 		}
 
 		if errors.Is(attemptCtx.Err(), context.DeadlineExceeded) {
-			return out, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
+			return out, timings, false, fmt.Errorf("polystorechaind command timed out after %s", cmdTimeout)
 		}
 		// Retry only an explicit SDK CheckTx sequence rejection. A successful or
 		// ambiguous broadcast must not be replayed based on arbitrary log text.
@@ -791,21 +800,31 @@ func runTxWithRetry(ctx context.Context, args ...string) ([]byte, error) {
 		body := extractJSONBody(out)
 		if validateJSONObject(body) == nil && json.Unmarshal(body, &check) == nil {
 			code, codeErr := explicitTxCode(check.Code)
+			if phaseValid && codeErr == nil {
+				timings = append(timings, submissionAttemptTiming{Attempt: i + 1,
+					PreBroadcastNS: phase.PreBroadcastNS, BroadcastTxSyncNS: phase.BroadcastTxSyncNS,
+					CheckTxCode: code})
+			} else {
+				timingComplete = false
+			}
 			if codeErr == nil && code == 32 && check.Codespace == "sdk" && i+1 < maxRetries {
 				log.Printf("runTxWithRetry: CheckTx sequence rejection (attempt %d/%d)", i+1, maxRetries)
 				if err := waitTxRetry(ctx, time.Second); err != nil {
-					return out, err
+					return out, timings, false, err
 				}
 				continue
 			}
 		}
+		if len(timings) != i+1 {
+			timingComplete = false
+		}
 		if err != nil {
-			return out, err
+			return out, timings, timingComplete, err
 		}
 
-		return out, nil
+		return out, timings, timingComplete, nil
 	}
-	return out, err
+	return out, timings, timingComplete, err
 }
 
 func main() {

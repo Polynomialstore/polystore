@@ -64,6 +64,8 @@ V3_CROSS_AUDIT_OPEN_BATCH_MAX = 31
 V3_CROSS_AUDIT_OPEN_GAS = 2_000_000
 V3_CROSS_AUDIT_OPEN_BATCH_GAS_CAP = (
     OPEN_SESSION_BATCH_BASE_GAS + V3_CROSS_AUDIT_OPEN_GAS * V3_CROSS_AUDIT_OPEN_BATCH_MAX)
+V3_PROVIDER_TIMING_SCHEMA = "polystore-v3-provider-timing-v1"
+V3_PROVIDER_TIMING_MAX_NS = 90 * 10**9
 
 
 def native_v3_chain_offsets():
@@ -316,6 +318,123 @@ def validate_v3_provider_outcomes(rows, providers, *, session_id):
         raise ValueError("v3 proof wave omitted a systematic provider")
     return dict(unique_tx_hashes=sorted(hashes), proof_count=proofs,
                 slot_count=len(slots), payees=[providers[slot] for slot in sorted(slots)])
+
+
+def _nearest_rank(values, percentile):
+    if not values:
+        raise ValueError("phase percentile requires observations")
+    ordered = sorted(values)
+    return ordered[(len(ordered) * percentile + 99) // 100 - 1]
+
+
+def validate_v3_provider_phase_timings(outcomes, transactions):
+    """Qualify monotonic provider phases after authoritative transaction joins."""
+    reasons = []
+    transaction_operations = [row.get("operation_id") for row in transactions]
+    outcome_operations = [row.get("request_id") for row in outcomes]
+    operation_ids_valid = (all(isinstance(value, str) and value for value in outcome_operations) and
+                           all(isinstance(value, str) and value for value in transaction_operations))
+    by_operation = ({row["operation_id"]: row for row in transactions}
+                    if operation_ids_valid else {})
+    if (not outcomes or not operation_ids_valid or len(outcomes) != len(transactions) or
+            len(set(outcome_operations)) != len(outcome_operations) or None in outcome_operations or
+            len(by_operation) != len(transactions) or
+            set(outcome_operations) != set(by_operation)):
+        reasons.append("timing rows do not map one-to-one to committed operations")
+    phases = {name: [] for name in ("authority_ns", "proof_preparation_ns",
+                                    "pre_broadcast_ns", "broadcast_tx_sync_ns",
+                                    "commit_observation_ns", "provider_total_ns",
+                                    "unattributed_ns")}
+    observations = []
+    retries = 0
+    for outcome in outcomes:
+        operation = outcome.get("request_id")
+        if not isinstance(operation, str) or not operation:
+            reasons.append("timing outcome has an invalid operation identity")
+            continue
+        transaction = by_operation.get(operation)
+        if transaction is None:
+            reasons.append(f"operation {operation!r} lacks an authoritative transaction")
+            continue
+        validators = transaction.get("validators")
+        try:
+            slot = producer.uint(outcome.get("slot", 99))
+            identity = (outcome.get("status") == "success" and
+                        transaction.get("outcome") == "committed_success" and
+                        isinstance(outcome.get("tx_hash"), str) and
+                        isinstance(transaction.get("txhash"), str) and
+                        outcome["tx_hash"].upper() == transaction["txhash"].upper() and
+                        outcome.get("provider") == transaction.get("provider") == transaction.get("creator") and
+                        outcome.get("session_id") == transaction.get("session_id") and
+                        slot == transaction.get("slot") and isinstance(validators, list) and
+                        len(validators) == 4 and len({row.get("node_id") for row in validators}) == 4)
+        except (TypeError, ValueError):
+            identity = False
+        if not identity:
+            reasons.append(f"operation {operation!r} timing identity is not its all-validator receipt")
+            continue
+        timing = outcome.get("timing")
+        expected = {"schema", "authority_ns", "proof_preparation_ns", "submission_attempts",
+                    "commit_observation_ns", "provider_total_ns"}
+        if not isinstance(timing, dict) or set(timing) != expected or timing.get("schema") != V3_PROVIDER_TIMING_SCHEMA:
+            reasons.append(f"operation {operation!r} has missing or malformed provider timing")
+            continue
+        values = {}
+        try:
+            for name in ("authority_ns", "proof_preparation_ns", "commit_observation_ns",
+                         "provider_total_ns"):
+                value = timing.get(name)
+                if type(value) is not int or not 0 <= value <= V3_PROVIDER_TIMING_MAX_NS:
+                    raise ValueError(name)
+                values[name] = value
+            attempts = timing.get("submission_attempts")
+            if not isinstance(attempts, list) or not 1 <= len(attempts) <= 5:
+                raise ValueError("submission_attempts")
+            attempt_total = 0
+            attempt_values = {"pre_broadcast_ns": [], "broadcast_tx_sync_ns": []}
+            for index, attempt in enumerate(attempts, 1):
+                if not isinstance(attempt, dict) or set(attempt) != {
+                        "attempt", "pre_broadcast_ns", "broadcast_tx_sync_ns", "check_tx_code"}:
+                    raise ValueError("submission_attempt")
+                if type(attempt.get("attempt")) is not int or attempt["attempt"] != index or \
+                        type(attempt.get("check_tx_code")) is not int:
+                    raise ValueError("submission_attempt")
+                expected_code = 0 if index == len(attempts) else 32
+                if attempt["check_tx_code"] != expected_code:
+                    raise ValueError("check_tx_code")
+                for name in ("pre_broadcast_ns", "broadcast_tx_sync_ns"):
+                    value = attempt.get(name)
+                    if type(value) is not int or not 0 <= value <= V3_PROVIDER_TIMING_MAX_NS:
+                        raise ValueError(name)
+                    attempt_values[name].append(value)
+                    attempt_total += value
+            if values["provider_total_ns"] < (values["authority_ns"] +
+                    values["proof_preparation_ns"] + values["commit_observation_ns"] + attempt_total):
+                raise ValueError("provider_total_ns")
+        except ValueError as error:
+            reasons.append(f"operation {operation!r} has invalid {error.args[0]} timing")
+            continue
+        retries += len(attempts) - 1
+        for name, row_values in attempt_values.items():
+            phases[name].extend(row_values)
+        for name, value in values.items():
+            phases[name].append(value)
+        unattributed = values["provider_total_ns"] - (values["authority_ns"] +
+            values["proof_preparation_ns"] + values["commit_observation_ns"] + attempt_total)
+        phases["unattributed_ns"].append(unattributed)
+        observations.append(dict(operation_id=operation, unattributed_ns=unattributed))
+    qualified = not reasons and len(phases["provider_total_ns"]) == len(outcomes)
+    result = dict(schema=V3_PROVIDER_TIMING_SCHEMA, qualification=qualified,
+                  transaction_count=len(outcomes), sequence_retry_attempts=retries,
+                  scope=("same-process monotonic durations; provider total starts at V3 dispatch after "
+                         "route selection and signer admission; pre-broadcast starts at CLI RunE, not process "
+                         "start; unattributed includes process startup, journal work, retry backoff and other "
+                         "local overhead; consensus header times remain separate inter-block wall time"),
+                  observations=observations, reasons=reasons)
+    if qualified:
+        result["percentiles_ns"] = {name: {f"p{percentile}": _nearest_rank(values, percentile)
+            for percentile in (50, 95, 99)} for name, values in phases.items()}
+    return result
 
 
 def _encode_varint(value):
@@ -674,6 +793,9 @@ def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
         raise ValueError("committed HTTP transaction must contain exactly one message")
     result["ordinals"] = validate_v3_committed_message(messages[0], kind=kind, creator=creator,
         slot=slot, deal_id=deal_id, session_id=session_id, proof_count=proof_count)
+    if kind == "session-proof":
+        result.update(operation_id=row.get("request_id"), provider=creator, creator=creator,
+                      slot=slot, session_id="0x" + session_id)
     return result
 
 
@@ -773,7 +895,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
         row["before_proofs"] = before
     capture_workload_metrics(lifecycle, "native_v3_before_proofs", fenced=True)
     for row in sessions:
-        requests = [dict(provider=providers[slot],
+        requests = [dict(id=f"session-{row['nonce']}-{slot}", provider=providers[slot],
                          url=provider_http_url(lifecycle, providers[slot], "/sp/session-proof"),
                          body=dict(session_id=row["session_id"]))
                     for slot in range(V3_SYSTEMATIC_PROVIDERS)]
@@ -789,6 +911,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
             if transaction["outcome"] != "committed_success":
                 raise ValueError("provider reported success for a failed v3 proof transaction")
             transactions.append(transaction)
+        phase_timing = validate_v3_provider_phase_timings(outcomes, transactions)
         at = max(producer.uint(tx["height"]) for tx in transactions)
         wait(at + 1)
         after = v3_session_query(lifecycle, row["session_id"], at)
@@ -798,7 +921,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
         tx_ordinals = sorted(ordinal for tx in transactions for ordinal in tx["ordinals"])
         if accepted != tx_ordinals or len(accepted) != V3_MAX_SAMPLES or summary["proof_count"] != V3_MAX_SAMPLES:
             raise ValueError("committed v3 proof messages do not equal authoritative bitmap deltas")
-        row.update(provider_outcomes=outcomes, outcome_summary=summary,
+        row.update(provider_outcomes=outcomes, outcome_summary=summary, phase_timing=phase_timing,
                    proof_transactions=transactions, committed_height=at,
                    accepted_sample_ordinals=accepted)
         lifecycle.save()
@@ -1186,6 +1309,8 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     if warmup_accepted != sorted(ordinal for row in warmup_transactions for ordinal in row["ordinals"]):
         raise ValueError("warmup bitmap differs from committed proof messages")
     doc["warmup_proof_transactions"] = warmup_transactions
+    doc["warmup_provider_phase_timing"] = validate_v3_provider_phase_timings(
+        warmup_outcomes, warmup_transactions)
     lifecycle.save()
 
     current = lifecycle.wait_height(1)
@@ -1269,6 +1394,7 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         lifecycle.save()
     if len(transactions) != V3_CROSS_AUDIT_MEASURED:
         raise ValueError("measured provider phase omitted a proof transaction")
+    doc["provider_phase_timing"] = validate_v3_provider_phase_timings(outcomes, transactions)
     doc["proof_anchor_span"] = validate_v3_cross_audit_span(
         transactions, scheduled_start_height, next_anchor, epoch_length)
     doc["measured_window"]["proof_receipt_max_height"] = validate_v3_http_receipt_fence(
