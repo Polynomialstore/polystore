@@ -179,24 +179,27 @@ separate measurement.
 ## Native v3 provider-daemon cross-audit diagnostic
 
 `native-v3-providers-cross-audit` extends the same production provider-daemon route
-without changing proof, gas, queue, or audit behavior. It opens sixteen fixed
-16 MiB sessions. One transaction per systematic provider warms the route
-outside the clock, then 120 transactions are offered round-robin across the
-eight assigned signers at 2 transactions/s for 60 seconds. Each signer has at
+without changing proof, gas, queue, or audit behavior. It opens 46 fixed
+16 MiB sessions in two ordered append-signed batches of 31 and 15. One
+batch declares 62.1M gas and the other 30.1M gas; both signed payloads and
+committed raw transactions must remain within the 2 MiB block-byte limit. One
+transaction per systematic provider warms the route outside the clock, then
+360 transactions are offered round-robin across the eight assigned signers at
+2 transactions/s for 180 seconds. Each signer has at
 most one request in flight. The HTTP clock includes proof generation, native
 verification, gas simulation, signing, broadcast, and commit observation.
 
-The run aligns its measured start 30 blocks before the next normal audit anchor
-and requires the profile to cross exactly that one anchor. It retains the actual
-offered, queued, completed, and failed request counts, so backlog or a bounded
-route failure remains diagnostic evidence rather than being relabeled as a
-successful 2 transactions/s result. A successful run additionally verifies all
-128 warmup and measured proof transactions, all 2,112 accepted ordinals, the
-crossed audit coverage and its unique transactions, provider account sequences,
-raw blocks/results on all four validators, Linux validator CPU ticks covering
-the fixed HTTP schedule, drain, and crossed-audit completion, and all sixteen
-expiry/refund paths. Scheduler HTTP duration remains a separate measurement. It
-does not send an ACK or verify delivery.
+The run aligns its measured start 10 blocks before the next normal audit anchor
+and requires the profile to cross exactly two anchors. It retains six 30-second
+offered-cohort, terminal, and backlog bins plus the underlying attempts. A
+bounded route failure remains diagnostic evidence rather than being relabeled
+as a successful 2 transactions/s result. A successful run additionally verifies
+all 368 warmup and measured proof transactions, all 6,072 accepted ordinals,
+both crossed-audit coverage sets and their 24 unique transactions, provider
+account sequences, raw blocks/results and Commit streams on all four validators,
+Linux validator CPU ticks covering the fixed HTTP schedule, drain, and both
+audit completions, and all 46 expiry/refund paths. Scheduler HTTP duration
+remains a separate measurement. It does not send an ACK or verify delivery.
 
 ```sh
 python3 scripts/retrieval_four_validator_workload.py \
@@ -209,8 +212,8 @@ python3 scripts/retrieval_four_validator_workload.py \
   --home "$RETRIEVAL_RUNS/native-v3-provider-cross-audit-001"
 ```
 
-This is a finite local constant-offer diagnostic. It does not establish a
-sustained operating point across multiple epochs, WAN behavior, phase RSS peak,
+This is a finite local operating-point diagnostic. It does not establish chain
+maximum capacity, WAN behavior, phase RSS peak, pure proof-generation latency,
 or delivered-byte capacity. A retained performance result requires this harness
 to land before collection.
 

@@ -53,11 +53,17 @@ V3_CHAIN_SESSIONS = 8
 V3_CHAIN_WARMUPS = 8
 V3_CHAIN_MEASURED = 56
 V3_CHAIN_MEASURED_CAP_SECONDS = 45
-V3_CROSS_AUDIT_SESSIONS = 16
+V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
-V3_CROSS_AUDIT_MEASURED = 120
-V3_CROSS_AUDIT_OFFER_SECONDS = 60
+V3_CROSS_AUDIT_MEASURED = 360
+V3_CROSS_AUDIT_OFFER_SECONDS = 180
 V3_CROSS_AUDIT_DRAIN_SECONDS = 30
+V3_CROSS_AUDIT_BIN_SECONDS = 30
+V3_CROSS_AUDIT_EPOCHS = 2
+V3_CROSS_AUDIT_OPEN_BATCH_MAX = 31
+V3_CROSS_AUDIT_OPEN_GAS = 2_000_000
+V3_CROSS_AUDIT_OPEN_BATCH_GAS_CAP = (
+    OPEN_SESSION_BATCH_BASE_GAS + V3_CROSS_AUDIT_OPEN_GAS * V3_CROSS_AUDIT_OPEN_BATCH_MAX)
 
 
 def native_v3_chain_offsets():
@@ -68,13 +74,64 @@ def native_v3_chain_offsets():
 
 
 def native_v3_cross_audit_schedule():
-    """Fifteen sessions by eight providers, offered round-robin at 2 tx/s."""
+    """Forty-five sessions by eight providers, offered round-robin at 2 tx/s."""
     rows = []
     for index in range(V3_CROSS_AUDIT_MEASURED):
-        rows.append(dict(index=index, session_index=1 + index // V3_SYSTEMATIC_PROVIDERS,
-                         slot=index % V3_SYSTEMATIC_PROVIDERS,
+        session_index = 1 + index // V3_SYSTEMATIC_PROVIDERS
+        slot = index % V3_SYSTEMATIC_PROVIDERS
+        rows.append(dict(id=f"measured-{session_index}-{slot}", index=index,
+                         session_index=session_index,
+                         slot=slot,
                          offered_offset_ns=index * 500_000_000))
     return rows
+
+
+def v3_http_schedule_bins(schedule, outcomes, *, start_ns):
+    """Six fixed bins: offered cohort, terminal completions, queue, and in-flight."""
+    if len(schedule) != V3_CROSS_AUDIT_MEASURED or len(outcomes) != len(schedule):
+        raise ValueError("cross-audit bins require every scheduled terminal outcome")
+    by_id = {row.get("request_id"): row for row in outcomes}
+    if len(by_id) != len(outcomes) or set(by_id) != {row.get("id") for row in schedule}:
+        raise ValueError("cross-audit terminal outcomes differ from the schedule")
+    for row in schedule:
+        offered = start_ns + row["offered_offset_ns"]
+        outcome = by_id[row["id"]]
+        dispatched = producer.uint(outcome.get("initial_dispatch_ns", 0), 64)
+        started = producer.uint(outcome.get("request_started_ns", 0), 64)
+        finished = producer.uint(outcome.get("request_finished_ns", 0), 64)
+        if not offered <= dispatched <= started <= finished:
+            raise ValueError("cross-audit terminal timing precedes its offer")
+    width = V3_CROSS_AUDIT_BIN_SECONDS * 10**9
+    if V3_CROSS_AUDIT_OFFER_SECONDS % V3_CROSS_AUDIT_BIN_SECONDS:
+        raise ValueError("cross-audit bins do not divide the offer window")
+    bins = []
+    for index in range(V3_CROSS_AUDIT_OFFER_SECONDS // V3_CROSS_AUDIT_BIN_SECONDS):
+        begin, end = start_ns + index * width, start_ns + (index + 1) * width
+        cohort = [row for row in schedule if begin <= start_ns + row["offered_offset_ns"] < end]
+        terminal = [row for row in outcomes
+                    if begin <= producer.uint(row.get("request_finished_ns", 0), 64) < end]
+        dispatched_by_end = sum(producer.uint(row.get("initial_dispatch_ns", 0), 64) < end
+                                for row in outcomes)
+        completed_by_end = sum(producer.uint(row.get("request_finished_ns", 0), 64) < end
+                               for row in outcomes)
+        offered_by_end = sum(start_ns + row["offered_offset_ns"] < end for row in schedule)
+        dispatched_before = sum(producer.uint(row.get("initial_dispatch_ns", 0), 64) < begin
+                                for row in outcomes)
+        completed_before = sum(producer.uint(row.get("request_finished_ns", 0), 64) < begin
+                               for row in outcomes)
+        offered_before = sum(start_ns + row["offered_offset_ns"] < begin for row in schedule)
+        bins.append(dict(index=index, start_offset_ns=index * width,
+                         end_offset_ns=(index + 1) * width,
+                         offered=len(cohort), terminal=len(terminal),
+                         cohort_completed_by_end=sum(
+                             producer.uint(by_id[row["id"]].get("request_finished_ns", 0), 64) < end
+                             for row in cohort),
+                         queued_at_end=offered_by_end - dispatched_by_end,
+                         in_flight_at_end=dispatched_by_end - completed_by_end,
+                         carryover_queued=offered_before - dispatched_before,
+                         carryover_in_flight=dispatched_before - completed_before,
+                         outstanding_at_end=offered_by_end - completed_by_end))
+    return bins
 
 
 def parse_proc_stat(raw, *, expected_pid=None):
@@ -272,13 +329,9 @@ def _encode_varint(value):
     return bytes(out)
 
 
-def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
-    """Decode the exact native v3 open response retained in a committed tx."""
-    data = result.get("data", "")
-    if (result.get("outcome") != "committed_success" or not isinstance(data, str) or
-            len(data) > 2048 or len(data) % 2 or not re.fullmatch(r"[0-9a-fA-F]+", data)):
-        raise ValueError("invalid committed v3 open response")
-    raw = bytes.fromhex(data)
+def opened_v3_sessions(result, count, *, logical_bytes=V3_PILOT_BYTES):
+    """Decode exact ordered native v3 open responses retained in one committed tx."""
+    artifact.integer(count, "v3 open response count", 1, V3_CROSS_AUDIT_OPEN_BATCH_MAX)
     expected_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
     suffix = (b"\x10" + _encode_varint(logical_bytes) +
               b"\x18" + _encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
@@ -286,13 +339,30 @@ def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
     response = b"\x0a\x20" + bytes(32) + suffix
     any_value = (b"\x0a" + _encode_varint(len(expected_type)) + expected_type +
                  b"\x12" + _encode_varint(len(response)) + response)
-    expected = b"\x12" + _encode_varint(len(any_value)) + any_value
-    sid_offset = len(expected) - len(suffix) - 32
-    if (len(raw) != len(expected) or raw[:sid_offset] != expected[:sid_offset] or
-            raw[sid_offset + 32:] != expected[sid_offset + 32:] or
-            not any(raw[sid_offset:sid_offset + 32])):
+    frame = b"\x12" + _encode_varint(len(any_value)) + any_value
+    data = result.get("data", "")
+    if (result.get("outcome") != "committed_success" or not isinstance(data, str) or
+            len(data) != len(frame) * count * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data)):
+        raise ValueError("invalid committed v3 open response")
+    raw = bytes.fromhex(data)
+    sid_offset = len(frame) - len(suffix) - 32
+    if len(raw) != len(frame) * count:
         raise ValueError("v3 open response differs from the fixed pilot geometry")
-    return raw[sid_offset:sid_offset + 32].hex()
+    sessions = []
+    for index in range(count):
+        value = raw[index * len(frame):(index + 1) * len(frame)]
+        session = value[sid_offset:sid_offset + 32]
+        if (value[:sid_offset] != frame[:sid_offset] or
+                value[sid_offset + 32:] != frame[sid_offset + 32:] or not any(session)):
+            raise ValueError("v3 open response differs from the fixed pilot geometry")
+        sessions.append(session.hex())
+    if len(set(sessions)) != count:
+        raise ValueError("v3 open response repeats a session id")
+    return sessions
+
+
+def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
+    return opened_v3_sessions(result, 1, logical_bytes=logical_bytes)[0]
 
 
 def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
@@ -301,6 +371,7 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
     attempts = []
     limit = V3_BUSY_MAX_ATTEMPTS if retry_pre_admission_busy else 1
     offered_ns = request.get("offered_ns")
+    initial_dispatch_ns = None
     for attempt in range(1, limit + 1):
         if attempt > 1:
             if artifact.monotonic_ns() + V3_BUSY_RETRY_SECONDS * 10**9 >= phase_deadline:
@@ -308,6 +379,8 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
             time.sleep(V3_BUSY_RETRY_SECONDS)
         path = directory / f"{phase}-{index}-{attempt}.json"
         began = artifact.monotonic_ns()
+        if initial_dispatch_ns is None:
+            initial_dispatch_ns = began
         request_deadline = min(phase_deadline,
                                began + request.get("timeout_seconds", 180) * 10**9)
         try:
@@ -332,7 +405,8 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
                 raise ValueError("v3 HTTP request did not return a status code") from error
             row = dict(body, http_status=code, provider=request["provider"], attempt=attempt,
                        request_index=index, request_id=request.get("id"), offered_ns=offered_ns,
-                       request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
+                       initial_dispatch_ns=initial_dispatch_ns, request_started_ns=began,
+                       request_finished_ns=artifact.monotonic_ns(),
                        stderr=result.stderr[-8192:], curl_returncode=result.returncode)
             attempts.append(row)
             if result.returncode != 0:
@@ -346,7 +420,8 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
         except BaseException as error:
             attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
                                  request_index=index, request_id=request.get("id"), offered_ns=offered_ns,
-                                 request_started_ns=began, error=str(error)[-8192:],
+                                 initial_dispatch_ns=initial_dispatch_ns, request_started_ns=began,
+                                 error=str(error)[-8192:],
                                  request_finished_ns=artifact.monotonic_ns()))
             return attempts, error
         finally:
@@ -428,7 +503,7 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
 def run_v3_http_schedule(lifecycle, curl, requests, phase):
     """Offer a fixed provider HTTP schedule with one in-flight request per signer."""
     offsets = [row.get("offered_offset_ns") for row in requests]
-    if (not requests or len(requests) > 128 or
+    if (not requests or len(requests) > V3_CROSS_AUDIT_MEASURED or
             any(type(value) is not int or value < 0 for value in offsets) or
             offsets != sorted(offsets) or
             len({row.get("id") for row in requests}) != len(requests) or
@@ -485,6 +560,7 @@ def run_v3_http_schedule(lifecycle, curl, requests, phase):
                 except BaseException as error:
                     attempts = [dict(status="driver_error", provider=request["provider"],
                         request_index=index, request_id=request["id"], offered_ns=request["offered_ns"],
+                        initial_dispatch_ns=now, request_started_ns=now,
                         error=str(error)[-8192:], request_finished_ns=now)]
                     future_error = error
                 retained.extend(attempts)
@@ -759,7 +835,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
     lifecycle.save()
 
 
-def classify_cross_audit_transaction(lifecycle, transaction, height, providers, deal_id, epoch):
+def classify_cross_audit_transaction(lifecycle, transaction, height, providers, deal_id, epochs):
     """Return one exact committed system-audit transaction or reject provider extras."""
     txhash = transaction["txhash"].upper()
     decoded = json.loads(lifecycle.cli(lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
@@ -772,15 +848,17 @@ def classify_cross_audit_transaction(lifecycle, transaction, height, providers, 
     if len(messages) != 1 or len(provider_messages) != 1:
         raise ValueError("provider transaction contains an unexpected message set")
     message = provider_messages[0]
+    expected_epochs = {producer.uint(value) for value in epochs} if not isinstance(epochs, int) else {epochs}
+    epoch = producer.uint(message.get("epoch_id", ""))
     if (message.get("@type") != "/polystorechain.polystorechain.v1.MsgProveLiveness" or
             producer.uint(message.get("deal_id", "")) != producer.uint(deal_id) or
-            producer.uint(message.get("epoch_id", "")) != epoch or
+            epoch not in expected_epochs or
             set(message).intersection({"user_receipt", "system_proof", "user_receipt_batch", "session_proof"}) != {"system_proof"} or
             not isinstance(message.get("system_proof"), dict) or not message["system_proof"] or
             producer.uint(transaction.get("code", 0)) != 0):
         raise ValueError("provider transaction is not a successful crossed-epoch system audit")
     provider = message["creator"]
-    return dict(txhash=txhash, height=height, provider=provider,
+    return dict(txhash=txhash, height=height, provider=provider, epoch=epoch,
                 slot=next(slot for slot, address in providers.items() if address == provider),
                 code=producer.uint(transaction.get("code", 0)), gas_wanted=transaction["gas_wanted"],
                 gas_used=transaction["gas_used"])
@@ -800,25 +878,37 @@ def reconcile_cross_audit_sequences(before, after, providers, proof_transactions
             raise ValueError("proof transaction sequence inventory is not unique committed success")
         hashes.add(txhash)
         proof_counts[provider] += 1
+    if (not isinstance(audit_views, dict) or len(audit_views) != V3_CROSS_AUDIT_EPOCHS or
+            any(type(epoch) is not int for epoch in audit_views)):
+        raise ValueError("crossed audit inventory must cover exactly two epochs")
     audit_counts = {address: 0 for address in providers.values()}
+    audit_counts_by_epoch = {
+        epoch: {address: 0 for address in providers.values()} for epoch in audit_views}
     audit_hashes = set()
     for row in audit_transactions:
         txhash, provider = row.get("txhash"), row.get("provider")
+        epoch = producer.uint(row.get("epoch", 0))
         if (not isinstance(txhash, str) or not re.fullmatch(r"[0-9A-F]{64}", txhash) or
                 txhash in hashes or txhash in audit_hashes or provider not in audit_counts or
-                producer.uint(row.get("code", 1)) != 0):
+                epoch not in audit_counts_by_epoch or producer.uint(row.get("code", 1)) != 0):
             raise ValueError("audit transaction sequence inventory is not unique committed success")
         audit_hashes.add(txhash)
         audit_counts[provider] += 1
+        audit_counts_by_epoch[epoch][provider] += 1
     for slot, provider in providers.items():
-        view = audit_views.get(slot)
-        if not isinstance(view, dict):
-            raise ValueError("crossed audit inventory omits a provider")
-        required = producer.uint(view.get("audit", {}).get("sample_count", ""))
-        accepted = producer.uint(view.get("audit", {}).get("accepted_count", ""))
-        if accepted != required:
-            raise ValueError("crossed audit coverage is incomplete")
-        if audit_counts[provider] != accepted:
+        expected = 0
+        for epoch, views in audit_views.items():
+            view = views.get(slot) if isinstance(views, dict) else None
+            if not isinstance(view, dict):
+                raise ValueError("crossed audit inventory omits a provider")
+            required = producer.uint(view.get("audit", {}).get("sample_count", ""))
+            accepted = producer.uint(view.get("audit", {}).get("accepted_count", ""))
+            if accepted != required:
+                raise ValueError("crossed audit coverage is incomplete")
+            if audit_counts_by_epoch[epoch][provider] != accepted:
+                raise ValueError("crossed audit epoch bitmap does not equal unique committed audit transactions")
+            expected += accepted
+        if audit_counts[provider] != expected:
             raise ValueError("crossed audit bitmap does not equal unique committed audit transactions")
     rows = []
     for provider in providers.values():
@@ -900,7 +990,7 @@ def wait_for_crossed_audit_signal(lifecycle, providers, deal_id, expected_counts
                     raise TimeoutError("crossed audit event signal did not complete within 30 seconds")
                 observed = (next_height - 1) // epoch_length + 1
                 if observed > expected_epoch or next_height >= deadline_height - 10:
-                    raise ValueError("cross-audit verification left its single-epoch/session margin")
+                    raise ValueError("cross-audit verification left its expected epoch/session margin")
                 results = lifecycle.query(node, f"/block_results?height={next_height}")
                 accepted.update(crossed_audit_events(
                     results, next_height, providers, deal_id, expected_counts))
@@ -958,41 +1048,81 @@ def validate_v3_http_receipt_fence(transactions, fence):
     return maximum
 
 
+def validate_v3_cross_audit_span(transactions, scheduled_start_height, first_anchor, epoch_length):
+    """Require measured proof commits on both sides of exactly two audit anchors."""
+    heights = [producer.uint(row.get("height", 0)) for row in transactions]
+    if not heights:
+        raise ValueError("cross-audit profile has no measured proof commits")
+    second_anchor = first_anchor + epoch_length
+    if (min(heights) < scheduled_start_height or min(heights) > first_anchor or
+            max(heights) < second_anchor or max(heights) >= second_anchor + epoch_length):
+        raise ValueError("measured proof commits did not span exactly the two crossed audit anchors")
+    return dict(first_height=min(heights), last_height=max(heights),
+                first_anchor=first_anchor, second_anchor=second_anchor)
+
+
 def close_cross_audit_measurement(lifecycle, audits, providers, deal_id, expected_counts,
-                                  epoch_length, expected_epoch, deadline_height,
+                                  epoch_length, expected_epochs, deadline_height,
                                   before_cpu, measured_end_height):
-    """Fence audit execution in CPU, then validate its state across all validators."""
-    crossed = wait_for_crossed_audit_signal(
-        lifecycle, providers, deal_id, expected_counts, epoch_length, expected_epoch, deadline_height)
+    """Fence two audit executions in CPU, then validate state across all validators."""
+    if len(expected_epochs) != V3_CROSS_AUDIT_EPOCHS:
+        raise ValueError("cross-audit measurement requires exactly two epochs")
+    crossed = [wait_for_crossed_audit_signal(
+        lifecycle, providers, deal_id, expected_counts, epoch_length, epoch, deadline_height)
+        for epoch in expected_epochs]
     after_cpu = validator_cpu_snapshot(lifecycle)
-    views = audits(crossed["height"], False, expected_epoch)
-    if set(views) != set(providers):
-        raise ValueError("crossed audit state does not cover every provider slot")
-    for slot, view in views.items():
-        provider = providers[slot]
-        if (producer.uint(view["audit"].get("sample_count", 0)) != expected_counts[provider] or
-                producer.uint(view["audit"].get("accepted_count", 0)) != expected_counts[provider]):
-            raise ValueError("crossed audit state is incomplete after its event signal")
-    crossed["audits"] = views
+    audit_views = {}
+    for epoch, signal in zip(expected_epochs, crossed):
+        views = audits(signal["height"], False, epoch)
+        if set(views) != set(providers):
+            raise ValueError("crossed audit state does not cover every provider slot")
+        for slot, view in views.items():
+            provider = providers[slot]
+            if (producer.uint(view["audit"].get("sample_count", 0)) != expected_counts[provider] or
+                    producer.uint(view["audit"].get("accepted_count", 0)) != expected_counts[provider]):
+                raise ValueError("crossed audit state is incomplete after its event signal")
+        signal["audits"] = views
+        audit_views[epoch] = views
     capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
     lifecycle.doc["native_v3_cross_audit"]["measured_window"] = dict(
         monotonic_start_ns=before_cpu["monotonic_ns"],
         monotonic_end_ns=after_cpu["monotonic_ns"],
         elapsed_ns=after_cpu["monotonic_ns"] - before_cpu["monotonic_ns"],
         proof_phase_end_height=measured_end_height,
-        crossed_audit_completion_height=crossed["height"],
+        crossed_audit_completion_heights=[row["height"] for row in crossed],
         validator_cpu_before=before_cpu,
         validator_cpu_after=after_cpu,
         validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
-        scope=("fixed HTTP offer, bounded drain, and crossed-audit completion; includes proof generation, "
+        scope=("fixed HTTP offer, bounded drain, and two crossed-audit completions; includes proof generation, "
                "local verification, gas simulation, signing, broadcast, bounded node-zero event observation, "
                "and the all-validator height fence; excludes the later four-validator LCD audit-state validation; "
                "no RSS phase peak"))
-    return crossed
+    return crossed, audit_views
 
 
-def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, audits, epoch_length):
-    """Fixed provider-route load spanning exactly one normal storage-audit anchor."""
+def freeze_cross_audit_post_load(lifecycle, audits, providers, ready_epoch, expected_epochs,
+                                 epoch_length, crossed_views):
+    """Freeze quiescent two-epoch state before slow historical receipt decoding."""
+    post_quiescence = require_provider_quiescence(lifecycle, providers)
+    final_height = post_quiescence["second_height"]
+    if (final_height - 1) // epoch_length + 1 != ready_epoch + V3_CROSS_AUDIT_EPOCHS:
+        raise ValueError("cross-audit profile did not cross exactly two epochs")
+    final_views = {}
+    for epoch in expected_epochs:
+        views = audits(final_height, False, epoch)
+        if views != crossed_views[epoch]:
+            raise ValueError("crossed audit evidence changed after provider quiescence")
+        final_views[epoch] = views
+    evidence = dict(height=final_height, provider_quiescence=post_quiescence,
+                    audits=final_views)
+    lifecycle.doc["native_v3_cross_audit"]["post_load_fence"] = evidence
+    lifecycle.save()
+    return post_quiescence, final_height, final_views
+
+
+def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, audits,
+                              epoch_length, command):
+    """Fixed provider-route operating point spanning exactly two normal audit anchors."""
     doc = lifecycle.doc["native_v3_cross_audit"] = dict(qualification=False)
     owner = lifecycle.signers["owner0"]
     opened_at = lifecycle.wait_height(3)
@@ -1001,7 +1131,7 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         raise ValueError("cross-audit sessions reach the deal end")
     root = producer.b64(deal["manifest_root"], 32).hex()
     integrity = lifecycle.doc["native_v3_generation"]["candidate"]["integrity_root"][2:]
-    sessions = doc["sessions"] = []
+    paths = []
     for nonce in range(1, V3_CROSS_AUDIT_SESSIONS + 1):
         path = lifecycle.home / f"native-cross-audit-open-{nonce}.json"
         with path.open("x") as output:
@@ -1009,12 +1139,20 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
                 range=dict(file_record_index=0, file_start_offset="0", file_length=str(V3_PILOT_BYTES),
                            range_start="0", range_length=str(V3_PILOT_BYTES)), nonce=str(nonce),
                 deadline_height=str(deadline_height)), output, separators=(",", ":"))
-        result = send("owner0", ["retrieval-session-v3", "open", str(path)])
-        result["validators"] = verify_transaction_nodes(lifecycle, result)
-        sessions.append(dict(session_id=opened_v3_session(result), nonce=nonce,
-                             open_transaction=result))
-        lifecycle.save()
-    evidence_height = wait(max(row["open_transaction"]["height"] for row in sessions) + 2)
+        paths.append(path)
+    sessions = doc["sessions"] = []
+    for batch_index, begin in enumerate(range(0, len(paths), V3_CROSS_AUDIT_OPEN_BATCH_MAX)):
+        batch_paths = paths[begin:begin + V3_CROSS_AUDIT_OPEN_BATCH_MAX]
+        ids, height = open_v3_session_batch(
+            lifecycle, batch_paths, lifecycle.home / f"native-cross-audit-open-batch-{batch_index}", command)
+        evidence = lifecycle.doc["native_v3_open_batches"][-1]
+        for offset, session_id in enumerate(ids):
+            sessions.append(dict(session_id=session_id, nonce=begin + offset + 1,
+                                 open_batch_index=batch_index, open_height=height,
+                                 open_transaction=evidence["transaction"]))
+    if [row["nonce"] for row in sessions] != list(range(1, V3_CROSS_AUDIT_SESSIONS + 1)):
+        raise ValueError("native v3 batch responses differ from ordered session intents")
+    evidence_height = wait(max(row["open_height"] for row in sessions) + 2)
     for row in sessions:
         view = v3_session_query(lifecycle, row["session_id"], evidence_height)
         _, accepted = validate_v3_session(view, session_id=row["session_id"], deal_id=deal["id"],
@@ -1049,11 +1187,12 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         raise ValueError("warmup bitmap differs from committed proof messages")
     doc["warmup_proof_transactions"] = warmup_transactions
     lifecycle.save()
+
     current = lifecycle.wait_height(1)
     ready_epoch = (current - 1) // epoch_length + 1
     next_anchor = ready_epoch * epoch_length + 1
-    target_height = next_anchor - 30
-    if target_height - current < 4 or deadline_height - (target_height + 60) < 40:
+    target_height = next_anchor - 10
+    if target_height - current < 4 or deadline_height - (target_height + epoch_length + 30) < 40:
         raise ValueError("cross-audit profile lacks alignment or session deadline margin")
     quiescence = require_provider_quiescence(lifecycle, providers)
     ready_height = quiescence["second_height"]
@@ -1070,23 +1209,47 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     requests = []
     for item in schedule:
         session = sessions[item["session_index"]]
-        requests.append(dict(item, id=f"measured-{item['session_index']}-{item['slot']}",
-            provider=providers[item["slot"]],
+        requests.append(dict(item, provider=providers[item["slot"]],
             url=provider_http_url(lifecycle, providers[item["slot"]], "/sp/session-proof"),
             body=dict(session_id=session["session_id"])))
-    before_cpu, scheduled_start_height = open_cross_audit_measurement(lifecycle, target_height)
-    doc["measurement_preconditions"] = dict(evidence_height=evidence_height, ready_height=ready_height,
-        ready_epoch=ready_epoch, next_anchor=next_anchor, target_height=target_height,
-        scheduled_start_height=scheduled_start_height,
-        session_deadline=deadline_height, audits=current_audits, provider_quiescence=quiescence)
-    outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
-    receipt_fence = doc["proof_receipt_fence"] = fence_v3_http_receipts(lifecycle)
-    measured_end_height = receipt_fence["provider_rpc_observed_height"]
-    expected_audit_counts = {providers[slot]: producer.uint(view["audit"]["sample_count"])
-                             for slot, view in current_audits.items()}
-    crossed = close_cross_audit_measurement(lifecycle, audits, providers, deal["id"],
-        expected_audit_counts, epoch_length, ready_epoch + 1, deadline_height,
-        before_cpu, measured_end_height)
+
+    collectors = []
+    completed_measurement = False
+    try:
+        start_commit_streams(lifecycle, 720, collectors,
+                             stream_key="native_v3_cross_audit_commit_streams",
+                             filename_prefix="native-v3-cross-audit-commit")
+        before_cpu, scheduled_start_height = open_cross_audit_measurement(lifecycle, target_height)
+        doc["measurement_preconditions"] = dict(evidence_height=evidence_height, ready_height=ready_height,
+            ready_epoch=ready_epoch, next_anchor=next_anchor, target_height=target_height,
+            scheduled_start_height=scheduled_start_height, session_deadline=deadline_height,
+            audits=current_audits, provider_quiescence=quiescence)
+        outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
+        schedule_start = lifecycle.doc["v3_http_schedules"]["cross-audit-measured"]["monotonic_start_ns"]
+        doc["schedule_bins"] = v3_http_schedule_bins(requests, outcomes, start_ns=schedule_start)
+        receipt_fence = doc["proof_receipt_fence"] = fence_v3_http_receipts(lifecycle)
+        measured_end_height = receipt_fence["provider_rpc_observed_height"]
+        expected_audit_counts = {providers[slot]: producer.uint(view["audit"]["sample_count"])
+                                 for slot, view in current_audits.items()}
+        expected_epochs = [ready_epoch + offset for offset in range(1, V3_CROSS_AUDIT_EPOCHS + 1)]
+        crossed, crossed_views = close_cross_audit_measurement(
+            lifecycle, audits, providers, deal["id"], expected_audit_counts, epoch_length,
+            expected_epochs, deadline_height, before_cpu, measured_end_height)
+        completed_measurement = True
+    finally:
+        artifact.stop_owned_process_groups(collectors)
+    if not completed_measurement:
+        raise ValueError("cross-audit measurement did not close")
+    summarize_commit_streams(lifecycle, collectors,
+        stream_key="native_v3_cross_audit_commit_streams",
+        before_phase="native_v3_cross_audit_before", after_phase="native_v3_cross_audit_after")
+
+    # Freeze the post-load state before the historical per-receipt queries below. Those
+    # queries are intentionally outside the measured window, but 360 CLI/RPC lookups can
+    # take long enough for another audit anchor to pass at the live tip.
+    post_quiescence, final_height, final_views = freeze_cross_audit_post_load(
+        lifecycle, audits, providers, ready_epoch, expected_epochs, epoch_length, crossed_views)
+
     grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
     for outcome in outcomes:
         grouped[schedule[outcome["request_index"]]["session_index"]].append(outcome)
@@ -1106,20 +1269,12 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         lifecycle.save()
     if len(transactions) != V3_CROSS_AUDIT_MEASURED:
         raise ValueError("measured provider phase omitted a proof transaction")
+    doc["proof_anchor_span"] = validate_v3_cross_audit_span(
+        transactions, scheduled_start_height, next_anchor, epoch_length)
     doc["measured_window"]["proof_receipt_max_height"] = validate_v3_http_receipt_fence(
         transactions, receipt_fence)
     lifecycle.save()
-    post_quiescence = require_provider_quiescence(lifecycle, providers)
-    final_height = post_quiescence["second_height"]
-    if (final_height - 1) // epoch_length + 1 != ready_epoch + 1:
-        raise ValueError("cross-audit profile crossed more than one epoch")
-    prior_final = audits(final_height, True, ready_epoch)
-    for slot, view in prior_final.items():
-        if any(view[name] != current_audits[slot][name] for name in ("canonical_context", "seed", "epoch_length")):
-            raise ValueError("prior audit authority changed across its finalization")
-    crossed_final = audits(final_height, False, ready_epoch + 1)
-    if crossed_final != crossed["audits"]:
-        raise ValueError("crossed audit evidence changed after provider quiescence")
+
     before_metrics = lifecycle.doc["commit_step_metrics"]["phases"]["native_v3_cross_audit_before"]
     first_height = min(row["sample"]["committed_height"] for row in before_metrics["nodes"]) + 1
     proof_hashes = {row["txhash"].upper() for row in transactions}
@@ -1128,18 +1283,19 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         if transaction["txhash"].upper() in proof_hashes:
             return
         row = classify_cross_audit_transaction(
-            lifecycle, transaction, height, providers, deal["id"], ready_epoch + 1)
+            lifecycle, transaction, height, providers, deal["id"], expected_epochs)
         if row is not None:
             audit_transactions.append(row)
     reconcile_transaction_blocks(lifecycle, transactions, first_height, final_height,
         lifecycle.home / "native-v3-cross-audit-blocks.jsonl", observe_transaction=observe_transaction)
-    if any(row["height"] > crossed["height"] for row in audit_transactions):
-        raise ValueError("crossed audit transaction committed after the CPU measurement fence")
+    completion_heights = {epoch: signal["height"] for epoch, signal in zip(expected_epochs, crossed)}
+    if any(row["height"] > completion_heights[row["epoch"]] for row in audit_transactions):
+        raise ValueError("crossed audit transaction committed after its CPU measurement fence")
     final_sequences = provider_sequences(lifecycle, providers, final_height)
     doc["audit_transactions"] = audit_transactions
     doc["provider_sequence_reconciliation"] = reconcile_cross_audit_sequences(
         quiescence["sequences"], final_sequences, providers, transactions,
-        audit_transactions, crossed_final)
+        audit_transactions, final_views)
     for index, row in enumerate(sessions):
         state = v3_session_query(lifecycle, row["session_id"], final_height)
         _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"],
@@ -1149,15 +1305,14 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
         expected = sorted(ordinal for tx in source for ordinal in tx["ordinals"])
         if accepted != expected or len(accepted) != V3_MAX_SAMPLES:
             raise ValueError("authoritative session bitmap differs from committed proof messages")
-        row.update(after_proofs=state, accepted_sample_ordinals=accepted,
-                   proof_transactions=source)
+        row.update(after_proofs=state, accepted_sample_ordinals=accepted, proof_transactions=source)
     doc.update(offered_proof_transactions=V3_CROSS_AUDIT_WARMUPS + V3_CROSS_AUDIT_MEASURED,
         warmup_transactions=V3_CROSS_AUDIT_WARMUPS, measured_offered_transactions=V3_CROSS_AUDIT_MEASURED,
         total_committed_valid_proof_transactions=len(warmup_transactions) + len(transactions),
         measured_committed_valid_proof_transactions=len(transactions),
         total_authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions),
         measured_authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions[1:]),
-        crossed_audit_epoch=ready_epoch + 1, crossed_audit=crossed_final,
+        crossed_audit_epochs=expected_epochs, crossed_audits=final_views,
         measured_gas_wanted=sum(row["gas_wanted"] for row in transactions),
         measured_gas_used=sum(row["gas_used"] for row in transactions),
         delivery_verified=False, owner_acknowledged=False, qualification=False)
@@ -1182,7 +1337,6 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     doc.update(status="native_v3_cross_audit_diagnostic_finished", expiration_verified=True,
                refunds_verified=True, qualification=False)
     lifecycle.save()
-
 
 def _write_v3_refund(lifecycle, owner, session_id):
     path = lifecycle.home / ("v3-refund-" + session_id + ".json")
@@ -2491,11 +2645,88 @@ def open_session_batch(lifecycle, operations, directory, command):
     return artifact.opened_session_ids(result, len(operations)), result["height"]
 
 
-def start_commit_streams(lifecycle, seconds, processes):
+def open_v3_session_batch(lifecycle, paths, directory, command):
+    """Generate, append-sign, and broadcast one exact ordered native-v3 open batch."""
+    if not 1 <= len(paths) <= V3_CROSS_AUDIT_OPEN_BATCH_MAX:
+        raise ValueError("native v3 open batch must contain 1..31 sessions")
+    owner = lifecycle.signers["owner0"]
+    expected = [json.loads(Path(path).read_text()) for path in paths]
+    if any(row.get("creator") != owner for row in expected):
+        raise ValueError("native v3 open batch requires the frozen owner")
+    directory.mkdir(mode=0o700)
+    unsigned, signed = directory / "unsigned.jsonl", directory / "signed.json"
+    generated, generated_gas = [], 0
+    with unsigned.open("x") as output:
+        for index, path in enumerate(paths):
+            expected_gas = V3_CROSS_AUDIT_OPEN_GAS + (OPEN_SESSION_BATCH_BASE_GAS if index == 0 else 0)
+            args = transaction_job(lifecycle, "owner0", ["retrieval-session-v3", "open", str(path)],
+                                   gas=str(expected_gas))["submit"] + ["--generate-only"]
+            tx = json.loads(command(args))
+            messages = tx.get("body", {}).get("messages", [])
+            gas = producer.uint(tx.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
+            if len(messages) != 1 or gas != expected_gas:
+                raise ValueError("generated native v3 open differs from ordered intent or gas")
+            message, wanted = messages[0], expected[index]
+            if (set(message) != {"@type", "creator", "deal_id", "generation", "range", "nonce", "deadline_height"} or
+                    message.get("@type") != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3" or
+                    message.get("creator") != wanted["creator"] or
+                    any(producer.uint(message.get(key, "")) != producer.uint(wanted[key])
+                        for key in ("deal_id", "generation", "nonce", "deadline_height")) or
+                    not isinstance(message.get("range"), dict) or
+                    set(message["range"]) != {"file_record_index", "file_start_offset", "file_length",
+                                              "range_start", "range_length"} or
+                    any(producer.uint(message["range"].get(key, "")) != producer.uint(wanted["range"][key])
+                        for key in message["range"])):
+                raise ValueError("generated native v3 open differs from ordered intent or gas")
+            generated.append(tx)
+            generated_gas += gas
+            output.write(json.dumps(tx, separators=(",", ":")) + "\n")
+    node = lifecycle.nodes[0]
+    common = ["--home", node["home"], "--node", f'http://127.0.0.1:{node["rpc"]}',
+              "--keyring-backend", "test", "--chain-id", lifecycle.chain]
+    command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append", "--from", owner,
+             *common, "--output-document", str(signed)])
+    value = json.loads(signed.read_text())
+    messages = [tx["body"]["messages"][0] for tx in generated]
+    signed_gas = producer.uint(value.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
+    expected_gas = OPEN_SESSION_BATCH_BASE_GAS + V3_CROSS_AUDIT_OPEN_GAS * len(paths)
+    signed_bytes = signed.stat().st_size
+    if (value.get("body", {}).get("messages") != messages or len(value.get("signatures", [])) != 1 or
+            generated_gas != expected_gas or signed_gas != expected_gas or
+            signed_gas > V3_CROSS_AUDIT_OPEN_BATCH_GAS_CAP or signed_bytes > 2 * 1024 * 1024):
+        raise ValueError("signed native v3 batch differs from ordered intent, gas, or byte cap")
+    job = dict(signer=owner, kind="open-session-v3-batch", timeout_seconds=60,
+               env={key: lifecycle.env[key] for key in ENV_KEYS if key in lifecycle.env},
+               _deadline_ns=lifecycle.deadline,
+               submit=[str(lifecycle.binary), "tx", "broadcast", str(signed), *common,
+                       "--broadcast-mode", "sync", "--output", "json"],
+               query=[str(lifecycle.binary), "query", "tx", "--home", node["home"],
+                      "--node", f'http://127.0.0.1:{node["rpc"]}', "--output", "json"])
+    result = artifact.scheduled_transaction(job)
+    evidence = dict(transaction=result, count=len(paths), generated_gas=generated_gas,
+                    signed_gas=signed_gas, signed_bytes=signed_bytes,
+                    signed_sha256=artifact.sha256(signed))
+    lifecycle.doc.setdefault("native_v3_open_batches", []).append(evidence)
+    lifecycle.doc.setdefault("preparation_transactions", []).append(result)
+    lifecycle.save()
+    if result.get("outcome") != "committed_success":
+        raise ValueError("atomic native v3 open failed or ambiguous; owner quarantined, no retry")
+    result["validators"] = verify_transaction_nodes(lifecycle, result)
+    validator_bytes = {producer.uint(row.get("bytes", 0)) for row in result["validators"]}
+    if (producer.uint(result.get("gas_wanted", 0)) != signed_gas or len(validator_bytes) != 1 or
+            not 1 <= next(iter(validator_bytes)) <= 2 * 1024 * 1024):
+        raise ValueError("committed native v3 batch differs from signed gas or byte bounds")
+    evidence["committed_bytes"] = next(iter(validator_bytes))
+    lifecycle.save()
+    return opened_v3_sessions(result, len(paths)), result["height"]
+
+
+def start_commit_streams(lifecycle, seconds, processes, *, stream_key="commit_streams",
+                         filename_prefix="commit"):
     """The caller owns every unreaped collector until group cleanup."""
-    rows = lifecycle.doc["commit_streams"] = []
+    rows = lifecycle.doc[stream_key] = []
     for node in lifecycle.nodes:
-        path = lifecycle.home / f'commit-{node["node_id"]}.jsonl'
+        path = lifecycle.home / f'{filename_prefix}-{node["node_id"]}.jsonl'
         log = path.with_suffix(".log")
         argv = [sys.executable, commit_metrics.__file__, f'http://127.0.0.1:{node["metrics"]}/metrics',
                 lifecycle.chain, "--stream-output", str(path), "--stream-seconds", str(seconds)]
@@ -2571,12 +2802,13 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_
         all_four_headers_agree=True, all_four_results_agree=True, qualification=False)
 
 
-def summarize_commit_streams(lifecycle, processes):
+def summarize_commit_streams(lifecycle, processes, *, stream_key="commit_streams",
+                             before_phase="sustained_before", after_phase="sustained_after"):
     """Filter raw observations strictly between the independently pinned fences."""
     phases = lifecycle.doc["commit_step_metrics"]["phases"]
-    before = {row["node_id"]: row["sample"] for row in phases["sustained_before"]["nodes"]}
-    after = {row["node_id"]: row["sample"] for row in phases["sustained_after"]["nodes"]}
-    rows = lifecycle.doc["commit_streams"]
+    before = {row["node_id"]: row["sample"] for row in phases[before_phase]["nodes"]}
+    after = {row["node_id"]: row["sample"] for row in phases[after_phase]["nodes"]}
+    rows = lifecycle.doc[stream_key]
     if len(rows) != 4 or len(processes) != 4 or set(before) != set(after) or {row["node_id"] for row in rows} != set(before):
         raise ValueError("four distinct Commit collectors and matching fences required")
     for row, process in zip(rows, processes):
@@ -2881,7 +3113,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         setup_transactions=[], providers=[],
         workload=("one 16 MiB FAT v3 K8 deal; eight sessions; 64 native proof transactions with untimed proof preparation"
                   if native_chain is not None else
-                  "one 16 MiB FAT v3 K8 deal; sixteen sessions; 128 production-route proof transactions across one normal audit anchor"
+                  "one 16 MiB FAT v3 K8 deal; 46 sessions; 368 production-route proof transactions across two normal audit anchors"
                   if native_cross_audit else
                   "one 16 MiB FAT v3 K8 deal; twelve production provider-daemons; two preopened native sessions"
                   if native_v3 else f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch"),
@@ -2944,8 +3176,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         require_retrieval_cli(lifecycle)
         if native_v3:
             require_v3_cli(lifecycle)
-        if sustained is not None and "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
-            raise ValueError("sustained workload requires SDK sign-batch --append")
+        if (sustained is not None or native_cross_audit) and \
+                "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
+            raise ValueError("batched session preparation requires SDK sign-batch --append")
         lifecycle.reserve_ports()
         for i in range(layout["assignments"]):
             reservation = socket.socket()
@@ -3149,7 +3382,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 doc["status"] = "native_v3_chain_diagnostic_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
-                                          curl=curl, audits=audits, epoch_length=epoch_length)
+                                          curl=curl, audits=audits, epoch_length=epoch_length, command=command)
                 doc["status"] = "native_v3_cross_audit_diagnostic_passed"
             else:
                 run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)
