@@ -16,7 +16,10 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-const integrityIndexColdBuildTimeoutV3 = 5 * time.Minute
+const (
+	integrityIndexColdBuildTimeoutV3 = 5 * time.Minute
+	retrievalV3DataRouteTimeout      = integrityIndexColdBuildTimeoutV3 + 30*time.Second
+)
 
 func acceptsRetrievalVersion(r *http.Request, version string) bool {
 	media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))

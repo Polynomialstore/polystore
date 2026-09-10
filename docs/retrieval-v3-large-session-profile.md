@@ -689,9 +689,9 @@ with shifted absolute MDU coordinates requires new leaf hashes, as specified
 above. This representation does not by itself qualify browser retrieval or
 full-byte delivery.
 
-## Provider and user-gateway data route
+## Provider-daemon and user-gateway data route
 
-The existing `GET /sp/retrieval/mdu/{polyfs_root}/{mdu_index}` provider route
+The existing `GET /sp/retrieval/mdu/{polyfs_root}/{mdu_index}` provider-daemon route
 serves a native v3 systematic-slot chunk when all of these fields are present:
 
 - `Accept: multipart/form-data; version=3`;
@@ -728,7 +728,7 @@ chunks, recomputes each coordinate-bound leaf, verifies every path against the
 frozen integrity root, and authenticates the FAT v3 metadata against the frozen
 PolyFS root before durable write, decode or ACK.
 
-Providers retain `integrity_index_v3.bin`, the complete duplicate-last internal
+Provider daemons retain `integrity_index_v3.bin`, the complete duplicate-last internal
 Merkle levels derived from `integrity_leaves_v3.bin`. Generation acceptance
 builds it with bounded memory before publishing the immutable generation.
 Previously accepted inactive generations may build the derived index once on
@@ -738,6 +738,12 @@ atomically published. A hot chunk reads only its path. The index is never an
 authority: each returned blob is rehashed and its path is checked against the
 frozen root before response headers are written.
 
+The future native-v3 browser client must keep a first cold user-gateway request
+alive for up to 5 minutes 30 seconds, including the provider-daemon's 5-minute
+index-build bound. Caller cancellation stops the synchronous build while its
+response-capacity admission and generation lease remain held. Warm requests use
+the hot path above.
+
 The bounded one-user-MDU benchmark
 `BenchmarkRetrievalDataV3Hot1MiB` (Linux amd64, 10 iterations) measured a
 565545 ns cold build and a 3088-byte index for 96 leaves. After warming, the
@@ -746,8 +752,8 @@ allocs/op. This small-fixture check covers index construction and the hot
 verification/allocation boundary; it is not a retrieval-throughput result.
 
 These routes remain unavailable on networks where retrieval v3 activation is
-zero. Browser client and EVM integration are still incomplete, so this provider
-slice alone does not satisfy the activation gate.
+zero. Browser client and EVM integration are still incomplete, so this
+provider-daemon slice alone does not satisfy the activation gate.
 
 The authenticated provider-daemon action is `POST /sp/generation-v3/accept`
 with `{"deal_id":0}` and the existing `X-PolyStore-Gateway-Auth` header. An

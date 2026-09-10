@@ -26,6 +26,12 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
+type retrievalV3DeadlineTransport func(*http.Request) (*http.Response, error)
+
+func (f retrievalV3DeadlineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
 func responseFromFrozenV3(f *frozenRetrievalSessionV3) types.QueryGetRetrievalSessionV3Response {
 	anchor := make([]byte, 32)
 	anchor[0] = 42
@@ -341,6 +347,7 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 		t.Fatal(err)
 	}
 	providerHits := 0
+	var proxyDeadlines []time.Duration
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		providerHits++
 		if r.Header.Get("X-PolyStore-Session-Id") != session || r.Header.Get("X-PolyStore-Slot") != strconv.FormatUint(uint64(obligation.Slot), 10) || r.URL.Query().Has("provider") || r.URL.Query().Has("deputy") {
@@ -350,6 +357,21 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 		_, _ = w.Write([]byte("verified provider response"))
 	}))
 	defer upstream.Close()
+	originalV3Client := routerRetrievalV3HTTPClient
+	v3Transport, ok := originalV3Client.Transport.(*http.Transport)
+	if !ok || v3Transport.ResponseHeaderTimeout != retrievalV3DataRouteTimeout {
+		t.Fatalf("v3 proxy response-header timeout does not cover the cold route: %#v", originalV3Client.Transport)
+	}
+	routerRetrievalV3HTTPClient = &http.Client{Transport: retrievalV3DeadlineTransport(func(r *http.Request) (*http.Response, error) {
+		deadline, ok := r.Context().Deadline()
+		if !ok {
+			t.Error("v3 proxy request has no deadline")
+		} else {
+			proxyDeadlines = append(proxyDeadlines, time.Until(deadline))
+		}
+		return originalV3Client.Transport.RoundTrip(r)
+	})}
+	t.Cleanup(func() { routerRetrievalV3HTTPClient = originalV3Client })
 	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/retrieval-sessions-v3/"):
@@ -374,15 +396,28 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 	providerBaseCache = sync.Map{}
 	providerBaseCache.Store(obligation.Payee, &providerBaseCacheEntry{baseURL: upstream.URL, expires: time.Now().Add(time.Hour)})
 	q := url.Values{"deal_id": {"0"}, "owner": {frozen.Session.Owner}, "provider": {frozen.Session.Owner}, "deputy": {"1"}}
-	r := httptest.NewRequest(http.MethodGet, "/gateway/mdu/"+root+"/"+strconv.FormatUint(chunk.mdu, 10)+"?"+q.Encode(), nil)
-	r = mux.SetURLVars(r, map[string]string{"cid": root, "index": strconv.FormatUint(chunk.mdu, 10)})
-	r.Header.Set("X-PolyStore-Session-Id", session)
-	r.Header.Set("Accept", "multipart/form-data; version=3")
-	r.Header.Set("X-PolyStore-Slot", strconv.FormatUint(uint64(obligation.Slot), 10))
+	request := func(ctx context.Context) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/gateway/mdu/"+root+"/"+strconv.FormatUint(chunk.mdu, 10)+"?"+q.Encode(), nil).WithContext(ctx)
+		r = mux.SetURLVars(r, map[string]string{"cid": root, "index": strconv.FormatUint(chunk.mdu, 10)})
+		r.Header.Set("X-PolyStore-Session-Id", session)
+		r.Header.Set("Accept", "multipart/form-data; version=3")
+		r.Header.Set("X-PolyStore-Slot", strconv.FormatUint(uint64(obligation.Slot), 10))
+		return r
+	}
 	w := httptest.NewRecorder()
-	RouterGatewayMdu(w, r)
-	if w.Code != http.StatusOK || w.Body.String() != "verified provider response" || providerHits != 1 {
-		t.Fatalf("v3 user-gateway routing failed: status=%d hits=%d body=%q", w.Code, providerHits, w.Body.String())
+	RouterGatewayMdu(w, request(context.Background()))
+	if w.Code != http.StatusOK || w.Body.String() != "verified provider response" {
+		t.Fatalf("v3 user-gateway routing failed: status=%d body=%q", w.Code, w.Body.String())
+	}
+	shortCtx, cancelShort := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShort()
+	w = httptest.NewRecorder()
+	RouterGatewayMdu(w, request(shortCtx))
+	if w.Code != http.StatusOK || w.Body.String() != "verified provider response" {
+		t.Fatalf("v3 user-gateway routing with caller deadline failed: status=%d body=%q", w.Code, w.Body.String())
+	}
+	if providerHits != 2 || len(proxyDeadlines) != 2 || proxyDeadlines[0] <= 60*time.Second || proxyDeadlines[0] > retrievalV3DataRouteTimeout || proxyDeadlines[1] <= 0 || proxyDeadlines[1] > 10*time.Second {
+		t.Fatalf("v3 proxy deadlines did not preserve route and caller bounds: hits=%d deadlines=%v", providerHits, proxyDeadlines)
 	}
 }
 
