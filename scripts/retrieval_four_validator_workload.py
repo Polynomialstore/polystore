@@ -3433,6 +3433,15 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
     return found
 
 
+def frozen_audit_quota(params, population, quota_bps):
+    quota = min(population, producer.uint(params["quota_max_blobs"]),
+                max(producer.uint(params["quota_min_blobs"]),
+                    (population * producer.uint(quota_bps) + 9999) // 10000))
+    if not 1 <= quota <= population:
+        raise ValueError("diagnostic requires a nonzero bounded frozen audit quota")
+    return quota
+
+
 def sustained_offsets(step_seconds, rate_scale=1):
     """Five fixed offered-rate steps with one bounded rate multiplier."""
     artifact.integer(step_seconds, "step seconds", 4, 180)
@@ -4110,13 +4119,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                           browser_payer=V3_BROWSER_PAYER if native_browser is not None else None)
         # Normal mint is retained for both explicit audit profiles.
         population = layout["openings_per_bundle"] * (v3_geometry["user_mdus"] if native_v3 else 1)
-        quotas = {min(population, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
-                      max(producer.uint(doc["frozen_module_params"]["quota_min_blobs"]),
-                          (population * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
-                  for key in ("quota_bps_per_epoch_hot", "quota_bps_per_epoch_cold")}
-        if len(quotas) != 1 or not 1 <= next(iter(quotas)) <= population:
-            raise ValueError(f"K{k} diagnostic requires an unambiguous nonzero frozen audit quota")
-        expected_samples = quotas.pop()
+        expected_samples = frozen_audit_quota(doc["frozen_module_params"], population,
+            doc["frozen_module_params"]["quota_bps_per_epoch_cold"])
         doc["audit_sampling_profile"] = dict(name=audit_profile, population_per_slot=population, samples_per_slot=expected_samples,
             samples_per_epoch=layout["assignments"] * expected_samples, qualification=False)
         genesis = json.loads((Path(lifecycle.nodes[0]["home"]) / "config/genesis.json").read_text())
@@ -4171,7 +4175,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                     break
                 except ValueError:
                     time.sleep(min(0.2, lifecycle.remaining()))
-        created = send("owner0", ["create-deal", "100000", "100000000", "10000000", "--service-hint", f"General:rs={k}+{layout['m']}"])
+        service_hint = f"General:rs={k}+{layout['m']}"
+        created = send("owner0", ["create-deal", "100000", "100000000", "10000000", "--service-hint", service_hint])
         wait(created["height"] + 1)
         owned = [d for d in lifecycle.query(lifecycle.nodes[0], API + "/deals", created["height"])["deals"]
                  if d["owner"] == lifecycle.signers["owner0"]]
@@ -4218,6 +4223,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         wait(height + 1)
         deal = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, height)["deal"]
         deal["id"] = identity
+        if deal.get("service_hint") != service_hint:
+            raise ValueError("committed deal differs from the fixed General audit policy")
         if producer.b64(deal["manifest_root"], 32).hex() != root[2:]:
             raise ValueError("committed root differs from ingest")
         if native_v3 and [producer.uint(deal.get(name, 0)) for name in

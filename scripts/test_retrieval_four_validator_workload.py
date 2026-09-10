@@ -2200,7 +2200,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
                     sustained=dict(exporter="/exporter", step_seconds=4, proof_gas=20000000, k=k,
                                    rate_scale=rate_scale, deputy_count=deputies), audit_profile="normal")
 
-    def fixture(self, *, complete=True, counts=None, k=2):
+    def fixture(self, *, complete=True, counts=None, k=2, user_mdus=1):
         layout = workload.mode2_layout(k)
         counts = (1, 9, 32) if counts is None and k == 2 else counts or (1,) * layout["assignments"]
         deal = dict(id="7", manifest_root=base64.b64encode(bytes([7]) * 32).decode(),
@@ -2210,12 +2210,12 @@ class HealthyAuditViewsTest(unittest.TestCase):
         for slot, count in enumerate(counts):
             accepted = count if complete else 0
             snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=k, m=layout["m"],
-                            slot=slot, metadata_mdus="2", user_mdus="1", deal_end="1000",
+                            slot=slot, metadata_mdus="2", user_mdus=str(user_mdus), deal_end="1000",
                             setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode())
             context = dict(version=2, chain_id="polystore_260-1", setup_digest=producer.SETUP_DIGEST,
                 kind=2, context_id="00"*32, deal_id=7, generation=1, root="07"*32,
                 assigned=producer.account(providers[slot]).hex(), payee=producer.account(providers[slot]).hex(),
-                layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2, user_mdus=1, start_mdu=0, start_leaf=0,
+                layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2, user_mdus=user_mdus, start_mdu=0, start_leaf=0,
                 blob_count=0, epoch_id=2, epoch_length=100, sample_count=count, snapshot_height=100,
                 anchor_height=101, first_response_height=102, deadline_height=200, deal_end=1000)
             values.append(dict(audit=dict(epoch_id="2", sample_count=str(count), accepted_count=str(accepted),
@@ -2236,6 +2236,18 @@ class HealthyAuditViewsTest(unittest.TestCase):
         values, deal, providers = self.fixture()
         with self.assertRaisesRegex(ValueError, "sample count"):
             workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=True, expected_samples=32)
+
+    def test_general_fixture_freezes_cold_quota_when_hot_and_cold_differ(self):
+        params = dict(quota_min_blobs="1", quota_max_blobs="64",
+                      quota_bps_per_epoch_hot="100", quota_bps_per_epoch_cold="50")
+        self.assertEqual(workload.frozen_audit_quota(params, 1064, params["quota_bps_per_epoch_cold"]), 6)
+        self.assertEqual(workload.frozen_audit_quota(params, 1064, params["quota_bps_per_epoch_hot"]), 11)
+        values, deal, providers = self.fixture(k=8, counts=(6,) * 12, user_mdus=133)
+        workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1",
+                                     finalized=True, expected_samples=6, k=8, user_mdus=133)
+        with self.assertRaisesRegex(ValueError, "sample count"):
+            workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1",
+                                         finalized=True, expected_samples=11, k=8, user_mdus=133)
 
     def test_k8_audit_uses_twelve_assignments_and_eight_row_population(self):
         values, deal, providers = self.fixture(k=8, counts=(8,) * 12)
