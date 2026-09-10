@@ -263,6 +263,7 @@ test.describe('native V3 browser qualification', () => {
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'start')).toBe(true)
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'end')).toBe(true)
       }
+      Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid })
       const paidTransactions = rawTransactions
       const cacheButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
       const [cachedDownload] = await Promise.all([
