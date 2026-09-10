@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,10 +46,20 @@ type inventoryExportItem struct {
 }
 
 type inventoryExportManifest struct {
-	ChainID        string                `json:"chain_id"`
-	TrustedSetup   string                `json:"trusted_setup"`
-	DeadlineUnixMS int64                 `json:"deadline_unix_ms"`
-	Sessions       []inventoryExportItem `json:"sessions"`
+	ChainID        string                  `json:"chain_id"`
+	TrustedSetup   string                  `json:"trusted_setup"`
+	DeadlineUnixMS int64                   `json:"deadline_unix_ms"`
+	Sessions       []inventoryExportItem   `json:"sessions,omitempty"`
+	V3Provider     string                  `json:"v3_provider,omitempty"`
+	V3Directory    string                  `json:"v3_artifact_directory,omitempty"`
+	V3Sessions     []inventoryV3ExportItem `json:"v3_sessions,omitempty"`
+}
+
+type inventoryV3ExportItem struct {
+	OutputPath string          `json:"output_path"`
+	SessionID  string          `json:"session_id"`
+	Height     uint64          `json:"height"`
+	View       json.RawMessage `json:"view"`
 }
 
 type inventoryExportResult struct {
@@ -59,6 +70,17 @@ type inventoryExportResult struct {
 	Seed         string  `json:"seed"`
 	WindowSHA256 string  `json:"window_sha256"`
 	GenerationMS float64 `json:"generation_ms"`
+}
+
+type inventoryV3ExportResult struct {
+	SessionID     string   `json:"session_id"`
+	MessagePath   string   `json:"message_path"`
+	MessageSHA256 string   `json:"message_sha256"`
+	ContextHash   string   `json:"context_hash"`
+	Seed          string   `json:"seed"`
+	Slot          uint32   `json:"slot"`
+	Ordinals      []uint64 `json:"ordinals"`
+	GenerationMS  float64  `json:"generation_ms"`
 }
 
 func freezeInventoryExport(item inventoryExportItem) (*frozenRetrievalSession, error) {
@@ -93,6 +115,69 @@ func writeInventoryExclusive(path string, value any) error {
 	if err != nil {
 		return err
 	}
+	return writeInventoryBytesExclusive(path, data)
+}
+
+func freezeInventoryV3Export(item inventoryV3ExportItem) (*frozenRetrievalSessionV3, error) {
+	if len(item.View) > maxSessionQueryBytes {
+		return nil, fmt.Errorf("oversized v3 session view")
+	}
+	var view types.QueryGetRetrievalSessionV3Response
+	if err := jsonpb.Unmarshal(bytes.NewReader(item.View), &view); err != nil {
+		return nil, err
+	}
+	f, err := freezeRetrievalSessionV3Response(&view, item.Height)
+	if err != nil {
+		return nil, err
+	}
+	if item.SessionID != hex.EncodeToString(f.Context.SessionID[:]) {
+		return nil, fmt.Errorf("wrong v3 session identity")
+	}
+	return f, nil
+}
+
+func exportInventoryV3(ctx context.Context, manifest inventoryExportManifest) ([]inventoryV3ExportResult, error) {
+	if manifest.V3Provider == "" || !filepath.IsAbs(manifest.V3Directory) || len(manifest.V3Sessions) < 1 || len(manifest.V3Sessions) > 8 || len(manifest.Sessions) != 0 {
+		return nil, fmt.Errorf("invalid bounded v3 inventory")
+	}
+	seen := map[string]bool{}
+	results := make([]inventoryV3ExportResult, 0, len(manifest.V3Sessions))
+	for _, item := range manifest.V3Sessions {
+		if ctx.Err() != nil || !filepath.IsAbs(item.OutputPath) || seen[item.SessionID] || seen[item.OutputPath] {
+			return nil, fmt.Errorf("invalid or duplicate v3 inventory identity/path")
+		}
+		seen[item.SessionID], seen[item.OutputPath] = true, true
+		f, err := freezeInventoryV3Export(item)
+		if err != nil {
+			return nil, err
+		}
+		started := time.Now()
+		slot, proofs, remaining, err := buildProviderProofBatchV3FromDirectory(ctx, f, manifest.V3Provider, manifest.V3Directory)
+		if err != nil {
+			return nil, err
+		}
+		if len(proofs) == 0 || remaining != 0 {
+			return nil, fmt.Errorf("incomplete v3 proof batch")
+		}
+		message := types.MsgSubmitRetrievalSessionProofV3{Creator: manifest.V3Provider, SessionId: f.Context.SessionID[:], Slot: slot, Proofs: proofs}
+		var encoded bytes.Buffer
+		if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(&encoded, &message); err != nil {
+			return nil, err
+		}
+		if err := writeInventoryBytesExclusive(item.OutputPath, encoded.Bytes()); err != nil {
+			return nil, err
+		}
+		digest := sha256.Sum256(encoded.Bytes())
+		ordinals := make([]uint64, len(proofs))
+		for i := range proofs {
+			ordinals[i] = proofs[i].Ordinal
+		}
+		results = append(results, inventoryV3ExportResult{item.SessionID, item.OutputPath, hex.EncodeToString(digest[:]), hex.EncodeToString(f.Hash[:]), hex.EncodeToString(f.Seed[:]), slot, ordinals, float64(time.Since(started)) / float64(time.Millisecond)})
+	}
+	return results, nil
+}
+
+func writeInventoryBytesExclusive(path string, data []byte) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
@@ -136,7 +221,7 @@ func TestExportFrozenRetrievalInventory(t *testing.T) {
 		t.Fatal("trailing manifest data")
 	}
 	deadline := time.UnixMilli(manifest.DeadlineUnixMS)
-	if len(manifest.Sessions) < 1 || len(manifest.Sessions) > 1700 || !deadline.After(time.Now()) || time.Until(deadline) > 2*time.Hour || !filepath.IsAbs(manifest.TrustedSetup) || manifest.ChainID == "" {
+	if (len(manifest.Sessions) < 1 && len(manifest.V3Sessions) < 1) || len(manifest.Sessions) > 1700 || !deadline.After(time.Now()) || time.Until(deadline) > 2*time.Hour || !filepath.IsAbs(manifest.TrustedSetup) || manifest.ChainID == "" {
 		t.Fatal("invalid bounded inventory")
 	}
 	previousChain := chainID
@@ -147,6 +232,18 @@ func TestExportFrozenRetrievalInventory(t *testing.T) {
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
+	if len(manifest.V3Sessions) != 0 {
+		results, err := exportInventoryV3(ctx, manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writeInventoryExclusive(manifestPath+".result.json", struct {
+			Messages []inventoryV3ExportResult `json:"messages"`
+		}{results}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 	seen := map[string]bool{}
 	results := make([]inventoryExportResult, 0, len(manifest.Sessions))
 	for _, item := range manifest.Sessions {
@@ -232,5 +329,43 @@ func TestInventoryExportRejectsChangedAuthorityAndOverwrite(t *testing.T) {
 	raw, err := os.ReadFile(path)
 	if err != nil || string(raw) != `"first"` {
 		t.Fatal("changed retained proof")
+	}
+}
+
+func TestInventoryV3ExportFreezesExactSessionAuthority(t *testing.T) {
+	r, height := frozenSessionV3Fixture(t, 1<<20, 1)
+	var encoded bytes.Buffer
+	if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(&encoded, r); err != nil {
+		t.Fatal(err)
+	}
+	item := inventoryV3ExportItem{SessionID: hex.EncodeToString(r.Session.SessionId), Height: height, View: encoded.Bytes()}
+	frozen, err := freezeInventoryV3Export(item)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frozen.Session.Obligations[0].Slot != 0 || frozen.Challenges[0].Ordinal != 0 {
+		t.Fatal("fixture did not retain zero-valued slot and ordinal authority")
+	}
+	for _, change := range []func(*inventoryV3ExportItem){
+		func(i *inventoryV3ExportItem) { i.SessionID = strings.Repeat("00", 32) },
+		func(i *inventoryV3ExportItem) { i.Height = 1 },
+		func(i *inventoryV3ExportItem) {
+			var changed types.QueryGetRetrievalSessionV3Response
+			if err := jsonpb.Unmarshal(bytes.NewReader(i.View), &changed); err != nil {
+				t.Fatal(err)
+			}
+			changed.Session.ContextHash[0] ^= 1
+			var raw bytes.Buffer
+			if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(&raw, &changed); err != nil {
+				t.Fatal(err)
+			}
+			i.View = raw.Bytes()
+		},
+	} {
+		bad := item
+		change(&bad)
+		if _, err := freezeInventoryV3Export(bad); err == nil {
+			t.Fatal("accepted altered v3 export authority")
+		}
 	}
 }

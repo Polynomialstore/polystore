@@ -1484,23 +1484,64 @@ class FourValidatorLifecycle:
         headers = {} if height is None else {"x-cosmos-block-height": str(height)}
         port = node["rpc"] if height is None else node["api"]
         request = urllib.request.Request(f"http://127.0.0.1:{port}{route}", headers=headers)
-        with urllib.request.urlopen(request, timeout=self.remaining()) as response:
+        future_height = {"code": 2, "message": "codespace sdk code 26: invalid height: cannot query with height in the future; please provide a valid height", "details": []}
+        retry_until = None
+        future_detail = None
+
+        def read(response, deadline=None):
             body = bytearray()
             while len(body) <= MAX_COMMAND_OUTPUT_BYTES:
+                if deadline is not None and monotonic_ns() >= deadline:
+                    raise TimeoutError("node query future-height retry deadline exceeded")
                 self.remaining()
-                chunk = response.read1(min(65536, MAX_COMMAND_OUTPUT_BYTES - len(body) + 1))
+                reader = getattr(response, "read1", response.read)
+                chunk = reader(min(65536, MAX_COMMAND_OUTPUT_BYTES - len(body) + 1))
                 if not chunk:
                     break
                 body.extend(chunk)
+            if deadline is not None and monotonic_ns() >= deadline:
+                raise TimeoutError("node query future-height retry deadline exceeded")
             self.remaining()
-            if response.status != 200 or len(body) > MAX_COMMAND_OUTPUT_BYTES:
-                raise ValueError("invalid or oversized node response")
-            if height is not None and response.headers.get("x-cosmos-block-height") != str(height):
-                raise ValueError("economic response does not attest the requested height")
-        value = json.loads(body)
-        if not isinstance(value, dict) or not value or value.get("error"):
-            raise ValueError("malformed node response")
-        return value if height is not None else value["result"]
+            return bytes(body)
+
+        while True:
+            timeout = self.remaining()
+            if retry_until is not None:
+                retry_remaining = (retry_until - monotonic_ns()) / 1e9
+                if retry_remaining <= 0:
+                    raise ValueError("node query HTTP 500: " + future_detail)
+                timeout = min(timeout, retry_remaining)
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    body = read(response, retry_until)
+                    if response.status != 200 or len(body) > MAX_COMMAND_OUTPUT_BYTES:
+                        raise ValueError("invalid or oversized node response")
+                    if height is not None and response.headers.get("x-cosmos-block-height") != str(height):
+                        raise ValueError("economic response does not attest the requested height")
+            except urllib.error.HTTPError as error:
+                try:
+                    body = read(error, retry_until)
+                finally:
+                    error.close()
+                try:
+                    value = json.loads(body)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    value = None
+                detail = body[-8192:].decode(errors="replace")
+                if height is not None and error.code == 500 and value == future_height:
+                    future_detail = detail
+                    retry_until = retry_until or min(self.deadline, monotonic_ns() + 5 * 10**9)
+                    if monotonic_ns() < retry_until:
+                        time.sleep(min(0.05, (retry_until - monotonic_ns()) / 1e9))
+                        continue
+                raise ValueError(f"node query HTTP {error.code}: {detail}") from error
+            try:
+                value = json.loads(body)
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError("malformed node response: " + body[-8192:].decode(errors="replace")) from error
+            if not isinstance(value, dict) or not value or value.get("error"):
+                raise ValueError("malformed node response: " + body[-8192:].decode(errors="replace"))
+            return value if height is not None else value["result"]
 
     def wait_height(self, minimum):
         while True:

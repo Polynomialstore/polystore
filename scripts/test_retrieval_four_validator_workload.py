@@ -2,6 +2,7 @@
 import base64
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import sqlite3
@@ -9,6 +10,7 @@ import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
+import urllib.error
 from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
@@ -71,6 +73,49 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    FUTURE_HEIGHT = json.dumps({"code": 2, "message": "codespace sdk code 26: invalid height: cannot query with height in the future; please provide a valid height", "details": []}).encode()
+
+    @staticmethod
+    def query_response(value, height="7"):
+        response = io.BytesIO(json.dumps(value).encode())
+        response.status = 200
+        response.headers = {"x-cosmos-block-height": height}
+        return response
+
+    @classmethod
+    def query_error(cls, body=None):
+        return urllib.error.HTTPError("http://node/query", 500, "Internal Server Error", {}, io.BytesIO(body or cls.FUTURE_HEIGHT))
+
+    def query_lifecycle(self):
+        lifecycle = object.__new__(artifact.FourValidatorLifecycle)
+        lifecycle.deadline = 100 * 10**9
+        lifecycle.remaining = Mock(return_value=30)
+        return lifecycle
+
+    def test_fixed_height_query_retries_only_future_height_error(self):
+        lifecycle = self.query_lifecycle()
+        delayed = [self.query_error(), self.query_response({"session": {"id": "ready"}})]
+        with patch.object(artifact.urllib.request, "urlopen", side_effect=delayed) as opened, \
+                patch.object(artifact, "monotonic_ns", return_value=0), patch.object(artifact.time, "sleep") as sleep:
+            self.assertEqual(lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7), {"session": {"id": "ready"}})
+        self.assertEqual(opened.call_count, 2)
+        self.assertEqual(opened.call_args_list[1].kwargs["timeout"], 5)
+        sleep.assert_called_once()
+
+        for body in (b'{"code":2,"message":"other","details":[]}', b"not-json"):
+            with self.subTest(body=body), patch.object(artifact.urllib.request, "urlopen", side_effect=[self.query_error(body)]) as opened:
+                with self.assertRaisesRegex(ValueError, "node query HTTP 500"):
+                    lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
+                opened.assert_called_once()
+
+    def test_fixed_height_query_future_height_retry_is_bounded(self):
+        lifecycle = self.query_lifecycle()
+        with patch.object(artifact.urllib.request, "urlopen", side_effect=[self.query_error()]) as opened, \
+                patch.object(artifact, "monotonic_ns", side_effect=[0, 5 * 10**9]):
+            with self.assertRaisesRegex(ValueError, "invalid height: cannot query with height in the future"):
+                lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
+        opened.assert_called_once()
+
     def test_transaction_verification_uses_fenced_blocks_not_tx_indexes(self):
         raw = b"signed transaction"
         txhash = hashlib.sha256(raw).hexdigest().upper()
@@ -651,9 +696,166 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertNotIn("", argv)
             self.assertEqual(argv[argv.index("--previous-polyfs-root") + 1], "0x")
 
+    def test_native_chain_fixed_profile_proc_accounting_and_identity(self):
+        offsets = workload.native_v3_chain_offsets()
+        self.assertEqual((len(offsets), offsets[:2], offsets[7:10], offsets[-1]),
+                         (56, [0, 10**9], [7*10**9, 8*10**9, 8_500_000_000], 23_750_000_000))
+        fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 4
+        fields[11], fields[12] = "101", "17"
+        parsed = workload.parse_proc_stat("42 (validator worker) name) " + " ".join(fields), expected_pid=42)
+        self.assertEqual(parsed, dict(pid=42, user_ticks=101, system_ticks=17, starttime_ticks=999))
+        with self.assertRaises(ValueError):
+            workload.parse_proc_stat("42 (validator) " + " ".join(fields), expected_pid=43)
+        before = dict(monotonic_ns=10, clock_ticks_per_second=100,
+                      validators=[dict(node_id="n", pid=42, starttime_ticks=999, user_ticks=101, system_ticks=17)])
+        after = copy.deepcopy(before)
+        after.update(monotonic_ns=20)
+        after["validators"][0].update(user_ticks=121, system_ticks=22)
+        delta = workload.validator_cpu_delta(before, after)
+        self.assertEqual((delta["validators"][0]["user_cpu_seconds"], delta["validators"][0]["system_cpu_seconds"]), (.2, .05))
+        after["validators"][0]["starttime_ticks"] += 1
+        with self.assertRaisesRegex(ValueError, "identity"):
+            workload.validator_cpu_delta(before, after)
+        after = copy.deepcopy(before)
+        after.update(monotonic_ns=20)
+        after["validators"][0]["user_ticks"] -= 1
+        with self.assertRaisesRegex(ValueError, "backwards"):
+            workload.validator_cpu_delta(before, after)
+
+    def test_native_chain_summary_excludes_warmup_from_measured_counts(self):
+        sessions = [dict(accepted_sample_ordinals=[0, 1]),
+                    dict(accepted_sample_ordinals=[2, 3, 4])]
+        messages = [dict(id="warmup", session_index=0, ordinals=[0, 1]),
+                    dict(id="measured", session_index=1, ordinals=[2, 3, 4])]
+        summary = workload.native_v3_chain_committed_summary(
+            sessions, messages, [dict(id="warmup")], [dict(id="measured")])
+        self.assertEqual(summary, dict(total_committed_valid_proof_transactions=2,
+            measured_committed_valid_proof_transactions=1,
+            total_authoritative_new_sample_ordinals=5,
+            measured_authoritative_new_sample_ordinals=3))
+        with self.assertRaisesRegex(ValueError, "messages differ"):
+            workload.native_v3_chain_committed_summary(
+                sessions, messages, [dict(id="warmup")], [dict(id="other")])
+
+    def test_native_chain_inventory_assembles_all_exported_provider_messages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+            sessions = []
+            for index in range(8):
+                sessions.append(dict(session_id=f"{index + 1:064x}", evidence_height=70,
+                    before_proofs={}, context_hash=f"{index + 9:064x}", seed=f"{index + 17:064x}"))
+            directories = {}
+            for provider in providers.values():
+                directories[provider] = home / provider
+                directories[provider].mkdir()
+            lifecycle = SimpleNamespace(home=home, chain="polystore_290-1",
+                env={"POLYSTORE_TRUSTED_SETUP": "/setup"},
+                deadline=artifact.monotonic_ns() + 30 * 10**9)
+
+            def export(argv, deadline, env):
+                manifest_path = Path(env["POLYSTORE_RETRIEVAL_EXPORT_MANIFEST"])
+                manifest = json.loads(manifest_path.read_text())
+                provider = manifest["v3_provider"]
+                slot = next(index for index, address in providers.items() if address == provider)
+                rows = []
+                for index, request in enumerate(manifest["v3_sessions"]):
+                    message_path = Path(request["output_path"])
+                    message = dict(creator=provider,
+                        session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
+                        slot=str(slot), proofs=[dict(ordinal=str(slot))])
+                    raw = json.dumps(message, separators=(",", ":")).encode()
+                    message_path.write_bytes(raw)
+                    rows.append(dict(session_id=request["session_id"], message_path=str(message_path),
+                        message_sha256=hashlib.sha256(raw).hexdigest(),
+                        context_hash=sessions[index]["context_hash"], seed=sessions[index]["seed"],
+                        slot=slot, ordinals=[slot], generation_ms=1.0))
+                Path(str(manifest_path) + ".result.json").write_text(json.dumps({"messages": rows}))
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch.object(artifact, "run_bounded_command", side_effect=export):
+                inventory = workload.export_native_v3_chain_inventory(
+                    lifecycle, Path("/exporter"), sessions, providers, directories)
+            self.assertEqual(len(inventory["manifests"]), 8)
+            self.assertEqual(len(inventory["messages"]), 64)
+            self.assertEqual([(row["session_index"], row["slot"]) for row in inventory["messages"]],
+                             [(session, slot) for session in range(8) for slot in range(8)])
+            self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
+                             list(providers.values()))
+
+    def test_native_chain_exporter_identity_records_exact_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exporter = Path(tmp) / "exporter"
+            exporter.write_bytes(b"native-v3-exporter")
+            exporter.chmod(0o700)
+            resolved, identity = workload.native_v3_chain_exporter_identity(exporter)
+            self.assertEqual(resolved, exporter.resolve())
+            self.assertEqual(identity, dict(native_chain_exporter=str(exporter.resolve()),
+                native_chain_exporter_sha256=hashlib.sha256(exporter.read_bytes()).hexdigest()))
+
+    def test_generate_only_preflight_pins_exact_default_emitting_message_and_explicit_gas(self):
+        message = dict(creator=AUDIT_ADDRESSES[0], session_id=base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                       slot=0, proofs=[dict(ordinal="0", proof=dict(mdu_index="0", blob_index="0"))])
+        unsigned = dict(body=dict(messages=[dict(**{"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"}, **message)]),
+                        auth_info=dict(fee=dict(gas_limit="13530000")))
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1", deadline=10**18,
+            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"},
+            signers={"provider0": AUDIT_ADDRESSES[0]})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "message.json"
+            path.write_text(json.dumps(message))
+            result = SimpleNamespace(returncode=0, stdout=json.dumps(unsigned), stderr="")
+            with patch.object(artifact, "run_bounded_command", return_value=result) as run:
+                job, evidence = workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
+            diagnostic = json.loads(Path(evidence["simulation_diagnostic"]).read_text())
+            self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (0, "provider0"))
+            self.assertEqual(evidence["gas_limit"], 13_530_000)
+            self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
+            self.assertEqual(run.call_args.args[0][-1], "--generate-only")
+            self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--from") + 1], "provider0")
+            self.assertEqual(job["submit"][job["submit"].index("--from") + 1], AUDIT_ADDRESSES[0])
+            changed = copy.deepcopy(unsigned)
+            changed["body"]["messages"][0]["slot"] = 1
+            changed_path = Path(tmp) / "changed.json"
+            changed_path.write_text(json.dumps(message))
+            with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                    returncode=0, stdout=json.dumps(changed), stderr="")), self.assertRaisesRegex(ValueError, "differs"):
+                workload.v3_generate_only_gas(life, changed_path, AUDIT_ADDRESSES[0])
+
+            failed_path = Path(tmp) / "failed.json"
+            failed_path.write_text(json.dumps(message))
+            failed = SimpleNamespace(returncode=1, stdout="partial output", stderr="simulation rejected")
+            with patch.object(artifact, "run_bounded_command", return_value=failed), \
+                 self.assertRaisesRegex(ValueError, "bounded v3 gas simulation failed"):
+                workload.v3_generate_only_gas(life, failed_path, AUDIT_ADDRESSES[0])
+            diagnostic = json.loads(Path(str(failed_path) + ".gas-simulation.json").read_text())
+            self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (1, "provider0"))
+            self.assertEqual(diagnostic["stdout_tail"], "partial output")
+            self.assertEqual(diagnostic["stderr_tail"], "simulation rejected")
+            self.assertEqual(diagnostic["stdout_bytes"], len(b"partial output"))
+            self.assertEqual(diagnostic["stderr_bytes"], len(b"simulation rejected"))
+
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_chain_cli_requires_exporter_and_fixed_profile(self):
+        common = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli",
+                    "--product-source", "/source", "--proof-exporter", "/exporter"]
+        for extra in ([], required + ["--proof-gas", "100"], required + ["--audit-profile", "c6"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit):
+                    workload.main()
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_chain=dict(exporter="/exporter"), audit_profile="normal")
+
     def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]
