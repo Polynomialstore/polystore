@@ -8,6 +8,8 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 import urllib.error
@@ -722,6 +724,153 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "backwards"):
             workload.validator_cpu_delta(before, after)
 
+    def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
+        profile = workload.native_v3_cross_audit_schedule()
+        self.assertEqual((len(profile), profile[0], profile[-1]), (120,
+            dict(index=0, session_index=1, slot=0, offered_offset_ns=0),
+            dict(index=119, session_index=15, slot=7, offered_offset_ns=59_500_000_000)))
+        self.assertEqual({slot: sum(row["slot"] == slot for row in profile) for slot in range(8)},
+                         {slot: 15 for slot in range(8)})
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            lock, active, maxima = threading.Lock(), {}, {}
+            requests = []
+            for index in range(8):
+                provider = f"provider-{index % 2}"
+                requests.append(dict(id=f"r{index}", provider=provider,
+                    offered_offset_ns=0, url=f"http://provider/{provider}/{index}", body={}))
+            def run(argv, deadline, env):
+                provider = argv[-1].split("/")[-2]
+                with lock:
+                    active[provider] = active.get(provider, 0) + 1
+                    maxima[provider] = max(maxima.get(provider, 0), active[provider])
+                time.sleep(.005)
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                with lock:
+                    active[provider] -= 1
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                rows = workload.run_v3_http_schedule(lifecycle, "/curl", requests, "fixed-schedule")
+            self.assertEqual([row["request_id"] for row in rows], [f"r{i}" for i in range(8)])
+            self.assertEqual(maxima, {"provider-0": 1, "provider-1": 1})
+            summary = lifecycle.doc["v3_http_schedules"]["fixed-schedule"]
+            self.assertEqual((summary["offered"], summary["completed"], summary["queued"], summary["in_flight"]),
+                             (8, 8, 0, 0))
+
+    def test_cross_audit_scheduler_retries_only_exact_busy_and_retains_drained_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(id=f"r{index}", provider=f"provider-{index}", offered_offset_ns=0,
+                             url=f"http://provider/{index}", body={}) for index in range(2)]
+            calls = {}
+            def busy_then_success(argv, deadline, env):
+                index = int(argv[-1].rsplit("/", 1)[-1])
+                calls[index] = calls.get(index, 0) + 1
+                if index == 0 and calls[index] == 1:
+                    body, status = ({"error": "retrieval submission busy",
+                        "hint": "retrieval submission capacity or signer busy"}, 429)
+                else:
+                    body, status = ({"status": "success"}, 200)
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=busy_then_success), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                rows = workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-busy")
+            self.assertEqual((calls, len(rows), len(lifecycle.doc["v3_http_phases"]["scheduled-busy"])),
+                             ({0: 2, 1: 1}, 2, 3))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            def one_failure(argv, deadline, env):
+                index = int(argv[-1].rsplit("/", 1)[-1])
+                path = Path(argv[argv.index("--output") + 1])
+                if index == 0:
+                    path.write_text("{")
+                else:
+                    path.write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=one_failure), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 self.assertRaises(ValueError):
+                workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-failure")
+            retained = lifecycle.doc["v3_http_phases"]["scheduled-failure"]
+            self.assertEqual({row.get("status") for row in retained}, {"driver_error", "success"})
+            self.assertIn("Expecting property name", lifecycle.doc["v3_http_schedules"]["scheduled-failure"]["terminal_error"])
+
+    def test_cross_audit_scheduler_enforces_shared_offer_and_drain_deadline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            request = dict(id="deadline", provider="provider", offered_offset_ns=0,
+                           url="http://provider/0", body={})
+            def run(argv, deadline, env):
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload, "V3_CROSS_AUDIT_OFFER_SECONDS", 0), \
+                 patch.object(workload, "V3_CROSS_AUDIT_DRAIN_SECONDS", 0), \
+                 self.assertRaisesRegex(TimeoutError, "fixed offer and drain cap"):
+                workload.run_v3_http_schedule(lifecycle, "/curl", [request], "scheduled-deadline")
+            self.assertEqual(lifecycle.doc["v3_http_schedules"]["scheduled-deadline"]["completed"], 1)
+
+    def test_cross_audit_sequence_reconciliation_counts_measured_proofs_and_audits(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        before = {address: dict(account_number=slot, sequence=10) for slot, address in providers.items()}
+        views = {slot: {"audit": {"sample_count": "8", "accepted_count": "8"}}
+                 for slot in providers}
+        proofs = []
+        for slot in range(8):
+            for index in range(15):
+                proofs.append(dict(txhash=f"{slot * 15 + index + 1:064X}", provider=providers[slot],
+                                   outcome="committed_success"))
+        audit_transactions = []
+        for slot, provider in providers.items():
+            for index in range(8):
+                audit_transactions.append(dict(txhash=f"{1000 + slot * 8 + index:064X}", provider=provider,
+                                               code=0))
+        after = copy.deepcopy(before)
+        for slot, address in providers.items():
+            after[address]["sequence"] += 8 + (15 if slot < 8 else 0)
+        rows = workload.reconcile_cross_audit_sequences(
+            before, after, providers, proofs, audit_transactions, views)
+        self.assertEqual([(row["proof_transactions"], row["audit_transactions"], row["actual_delta"])
+                          for row in rows], [(15, 8, 23)] * 8 + [(0, 8, 8)] * 4)
+        after[providers[9]]["sequence"] += 1
+        with self.assertRaisesRegex(ValueError, "outside unique workload and audit"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs, audit_transactions, views)
+        after[providers[9]]["sequence"] -= 1
+        with self.assertRaisesRegex(ValueError, "not unique"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs + [proofs[0]], audit_transactions, views)
+        with self.assertRaisesRegex(ValueError, "bitmap does not equal"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs, audit_transactions[:-1], views)
+
+    def test_cross_audit_transaction_classification_binds_committed_system_proof(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        txhash = "A" * 64
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgProveLiveness",
+                   "creator": providers[3], "deal_id": "7", "epoch_id": "4",
+                   "system_proof": {"mdu_index": "2"}}
+        decoded = dict(txhash=txhash, height="301", tx={"body": {"messages": [message]}})
+        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}],
+                                    cli=Mock(return_value=json.dumps(decoded)))
+        transaction = dict(txhash=txhash, height=301, code=0, gas_wanted=10, gas_used=9)
+        row = workload.classify_cross_audit_transaction(lifecycle, transaction, providers, "7", 4)
+        self.assertEqual((row["provider"], row["slot"], row["txhash"]),
+                         (providers[3], 3, txhash))
+        message["session_proof"] = {}
+        lifecycle.cli.return_value = json.dumps(decoded)
+        with self.assertRaisesRegex(ValueError, "not a successful"):
+            workload.classify_cross_audit_transaction(lifecycle, transaction, providers, "7", 4)
+
     def test_native_chain_summary_excludes_warmup_from_measured_counts(self):
         sessions = [dict(accepted_sample_ordinals=[0, 1]),
                     dict(accepted_sample_ordinals=[2, 3, 4])]
@@ -838,6 +987,25 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_cross_audit_cli_is_fixed_bounded_and_normal_audit_only(self):
+        common = ["diagnostic", "--mode", "native-v3-providers-cross-audit", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra in ([], required + ["--timeout", "901"], required + ["--audit-profile", "c6"],
+                      required + ["--proof-only"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit) as error:
+                    workload.main()
+                self.assertEqual(error.exception.code, 2)
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required + ["--timeout", "900"]), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_cross_audit=True, audit_profile="normal")
+
     def test_native_v3_chain_cli_requires_exporter_and_fixed_profile(self):
         common = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]

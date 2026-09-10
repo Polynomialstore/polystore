@@ -53,6 +53,11 @@ V3_CHAIN_SESSIONS = 8
 V3_CHAIN_WARMUPS = 8
 V3_CHAIN_MEASURED = 56
 V3_CHAIN_MEASURED_CAP_SECONDS = 45
+V3_CROSS_AUDIT_SESSIONS = 16
+V3_CROSS_AUDIT_WARMUPS = 8
+V3_CROSS_AUDIT_MEASURED = 120
+V3_CROSS_AUDIT_OFFER_SECONDS = 60
+V3_CROSS_AUDIT_DRAIN_SECONDS = 30
 
 
 def native_v3_chain_offsets():
@@ -60,6 +65,16 @@ def native_v3_chain_offsets():
     return ([i * 10**9 for i in range(8)] +
             [8 * 10**9 + i * 500_000_000 for i in range(16)] +
             [16 * 10**9 + i * 250_000_000 for i in range(32)])
+
+
+def native_v3_cross_audit_schedule():
+    """Fifteen sessions by eight providers, offered round-robin at 2 tx/s."""
+    rows = []
+    for index in range(V3_CROSS_AUDIT_MEASURED):
+        rows.append(dict(index=index, session_index=1 + index // V3_SYSTEMATIC_PROVIDERS,
+                         slot=index % V3_SYSTEMATIC_PROVIDERS,
+                         offered_offset_ns=index * 500_000_000))
+    return rows
 
 
 def parse_proc_stat(raw, *, expected_pid=None):
@@ -280,6 +295,64 @@ def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
     return raw[sid_offset:sid_offset + 32].hex()
 
 
+def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
+                         phase_deadline, retry_pre_admission_busy):
+    """Run one provider request with the production route's exact safe-busy retry."""
+    attempts = []
+    limit = V3_BUSY_MAX_ATTEMPTS if retry_pre_admission_busy else 1
+    offered_ns = request.get("offered_ns")
+    for attempt in range(1, limit + 1):
+        if attempt > 1:
+            if artifact.monotonic_ns() + V3_BUSY_RETRY_SECONDS * 10**9 >= phase_deadline:
+                break
+            time.sleep(V3_BUSY_RETRY_SECONDS)
+        path = directory / f"{phase}-{index}-{attempt}.json"
+        began = artifact.monotonic_ns()
+        request_deadline = min(phase_deadline,
+                               began + request.get("timeout_seconds", 180) * 10**9)
+        try:
+            result = artifact.run_bounded_command([
+                curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
+                "--request", "POST", "--header", "Content-Type: application/json",
+                "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
+                "--data", json.dumps(request["body"], separators=(",", ":")),
+                "--max-filesize", str(1024 * 1024), "--output", str(path),
+                "--write-out", "%{http_code}", request["url"],
+            ], request_deadline, env=lifecycle.env)
+            with path.open("rb") as source:
+                raw = source.read(1024 * 1024 + 1)
+            if len(raw) > 1024 * 1024:
+                raise ValueError("v3 HTTP response exceeds 1 MiB")
+            body = json.loads(raw)
+            if not isinstance(body, dict):
+                raise ValueError("v3 HTTP response must be a JSON object")
+            try:
+                code = producer.uint(result.stdout.strip())
+            except ValueError as error:
+                raise ValueError("v3 HTTP request did not return a status code") from error
+            row = dict(body, http_status=code, provider=request["provider"], attempt=attempt,
+                       request_index=index, request_id=request.get("id"), offered_ns=offered_ns,
+                       request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
+                       stderr=result.stderr[-8192:], curl_returncode=result.returncode)
+            attempts.append(row)
+            if result.returncode != 0:
+                return attempts, ValueError(
+                    f"v3 HTTP request for provider {request['provider']!r} exited {result.returncode}")
+            busy = (code == 429 and set(body) == {"error", "hint"} and
+                    body.get("error") == "retrieval submission busy" and
+                    body.get("hint") == "retrieval submission capacity or signer busy")
+            if not retry_pre_admission_busy or not busy:
+                return attempts, None
+        except BaseException as error:
+            attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
+                                 request_index=index, request_id=request.get("id"), offered_ns=offered_ns,
+                                 error=str(error)[-8192:], request_finished_ns=artifact.monotonic_ns()))
+            return attempts, error
+        finally:
+            path.unlink(missing_ok=True)
+    return attempts, None
+
+
 def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
                       retry_pre_admission_busy=False):
     """Run one bounded disjoint-signer HTTP phase and retain every outcome."""
@@ -297,61 +370,10 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
     completed = []
     retained = lifecycle.doc.setdefault("v3_http_phases", {}).setdefault(phase, [])
 
-    def execute(index, request):
-        attempts = []
-        limit = V3_BUSY_MAX_ATTEMPTS if retry_pre_admission_busy else 1
-        request_deadline = min(phase_deadline,
-                               started + request.get("timeout_seconds", 180) * 10**9)
-        for attempt in range(1, limit + 1):
-            if attempt > 1:
-                if artifact.monotonic_ns() + V3_BUSY_RETRY_SECONDS * 10**9 >= request_deadline:
-                    break
-                time.sleep(V3_BUSY_RETRY_SECONDS)
-            path = directory / f"{phase}-{index}-{attempt}.json"
-            began = artifact.monotonic_ns()
-            try:
-                result = artifact.run_bounded_command([
-                    curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
-                    "--request", "POST", "--header", "Content-Type: application/json",
-                    "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
-                    "--data", json.dumps(request["body"], separators=(",", ":")),
-                    "--max-filesize", str(1024 * 1024), "--output", str(path),
-                    "--write-out", "%{http_code}", request["url"],
-                ], request_deadline, env=lifecycle.env)
-                with path.open("rb") as source:
-                    raw = source.read(1024 * 1024 + 1)
-                if len(raw) > 1024 * 1024:
-                    raise ValueError("v3 HTTP response exceeds 1 MiB")
-                body = json.loads(raw)
-                if not isinstance(body, dict):
-                    raise ValueError("v3 HTTP response must be a JSON object")
-                try:
-                    code = producer.uint(result.stdout.strip())
-                except ValueError as error:
-                    raise ValueError("v3 HTTP request did not return a status code") from error
-                row = dict(body, http_status=code, provider=request["provider"], attempt=attempt,
-                           request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
-                           stderr=result.stderr[-8192:], curl_returncode=result.returncode)
-                attempts.append(row)
-                if result.returncode != 0:
-                    return attempts, ValueError(
-                        f"v3 HTTP request for provider {request['provider']!r} exited {result.returncode}")
-                busy = (code == 429 and set(body) == {"error", "hint"} and
-                        body.get("error") == "retrieval submission busy" and
-                        body.get("hint") == "retrieval submission capacity or signer busy")
-                if not retry_pre_admission_busy or not busy:
-                    return attempts, None
-            except BaseException as error:
-                attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
-                                     error=str(error)[-8192:], request_finished_ns=artifact.monotonic_ns()))
-                return attempts, error
-            finally:
-                path.unlink(missing_ok=True)
-        return attempts, None
-
     errors = []
     with ThreadPoolExecutor(max_workers=max_in_flight) as executor:
-        pending = {executor.submit(execute, index, request): request
+        pending = {executor.submit(_run_v3_http_request, lifecycle, curl, request, phase, index,
+                                   directory, phase_deadline, retry_pre_admission_busy): request
                    for index, request in enumerate(requests)}
         while pending:
             done, _ = wait_futures(pending, timeout=1, return_when=FIRST_COMPLETED)
@@ -400,6 +422,108 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
     lifecycle.save()
     print(json.dumps(heartbeat, sort_keys=True), flush=True)
     return sorted(completed, key=lambda row: row["provider"])
+
+
+def run_v3_http_schedule(lifecycle, curl, requests, phase):
+    """Offer a fixed provider HTTP schedule with one in-flight request per signer."""
+    offsets = [row.get("offered_offset_ns") for row in requests]
+    if (not requests or len(requests) > 128 or
+            any(type(value) is not int or value < 0 for value in offsets) or
+            offsets != sorted(offsets) or
+            len({row.get("id") for row in requests}) != len(requests) or
+            not 1 <= len({row.get("provider") for row in requests}) <= V3_SYSTEMATIC_PROVIDERS):
+        raise ValueError("invalid bounded v3 HTTP schedule")
+    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+    directory = lifecycle.home / "v3-http"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    started = artifact.monotonic_ns()
+    phase_deadline = min(lifecycle.deadline, started +
+        (V3_CROSS_AUDIT_OFFER_SECONDS + V3_CROSS_AUDIT_DRAIN_SECONDS) * 10**9)
+    scheduled = [dict(row, offered_ns=started + row["offered_offset_ns"], timeout_seconds=30)
+                 for row in requests]
+    retained = lifecycle.doc.setdefault("v3_http_phases", {}).setdefault(phase, [])
+    summary = lifecycle.doc.setdefault("v3_http_schedules", {}).setdefault(phase, dict(
+        monotonic_start_ns=started, offered_window_ns=V3_CROSS_AUDIT_OFFER_SECONDS * 10**9,
+        drain_cap_ns=V3_CROSS_AUDIT_DRAIN_SECONDS * 10**9, total=len(requests),
+        offered=0, completed=0, queued=0, in_flight=0, max_in_flight_per_provider=1,
+        max_queued=0, max_in_flight=0, max_dispatch_lag_ns=0,
+        timing_scope="provider HTTP includes proof generation, local verification, gas simulation, signing, broadcast and commit observation"))
+    queued, next_index, active, pending, completed, errors = [], 0, set(), {}, [], []
+    last_heartbeat = last_progress = started
+    with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as executor:
+        while len(completed) < len(scheduled) and (not errors or pending):
+            now = artifact.monotonic_ns()
+            if not errors:
+                while next_index < len(scheduled) and scheduled[next_index]["offered_ns"] <= now:
+                    queued.append(next_index)
+                    next_index += 1
+                for index in list(queued):
+                    request = scheduled[index]
+                    if request["provider"] in active:
+                        continue
+                    queued.remove(index)
+                    active.add(request["provider"])
+                    pending[executor.submit(_run_v3_http_request, lifecycle, curl, request, phase,
+                        index, directory, phase_deadline, True)] = (index, request)
+            timeout = .1
+            if not pending and next_index < len(scheduled) and not errors:
+                timeout = min(timeout, max(0, (scheduled[next_index]["offered_ns"] - now) / 1e9))
+            if pending:
+                done = wait_futures(pending, timeout=timeout, return_when=FIRST_COMPLETED)[0]
+            else:
+                time.sleep(timeout)
+                done = set()
+            now = artifact.monotonic_ns()
+            for future in done:
+                index, request = pending.pop(future)
+                active.remove(request["provider"])
+                future_error = None
+                try:
+                    attempts, future_error = future.result()
+                except BaseException as error:
+                    attempts = [dict(status="driver_error", provider=request["provider"],
+                        request_index=index, request_id=request["id"], offered_ns=request["offered_ns"],
+                        error=str(error)[-8192:], request_finished_ns=now)]
+                    future_error = error
+                retained.extend(attempts)
+                if future_error is not None:
+                    errors.append(future_error)
+                else:
+                    completed.append(attempts[-1])
+                    last_progress = now
+            summary.update(offered=next_index, completed=len(completed), queued=len(queued),
+                           in_flight=len(pending), elapsed_ns=now-started,
+                           seconds_since_progress=(now-last_progress)/1e9)
+            summary["max_queued"] = max(summary["max_queued"], len(queued))
+            summary["max_in_flight"] = max(summary["max_in_flight"], len(pending))
+            if completed:
+                summary["max_dispatch_lag_ns"] = max(summary["max_dispatch_lag_ns"],
+                    max(row["request_started_ns"] - row["offered_ns"] for row in completed))
+            if now - last_heartbeat >= 60 * 10**9:
+                heartbeat = dict(phase=phase, **{key: summary[key] for key in (
+                    "offered", "completed", "queued", "in_flight", "elapsed_ns", "seconds_since_progress")})
+                lifecycle.doc.setdefault("progress", []).append(heartbeat)
+                lifecycle.save()
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = now
+            elif done:
+                lifecycle.save()
+            if not errors:
+                try:
+                    lifecycle.remaining()
+                    if now >= phase_deadline:
+                        raise TimeoutError(f"{phase} exceeded its fixed offer and drain cap")
+                    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+                except BaseException as error:
+                    errors.append(error)
+    finished = artifact.monotonic_ns()
+    summary.update(monotonic_end_ns=finished, elapsed_ns=finished-started,
+                   offered=next_index, completed=len(completed), queued=len(queued), in_flight=0,
+                   terminal_error=str(errors[0])[-8192:] if errors else None)
+    lifecycle.save()
+    if errors:
+        raise errors[0]
+    return sorted(completed, key=lambda row: row["request_index"])
 
 
 def v3_session_query(lifecycle, session_id, height=None):
@@ -610,6 +734,308 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
                samples_per_session=V3_MAX_SAMPLES, delivery_verified=False, owner_acknowledged=False,
                qualification=False, timing_scope="provider HTTP includes proof generation, local verification, gas simulation, signing, broadcast and commit observation",
                retention_limit="normal audits retain the same generation, so retained-generation union cannot independently attribute session reference release")
+    lifecycle.save()
+
+
+def classify_cross_audit_transaction(lifecycle, transaction, providers, deal_id, epoch):
+    """Return one exact committed system-audit transaction or reject provider extras."""
+    txhash = transaction["txhash"].upper()
+    decoded = json.loads(lifecycle.cli(lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
+    if decoded.get("txhash", "").upper() != txhash or producer.uint(decoded.get("height", "")) != transaction["height"]:
+        raise ValueError("decoded cross-audit transaction identity differs from committed block")
+    messages = decoded.get("tx", {}).get("body", {}).get("messages", [])
+    provider_messages = [row for row in messages if row.get("creator") in providers.values()]
+    if not provider_messages:
+        return None
+    if len(messages) != 1 or len(provider_messages) != 1:
+        raise ValueError("provider transaction contains an unexpected message set")
+    message = provider_messages[0]
+    if (message.get("@type") != "/polystorechain.polystorechain.v1.MsgProveLiveness" or
+            producer.uint(message.get("deal_id", "")) != producer.uint(deal_id) or
+            producer.uint(message.get("epoch_id", "")) != epoch or
+            set(message).intersection({"user_receipt", "system_proof", "user_receipt_batch", "session_proof"}) != {"system_proof"} or
+            not isinstance(message.get("system_proof"), dict) or not message["system_proof"] or
+            producer.uint(transaction.get("code", 0)) != 0):
+        raise ValueError("provider transaction is not a successful crossed-epoch system audit")
+    provider = message["creator"]
+    return dict(txhash=txhash, height=transaction["height"], provider=provider,
+                slot=next(slot for slot, address in providers.items() if address == provider),
+                code=producer.uint(transaction.get("code", 0)), gas_wanted=transaction["gas_wanted"],
+                gas_used=transaction["gas_used"])
+
+
+def reconcile_cross_audit_sequences(before, after, providers, proof_transactions,
+                                    audit_transactions, audit_views):
+    """Bind signer sequence deltas to unique successful proof and audit transactions."""
+    if set(before) != set(after) or set(before) != set(providers.values()):
+        raise ValueError("provider sequence fence has the wrong signer set")
+    proof_counts = {address: 0 for address in providers.values()}
+    hashes = set()
+    for row in proof_transactions:
+        txhash, provider = row.get("txhash"), row.get("provider")
+        if (not isinstance(txhash, str) or not re.fullmatch(r"[0-9A-F]{64}", txhash) or
+                txhash in hashes or provider not in proof_counts or row.get("outcome") != "committed_success"):
+            raise ValueError("proof transaction sequence inventory is not unique committed success")
+        hashes.add(txhash)
+        proof_counts[provider] += 1
+    audit_counts = {address: 0 for address in providers.values()}
+    audit_hashes = set()
+    for row in audit_transactions:
+        txhash, provider = row.get("txhash"), row.get("provider")
+        if (not isinstance(txhash, str) or not re.fullmatch(r"[0-9A-F]{64}", txhash) or
+                txhash in hashes or txhash in audit_hashes or provider not in audit_counts or
+                producer.uint(row.get("code", 1)) != 0):
+            raise ValueError("audit transaction sequence inventory is not unique committed success")
+        audit_hashes.add(txhash)
+        audit_counts[provider] += 1
+    for slot, provider in providers.items():
+        view = audit_views.get(slot)
+        if not isinstance(view, dict):
+            raise ValueError("crossed audit inventory omits a provider")
+        required = producer.uint(view.get("audit", {}).get("sample_count", ""))
+        accepted = producer.uint(view.get("audit", {}).get("accepted_count", ""))
+        if accepted != required:
+            raise ValueError("crossed audit coverage is incomplete")
+        if audit_counts[provider] != accepted:
+            raise ValueError("crossed audit bitmap does not equal unique committed audit transactions")
+    rows = []
+    for provider in providers.values():
+        start, end = before[provider], after[provider]
+        if start["account_number"] != end["account_number"]:
+            raise ValueError("provider account number changed")
+        actual = end["sequence"] - start["sequence"]
+        expected = proof_counts[provider] + audit_counts[provider]
+        if actual != expected:
+            raise ValueError("provider sequence changed outside unique workload and audit transactions")
+        rows.append(dict(provider=provider, before=start["sequence"], after=end["sequence"],
+                         proof_transactions=proof_counts[provider], audit_transactions=audit_counts[provider],
+                         expected_delta=expected, actual_delta=actual))
+    return rows
+
+
+def wait_for_crossed_audits(lifecycle, audits, epoch_length, expected_epoch, deadline_height):
+    """Wait briefly for one crossed epoch's complete current audit coverage."""
+    started = artifact.monotonic_ns()
+    deadline = min(lifecycle.deadline, started + 30 * 10**9)
+    attempts, last_error = [], None
+    while artifact.monotonic_ns() < deadline:
+        height = lifecycle.wait_height(1)
+        observed = (height - 1) // epoch_length + 1
+        if observed > expected_epoch or height >= deadline_height - 10:
+            raise ValueError("cross-audit verification left its single-epoch/session margin")
+        if observed < expected_epoch:
+            attempts.append(dict(height=height, waiting_for_epoch=expected_epoch))
+            time.sleep(min(.2, lifecycle.remaining()))
+            continue
+        try:
+            views = audits(height, False, expected_epoch)
+            accepted = sum(producer.uint(row["audit"].get("accepted_count", 0)) for row in views.values())
+            required = sum(producer.uint(row["audit"]["sample_count"]) for row in views.values())
+            attempts.append(dict(height=height, accepted=accepted, required=required))
+            if accepted == required:
+                return dict(height=height, audits=views, attempts=attempts)
+            last_error = f"accepted {accepted} of {required}"
+        except ValueError as error:
+            last_error = str(error)[-1024:]
+            attempts.append(dict(height=height, error=last_error))
+        time.sleep(min(.2, lifecycle.remaining()))
+    raise TimeoutError("crossed audit coverage did not complete within 30 seconds: " + str(last_error))
+
+
+def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, audits, epoch_length):
+    """Fixed provider-route load spanning exactly one normal storage-audit anchor."""
+    doc = lifecycle.doc["native_v3_cross_audit"] = dict(qualification=False)
+    owner = lifecycle.signers["owner0"]
+    opened_at = lifecycle.wait_height(3)
+    deadline_height = opened_at + 300
+    if deadline_height >= producer.uint(deal["end_block"]):
+        raise ValueError("cross-audit sessions reach the deal end")
+    root = producer.b64(deal["manifest_root"], 32).hex()
+    integrity = lifecycle.doc["native_v3_generation"]["candidate"]["integrity_root"][2:]
+    sessions = doc["sessions"] = []
+    for nonce in range(1, V3_CROSS_AUDIT_SESSIONS + 1):
+        path = lifecycle.home / f"native-cross-audit-open-{nonce}.json"
+        with path.open("x") as output:
+            json.dump(dict(creator=owner, deal_id=str(deal["id"]), generation="1",
+                range=dict(file_record_index=0, file_start_offset="0", file_length=str(V3_PILOT_BYTES),
+                           range_start="0", range_length=str(V3_PILOT_BYTES)), nonce=str(nonce),
+                deadline_height=str(deadline_height)), output, separators=(",", ":"))
+        result = send("owner0", ["retrieval-session-v3", "open", str(path)])
+        result["validators"] = verify_transaction_nodes(lifecycle, result)
+        sessions.append(dict(session_id=opened_v3_session(result), nonce=nonce,
+                             open_transaction=result))
+        lifecycle.save()
+    evidence_height = wait(max(row["open_transaction"]["height"] for row in sessions) + 2)
+    for row in sessions:
+        view = v3_session_query(lifecycle, row["session_id"], evidence_height)
+        _, accepted = validate_v3_session(view, session_id=row["session_id"], deal_id=deal["id"],
+            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root,
+            integrity_root=integrity, chain_id=lifecycle.chain, deadline_height=deadline_height)
+        if accepted:
+            raise ValueError("cross-audit session starts with accepted samples")
+        row["before_proofs"] = view
+    warmup_requests = [dict(id=f"warmup-{slot}", provider=providers[slot],
+        url=provider_http_url(lifecycle, providers[slot], "/sp/session-proof"),
+        body=dict(session_id=sessions[0]["session_id"]), timeout_seconds=30)
+        for slot in range(V3_SYSTEMATIC_PROVIDERS)]
+    warmup_outcomes = run_v3_http_phase(lifecycle, curl, warmup_requests, "cross-audit-warmup",
+        max_in_flight=V3_SYSTEMATIC_PROVIDERS, retry_pre_admission_busy=True)
+    validate_v3_provider_outcomes(warmup_outcomes, providers, session_id=sessions[0]["session_id"])
+    warmup_transactions = []
+    for outcome in warmup_outcomes:
+        tx = committed_v3_http_tx(lifecycle, outcome, kind="session-proof", creator=outcome["provider"],
+            slot=producer.uint(outcome["slot"]), session_id=sessions[0]["session_id"],
+            proof_count=producer.uint(outcome["proof_count"]))
+        tx.update(provider=outcome["provider"], operation_id=outcome["request_id"])
+        if tx["outcome"] != "committed_success":
+            raise ValueError("warmup provider reported success for a failed proof transaction")
+        warmup_transactions.append(tx)
+    warmup_height = max(row["height"] for row in warmup_transactions)
+    wait(warmup_height + 1)
+    warmup_view = v3_session_query(lifecycle, sessions[0]["session_id"], warmup_height)
+    _, warmup_accepted = validate_v3_session(warmup_view, session_id=sessions[0]["session_id"],
+        deal_id=deal["id"], owner=owner, providers=providers, nonce=1, polyfs_root=root,
+        integrity_root=integrity, chain_id=lifecycle.chain, deadline_height=deadline_height)
+    if warmup_accepted != sorted(ordinal for row in warmup_transactions for ordinal in row["ordinals"]):
+        raise ValueError("warmup bitmap differs from committed proof messages")
+    doc["warmup_proof_transactions"] = warmup_transactions
+    lifecycle.save()
+    current = lifecycle.wait_height(1)
+    ready_epoch = (current - 1) // epoch_length + 1
+    next_anchor = ready_epoch * epoch_length + 1
+    target_height = next_anchor - 30
+    if target_height - current < 4 or deadline_height - (target_height + 60) < 40:
+        raise ValueError("cross-audit profile lacks alignment or session deadline margin")
+    quiescence = require_provider_quiescence(lifecycle, providers)
+    ready_height = quiescence["second_height"]
+    current_audits = audits(ready_height, False, ready_epoch)
+    if any(producer.uint(row["audit"].get("accepted_count", 0)) != producer.uint(row["audit"]["sample_count"])
+           for row in current_audits.values()):
+        raise ValueError("current audit coverage is incomplete before cross-audit load")
+    for row in sessions[1:]:
+        if v3_session_query(lifecycle, row["session_id"], ready_height) != row["before_proofs"]:
+            raise ValueError("prepared cross-audit session changed before timing")
+    if lifecycle.wait_height(1) > target_height:
+        raise ValueError("cross-audit preflight missed its fixed start alignment")
+    wait(target_height)
+    scheduled_start_height = lifecycle.wait_height(1)
+    if scheduled_start_height > target_height + 1:
+        raise ValueError("cross-audit start moved beyond its fixed anchor alignment")
+    schedule = native_v3_cross_audit_schedule()
+    requests = []
+    for item in schedule:
+        session = sessions[item["session_index"]]
+        requests.append(dict(item, id=f"measured-{item['session_index']}-{item['slot']}",
+            provider=providers[item["slot"]],
+            url=provider_http_url(lifecycle, providers[item["slot"]], "/sp/session-proof"),
+            body=dict(session_id=session["session_id"])))
+    doc["measurement_preconditions"] = dict(evidence_height=evidence_height, ready_height=ready_height,
+        ready_epoch=ready_epoch, next_anchor=next_anchor, target_height=target_height,
+        scheduled_start_height=scheduled_start_height,
+        session_deadline=deadline_height, audits=current_audits, provider_quiescence=quiescence)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
+    before_cpu = validator_cpu_snapshot(lifecycle)
+    outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
+    after_cpu = validator_cpu_snapshot(lifecycle)
+    measured_end_height = lifecycle.wait_height(1)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
+    doc["measured_window"] = dict(monotonic_start_ns=before_cpu["monotonic_ns"],
+        monotonic_end_ns=after_cpu["monotonic_ns"],
+        elapsed_ns=after_cpu["monotonic_ns"]-before_cpu["monotonic_ns"],
+        committed_end_height=measured_end_height, validator_cpu_before=before_cpu,
+        validator_cpu_after=after_cpu, validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
+        scope="fixed HTTP offer and bounded drain; includes proof generation, local verification, gas simulation, signing, broadcast and commit observation; no RSS phase peak")
+    grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
+    for outcome in outcomes:
+        grouped[schedule[outcome["request_index"]]["session_index"]].append(outcome)
+    transactions = doc["measured_proof_transactions"] = []
+    for session_index, session_outcomes in grouped.items():
+        session = sessions[session_index]
+        validate_v3_provider_outcomes(session_outcomes, providers, session_id=session["session_id"])
+        for outcome in session_outcomes:
+            tx = committed_v3_http_tx(lifecycle, outcome, kind="session-proof",
+                creator=outcome["provider"], slot=producer.uint(outcome["slot"]),
+                session_id=session["session_id"], proof_count=producer.uint(outcome["proof_count"]))
+            tx.update(provider=outcome["provider"], operation_id=outcome["request_id"],
+                      session_index=session_index)
+            if tx["outcome"] != "committed_success" or producer.uint(tx["height"]) > measured_end_height:
+                raise ValueError("measured provider outcome is not a committed in-window success")
+            transactions.append(tx)
+        lifecycle.save()
+    if len(transactions) != V3_CROSS_AUDIT_MEASURED:
+        raise ValueError("measured provider phase omitted a proof transaction")
+    lifecycle.save()
+    crossed = wait_for_crossed_audits(lifecycle, audits, epoch_length, ready_epoch + 1, deadline_height)
+    post_quiescence = require_provider_quiescence(lifecycle, providers)
+    final_height = post_quiescence["second_height"]
+    if (final_height - 1) // epoch_length + 1 != ready_epoch + 1:
+        raise ValueError("cross-audit profile crossed more than one epoch")
+    prior_final = audits(final_height, True, ready_epoch)
+    for slot, view in prior_final.items():
+        if any(view[name] != current_audits[slot][name] for name in ("canonical_context", "seed", "epoch_length")):
+            raise ValueError("prior audit authority changed across its finalization")
+    crossed_final = audits(final_height, False, ready_epoch + 1)
+    if crossed_final != crossed["audits"]:
+        raise ValueError("crossed audit evidence changed after provider quiescence")
+    before_metrics = lifecycle.doc["commit_step_metrics"]["phases"]["native_v3_cross_audit_before"]
+    first_height = min(row["sample"]["committed_height"] for row in before_metrics["nodes"]) + 1
+    proof_hashes = {row["txhash"].upper() for row in transactions}
+    audit_transactions = []
+    def observe_transaction(transaction):
+        if transaction["txhash"].upper() in proof_hashes:
+            return
+        row = classify_cross_audit_transaction(
+            lifecycle, transaction, providers, deal["id"], ready_epoch + 1)
+        if row is not None:
+            audit_transactions.append(row)
+    reconcile_transaction_blocks(lifecycle, transactions, first_height, final_height,
+        lifecycle.home / "native-v3-cross-audit-blocks.jsonl", observe_transaction=observe_transaction)
+    final_sequences = provider_sequences(lifecycle, providers, final_height)
+    doc["audit_transactions"] = audit_transactions
+    doc["provider_sequence_reconciliation"] = reconcile_cross_audit_sequences(
+        quiescence["sequences"], final_sequences, providers, transactions,
+        audit_transactions, crossed_final)
+    for index, row in enumerate(sessions):
+        state = v3_session_query(lifecycle, row["session_id"], final_height)
+        _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"],
+            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root,
+            integrity_root=integrity, chain_id=lifecycle.chain, deadline_height=deadline_height)
+        source = warmup_transactions if index == 0 else [tx for tx in transactions if tx["session_index"] == index]
+        expected = sorted(ordinal for tx in source for ordinal in tx["ordinals"])
+        if accepted != expected or len(accepted) != V3_MAX_SAMPLES:
+            raise ValueError("authoritative session bitmap differs from committed proof messages")
+        row.update(after_proofs=state, accepted_sample_ordinals=accepted,
+                   proof_transactions=source)
+    doc.update(offered_proof_transactions=V3_CROSS_AUDIT_WARMUPS + V3_CROSS_AUDIT_MEASURED,
+        warmup_transactions=V3_CROSS_AUDIT_WARMUPS, measured_offered_transactions=V3_CROSS_AUDIT_MEASURED,
+        total_committed_valid_proof_transactions=len(warmup_transactions) + len(transactions),
+        measured_committed_valid_proof_transactions=len(transactions),
+        total_authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions),
+        measured_authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions[1:]),
+        crossed_audit_epoch=ready_epoch + 1, crossed_audit=crossed_final,
+        measured_gas_wanted=sum(row["gas_wanted"] for row in transactions),
+        measured_gas_used=sum(row["gas_used"] for row in transactions),
+        delivery_verified=False, owner_acknowledged=False, qualification=False)
+    wait(deadline_height + 2)
+    for row in sessions:
+        expired = v3_session_query(lifecycle, row["session_id"])
+        validate_v3_session(expired, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
+            providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
+            chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True)
+        refund = send("owner0", ["retrieval-session-v3", "refund",
+                                  str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
+        refund["validators"] = verify_transaction_nodes(lifecycle, refund)
+        row.update(expired_before_refund=expired, refund_transaction=refund)
+        lifecycle.save()
+    wait(max(row["refund_transaction"]["height"] for row in sessions) + 1)
+    for row in sessions:
+        after = v3_session_query(lifecycle, row["session_id"])
+        validate_v3_session(after, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
+            providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
+            chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True, refunded=True)
+        row["after_refund"] = after
+    doc.update(status="native_v3_cross_audit_diagnostic_finished", expiration_verified=True,
+               refunds_verified=True, qualification=False)
     lifecycle.save()
 
 
@@ -1950,7 +2376,7 @@ def reconcile_sustained_blocks(lifecycle, journal):
                                  lifecycle.home / "sustained-blocks.jsonl")
 
 
-def reconcile_transaction_blocks(lifecycle, results, first, last, path):
+def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_transaction=None):
     """Retain raw block gas/bytes and validate workload txs on all validators."""
     artifact.integer(last - first + 1, "fenced block count", 1, 1200)
     committed = [row for row in results if row["outcome"] in ("committed_success", "committed_failure")]
@@ -1986,6 +2412,9 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path):
                     raise ValueError("committed workload transaction differs from retained journal")
                 tx["operation_id"] = row["operation_id"]
                 matched.add(tx["txhash"])
+            if observe_transaction is not None:
+                for tx in summary["transactions"]:
+                    observe_transaction(tx)
             output.write(json.dumps(summary, sort_keys=True) + "\n")
     if matched != set(expected):
         raise ValueError("fenced blocks omit a committed workload transaction")
@@ -2248,9 +2677,12 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
 
 
 def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None,
-                native_v3=False, native_chain=None, audit_profile="normal"):
+                native_v3=False, native_chain=None, native_cross_audit=False,
+                audit_profile="normal"):
     """Real canonical ingest and normal audits; optional bounded retrieval workload."""
     if native_chain is not None:
+        native_v3 = True
+    if native_cross_audit:
         native_v3 = True
     if native_v3 and sustained is not None:
         raise ValueError("native v3 diagnostic and sustained v2 workload are distinct modes")
@@ -2296,10 +2728,13 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                  preflight_minimum_bytes=V3_PREFLIGHT_FREE_BYTES,
                                  runtime_minimum_bytes=V3_ABORT_FREE_BYTES)
     doc.update(mode=("four-validator-native-v3-chain-diagnostic" if native_chain is not None else
+                     "four-validator-native-v3-cross-audit-diagnostic" if native_cross_audit else
                      "four-validator-native-v3-provider-diagnostic" if native_v3 else "four-validator-healthy-provider-diagnostic"),
         setup_transactions=[], providers=[],
         workload=("one 16 MiB FAT v3 K8 deal; eight sessions; 64 native proof transactions with untimed proof preparation"
                   if native_chain is not None else
+                  "one 16 MiB FAT v3 K8 deal; sixteen sessions; 128 production-route proof transactions across one normal audit anchor"
+                  if native_cross_audit else
                   "one 16 MiB FAT v3 K8 deal; twelve production provider-daemons; two preopened native sessions"
                   if native_v3 else f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch"),
         qualification=False, limits=["No capacity or delivered retrieval qualification",
@@ -2564,6 +2999,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 run_native_v3_chain(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
                                     audits=audits, exporter=export_binary, epoch_length=epoch_length)
                 doc["status"] = "native_v3_chain_diagnostic_passed"
+            elif native_cross_audit:
+                run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
+                                          curl=curl, audits=audits, epoch_length=epoch_length)
+                doc["status"] = "native_v3_cross_audit_diagnostic_passed"
             else:
                 run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)
                 doc["status"] = "native_v3_provider_diagnostic_passed"
@@ -2601,7 +3040,8 @@ def main():
     for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source", "proof-exporter"):
         parser.add_argument("--" + flag)
     parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers",
-                                           "native-v3-providers", "native-v3-chain"), default="settlement-smoke")
+                                           "native-v3-providers", "native-v3-providers-cross-audit",
+                                           "native-v3-chain"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
@@ -2647,6 +3087,12 @@ def main():
             parser.error("native-v3-providers requires product binaries/source, normal audits, timeout <= 600, and excludes fixtures/--proof-only")
         print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source,
                           native_v3=True, audit_profile="normal"))
+    elif mode == "native-v3-providers-cross-audit":
+        if (not gateway or not cli or not source or k8 or k2 or proof_only or
+                options["timeout"] > 900 or audit_profile != "normal"):
+            parser.error("native-v3-providers-cross-audit requires product binaries/source, normal audits, timeout <= 900, and excludes fixtures/--proof-only")
+        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source,
+                          native_cross_audit=True, audit_profile="normal"))
     elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
             parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")
