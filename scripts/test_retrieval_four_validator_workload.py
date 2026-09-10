@@ -8,6 +8,8 @@ from pathlib import Path
 import sqlite3
 import subprocess
 import tempfile
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 import urllib.error
@@ -479,6 +481,104 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.validate_v3_committed_message(duplicate, kind="session-proof",
                 creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
 
+    def test_committed_v3_http_transaction_normalizes_rpc_numbers_and_reconciles_raw_block(self):
+        provider = AUDIT_ADDRESSES[0]
+        raw = b"production-shaped-signed-transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
+        response = {"hash": txhash, "height": "219", "tx_result": {
+            "code": "0", "gas_wanted": "2000000", "gas_used": "479121"}}
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
+                   "creator": provider, "slot": "0",
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                   "proofs": [{"ordinal": "0"}]}
+        block = {"block_id": {"hash": "CD" * 32}, "block": {
+            "header": {"height": "219", "chain_id": "chain", "time": "time", "app_hash": "EF" * 32},
+            "data": {"txs": [base64.b64encode(raw).decode()]}}}
+        block_results = {"height": "219", "txs_results": [{
+            "code": "0", "gas_wanted": "2000000", "gas_used": "479121"}]}
+        commit = {"canonical": True, "signed_header": {"header": block["block"]["header"],
+            "commit": {"height": "219", "block_id": block["block_id"]}}}
+        decoded = {"txhash": txhash, "height": "219", "tx": {"body": {"messages": [message]}}}
+        tip_advanced = False
+        def wait_height(height):
+            nonlocal tip_advanced
+            self.assertEqual(height, 220)
+            tip_advanced = True
+            return height
+        def query(node, path):
+            if path.startswith("/tx?"):
+                return response
+            if path.startswith("/block_results"):
+                return block_results
+            if path.startswith("/block?"):
+                return block
+            if path.startswith("/commit?"):
+                return dict(commit, canonical=tip_advanced)
+            raise AssertionError(path)
+        with tempfile.TemporaryDirectory() as home:
+            lifecycle = SimpleNamespace(home=Path(home), chain="chain",
+                nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
+                query=query, wait_height=Mock(side_effect=wait_height), remaining=Mock(), doc={},
+                cli=Mock(return_value=json.dumps(decoded)))
+            transaction = workload.committed_v3_http_tx(lifecycle,
+                {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
+                session_id=self.SESSION, proof_count=1)
+            self.assertEqual({key: transaction[key] for key in ("height", "code", "gas_wanted", "gas_used")},
+                             {"height": 219, "code": 0, "gas_wanted": 2000000, "gas_used": 479121})
+            self.assertTrue(all(isinstance(transaction[key], int)
+                                for key in ("height", "code", "gas_wanted", "gas_used")))
+            self.assertEqual(transaction["outcome"], "committed_success")
+            tip_advanced = False
+            lifecycle.wait_height.reset_mock()
+            transaction["operation_id"] = "measured-1-0"
+            output = Path(home) / "blocks.jsonl"
+            observed = []
+            self.assertFalse(query(lifecycle.nodes[0], "/commit?height=219")["canonical"])
+            workload.reconcile_transaction_blocks(
+                lifecycle, [transaction], 219, 219, output,
+                observe_transaction=lambda row, height: observed.append((row, height)))
+            lifecycle.wait_height.assert_called_once_with(220)
+            retained = json.loads(output.read_text())
+            self.assertEqual(retained["transactions"][0]["operation_id"], "measured-1-0")
+            self.assertEqual(observed, [(retained["transactions"][0], 219)])
+            self.assertEqual(lifecycle.doc["committed_block_reconciliation"]["committed_workload_transactions"], 1)
+            for field, value in (("txhash", "AB" * 32), ("height", "220")):
+                changed = copy.deepcopy(decoded)
+                changed[field] = value
+                lifecycle.cli.return_value = json.dumps(changed)
+                with self.subTest(decoded_identity=field), self.assertRaisesRegex(
+                        ValueError, "decoded HTTP transaction identity"):
+                    workload.committed_v3_http_tx(lifecycle,
+                        {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
+                        session_id=self.SESSION, proof_count=1)
+
+    def test_refund_receipt_binds_decoded_owner_and_session(self):
+        owner = AUDIT_ADDRESSES[8]
+        txhash = "CD" * 32
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgRefundRetrievalSessionV3",
+                   "creator": owner,
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode()}
+        decoded = {"txhash": txhash, "height": "301",
+                   "tx": {"body": {"messages": [message]}}}
+        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}],
+            cli=Mock(return_value=json.dumps(decoded)))
+        result = dict(txhash=txhash, height=301, code=0, gas_wanted=500000, gas_used=400000)
+        validators = [{"node_id": str(index)} for index in range(4)]
+        with patch.object(workload, "verify_transaction_nodes", return_value=validators):
+            verified = workload.verify_v3_refund_transaction(
+                lifecycle, result, owner=owner, session_id=self.SESSION)
+        self.assertEqual((verified["message"], verified["validators"]), (message, validators))
+        for field, value in (("creator", AUDIT_ADDRESSES[7]),
+                             ("session_id", base64.b64encode(bytes(32)).decode())):
+            changed = copy.deepcopy(decoded)
+            changed["tx"]["body"]["messages"][0][field] = value
+            lifecycle.cli.return_value = json.dumps(changed)
+            with self.subTest(field=field), patch.object(
+                    workload, "verify_transaction_nodes", return_value=validators), \
+                    self.assertRaisesRegex(ValueError, "intended owner/session"):
+                workload.verify_v3_refund_transaction(
+                    lifecycle, copy.deepcopy(result), owner=owner, session_id=self.SESSION)
+
 
     def test_provider_endpoint_uses_address_not_assignment_slot(self):
         lifecycle = SimpleNamespace(doc={"providers": [
@@ -623,6 +723,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             retained = lifecycle.doc["v3_http_phases"]["retry-parser-error"]
             self.assertEqual((calls, len(retained), retained[0]["http_status"], retained[1]["status"]),
                              (2, 2, 429, "driver_error"))
+            self.assertLessEqual(retained[1]["request_started_ns"],
+                                 retained[1]["request_finished_ns"])
 
     def test_native_v3_provider_routes_use_gateway_auth_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -721,6 +823,393 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         after["validators"][0]["user_ticks"] -= 1
         with self.assertRaisesRegex(ValueError, "backwards"):
             workload.validator_cpu_delta(before, after)
+
+    def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
+        profile = workload.native_v3_cross_audit_schedule()
+        self.assertEqual((len(profile), profile[0], profile[-1]), (120,
+            dict(index=0, session_index=1, slot=0, offered_offset_ns=0),
+            dict(index=119, session_index=15, slot=7, offered_offset_ns=59_500_000_000)))
+        self.assertEqual({slot: sum(row["slot"] == slot for row in profile) for slot in range(8)},
+                         {slot: 15 for slot in range(8)})
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            lock, active, maxima = threading.Lock(), {}, {}
+            requests = []
+            for index in range(8):
+                provider = f"provider-{index % 2}"
+                requests.append(dict(id=f"r{index}", provider=provider,
+                    offered_offset_ns=0, url=f"http://provider/{provider}/{index}", body={}))
+            def run(argv, deadline, env):
+                provider = argv[-1].split("/")[-2]
+                with lock:
+                    active[provider] = active.get(provider, 0) + 1
+                    maxima[provider] = max(maxima.get(provider, 0), active[provider])
+                time.sleep(.005)
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                with lock:
+                    active[provider] -= 1
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                rows = workload.run_v3_http_schedule(lifecycle, "/curl", requests, "fixed-schedule")
+            self.assertEqual([row["request_id"] for row in rows], [f"r{i}" for i in range(8)])
+            self.assertEqual(maxima, {"provider-0": 1, "provider-1": 1})
+            summary = lifecycle.doc["v3_http_schedules"]["fixed-schedule"]
+            self.assertEqual((summary["offered"], summary["completed"], summary["queued"], summary["in_flight"]),
+                             (8, 8, 0, 0))
+
+    def test_cross_audit_scheduler_retries_only_exact_busy_and_retains_drained_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(id=f"r{index}", provider=f"provider-{index}", offered_offset_ns=0,
+                             url=f"http://provider/{index}", body={}) for index in range(2)]
+            calls = {}
+            def busy_then_success(argv, deadline, env):
+                index = int(argv[-1].rsplit("/", 1)[-1])
+                calls[index] = calls.get(index, 0) + 1
+                if index == 0 and calls[index] == 1:
+                    body, status = ({"error": "retrieval submission busy",
+                        "hint": "retrieval submission capacity or signer busy"}, 429)
+                else:
+                    body, status = ({"status": "success"}, 200)
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=busy_then_success), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                rows = workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-busy")
+            self.assertEqual((calls, len(rows), len(lifecycle.doc["v3_http_phases"]["scheduled-busy"])),
+                             ({0: 2, 1: 1}, 2, 3))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            def one_failure(argv, deadline, env):
+                index = int(argv[-1].rsplit("/", 1)[-1])
+                path = Path(argv[argv.index("--output") + 1])
+                if index == 0:
+                    path.write_text("{")
+                else:
+                    path.write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=one_failure), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 self.assertRaises(ValueError):
+                workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-failure")
+            retained = lifecycle.doc["v3_http_phases"]["scheduled-failure"]
+            self.assertEqual({row.get("status") for row in retained}, {"driver_error", "success"})
+            self.assertIn("Expecting property name", lifecycle.doc["v3_http_schedules"]["scheduled-failure"]["terminal_error"])
+
+    def test_cross_audit_scheduler_metrics_use_initial_dispatch_and_peak_pending(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(id=f"r{index}", provider=f"provider-{index}", offered_offset_ns=0,
+                             url=f"http://provider/{index}", body={}) for index in range(2)]
+
+            def completed_after_retry(_lifecycle, _curl, request, _phase, index, _directory,
+                                      _deadline, _retry):
+                offered = request["offered_ns"]
+                first = dict(http_status=429, provider=request["provider"], request_index=index,
+                    request_id=request["id"], offered_ns=offered, request_started_ns=offered + 3,
+                    request_finished_ns=offered + 4)
+                terminal = dict(status="success", provider=request["provider"], request_index=index,
+                    request_id=request["id"], offered_ns=offered,
+                    request_started_ns=offered + 2_000_000_003,
+                    request_finished_ns=offered + 2_000_000_004)
+                return [first, terminal], None
+
+            with patch.object(workload, "_run_v3_http_request", side_effect=completed_after_retry), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-metrics")
+            summary = lifecycle.doc["v3_http_schedules"]["scheduled-metrics"]
+            self.assertEqual(summary["max_dispatch_lag_ns"], 3)
+            self.assertEqual(summary["max_in_flight"], 2)
+
+    def test_cross_audit_scheduler_enforces_shared_offer_and_drain_deadline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            request = dict(id="deadline", provider="provider", offered_offset_ns=0,
+                           url="http://provider/0", body={})
+            def run(argv, deadline, env):
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload, "V3_CROSS_AUDIT_OFFER_SECONDS", 0), \
+                 patch.object(workload, "V3_CROSS_AUDIT_DRAIN_SECONDS", 0), \
+                 self.assertRaisesRegex(TimeoutError, "fixed offer and drain cap"):
+                workload.run_v3_http_schedule(lifecycle, "/curl", [request], "scheduled-deadline")
+            self.assertEqual(lifecycle.doc["v3_http_schedules"]["scheduled-deadline"]["completed"], 1)
+
+    def test_cross_audit_sequence_reconciliation_counts_measured_proofs_and_audits(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        before = {address: dict(account_number=slot, sequence=10) for slot, address in providers.items()}
+        views = {slot: {"audit": {"sample_count": "8", "accepted_count": "8"}}
+                 for slot in providers}
+        proofs = []
+        for slot in range(8):
+            for index in range(15):
+                proofs.append(dict(txhash=f"{slot * 15 + index + 1:064X}", provider=providers[slot],
+                                   outcome="committed_success"))
+        audit_transactions = []
+        for slot, provider in providers.items():
+            for index in range(8):
+                audit_transactions.append(dict(txhash=f"{1000 + slot * 8 + index:064X}", provider=provider,
+                                               code=0))
+        after = copy.deepcopy(before)
+        for slot, address in providers.items():
+            after[address]["sequence"] += 8 + (15 if slot < 8 else 0)
+        rows = workload.reconcile_cross_audit_sequences(
+            before, after, providers, proofs, audit_transactions, views)
+        self.assertEqual([(row["proof_transactions"], row["audit_transactions"], row["actual_delta"])
+                          for row in rows], [(15, 8, 23)] * 8 + [(0, 8, 8)] * 4)
+        after[providers[9]]["sequence"] += 1
+        with self.assertRaisesRegex(ValueError, "outside unique workload and audit"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs, audit_transactions, views)
+        after[providers[9]]["sequence"] -= 1
+        with self.assertRaisesRegex(ValueError, "not unique"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs + [proofs[0]], audit_transactions, views)
+        with self.assertRaisesRegex(ValueError, "bitmap does not equal"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs, audit_transactions[:-1], views)
+
+    def test_cross_audit_cpu_fence_waits_for_delayed_audit_completion(self):
+        events = []
+        before = {"monotonic_ns": 10, "validators": []}
+        after = {"monotonic_ns": 30, "validators": []}
+        lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
+        providers = {0: AUDIT_ADDRESSES[0]}
+        expected = {AUDIT_ADDRESSES[0]: 1}
+        views = {0: {"audit": {"sample_count": "1", "accepted_count": "1"}}}
+
+        def wait_for_signal(*args):
+            events.append("event-signal-and-all-node-fence")
+            return {"height": 303, "signal_height": 303}
+
+        def cpu_snapshot(*args):
+            events.append("cpu-after")
+            return after
+
+        def audits(*args):
+            events.append("four-node-audit-validation")
+            return views
+
+        def capture(*args, **kwargs):
+            events.append("metrics-after")
+
+        with patch.object(workload, "wait_for_crossed_audit_signal", side_effect=wait_for_signal), \
+                patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot), \
+                patch.object(workload, "capture_workload_metrics", side_effect=capture), \
+                patch.object(workload, "validator_cpu_delta", return_value={"cpu": "delta"}):
+            crossed = workload.close_cross_audit_measurement(
+                lifecycle, audits, providers, "0", expected, 100, 4, 500, before, 299)
+
+        self.assertEqual(events, ["event-signal-and-all-node-fence", "cpu-after",
+                                  "four-node-audit-validation", "metrics-after"])
+        self.assertEqual(crossed["height"], 303)
+        self.assertEqual(crossed["audits"], views)
+        window = lifecycle.doc["native_v3_cross_audit"]["measured_window"]
+        self.assertEqual(window["crossed_audit_completion_height"], 303)
+        self.assertEqual(window["proof_phase_end_height"], 299)
+        self.assertIn("crossed-audit completion", window["scope"])
+
+    def test_crossed_audit_signal_uses_production_block_events_and_bounded_fence(self):
+        provider = AUDIT_ADDRESSES[0]
+        providers = {0: provider}
+        expected = {provider: 1}
+        event = {"type": "prove_liveness", "attributes": [
+            {"key": "provider", "value": provider},
+            {"key": "deal_id", "value": "0"},
+            {"key": "challenge_kind", "value": "2"},
+            {"key": "challenge_ordinal", "value": "0"},
+            {"key": "tier", "value": "gold"},
+            {"key": "reward_amount", "value": "1stake"},
+        ]}
+        block_results = {"height": "301", "txs_results": [
+            {"code": "0", "gas_wanted": "2000000", "gas_used": "613056",
+             "events": [event]},
+        ]}
+        original_deadline = artifact.monotonic_ns() + 60 * 10**9
+        lifecycle = SimpleNamespace(deadline=original_deadline, chain="chain",
+            nodes=[{"node_id": "node0"}])
+
+        def query(node, path):
+            self.assertLess(lifecycle.deadline, original_deadline)
+            if path == "/status":
+                return {"node_info": {"id": "node0", "network": "chain"},
+                        "sync_info": {"latest_block_height": "301"}}
+            self.assertEqual(path, "/block_results?height=301")
+            return block_results
+
+        def wait_height(height):
+            self.assertEqual(height, 301)
+            self.assertLess(lifecycle.deadline, original_deadline)
+            return 302
+
+        lifecycle.query = Mock(side_effect=query)
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        lifecycle.remaining = lambda: max(0, (lifecycle.deadline - artifact.monotonic_ns()) / 1e9)
+        result = workload.wait_for_crossed_audit_signal(
+            lifecycle, providers, "0", expected, 100, 4, 500)
+        self.assertEqual(result["height"], 302)
+        self.assertEqual(result["signal_height"], 301)
+        self.assertEqual(result["accepted_events"], 1)
+        self.assertEqual(lifecycle.deadline, original_deadline)
+
+        def fail_fence(height):
+            self.assertLess(lifecycle.deadline, original_deadline)
+            raise TimeoutError("bounded all-node fence")
+
+        lifecycle.wait_height.side_effect = fail_fence
+        with self.assertRaisesRegex(TimeoutError, "bounded all-node fence"):
+            workload.wait_for_crossed_audit_signal(
+                lifecycle, providers, "0", expected, 100, 4, 500)
+        self.assertEqual(lifecycle.deadline, original_deadline)
+
+        failed = copy.deepcopy(block_results)
+        failed["txs_results"][0]["code"] = "7"
+        self.assertEqual(workload.crossed_audit_events(
+            failed, 301, providers, "0", expected), set())
+        for index, value in ((0, AUDIT_ADDRESSES[1]), (1, "1"), (2, "1")):
+            wrong_identity = copy.deepcopy(block_results)
+            wrong_identity["txs_results"][0]["events"][0]["attributes"][index]["value"] = value
+            with self.subTest(attribute=index):
+                self.assertEqual(workload.crossed_audit_events(
+                    wrong_identity, 301, providers, "0", expected), set())
+        out_of_range = copy.deepcopy(block_results)
+        out_of_range["txs_results"][0]["events"][0]["attributes"][3]["value"] = "1"
+        with self.assertRaisesRegex(ValueError, "out-of-range ordinal"):
+            workload.crossed_audit_events(out_of_range, 301, providers, "0", expected)
+        duplicate = copy.deepcopy(block_results)
+        duplicate["txs_results"][0]["events"].append(copy.deepcopy(event))
+        self.assertEqual(len(workload.crossed_audit_events(
+            duplicate, 301, providers, "0", expected)), 1)
+        repeated_attribute = copy.deepcopy(block_results)
+        repeated_attribute["txs_results"][0]["events"][0]["attributes"].append(
+            {"key": "provider", "value": provider})
+        with self.assertRaisesRegex(ValueError, "repeats an event attribute"):
+            workload.crossed_audit_events(
+                repeated_attribute, 301, providers, "0", expected)
+
+    def test_cross_audit_start_fence_follows_metrics_and_target_wait(self):
+        events = []
+        lifecycle = SimpleNamespace()
+
+        def capture(*args, **kwargs):
+            events.append("metrics-before")
+
+        def wait_height(minimum):
+            events.append(f"wait-{minimum}")
+            return 271 if minimum == 271 else 272
+
+        def cpu_snapshot(*args):
+            events.append("cpu-before")
+            return {"monotonic_ns": 10, "validators": []}
+
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        with patch.object(workload, "capture_workload_metrics", side_effect=capture), \
+                patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot):
+            before, height = workload.open_cross_audit_measurement(lifecycle, 271)
+        self.assertEqual((before["monotonic_ns"], height), (10, 272))
+        self.assertEqual(events, ["metrics-before", "wait-271", "cpu-before", "wait-1"])
+
+        lifecycle.wait_height = Mock(side_effect=[271, 273])
+        with patch.object(workload, "capture_workload_metrics"), \
+                patch.object(workload, "validator_cpu_snapshot", return_value=before), \
+                self.assertRaisesRegex(ValueError, "fixed anchor alignment"):
+            workload.open_cross_audit_measurement(lifecycle, 271)
+
+    def test_cross_audit_receipt_fence_uses_provider_rpc_tip(self):
+        node = {"node": "unused", "node_id": "provider-rpc"}
+        status = {"node_info": {"id": "provider-rpc", "network": "chain"},
+                  "sync_info": {"latest_block_height": "219"}}
+
+        def wait_height(minimum):
+            # The old wait_height(1) cutoff could observe the lagging tip 218.
+            return 218 if minimum == 1 else minimum
+
+        lifecycle = SimpleNamespace(nodes=[node], chain="chain", query=Mock(return_value=status),
+                                    wait_height=Mock(side_effect=wait_height))
+        fence = workload.fence_v3_http_receipts(lifecycle)
+        self.assertEqual(fence, {"provider_rpc_node_id": "provider-rpc",
+            "provider_rpc_observed_height": 219, "all_validator_height": 219})
+        lifecycle.wait_height.assert_called_once_with(219)
+        self.assertEqual(workload.validate_v3_http_receipt_fence(
+            [{"height": "217"}, {"height": 219}], fence), 219)
+        with self.assertRaisesRegex(ValueError, "outside its fenced phase"):
+            workload.validate_v3_http_receipt_fence([{"height": "220"}], fence)
+
+        lifecycle.query.return_value = copy.deepcopy(status)
+        lifecycle.query.return_value["node_info"]["id"] = "other-node"
+        with self.assertRaisesRegex(ValueError, "different node or chain"):
+            workload.fence_v3_http_receipts(lifecycle)
+
+    def test_cross_audit_cpu_fence_is_not_closed_after_audit_failure(self):
+        lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
+        with patch.object(workload, "wait_for_crossed_audit_signal", side_effect=TimeoutError("delayed audit")), \
+                patch.object(workload, "validator_cpu_snapshot") as cpu_snapshot, \
+                patch.object(workload, "capture_workload_metrics") as capture, \
+                self.assertRaisesRegex(TimeoutError, "delayed audit"):
+            workload.close_cross_audit_measurement(
+                lifecycle, Mock(), {0: AUDIT_ADDRESSES[0]}, "0", {AUDIT_ADDRESSES[0]: 1},
+                100, 4, 500, {"monotonic_ns": 10}, 299)
+        cpu_snapshot.assert_not_called()
+        capture.assert_not_called()
+        self.assertNotIn("measured_window", lifecycle.doc["native_v3_cross_audit"])
+
+    def test_cross_audit_transaction_classification_binds_committed_system_proof(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        raw = b"production-shaped-crossed-audit-transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgProveLiveness",
+                   "creator": providers[3], "deal_id": "7", "epoch_id": "4",
+                   "system_proof": {"mdu_index": "2"}}
+        decoded = dict(txhash=txhash, height="301", tx={"body": {"messages": [message]}})
+        block = {"block_id": {"hash": "CD" * 32}, "block": {
+            "header": {"height": "301", "chain_id": "chain", "time": "time", "app_hash": "EF" * 32},
+            "data": {"txs": [base64.b64encode(raw).decode()]}}}
+        block_results = {"height": "301", "txs_results": [{
+            "code": "0", "gas_wanted": "10", "gas_used": "9"}]}
+        commit = {"canonical": True, "signed_header": {"header": block["block"]["header"],
+            "commit": {"height": "301", "block_id": block["block_id"]}}}
+        def query(node, path):
+            if path.startswith("/block_results"):
+                return block_results
+            if path.startswith("/block?"):
+                return block
+            if path.startswith("/commit?"):
+                return commit
+            raise AssertionError(path)
+        with tempfile.TemporaryDirectory() as home:
+            lifecycle = SimpleNamespace(home=Path(home), chain="chain",
+                nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
+                cli=Mock(return_value=json.dumps(decoded)), query=query,
+                wait_height=Mock(return_value=302), remaining=Mock(), doc={})
+            rows = []
+            def observe(transaction, height):
+                rows.append(workload.classify_cross_audit_transaction(
+                    lifecycle, transaction, height, providers, "7", 4))
+            workload.reconcile_transaction_blocks(
+                lifecycle, [], 301, 301, Path(home) / "blocks.jsonl",
+                observe_transaction=observe)
+            lifecycle.wait_height.assert_called_once_with(302)
+            self.assertEqual((rows[0]["provider"], rows[0]["slot"], rows[0]["txhash"], rows[0]["height"]),
+                             (providers[3], 3, txhash, 301))
+            lifecycle.cli.return_value = json.dumps(dict(decoded, height="302"))
+            with self.assertRaisesRegex(ValueError, "identity differs"):
+                workload.classify_cross_audit_transaction(
+                    lifecycle, rows[0], 301, providers, "7", 4)
+            message["session_proof"] = {}
+            lifecycle.cli.return_value = json.dumps(decoded)
+            with self.assertRaisesRegex(ValueError, "not a successful"):
+                workload.classify_cross_audit_transaction(
+                    lifecycle, rows[0], 301, providers, "7", 4)
 
     def test_native_chain_summary_excludes_warmup_from_measured_counts(self):
         sessions = [dict(accepted_sample_ordinals=[0, 1]),
@@ -838,6 +1327,25 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_cross_audit_cli_is_fixed_bounded_and_normal_audit_only(self):
+        common = ["diagnostic", "--mode", "native-v3-providers-cross-audit", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra in ([], required + ["--timeout", "901"], required + ["--audit-profile", "c6"],
+                      required + ["--proof-only"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit) as error:
+                    workload.main()
+                self.assertEqual(error.exception.code, 2)
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required + ["--timeout", "900"]), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_cross_audit=True, audit_profile="normal")
+
     def test_native_v3_chain_cli_requires_exporter_and_fixed_profile(self):
         common = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]

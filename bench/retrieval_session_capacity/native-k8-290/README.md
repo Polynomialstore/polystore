@@ -176,6 +176,44 @@ bounded offered/committed diagnostic. A longer reviewed profile is required
 before quoting stable throughput, and delivered-file performance remains a
 separate measurement.
 
+## Native v3 provider-daemon cross-audit diagnostic
+
+`native-v3-providers-cross-audit` extends the same production provider-daemon route
+without changing proof, gas, queue, or audit behavior. It opens sixteen fixed
+16 MiB sessions. One transaction per systematic provider warms the route
+outside the clock, then 120 transactions are offered round-robin across the
+eight assigned signers at 2 transactions/s for 60 seconds. Each signer has at
+most one request in flight. The HTTP clock includes proof generation, native
+verification, gas simulation, signing, broadcast, and commit observation.
+
+The run aligns its measured start 30 blocks before the next normal audit anchor
+and requires the profile to cross exactly that one anchor. It retains the actual
+offered, queued, completed, and failed request counts, so backlog or a bounded
+route failure remains diagnostic evidence rather than being relabeled as a
+successful 2 transactions/s result. A successful run additionally verifies all
+128 warmup and measured proof transactions, all 2,112 accepted ordinals, the
+crossed audit coverage and its unique transactions, provider account sequences,
+raw blocks/results on all four validators, Linux validator CPU ticks covering
+the fixed HTTP schedule, drain, and crossed-audit completion, and all sixteen
+expiry/refund paths. Scheduler HTTP duration remains a separate measurement. It
+does not send an ACK or verify delivery.
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-providers-cross-audit --audit-profile normal --timeout 900 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-provider-cross-audit-001"
+```
+
+This is a finite local constant-offer diagnostic. It does not establish a
+sustained operating point across multiple epochs, WAN behavior, phase RSS peak,
+or delivered-byte capacity. A retained performance result requires this harness
+to land before collection.
+
 ## Native v3 chain-only diagnostic
 
 `native-v3-chain` keeps the same 16 MiB FAT v3 generation and normal audits,
