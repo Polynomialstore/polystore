@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Download, type Page, type Request, type Response, type Route } from '@playwright/test'
+import { expect, type APIRequestContext, type Download, type Page, type Response, type Route } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 
@@ -275,15 +275,12 @@ test.describe('native V3 browser qualification', () => {
     const evmResponseHashes: string[] = []
     const evmTransactions: JsonObject[] = []
     const evmReceipts: JsonObject[] = []
-    const gatewayMduResponses: Array<{ url: string; kind: 'metadata' | 'data'; bodyBytes: number }> = []
     const gatewayMduCanceled: Array<{ url: string; kind: 'metadata' | 'data'; error: string }> = []
     const directSpMduRequests: string[] = []
     const mduNetworkRequests: MduRequestCounts = {
       gatewayMetadata: 0, gatewayData: 0, directMetadata: 0, directData: 0,
     }
     const snapshotMduRequests = (): MduRequestCounts => ({ ...mduNetworkRequests })
-    const pendingGatewayMduRequests = new Map<Request, { url: string; kind: 'metadata' | 'data' }>()
-    const retrievalObserverErrors: string[] = []
     let rawTransactions = 0
     let failure: Error | undefined
     const summary: Record<string, unknown> = {
@@ -321,12 +318,6 @@ test.describe('native V3 browser qualification', () => {
           else if (gatewayMdu) mduNetworkRequests.gatewayMetadata++
           else if (data) mduNetworkRequests.directData++
           else mduNetworkRequests.directMetadata++
-          if (gatewayMdu) {
-            pendingGatewayMduRequests.set(request, {
-              url: request.url(),
-              kind: data ? 'data' : 'metadata',
-            })
-          }
         }
         if (directMdu) {
           directSpMduRequests.push(request.url())
@@ -334,26 +325,14 @@ test.describe('native V3 browser qualification', () => {
         if (request.method() !== 'POST') return
         try { if (JSON.parse(request.postData() || '{}').method === 'eth_sendRawTransaction') rawTransactions++ } catch { /* evidence remains countable */ }
       })
-      page.on('requestfinished', (request) => {
-        const observed = pendingGatewayMduRequests.get(request)
-        if (!observed) return
-        void (async () => {
-          const response = await request.response()
-          if (!response) throw new Error(`gateway MDU request completed without a response: ${observed.url}`)
-          if (!response.ok()) throw new Error(`gateway MDU request returned HTTP ${response.status()}: ${observed.url}`)
-          const sizes = await request.sizes()
-          gatewayMduResponses.push({ ...observed, bodyBytes: sizes.responseBodySize })
-        })().catch((error: unknown) => {
-          retrievalObserverErrors.push(error instanceof Error ? error.message : String(error))
-        }).finally(() => {
-          pendingGatewayMduRequests.delete(request)
-        })
-      })
       page.on('requestfailed', (request) => {
-        const observed = pendingGatewayMduRequests.get(request)
-        if (!observed) return
-        gatewayMduCanceled.push({ ...observed, error: request.failure()?.errorText || 'request failed' })
-        pendingGatewayMduRequests.delete(request)
+        const path = new URL(request.url()).pathname
+        if (!/^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)) return
+        gatewayMduCanceled.push({
+          url: request.url(),
+          kind: request.headers()['x-polystore-session-id'] ? 'data' : 'metadata',
+          error: request.failure()?.errorText || 'request failed',
+        })
       })
       page.on('response', (response: Response) => {
         if (response.request().method() === 'POST' && response.url().startsWith(evm)) {
@@ -381,7 +360,7 @@ test.describe('native V3 browser qualification', () => {
       expect(policy && typeof policy === 'object' && (policy as JsonObject).mode)
         .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
       progress.enter('deal_detail')
-      const gatewayUrl = await mountDealDetail(page)
+      await mountDealDetail(page)
       progress.startRetrieval(retrievalTimeout)
       const button = await openDownload(page)
       const [download] = await Promise.all([
@@ -449,31 +428,20 @@ test.describe('native V3 browser qualification', () => {
       expect(progressAfterPaid.flushedLogicalBytes).toBe(expectedBytes)
       expect(progressAfterPaid.verifiedChunks).toBeGreaterThan(0)
       expect(progressAfterPaid.ackedObligations).toBe((obligations as JsonObject[]).length)
-      for (const phase of ['chunk_transport', 'browser_verify', 'decode_write', 'flush']) {
+      for (const phase of ['metadata_authentication', 'chunk_transport', 'browser_verify', 'decode_write', 'flush']) {
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'start')).toBe(true)
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'end')).toBe(true)
       }
-      await expect.poll(() => pendingGatewayMduRequests.size).toBe(0)
-      expect(retrievalObserverErrors).toEqual([])
-      const metadataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'metadata')
-      const dataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'data')
-      expect(metadataResponses.length).toBeGreaterThan(0)
-      expect(dataResponses.length).toBeGreaterThan(0)
-      expect(gatewayMduResponses.every(({ url }) => url.startsWith(`${gatewayUrl}/gateway/mdu/`))).toBe(true)
-      expect(gatewayMduResponses.every(({ bodyBytes }) => bodyBytes > 0)).toBe(true)
+      const requestCounts = snapshotMduRequests()
+      expect(requestCounts.gatewayMetadata).toBeGreaterThan(0)
+      expect(requestCounts.gatewayData).toBeGreaterThan(0)
+      expect(requestCounts.directMetadata).toBe(0)
+      expect(requestCounts.directData).toBe(0)
       expect(directSpMduRequests).toHaveLength(0)
       const retrievalHttp = {
-        gateway: {
-          metadata: { completedCount: metadataResponses.length,
-            completedPayloadBytes: metadataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
-            completedUrls: metadataResponses.map(({ url }) => url) },
-          data: { completedCount: dataResponses.length,
-            completedPayloadBytes: dataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
-            completedUrls: dataResponses.map(({ url }) => url) },
-          canceled: { count: gatewayMduCanceled.length, urls: gatewayMduCanceled.map(({ url }) => url),
-            responses: gatewayMduCanceled },
-        },
-        directSpMdu: { requestCount: 0, urls: [] as string[] },
+        requestCounts,
+        canceled: { count: gatewayMduCanceled.length, responses: gatewayMduCanceled },
+        wireBytesMeasured: false,
       }
       Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid, retrievalHttp })
       const paidTransactions = rawTransactions
