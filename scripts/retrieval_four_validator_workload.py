@@ -2214,7 +2214,8 @@ def prepare_native_v3_browser_expiry(lifecycle, *, main_deal, providers, send, w
     initial = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, created["height"])["deal"]
     assigned = {producer.uint(row["slot"]): row["provider"] for row in initial["mode2_slots"]
                 if row["status"] == "SLOT_STATUS_ACTIVE" and not row.get("pending_provider")}
-    if assigned != providers or len(initial["mode2_slots"]) != len(providers):
+    if (set(assigned) != set(providers) or set(assigned.values()) != set(providers.values()) or
+            len(initial["mode2_slots"]) != len(providers)):
         raise ValueError("short browser deal differs from the owned provider placement")
     directory = lifecycle.home / "native-v3-browser-expiry-fixture"
     directory.mkdir(mode=0o700)
@@ -2225,9 +2226,10 @@ def prepare_native_v3_browser_expiry(lifecycle, *, main_deal, providers, send, w
     uploaded = json.loads(command([curl, "--silent", "--show-error", "--fail", "--max-time", "180",
         "--form-string", "owner=" + lifecycle.signers["owner0"], "--form-string", "file_path=payload.bin",
         "--form", "file=@" + str(path),
-        f"http://127.0.0.1:19091/sp/retrieval/upload?deal_id={identity}&fat_version=3"], 185))
+        provider_http_url(lifecycle, assigned[0],
+            f"/sp/retrieval/upload?deal_id={identity}&fat_version=3")], 185))
     candidate, height = admit_native_v3_generation(lifecycle, uploaded=uploaded, deal_id=identity,
-        providers=providers, send=send, curl=curl, file_bytes=1024,
+        providers=assigned, send=send, curl=curl, file_bytes=1024,
         evidence_key="native_v3_browser_expiry_generation",
         http_phase="browser-expiry-generation-acceptance")
     wait(height + 1)
@@ -4160,10 +4162,11 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
                     check_providers=check_providers)
-                expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
-                    send=send, wait=wait, command=command, curl=curl)
-                run_native_v3_browser_expiry(lifecycle, source=source, deal=expiry["deal"],
-                    browser_ports=browser_ports, payload=expiry["payload"], check_providers=check_providers)
+                if browser_bytes == 1024:
+                    expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
+                        send=send, wait=wait, command=command, curl=curl)
+                    run_native_v3_browser_expiry(lifecycle, source=source, deal=expiry["deal"],
+                        browser_ports=browser_ports, payload=expiry["payload"], check_providers=check_providers)
                 doc.update(status="native_v3_browser_qualification_passed", qualification=True)
             else:
                 run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)

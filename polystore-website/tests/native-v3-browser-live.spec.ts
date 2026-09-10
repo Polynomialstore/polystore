@@ -8,6 +8,7 @@ import type { RetrievalDiagnostic } from '../src/lib/retrievalDiagnostics'
 
 const enabled = process.env.E2E_NATIVE_V3_BROWSER === '1'
 const expiryEnabled = process.env.E2E_NATIVE_V3_EXPIRY === '1'
+const faultsEnabled = process.env.E2E_NATIVE_V3_FAULTS === '1'
 const dealId = process.env.E2E_NATIVE_V3_DEAL_ID || ''
 const payer = process.env.E2E_NATIVE_V3_PAYER || ''
 const filePath = process.env.E2E_NATIVE_V3_FILE || 'payload.bin'
@@ -26,6 +27,11 @@ async function balance(page: Page, address: string, denom: string): Promise<bigi
 type JsonObject = Record<string, unknown>
 
 type EvmRpcRequest = { id?: string | number; method?: string; params?: unknown[] }
+type V3PlannedChunk = { id: string; slot: number; mduIndex: string; startBlobIndex: number; entries: string[] }
+type V3CheckpointObservation = {
+  sessionId: string; nonce: string; population: string; sampleCount: string; ackedMask: number; settledMask: number
+  lockedFee: string; cursors: Record<string, string>; chunks: V3PlannedChunk[]; unsampled: string[]
+}
 
 async function evmRpc(page: Page, method: string, params: unknown[]): Promise<unknown> {
   const response = await page.request.post(evm, {
@@ -59,6 +65,61 @@ async function latestHeight(request: APIRequestContext): Promise<bigint> {
   return BigInt(String(header?.height || '0'))
 }
 
+async function observeV3Checkpoint(page: Page): Promise<V3CheckpointObservation> {
+  return page.evaluate(async ({ dealId, payer }) => {
+    const checkpoints = await import(/* @vite-ignore */ '/src/lib/retrievalV3Checkpoint.ts') as typeof import('../src/lib/retrievalV3Checkpoint')
+    const transactions = await import(/* @vite-ignore */ '/src/lib/retrievalTransactions.ts') as typeof import('../src/lib/retrievalTransactions')
+    const retrieval = await import(/* @vite-ignore */ '/src/lib/retrievalV3.ts') as typeof import('../src/lib/retrievalV3')
+    const { workerClient } = await import(/* @vite-ignore */ '/src/lib/worker-client.ts') as typeof import('../src/lib/worker-client')
+    const { appConfig } = await import(/* @vite-ignore */ '/src/config.ts') as typeof import('../src/config')
+    const rows = checkpoints.listRetrievalV3Checkpoints(BigInt(dealId), payer, appConfig.cosmosChainId,
+      transactions.browserRetrievalStore())
+    if (rows.length !== 1 || !rows[0].state.session?.anchorSeed) throw new Error('expected one ready frozen v3 checkpoint')
+    const state = rows[0].state, session = state.session
+    const challenges = await workerClient.retrievalV3Challenges(session.context, session.anchorSeed)
+    const selected = new Set<string>(), view = new DataView(challenges.buffer, challenges.byteOffset, challenges.byteLength)
+    for (let offset = 0; offset < challenges.byteLength; offset += 72) selected.add(view.getBigUint64(offset + 16).toString())
+    const chunks = [...retrieval.planV3Chunks(session)].map((chunk) => ({
+      id: `${chunk.slot}:${chunk.entries[0].t}:${chunk.entries[chunk.entries.length - 1].t}`,
+      slot: chunk.slot, mduIndex: chunk.mduIndex.toString(), startBlobIndex: chunk.startBlobIndex,
+      entries: chunk.entries.map((entry) => entry.t.toString()),
+    }))
+    const unsampled: string[] = []
+    for (let t = session.first; t <= session.last; t++) if (!selected.has(t.toString())) unsampled.push(t.toString())
+    return {
+      sessionId: session.sessionId, nonce: session.nonce.toString(), population: session.population.toString(),
+      sampleCount: session.sampleCount.toString(), ackedMask: session.ackedMask, settledMask: session.settledMask,
+      lockedFee: session.lockedFee.toString(),
+      cursors: Object.fromEntries(Object.entries(state.cursors).map(([slot, through]) => [slot, through!.toString()])),
+      chunks, unsampled,
+    }
+  }, { dealId, payer })
+}
+
+function mutateV3Multipart(body: Buffer, contentType: string, kind: 'corrupt' | 'wrong-order' | 'truncate', blob = 0): Buffer {
+  const boundary = /(?:^|;)\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType)?.slice(1).find(Boolean)
+  if (!boundary) throw new Error('missing v3 multipart boundary')
+  const opening = Buffer.from(`--${boundary}\r\n`), middle = Buffer.from(`\r\n--${boundary}\r\n`)
+  const closing = Buffer.from(`\r\n--${boundary}--`), headerEnd = Buffer.from('\r\n\r\n')
+  const split = body.indexOf(middle, opening.length), close = body.indexOf(closing, split + middle.length)
+  const secondHeader = body.indexOf(headerEnd, split + middle.length)
+  if (!body.subarray(0, opening.length).equals(opening) || split < 0 || close < 0 || secondHeader < 0) {
+    throw new Error('unexpected v3 multipart framing')
+  }
+  if (kind === 'wrong-order') {
+    const first = body.subarray(opening.length, split), second = body.subarray(split + middle.length, close)
+    return Buffer.concat([opening, second, middle, first, body.subarray(close)])
+  }
+  const dataStart = secondHeader + headerEnd.length
+  if (close - dataStart < 1) throw new Error('missing v3 multipart bytes')
+  if (kind === 'truncate') return Buffer.concat([body.subarray(0, close - 1), body.subarray(close)])
+  const offset = dataStart + blob * 131_072 + 1
+  if (offset >= close) throw new Error('corruption target lies outside v3 multipart bytes')
+  const mutated = Buffer.from(body)
+  mutated[offset] ^= 1
+  return mutated
+}
+
 async function hashDownload(download: Download): Promise<{ bytes: number; sha256: string }> {
   const digest = crypto.createHash('sha256')
   let bytes = 0
@@ -88,6 +149,13 @@ async function waitForDownloadEventOrFailure(page: Page, timeout: number, baseli
   }
   const failure = await readDownloadFailureBanner(page)
   throw new Error(`download event not emitted${failure ? `: ${failure}` : ''}`)
+}
+
+async function waitForRetrievalFailure(page: Page, timeout = 120_000): Promise<string> {
+  await expect.poll(() => readDownloadFailureBanner(page), { timeout }).toContain('Download failed:')
+  const failure = await readDownloadFailureBanner(page)
+  expect(failure).toContain('Download failed:')
+  return failure
 }
 
 async function openDownload(page: Page) {
@@ -180,7 +248,7 @@ test.describe('native V3 browser qualification', () => {
   test.use({ acceptDownloads: true })
 
   test('PUBLIC native deal is paid, verified, acknowledged, cached and downloaded by its sponsor', async ({ page }) => {
-    test.skip(expiryEnabled, 'the dedicated short-deal invocation runs only expiry recovery')
+    test.skip(expiryEnabled || faultsEnabled, 'dedicated fault invocations skip the happy path')
     const retrievalTimeout = expectedBytes >= 2 ** 30 ? 30 * 60_000 : 10 * 60_000
     test.setTimeout(expectedBytes >= 2 ** 30 ? 75 * 60_000 : 15 * 60_000)
     expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
@@ -383,7 +451,7 @@ test.describe('native V3 browser qualification', () => {
 
   for (const fault of ['estimate rejected', 'wallet 4001'] as const) {
     test(`${fault} before payment preserves an unfinished request without spending`, async ({ page }) => {
-      test.skip(expiryEnabled, 'the dedicated short-deal invocation runs only expiry recovery')
+      test.skip(expiryEnabled || faultsEnabled, 'dedicated fault invocations skip pre-payment cases')
       test.setTimeout(5 * 60_000)
       expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
       expect(payer).toMatch(/^nil1[0-9a-z]+$/)
@@ -479,7 +547,7 @@ test.describe('native V3 browser qualification', () => {
   }
 
   test('expired paid checkpoint refunds without a second open or provider access', async ({ page }) => {
-    test.skip(!expiryEnabled, 'requires the dedicated short-lived native V3 deal')
+    test.skip(!expiryEnabled || faultsEnabled, 'requires only the dedicated short-lived native V3 deal')
     test.setTimeout(8 * 60_000)
     expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
     expect(payer).toMatch(/^nil1[0-9a-z]+$/)
@@ -677,6 +745,286 @@ test.describe('native V3 browser qualification', () => {
       })
       await durable('refunded')
     } finally {
+      persist()
+      await saved
+    }
+  })
+
+  test('one paid session survives unknown open, authenticated faults and page replacement', async ({ page }) => {
+    test.skip(!faultsEnabled || expiryEnabled, 'requires only the dedicated 16 MiB + 1 native V3 deal')
+    test.setTimeout(25 * 60_000)
+    expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
+    expect(payer).toMatch(/^nil1[0-9a-z]+$/)
+    expect(expectedBytes).toBe(16 * 1024 * 1024 + 1)
+    expect(expectedHash).toMatch(/^[0-9a-f]{64}$/)
+
+    const context = page.context()
+    const diagnostics: Array<RetrievalDiagnostic & { segment: string }> = []
+    const evmResponseHashes: string[] = []
+    const evmTransactions: JsonObject[] = []
+    const evmReceipts: JsonObject[] = []
+    const durableStages: string[] = []
+    const faultDeliveries = { corrupt: 0, 'wrong-order': 0, truncate: 0 }
+    let segment = 'initial'
+    let rawTransactions = 0
+    let suppressOpenResponse = true
+    let unknownOpenHash = ''
+    let holdAckEstimate = false
+    let heldAckEstimate = false
+    let releaseHeldAck: (() => void) | undefined
+    let activePage = page
+    let faultMode: 'corrupt' | 'wrong-order' | 'truncate' | 'pass' = 'corrupt'
+    let planned: V3CheckpointObservation | undefined
+    let targetChunk: V3PlannedChunk | undefined
+    let targetT = ''
+    let targetBlob = -1
+    let dataRequests = 0
+    let targetRequests = 0
+    const summary: Record<string, unknown> = {
+      success: false, dealId, payer, filePath, expectedBytes, expectedHash, diagnostics,
+      evmResponseHashes, evmTransactions, evmReceipts, faultDeliveries,
+      resultDurability: { atomicReplace: true, verifiedStages: durableStages },
+    }
+    let saved: Promise<void> = Promise.resolve()
+    const persist = () => {
+      if (!resultPath) return
+      const temporary = `${resultPath}.tmp`
+      const json = JSON.stringify(summary, (_key, value) => typeof value === 'bigint' ? value.toString() : value, 2)
+      saved = saved.then(() => fs.writeFile(temporary, json)).then(() => fs.rename(temporary, resultPath))
+      void saved.catch(() => undefined)
+    }
+    const durable = async (stage: string) => {
+      Object.assign(summary, { stage })
+      if (!resultPath) return
+      persist()
+      await saved
+      const retained = JSON.parse(await fs.readFile(resultPath, 'utf8')) as JsonObject
+      expect(retained.stage).toBe(stage)
+      durableStages.push(stage)
+    }
+
+    await context.exposeFunction('__nativeV3FaultDiagnostic', (event: RetrievalDiagnostic) => {
+      diagnostics.push({ ...event, segment })
+    })
+    await context.addInitScript(() => {
+      const scope = window as unknown as {
+        __polystoreRetrievalDiagnostic: (event: unknown) => void
+        __nativeV3FaultDiagnostic: (event: unknown) => Promise<void>
+      }
+      scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3FaultDiagnostic(event) }
+    })
+
+    await context.route(evm, async (route) => {
+      const request = route.request()
+      if (request.method() !== 'POST') return route.continue()
+      let rpc: EvmRpcRequest
+      try { rpc = JSON.parse(request.postData() || '{}') as EvmRpcRequest } catch { return route.continue() }
+      if (rpc.method === 'eth_estimateGas' && holdAckEstimate) {
+        holdAckEstimate = false
+        heldAckEstimate = true
+        await new Promise<void>((resolve) => { releaseHeldAck = resolve })
+        await route.abort('failed').catch(() => undefined)
+        return
+      }
+      if (rpc.method !== 'eth_sendRawTransaction') return route.continue()
+      rawTransactions++
+      const upstream = await route.fetch()
+      const body = await upstream.body()
+      const payload = JSON.parse(body.toString()) as JsonObject
+      expect(payload.error).toBeUndefined()
+      expect(payload.result).toMatch(/^0x[0-9a-f]{64}$/i)
+      const hash = String(payload.result)
+      evmResponseHashes.push(hash)
+      if (suppressOpenResponse) {
+        suppressOpenResponse = false
+        unknownOpenHash = hash
+        await route.abort('failed')
+        return
+      }
+      await route.fulfill({ response: upstream, body })
+    })
+
+    const mutateTarget = async (route: Route) => {
+      const request = route.request(), headers = request.headers()
+      const sessionId = headers['x-polystore-session-id'] || ''
+      if (!sessionId) return route.continue()
+      dataRequests++
+      if (!planned) {
+        planned = await observeV3Checkpoint(activePage)
+        expect(planned.population).toBe('133')
+        expect(planned.sampleCount).toBe('132')
+        expect(planned.unsampled).toHaveLength(1)
+        expect(planned.chunks).toHaveLength(21)
+        targetT = planned.unsampled[0]
+        targetChunk = planned.chunks.find((chunk) => chunk.entries.includes(targetT))
+        if (!targetChunk) throw new Error('unsampled coordinate has no planned v3 chunk')
+        targetBlob = targetChunk.entries.indexOf(targetT)
+      }
+      expect(sessionId).toBe(planned.sessionId)
+      const url = new URL(request.url())
+      const mduIndex = url.pathname.split('/').filter(Boolean).at(-1)
+      const isTarget = headers['x-polystore-slot'] === String(targetChunk!.slot) &&
+        headers['x-polystore-start-blob-index'] === String(targetChunk!.startBlobIndex) && mduIndex === targetChunk!.mduIndex
+      if (!isTarget) return route.continue()
+      targetRequests++
+      if (faultMode === 'pass') return route.continue()
+      faultDeliveries[faultMode]++
+      const upstream = await route.fetch()
+      const body = await upstream.body()
+      const contentType = upstream.headers()['content-type'] || ''
+      const mutated = mutateV3Multipart(body, contentType, faultMode, targetBlob)
+      await route.fulfill({ response: upstream, body: mutated })
+    }
+    await context.route('**/gateway/mdu/**', mutateTarget)
+    await context.route('**/sp/retrieval/mdu/**', mutateTarget)
+
+    try {
+      const before = {
+        stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page), deal: await deal(page),
+      }
+      expect(before.deal.owner).not.toBe(payer)
+      expect((before.deal.retrieval_policy as JsonObject | undefined)?.mode)
+        .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
+      const gatewayUrl = await mountDealDetail(page)
+      const initialButton = await openDownload(page)
+      await initialButton.click()
+      const unknownFailure = await waitForRetrievalFailure(page)
+      expect(unknownOpenHash).toMatch(/^0x[0-9a-f]{64}$/i)
+      expect(rawTransactions).toBe(1)
+      expect(evmResponseHashes).toEqual([unknownOpenHash])
+      await expect.poll(() => unfinishedLocalState(page)).toEqual({
+        checkpoints: 1, unbound: 1, journals: [{ state: 'broadcasting', hasHash: false }],
+      })
+      const afterUnknown = {
+        stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page),
+      }
+      expect(afterUnknown.stake).toBeLessThan(before.stake)
+      expect(afterUnknown.aatom).toBeLessThan(before.aatom)
+      expect(BigInt(afterUnknown.nonce.nonce)).toBe(BigInt(before.nonce.nonce) + 1n)
+      Object.assign(summary, { stage: 'unknown-open', before, afterUnknown, gatewayUrl, unknownFailure, unknownOpenHash })
+      await durable('unknown-open')
+
+      const recoveryButton = () => activePage.getByTestId('deal-detail-file-row').filter({
+        has: activePage.getByTestId('v3-frozen-recovery'),
+      }).getByTestId('deal-detail-download')
+      const faultSnapshots: Record<string, V3CheckpointObservation> = {}
+      for (const kind of ['corrupt', 'wrong-order', 'truncate'] as const) {
+        segment = kind
+        faultMode = kind
+        await expect(recoveryButton()).toBeVisible({ timeout: 120_000 })
+        await recoveryButton().click()
+        await expect.poll(() => faultDeliveries[kind], { timeout: 120_000 }).toBeGreaterThan(0)
+        await waitForRetrievalFailure(activePage)
+        await expect(recoveryButton()).toBeEnabled({ timeout: 120_000 })
+        const snapshot = await observeV3Checkpoint(activePage)
+        faultSnapshots[kind] = snapshot
+        expect(snapshot.sessionId).toBe(planned!.sessionId)
+        expect(snapshot.nonce).toBe(planned!.nonce)
+        const targetPosition = planned!.chunks.indexOf(targetChunk!)
+        const previous = planned!.chunks.slice(0, targetPosition).filter((chunk) => chunk.slot === targetChunk!.slot).at(-1)
+        expect(snapshot.cursors[String(targetChunk!.slot)] || '-1')
+          .toBe(previous?.entries.at(-1) || '-1')
+        expect(snapshot.ackedMask & (1 << targetChunk!.slot)).toBe(0)
+        expect(snapshot.settledMask & (1 << targetChunk!.slot)).toBe(0)
+        expect(diagnostics.some((event) => event.chunkId === targetChunk!.id &&
+          ['verified_write', 'flushed', 'verified_chunk'].includes(event.phase))).toBe(false)
+        expect(diagnostics.some((event) => event.phase === 'acked_obligation' && event.slot === targetChunk!.slot)).toBe(false)
+        expect(rawTransactions).toBe(1 + diagnostics.filter((event) => event.phase === 'acked_obligation').length)
+        expect((await latestNonce(activePage)).nonce).toBe(afterUnknown.nonce.nonce)
+        Object.assign(summary, { stage: kind, planned, targetT, targetChunk, targetBlob, faultSnapshots, dataRequests, targetRequests })
+        await durable(kind)
+      }
+
+      segment = 'durable-before-reopen'
+      faultMode = 'pass'
+      holdAckEstimate = true
+      await recoveryButton().click()
+      await expect.poll(() => heldAckEstimate, { timeout: 180_000 }).toBe(true)
+      const durableCheckpoint = await observeV3Checkpoint(activePage)
+      const targetSlotEnd = planned!.chunks.filter((chunk) => chunk.slot === targetChunk!.slot).at(-1)!.entries.at(-1)!
+      expect(durableCheckpoint.cursors[String(targetChunk!.slot)]).toBe(targetSlotEnd)
+      expect(durableCheckpoint.ackedMask & (1 << targetChunk!.slot)).toBe(0)
+      expect(diagnostics.some((event) => event.phase === 'verified_chunk' && event.chunkId === targetChunk!.id)).toBe(true)
+      const requestsBeforeReopen = { data: dataRequests, target: targetRequests }
+      Object.assign(summary, { stage: 'durable-before-reopen', durableCheckpoint, requestsBeforeReopen })
+      await durable('durable-before-reopen')
+
+      const closing = activePage.close()
+      releaseHeldAck?.()
+      await closing
+      segment = 'reopened'
+      activePage = await context.newPage()
+      await mountDealDetail(activePage, false)
+      await expect(recoveryButton()).toBeVisible({ timeout: 120_000 })
+      const [download] = await Promise.all([
+        waitForDownloadEventOrFailure(activePage, 10 * 60_000, await readDownloadFailureBanner(activePage)),
+        recoveryButton().click(),
+      ])
+      const downloaded = await hashDownload(download)
+      await download.delete()
+      expect(downloaded).toEqual({ bytes: expectedBytes, sha256: expectedHash })
+      expect(targetRequests).toBe(requestsBeforeReopen.target)
+
+      const session = await sessionById(activePage, planned!.sessionId)
+      const obligations = session.obligations as JsonObject[]
+      const expectedMask = obligations.reduce((mask, row) => mask | (1n << BigInt(String(row.slot))), 0n)
+      expect(BigInt(String(session.acked_slots_mask))).toBe(expectedMask)
+      expect(BigInt(String(session.settled_slots_mask))).toBe(expectedMask)
+      expect(BigInt(String(session.refunded_slots_mask))).toBe(0n)
+      expect(BigInt(String(session.locked_fee))).toBe(0n)
+      expect(rawTransactions).toBe(1 + obligations.length)
+      expect(evmResponseHashes).toHaveLength(rawTransactions)
+      expect(new Set(evmResponseHashes).size).toBe(rawTransactions)
+      expect(evmResponseHashes[0]).toBe(unknownOpenHash)
+      for (const hash of evmResponseHashes) {
+        const transaction = await evmRpc(activePage, 'eth_getTransactionByHash', [hash])
+        const receipt = await evmRpc(activePage, 'eth_getTransactionReceipt', [hash])
+        expect(transaction && typeof transaction === 'object').toBe(true)
+        expect(receipt && typeof receipt === 'object').toBe(true)
+        const tx = transaction as JsonObject, committed = receipt as JsonObject
+        expect(tx.hash).toBe(hash)
+        expect(committed.transactionHash).toBe(hash)
+        expect(committed.status).toBe('0x1')
+        evmTransactions.push(tx)
+        evmReceipts.push(committed)
+      }
+      const variableFee = obligations.reduce((sum, row) =>
+        sum + BigInt(String(row.blob_count)) * BigInt(String(session.price_per_blob)), 0n)
+      const chargedStake = BigInt(String(session.base_fee)) + variableFee
+      const after = {
+        stake: await balance(activePage, payer, 'stake'), aatom: await balance(activePage, payer, 'aatom'),
+        nonce: await latestNonce(activePage),
+      }
+      expect(before.stake - after.stake).toBe(chargedStake)
+      expect(after.aatom).toBeLessThan(before.aatom)
+      expect(after.nonce).toEqual(afterUnknown.nonce)
+      await expect.poll(() => unfinishedLocalState(activePage)).toEqual({ checkpoints: 1, unbound: 0, journals: [] })
+
+      const requestsBeforeCache = { data: dataRequests, target: targetRequests, raw: rawTransactions }
+      const cacheButton = activePage.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).first()
+      const [cachedDownload] = await Promise.all([
+        waitForDownloadEventOrFailure(activePage, 120_000, await readDownloadFailureBanner(activePage)), cacheButton.click(),
+      ])
+      const cached = await hashDownload(cachedDownload)
+      await cachedDownload.delete()
+      expect(cached).toEqual(downloaded)
+      expect({ data: dataRequests, target: targetRequests, raw: rawTransactions }).toEqual(requestsBeforeCache)
+      const phaseGuards = {
+        openedSessions: diagnostics.filter((event) => event.phase === 'opened_session').length,
+        acknowledgedObligations: diagnostics.filter((event) => event.phase === 'acked_obligation').length,
+        targetVerifiedChunks: diagnostics.filter((event) => event.phase === 'verified_chunk' && event.chunkId === targetChunk!.id).length,
+      }
+      expect(phaseGuards).toEqual({ openedSessions: 1, acknowledgedObligations: obligations.length, targetVerifiedChunks: 1 })
+      Object.assign(summary, {
+        success: true, stage: 'settled-cache', session, before, afterUnknown, after, rawTransactions,
+        downloaded, cached, chargedStake: String(chargedStake), requestsBeforeCache, dataRequests, targetRequests,
+        phaseGuards, localState: await unfinishedLocalState(activePage),
+      })
+      await durable('settled-cache')
+    } finally {
+      releaseHeldAck?.()
       persist()
       await saved
     }

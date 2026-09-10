@@ -297,13 +297,16 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             main_payload.write_bytes(bytes(range(256)) * 8)
             owner = ADDRESSES[0]
             providers = dict(enumerate(AUDIT_ADDRESSES))
+            assigned = {slot: AUDIT_ADDRESSES[(slot + 1) % len(AUDIT_ADDRESSES)] for slot in providers}
             slots = [dict(slot=str(slot), provider=provider, status="SLOT_STATUS_ACTIVE", pending_provider="")
-                     for slot, provider in providers.items()]
+                     for slot, provider in assigned.items()]
             initial = {"mode2_slots": slots}
             final = dict(initial, manifest_root=base64.b64encode(bytes.fromhex("ab" * 32)).decode(),
                          size="1024", total_mdus="3", witness_mdus="1", current_gen="1")
             lifecycle = SimpleNamespace(home=home, nodes=[{}], signers={"owner0": owner},
-                doc={"payload": {"path": str(main_payload)}}, save=Mock())
+                doc={"payload": {"path": str(main_payload)},
+                     "providers": [dict(address=provider, port=19091 + slot)
+                                   for slot, provider in providers.items()]}, save=Mock())
             lifecycle.query = Mock(side_effect=[{"deals": [{"id": "7", "owner": owner}, {"id": "8", "owner": owner}]},
                                                 {"deal": initial}, {"deal": final}])
             send = Mock(return_value={"height": 10})
@@ -316,6 +319,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                     providers=providers, send=send, wait=wait, command=command, curl="/curl")
             self.assertEqual(send.call_args.args[1][:2], ["create-deal", "180"])
             self.assertEqual(fixture["payload"]["bytes"], 1024)
+            self.assertTrue(command.call_args.args[0][-1].startswith(
+                "http://127.0.0.1:19092/sp/retrieval/upload?deal_id=8&"))
+            self.assertEqual(admit.call_args.kwargs["providers"], assigned)
             self.assertEqual(admit.call_args.kwargs["evidence_key"], "native_v3_browser_expiry_generation")
             self.assertEqual(admit.call_args.kwargs["http_phase"], "browser-expiry-generation-acceptance")
             self.assertEqual(policy.call_args.kwargs["directory_name"], "browser-expiry-public-policy")
