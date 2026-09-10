@@ -3,6 +3,8 @@ import argparse, hashlib, importlib.util, json, math, re, statistics, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+HARNESS_SHA256 = "7efd7fa4e8bec5f90f8ac09742220f6fa3f961316fb0ac3edfb20e67974cb662"
+
 
 def require(ok, message):
     if not ok: raise ValueError(message)
@@ -36,6 +38,18 @@ def load_harness(path):
     return module
 
 
+def validate_transaction(row, node_ids):
+    require(row["outcome"] == "committed_success" and row["code"] == 0 and
+            row["height"] > 0 and row["gas_wanted"] > 0 and row["gas_used"] > 0,
+            "non-successful transaction included")
+    validators = row["validators"]
+    require(len(validators) == 4 and {v["node_id"] for v in validators} == node_ids,
+            "transaction validator agreement is incomplete")
+    for validator in validators:
+        require(all(validator[key] == row[key] for key in ("txhash", "height", "code", "gas_wanted", "gas_used"))
+                and validator["bytes"] == validators[0]["bytes"] > 0, "transaction validator outcome differs")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("harness", type=Path)
@@ -45,8 +59,8 @@ def main():
                         choices=("premerge-correctness-smoke", "landed-retained-diagnostic"))
     args = parser.parse_args()
     doc = json.loads(args.evidence.read_text())
-    require(hashlib.sha256(args.harness.read_bytes()).hexdigest() == doc["provenance"]["driver_sha256"],
-            "supplied harness differs from collected driver")
+    require(hashlib.sha256(args.harness.read_bytes()).hexdigest() == HARNESS_SHA256 ==
+            doc["provenance"]["driver_sha256"], "supplied harness differs from independently pinned driver")
     harness = load_harness(args.harness.resolve())
     if args.run_scope == "landed-retained-diagnostic":
         require(doc["provenance"]["source_checkout"] == "0acb91a2d89073d0e3cb441db97d2dd192d03be9",
@@ -94,13 +108,7 @@ def main():
     all_rows = warmups + rows
     require(len({row["txhash"] for row in all_rows}) == 64, "repeated committed transaction")
     for row in all_rows:
-        require(row["outcome"] == "committed_success" and row["code"] == 0, "non-successful transaction included")
-        validators = row["validators"]
-        require(len(validators) == 4 and {v["node_id"] for v in validators} == node_ids,
-                "transaction validator agreement is incomplete")
-        for validator in validators:
-            require(all(validator[key] == row[key] for key in ("txhash", "height", "code", "gas_wanted", "gas_used"))
-                    and validator["bytes"] == validators[0]["bytes"] > 0, "transaction validator outcome differs")
+        validate_transaction(row, node_ids)
         require(row["offered_ns"] <= row["started_ns"] <= row["finished_ns"] and
                 row["queue_latency_ns"] == row["started_ns"] - row["offered_ns"] and
                 row["terminal_latency_ns"] == row["finished_ns"] - row["offered_ns"] and
@@ -108,10 +116,43 @@ def main():
                 "transaction timing identities are inconsistent")
     sessions = native["sessions"]
     require(len(sessions) == 8 and len({row["session_id"] for row in sessions}) == 8, "session set differs from fixed profile")
+    admitted = doc["native_v3_generation"]["admitted"]["admitted"]
+    providers = dict(enumerate(admitted["providers"][:8]))
+    refund_hashes = set()
     for session in sessions:
-        require(harness.v3_bitmap_ordinals(session["before_proofs"]["session"]) == [] and
-                harness.v3_bitmap_ordinals(session["after_proofs"]["session"]) == session["accepted_sample_ordinals"] == list(range(132)),
-                "authoritative accepted ordinals differ from session bitmap")
+        before = session["before_proofs"]["session"]
+        deadline = int(before["deadline_height"])
+        immutable = {key: value for key, value in before.items() if key not in
+                     {"accepted_sample_bitmap", "updated_height", "expired", "locked_fee", "refunded_slots_mask", "obligations"}}
+        for name, expired, refunded in (("before_proofs", False, False), ("after_proofs", False, False),
+                                        ("expired_before_refund", True, False), ("after_refund", True, True)):
+            state, ordinals = harness.validate_v3_session(
+                session[name], session_id=session["session_id"], deal_id=admitted["deal_id"],
+                owner=admitted["owner"], providers=providers, nonce=session["nonce"],
+                polyfs_root=harness.producer.b64(admitted["polyfs_root"], 32).hex(),
+                integrity_root=harness.producer.b64(admitted["integrity_root"], 32).hex(),
+                chain_id=doc["chain_id"], deadline_height=deadline, expired=expired, refunded=refunded)
+            require(all(state[key] == value for key, value in immutable.items()), "frozen session authority changed")
+            require(ordinals == ([] if name == "before_proofs" else list(range(132))),
+                    "authoritative accepted ordinals differ from session bitmap")
+            require([{k: v for k, v in row.items() if k != "sample_count"} for row in state["obligations"]] ==
+                    [{k: v for k, v in row.items() if k != "sample_count"} for row in before["obligations"]],
+                    "frozen obligation authority changed")
+            if expired:
+                require(state["obligations"] == session["after_proofs"]["session"]["obligations"],
+                        "terminal obligations differ from accepted proofs")
+            require(int(state["locked_fee"]) == (0 if refunded else 133), "session refund liability differs")
+            if expired:
+                require(session[name]["anchor_seed"] is None and int(state["updated_height"]) > deadline,
+                        "expired session retains anchor or predates deadline")
+        require(session["accepted_sample_ordinals"] == list(range(132)), "accepted ordinal inventory differs")
+        refund = session["refund_transaction"]
+        validate_transaction(refund, node_ids)
+        require(refund["txhash"] not in refund_hashes and refund["txhash"] not in {row["txhash"] for row in all_rows},
+                "repeated refund transaction")
+        refund_hashes.add(refund["txhash"])
+        require(deadline < int(session["expired_before_refund"]["session"]["updated_height"]) < refund["height"] ==
+                int(session["after_refund"]["session"]["updated_height"]), "refund transaction does not join terminal state")
     messages = [dict(row, id=f'v3-chain-{row["session_index"]}-{row["slot"]}') for row in native["inventory"]["messages"]]
     counts = harness.native_v3_chain_committed_summary(sessions, messages, warmups, rows)
     require(all(native[key] == value for key, value in counts.items()), "committed counters differ from authoritative inventory")

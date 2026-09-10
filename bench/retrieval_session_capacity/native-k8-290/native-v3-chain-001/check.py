@@ -29,6 +29,18 @@ def main():
         lambda d: d["native_v3_chain"]["scheduler"]["transactions"][0].update(kind="ack"),
         lambda d: d["validator_resources"][0].update(peak_rss_bytes=-1),
         lambda d: d["commit_step_metrics"]["phases"]["native_v3_chain_before"]["nodes"][0].update(node_id="wrong"),
+        lambda d: d["native_v3_chain"]["sessions"][0].pop("expired_before_refund"),
+        lambda d: d["native_v3_chain"]["sessions"][0].pop("refund_transaction"),
+        lambda d: d["native_v3_chain"]["sessions"][0].pop("after_refund"),
+        lambda d: d["native_v3_chain"]["sessions"][0]["after_refund"]["session"].update(refunded_slots_mask=0),
+        lambda d: d["native_v3_chain"]["sessions"][0]["after_refund"]["session"].update(locked_fee="133"),
+        lambda d: d["native_v3_chain"]["sessions"][0]["refund_transaction"].update(code=1),
+        lambda d: d["native_v3_chain"]["sessions"][0]["refund_transaction"]["validators"].pop(),
+        lambda d: d["native_v3_chain"]["sessions"][0]["refund_transaction"]["validators"][0].update(height=1),
+        lambda d: d["native_v3_chain"]["sessions"][0]["after_refund"]["session"].update(updated_height="384"),
+        lambda d: d["native_v3_chain"]["sessions"][0].update(after_refund=d["native_v3_chain"]["sessions"][1]["after_refund"]),
+        lambda d: d["native_v3_chain"]["sessions"][0]["expired_before_refund"]["session"].update(locked_fee="1"),
+        lambda d: d["native_v3_chain"]["sessions"][0]["expired_before_refund"]["session"].update(accepted_sample_bitmap=""),
     ]
     with tempfile.TemporaryDirectory() as temporary:
         source = Path(temporary) / "evidence.json"
@@ -62,7 +74,11 @@ def main():
         command[-1] = str(bad_harness)
         result = run(original)
         assert result.returncode == 2 and not result.stdout and not marker.exists(), result.stderr
-    print(f"Report accepted retained success and rejected {len(mutations) + 3} altered inputs.")
+        document = copy.deepcopy(original)
+        document["provenance"]["driver_sha256"] = hashlib.sha256(bad_harness.read_bytes()).hexdigest()
+        result = run(document)
+        assert result.returncode == 2 and not result.stdout and not marker.exists(), result.stderr
+    print(f"Report accepted retained success and rejected {len(mutations) + 4} altered inputs.")
 
 
 if __name__ == "__main__":
