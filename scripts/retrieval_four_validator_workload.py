@@ -2405,6 +2405,9 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_
     expected = {row["txhash"]: row for row in committed}
     if len(expected) != len(committed):
         raise ValueError("journal repeats a committed transaction hash")
+    # Comet reports canonical=false for the current BlockStore tip. Fence every
+    # validator past the retained interval before treating that as disagreement.
+    lifecycle.wait_height(last + 1)
     matched = set()
     with path.open("x") as output:
         for height in range(first, last + 1):

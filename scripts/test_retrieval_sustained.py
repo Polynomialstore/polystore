@@ -356,6 +356,7 @@ class SustainedTest(unittest.TestCase):
                         value["transactions"][0]["gas_used"] += 1
                     return value
                 life = SimpleNamespace(home=Path(home), chain="chain", nodes=list(range(4)), remaining=Mock(),
+                    wait_height=Mock(return_value=12),
                     query=query, doc=dict(commit_step_metrics=dict(phases=phases)))
                 with patch.object(artifact, "committed_block_summary", side_effect=summarize):
                     if corrupt:

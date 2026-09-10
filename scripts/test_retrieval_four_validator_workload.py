@@ -499,6 +499,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         commit = {"canonical": True, "signed_header": {"header": block["block"]["header"],
             "commit": {"height": "219", "block_id": block["block_id"]}}}
         decoded = {"txhash": txhash, "height": "219", "tx": {"body": {"messages": [message]}}}
+        tip_advanced = False
+        def wait_height(height):
+            nonlocal tip_advanced
+            self.assertEqual(height, 220)
+            tip_advanced = True
+            return height
         def query(node, path):
             if path.startswith("/tx?"):
                 return response
@@ -507,12 +513,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             if path.startswith("/block?"):
                 return block
             if path.startswith("/commit?"):
-                return commit
+                return dict(commit, canonical=tip_advanced)
             raise AssertionError(path)
         with tempfile.TemporaryDirectory() as home:
             lifecycle = SimpleNamespace(home=Path(home), chain="chain",
                 nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
-                query=query, wait_height=Mock(return_value=220), remaining=Mock(), doc={},
+                query=query, wait_height=Mock(side_effect=wait_height), remaining=Mock(), doc={},
                 cli=Mock(return_value=json.dumps(decoded)))
             transaction = workload.committed_v3_http_tx(lifecycle,
                 {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
@@ -522,12 +528,16 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertTrue(all(isinstance(transaction[key], int)
                                 for key in ("height", "code", "gas_wanted", "gas_used")))
             self.assertEqual(transaction["outcome"], "committed_success")
+            tip_advanced = False
+            lifecycle.wait_height.reset_mock()
             transaction["operation_id"] = "measured-1-0"
             output = Path(home) / "blocks.jsonl"
             observed = []
+            self.assertFalse(query(lifecycle.nodes[0], "/commit?height=219")["canonical"])
             workload.reconcile_transaction_blocks(
                 lifecycle, [transaction], 219, 219, output,
                 observe_transaction=lambda row, height: observed.append((row, height)))
+            lifecycle.wait_height.assert_called_once_with(220)
             retained = json.loads(output.read_text())
             self.assertEqual(retained["transactions"][0]["operation_id"], "measured-1-0")
             self.assertEqual(observed, [(retained["transactions"][0], 219)])
@@ -967,7 +977,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             lifecycle = SimpleNamespace(home=Path(home), chain="chain",
                 nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
-                cli=Mock(return_value=json.dumps(decoded)), query=query, remaining=Mock(), doc={})
+                cli=Mock(return_value=json.dumps(decoded)), query=query,
+                wait_height=Mock(return_value=302), remaining=Mock(), doc={})
             rows = []
             def observe(transaction, height):
                 rows.append(workload.classify_cross_audit_transaction(
@@ -975,6 +986,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.reconcile_transaction_blocks(
                 lifecycle, [], 301, 301, Path(home) / "blocks.jsonl",
                 observe_transaction=observe)
+            lifecycle.wait_height.assert_called_once_with(302)
             self.assertEqual((rows[0]["provider"], rows[0]["slot"], rows[0]["txhash"], rows[0]["height"]),
                              (providers[3], 3, txhash, 301))
             lifecycle.cli.return_value = json.dumps(dict(decoded, height="302"))

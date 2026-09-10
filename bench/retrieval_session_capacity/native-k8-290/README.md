@@ -176,9 +176,9 @@ bounded offered/committed diagnostic. A longer reviewed profile is required
 before quoting stable throughput, and delivered-file performance remains a
 separate measurement.
 
-## Native v3 provider-route cross-audit diagnostic
+## Native v3 provider-daemon cross-audit diagnostic
 
-`native-v3-providers-cross-audit` extends the same production provider route
+`native-v3-providers-cross-audit` extends the same production provider-daemon route
 without changing proof, gas, queue, or audit behavior. It opens sixteen fixed
 16 MiB sessions. One transaction per systematic provider warms the route
 outside the clock, then 120 transactions are offered round-robin across the
