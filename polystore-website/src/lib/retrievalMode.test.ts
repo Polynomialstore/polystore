@@ -7,8 +7,10 @@ import {
   LOCAL_GATEWAY_CONNECTED_BASE_KEY,
   LOCAL_GATEWAY_CONNECTED_KEY,
   persistLocalGatewayConnection,
+  persistLocalGatewayLiveness,
   primaryCacheIndicatorLabel,
   readLocalGatewayConnectedBase,
+  readLocalGatewayConnectedHint,
 } from './retrievalMode'
 
 test('connected gateway persistence binds the attestation to its trusted probed base', () => {
@@ -27,6 +29,9 @@ test('connected gateway persistence binds the attestation to its trusted probed 
     persistLocalGatewayConnection()
     assert.equal(values.get(LOCAL_GATEWAY_CONNECTED_KEY), '0')
     assert.equal(values.has(LOCAL_GATEWAY_CONNECTED_BASE_KEY), false)
+    persistLocalGatewayLiveness()
+    assert.equal(readLocalGatewayConnectedHint(), true)
+    assert.equal(readLocalGatewayConnectedBase(), undefined)
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'window', descriptor)
     else delete (globalThis as { window?: unknown }).window

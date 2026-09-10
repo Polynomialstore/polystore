@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { appConfig } from '../config';
 import { isTrustedLocalGatewayBase } from '../lib/transport/mode';
-import { persistLocalGatewayConnection } from '../lib/retrievalMode';
+import { persistLocalGatewayConnection, persistLocalGatewayLiveness } from '../lib/retrievalMode';
 
 type GatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -76,16 +76,12 @@ function normalizeGatewaySeed(value: string | null | undefined): string {
   return DEFAULT_LOCAL_GATEWAY_BASE;
 }
 
-function parseGatewayPersona(details: LocalGatewayDetails | null): string {
-  if (!details) return '';
-  return String(details.persona || '').trim().toLowerCase();
-}
-
-function hasGatewayRouteFamily(details: LocalGatewayDetails | null): boolean {
-  if (!details) return false;
-  const families = Array.isArray(details.allowed_route_families) ? details.allowed_route_families : [];
-  if (families.length === 0) return true;
-  return families.some((family) => String(family || '').toLowerCase().includes('gateway'));
+function parsePaymentEligibleStatus(payload: unknown): LocalGatewayDetails | null {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const details = payload as LocalGatewayDetails;
+  if (details.persona !== 'user-gateway') return null;
+  if (!Array.isArray(details.allowed_route_families) || !details.allowed_route_families.includes('gateway')) return null;
+  return details;
 }
 
 export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS): LocalGatewayInfo {
@@ -148,8 +144,6 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
     let disposed = false;
     let probeController: AbortController | null = null;
     let timer: number | null = null;
-    let probePath: '/status' | '/health' = '/status';
-
     const schedule = (delayMs: number) => {
       if (timer !== null) {
         window.clearTimeout(timer);
@@ -169,15 +163,17 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       updateError(null); // Clear previous errors
       let lastHttpStatus: number | null = null;
       let lastErr: unknown = null;
-      let lastPersonaError: string | null = null;
+      let lastQualificationError: string | null = null;
+      let healthOnlyBase: string | null = null;
 
       try {
         const preferred = normalizeGatewaySeed(activeUrlRef.current || appConfig.gatewayBase || DEFAULT_LOCAL_GATEWAY_BASE);
         const baseCandidates = buildGatewayBaseCandidates(preferred);
         for (const baseUrl of baseCandidates) {
           try {
-            const response = await fetch(`${baseUrl}${probePath}`, {
+            const response = await fetch(`${baseUrl}${GATEWAY_STATUS_ENDPOINT}`, {
               method: 'GET',
+              redirect: 'error',
               signal: AbortSignal.any([probeController.signal, AbortSignal.timeout(3000)]),
             });
             if (disposed) return;
@@ -185,21 +181,12 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
             if (response.ok) {
               const payload = await response.json().catch(() => null);
               if (disposed) return;
-              if (payload && typeof payload === 'object') {
-                const parsed = payload as LocalGatewayDetails;
-                const persona = parseGatewayPersona(parsed);
-                if (persona === 'provider-daemon' || persona === 'provider_daemon') {
-                  lastPersonaError = 'Endpoint on :8080 is provider-daemon; user-gateway required';
-                  continue;
-                }
-                if (!hasGatewayRouteFamily(parsed)) {
-                  lastPersonaError = 'Endpoint on :8080 does not expose gateway routes';
-                  continue;
-                }
-                updateDetails(parsed);
-              } else {
-                updateDetails(null);
+              const parsed = parsePaymentEligibleStatus(payload);
+              if (!parsed) {
+                lastQualificationError = 'Endpoint does not identify a user-gateway with gateway routes';
+                continue;
               }
+              updateDetails(parsed);
               updateActiveUrl(baseUrl);
               persistLocalGatewayConnection(baseUrl);
               updateStatus('connected');
@@ -211,19 +198,15 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
               continue;
             }
 
-            const fallbackPath = probePath === GATEWAY_STATUS_ENDPOINT ? GATEWAY_HEALTH_ENDPOINT : GATEWAY_STATUS_ENDPOINT;
-            const healthRes = await fetch(`${baseUrl}${fallbackPath}`, {
+            const healthRes = await fetch(`${baseUrl}${GATEWAY_HEALTH_ENDPOINT}`, {
               method: 'GET',
+              redirect: 'error',
               signal: AbortSignal.any([probeController.signal, AbortSignal.timeout(3000)]),
             });
             if (disposed) return;
             if (healthRes.ok) {
-              probePath = fallbackPath;
-              updateActiveUrl(baseUrl);
-              persistLocalGatewayConnection(baseUrl);
-              updateStatus('connected');
-              updateDetails(null);
-              return;
+              healthOnlyBase ||= baseUrl;
+              continue;
             }
 
             if (healthRes.status !== 404) {
@@ -236,14 +219,22 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
         }
 
         if (disposed) return;
+        if (healthOnlyBase) {
+          persistLocalGatewayLiveness();
+          updateActiveUrl(healthOnlyBase);
+          updateStatus('connected');
+          updateDetails(null);
+          return;
+        }
+        persistLocalGatewayConnection();
         updateStatus('disconnected');
         updateDetails(null);
         if (lastHttpStatus !== null) {
           updateError(`Gateway responded with status: ${lastHttpStatus}`);
           return;
         }
-        if (lastPersonaError) {
-          updateError(lastPersonaError);
+        if (lastQualificationError) {
+          updateError(lastQualificationError);
           updateActiveUrl(normalizeGatewaySeed(appConfig.gatewayBase));
           return;
         }

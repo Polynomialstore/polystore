@@ -6,12 +6,24 @@ import * as retrievalMode from './retrievalMode'
 import * as transportMode from './transport/mode'
 import * as v3Candidates from './transport/v3Candidates'
 
-function fixture(configuredBase: string, fetchFn: (url: string) => Promise<Response>) {
+const qualifiedStatus = JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['gateway'] })
+
+async function eventually(predicate: () => boolean) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  assert.fail('condition was not reached')
+}
+
+function fixture(configuredBase: string, fetchFn: (url: string, init?: RequestInit) => Promise<Response>) {
   const values = new Map<string, string>()
   let cleanup: (() => void) | undefined
   let timer: (() => void) | undefined
   const waiters = new Map<string, Array<() => void>>()
   const published: string[] = []
+  const stateValues: unknown[] = []
+  let stateIndex = 0
   const localStorage = {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => {
@@ -28,7 +40,12 @@ function fixture(configuredBase: string, fetchFn: (url: string) => Promise<Respo
   const fakeDocument = { visibilityState: 'visible', addEventListener: () => {}, removeEventListener: () => {} }
   const modules: Record<string, unknown> = {
     react: {
-      useState: (initial: unknown) => [initial, () => {}],
+      useState: (initial: unknown) => {
+        const index = stateIndex
+        stateIndex += 1
+        stateValues[index] = initial
+        return [initial, (next: unknown) => { stateValues[index] = next }]
+      },
       useRef: (initial: unknown) => ({ current: initial }),
       useEffect: (effect: () => (() => void) | void) => { cleanup = effect() || undefined },
     },
@@ -43,6 +60,9 @@ function fixture(configuredBase: string, fetchFn: (url: string) => Promise<Respo
         localStorage.setItem(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY, '0')
         localStorage.removeItem(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY)
       }
+    }, persistLocalGatewayLiveness: () => {
+      localStorage.setItem(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY, '1')
+      localStorage.removeItem(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY)
     } },
   }
   const source = readFileSync(new URL('../hooks/useLocalGateway.ts', import.meta.url), 'utf8')
@@ -53,7 +73,7 @@ function fixture(configuredBase: string, fetchFn: (url: string) => Promise<Respo
     return modules[name]
   }, exports, fakeWindow, fakeDocument, fetchFn)
   exports.useLocalGateway!()
-  return { values, cleanup: () => cleanup?.(), runTimer: () => timer?.(),
+  return { values, published, status: () => stateValues[0], cleanup: () => cleanup?.(), runTimer: () => timer?.(),
     waitForBase: (base: string) => published.includes(base) ? Promise.resolve() : new Promise<void>((resolve) => {
       waiters.set(base, [...waiters.get(base) || [], resolve])
     }) }
@@ -65,15 +85,18 @@ for (const row of [
 ] as const) {
   test(`useLocalGateway persists probed ${row.active} instead of configured ${row.configured}`, async () => {
     const seen: string[] = []
-    const f = fixture(row.configured, async (url) => {
+    const redirects: Array<RequestRedirect | undefined> = []
+    const f = fixture(row.configured, async (url, init) => {
       seen.push(url)
-      if (url === `${row.active}/status`) return new Response('{"persona":"user-gateway"}', { status: 200 })
+      redirects.push(init?.redirect)
+      if (url === `${row.active}/status`) return new Response(qualifiedStatus, { status: 200 })
       throw new TypeError('unreachable')
     })
     await f.waitForBase(row.active)
     assert.ok(seen.includes(`${row.configured}/status`))
     assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY), row.active)
     assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY), '1')
+    assert.ok(redirects.every((redirect) => redirect === 'error'))
     f.cleanup()
   })
 }
@@ -81,8 +104,8 @@ for (const row of [
 test('useLocalGateway refreshes the persisted base when a connected probe falls back', async () => {
   let fallback = false
   const f = fixture('http://localhost:8080', async (url) => {
-    if (!fallback && url === 'http://localhost:8080/status') return new Response('{"persona":"user-gateway"}', { status: 200 })
-    if (fallback && url === 'http://127.0.0.1:8080/status') return new Response('{"persona":"user-gateway"}', { status: 200 })
+    if (!fallback && url === 'http://localhost:8080/status') return new Response(qualifiedStatus, { status: 200 })
+    if (fallback && url === 'http://127.0.0.1:8080/status') return new Response(qualifiedStatus, { status: 200 })
     throw new TypeError('unreachable')
   })
   await f.waitForBase('http://localhost:8080')
@@ -98,12 +121,74 @@ test('an unmounted useLocalGateway probe cannot publish a late successful route'
   const response = new Promise<Response>((done) => { resolve = done })
   const f = fixture('http://localhost:8080', async () => response)
   f.cleanup()
-  resolve(new Response('{"persona":"user-gateway"}', { status: 200 }))
+  resolve(new Response(qualifiedStatus, { status: 200 }))
   await response
   await Promise.resolve()
   await Promise.resolve()
   assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY), '0')
   assert.equal(f.values.has(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY), false)
+})
+
+for (const row of [
+  { name: 'invalid JSON', body: '{' },
+  { name: 'null', body: 'null' },
+  { name: 'array', body: '[]' },
+  { name: 'empty object', body: '{}' },
+  { name: 'wrong persona', body: JSON.stringify({ persona: 'provider-daemon', allowed_route_families: ['gateway'] }) },
+  { name: 'missing route families', body: JSON.stringify({ persona: 'user-gateway' }) },
+  { name: 'near-match route family', body: JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['user-gateway', 'gateway/retrieval'] }) },
+] as const) {
+  test(`useLocalGateway does not publish ${row.name} status and still discovers a qualified fallback`, async () => {
+    const configured = 'http://localhost:18080'
+    const fallback = 'http://127.0.0.1:8080'
+    const f = fixture(configured, async (url) => {
+      if (url === `${configured}/status`) return new Response(row.body, { status: 200 })
+      if (url === `${fallback}/status`) return new Response(qualifiedStatus, { status: 200 })
+      throw new TypeError('unreachable')
+    })
+    await f.waitForBase(fallback)
+    assert.equal(f.published.includes(configured), false)
+    assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY), fallback)
+    f.cleanup()
+  })
+}
+
+test('health-only liveness does not authorize payment and a later valid status upgrades it', async () => {
+  const configured = 'http://localhost:18080'
+  let qualified = false
+  const f = fixture(configured, async (url) => {
+    if (url === `${configured}/status`) {
+      return qualified ? new Response(qualifiedStatus, { status: 200 }) : new Response(null, { status: 404 })
+    }
+    if (url === `${configured}/health`) return new Response(null, { status: 200 })
+    throw new TypeError('unreachable')
+  })
+  await eventually(() => f.status() === 'connected')
+  assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY), '1')
+  assert.equal(f.values.has(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY), false)
+
+  qualified = true
+  f.runTimer()
+  await f.waitForBase(configured)
+  assert.equal(f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY), '1')
+  f.cleanup()
+})
+
+test('a connected gateway that becomes unqualified loses payment eligibility', async () => {
+  const configured = 'http://localhost:8080'
+  let qualified = true
+  const f = fixture(configured, async (url) => {
+    if (url.endsWith('/status')) {
+      return new Response(qualified ? qualifiedStatus : '{}', { status: 200 })
+    }
+    throw new TypeError('unreachable')
+  })
+  await f.waitForBase(configured)
+  qualified = false
+  f.runTimer()
+  await eventually(() => f.values.get(retrievalMode.LOCAL_GATEWAY_CONNECTED_KEY) === '0')
+  assert.equal(f.values.has(retrievalMode.LOCAL_GATEWAY_CONNECTED_BASE_KEY), false)
+  f.cleanup()
 })
 
 test('useTransportRouter reads the current probed base for each v3 metadata and chunk request', async () => {

@@ -51,6 +51,16 @@ export function persistLocalGatewayConnection(base?: string): void {
   }
 }
 
+export function persistLocalGatewayLiveness(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(LOCAL_GATEWAY_CONNECTED_KEY, '1')
+    window.localStorage.removeItem(LOCAL_GATEWAY_CONNECTED_BASE_KEY)
+  } catch {
+    // best-effort only
+  }
+}
+
 export function isGatewayModePreferred(input: GatewayModeInput): boolean {
   const preference = String(input.preference || '').trim()
   const gatewayBase = String(input.gatewayBase || appConfig.gatewayBase || '').trim()
