@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/blake2s"
-	"golang.org/x/sync/singleflight"
 	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
@@ -76,7 +75,6 @@ var retrievalMetadataCache = struct {
 	sync.Mutex
 	entries map[retrievalGenerationKey]generationCacheEntry
 	clock   uint64
-	group   singleflight.Group
 }{entries: make(map[retrievalGenerationKey]generationCacheEntry)}
 
 func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrievalchallenge.Context) (*authenticatedGeneration, error) {
@@ -99,42 +97,79 @@ func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retr
 	if found {
 		return entry.value, nil
 	}
-	// Callers are already admitted. Do (rather than detached work) keeps native
-	// preparation inside that admission bound even if the requesting client leaves.
-	value, err, _ := retrievalMetadataCache.group.Do(fmt.Sprintf("%#v", key), func() (interface{}, error) {
-		retrievalMetadataCache.Lock()
-		cached, ok := retrievalMetadataCache.entries[key]
-		retrievalMetadataCache.Unlock()
-		if ok {
-			return cached.value, nil
-		}
-		prepared, err := prepareRetrievalMetadata(ctx, dir, key)
-		if err != nil {
-			return nil, err
-		}
-		retrievalMetadataCache.Lock()
-		defer retrievalMetadataCache.Unlock()
-		if len(retrievalMetadataCache.entries) >= maxRetrievalResponses {
-			var oldest retrievalGenerationKey
-			age := ^uint64(0)
-			for k, v := range retrievalMetadataCache.entries {
-				if v.used < age {
-					oldest, age = k, v.used
-				}
-			}
-			delete(retrievalMetadataCache.entries, oldest)
-		}
+	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepareRetrievalMetadata)
+}
+
+func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error)) (*authenticatedGeneration, error) {
+	retrievalMetadataCache.Lock()
+	entry, found := retrievalMetadataCache.entries[key]
+	if found {
 		retrievalMetadataCache.clock++
-		retrievalMetadataCache.entries[key] = generationCacheEntry{prepared, retrievalMetadataCache.clock}
-		return prepared, nil
-	})
+		entry.used = retrievalMetadataCache.clock
+		retrievalMetadataCache.entries[key] = entry
+	}
+	retrievalMetadataCache.Unlock()
+	if found {
+		return entry.value, nil
+	}
+	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	gateKey := fmt.Sprintf("retrieval-metadata:%s:%#v", abs, key)
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		finish, claimed, err := claimRetrievalPreparation(ctx, gateKey)
+		if err != nil {
+			return nil, err
+		}
+		if !claimed {
+			continue
+		}
+		// Callers are already admitted. The synchronous owner keeps native
+		// preparation inside its own admission and generation lease. A live waiter
+		// rechecks the cache and becomes the next owner if this owner is canceled.
+		value, err := func() (value *authenticatedGeneration, err error) {
+			defer func() { finish(err) }()
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			retrievalMetadataCache.Lock()
+			cached, ok := retrievalMetadataCache.entries[key]
+			retrievalMetadataCache.Unlock()
+			if ok {
+				return cached.value, nil
+			}
+			prepared, err := prepare(ctx, dir, key)
+			if err != nil {
+				return nil, err
+			}
+			retrievalMetadataCache.Lock()
+			defer retrievalMetadataCache.Unlock()
+			if len(retrievalMetadataCache.entries) >= maxRetrievalResponses {
+				var oldest retrievalGenerationKey
+				age := ^uint64(0)
+				for k, v := range retrievalMetadataCache.entries {
+					if v.used < age {
+						oldest, age = k, v.used
+					}
+				}
+				delete(retrievalMetadataCache.entries, oldest)
+			}
+			retrievalMetadataCache.clock++
+			retrievalMetadataCache.entries[key] = generationCacheEntry{prepared, retrievalMetadataCache.clock}
+			return prepared, nil
+		}()
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return value, nil
 	}
-	return value.(*authenticatedGeneration), nil
 }
 
 func readExactArtifactRange(path string, size, offset, length uint64) ([]byte, error) {

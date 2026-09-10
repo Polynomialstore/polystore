@@ -257,6 +257,10 @@ func openFrozenGeneration(dealID uint64, root ManifestRoot) (string, func(), err
 	// C2 and authenticated bytes supply readiness/layout. A sidecar cannot
 	// redirect a secured response or trigger repeated full metadata work.
 	dir, err := lookupDealGeneration(dealID, root, root.Canonical)
+	if err != nil {
+		release()
+		return "", func() {}, err
+	}
 	return dir, release, err
 }
 

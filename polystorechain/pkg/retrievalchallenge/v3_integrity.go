@@ -89,6 +89,13 @@ func integrityParentV3(left, right [32]byte) [32]byte {
 	return out
 }
 
+// IntegrityParentV3 derives one canonical internal node. Storage providers use
+// it to materialize an untrusted, seekable copy of the integrity tree; callers
+// must still verify every resulting path against the authenticated root.
+func IntegrityParentV3(left, right [32]byte) [32]byte {
+	return integrityParentV3(left, right)
+}
+
 func IntegrityRootV3(leaves [][32]byte) ([32]byte, error) {
 	if len(leaves) == 0 || uint64(len(leaves)) > MaxIntegrityLeaves {
 		return [32]byte{}, errors.New("invalid integrity leaf count")

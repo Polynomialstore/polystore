@@ -21,22 +21,35 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-var routerHTTPClient = &http.Client{
-	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   4 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
-		TLSHandshakeTimeout:   4 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		// Some provider requests (especially /gateway/upload which may ingest + upload
-		// Mode 2 stripes) can take longer than a few seconds before responding.
-		// Keep this generous so local-stack/E2E doesn't flake on slow machines/CI.
-		ResponseHeaderTimeout: 2 * time.Minute,
-		IdleConnTimeout:       90 * time.Second,
-		MaxIdleConns:          128,
-	},
+var routerHTTPTransport = &http.Transport{
+	Proxy: http.ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   4 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext,
+	TLSHandshakeTimeout:   4 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+	// Some provider requests (especially /gateway/upload which may ingest + upload
+	// Mode 2 stripes) can take longer than a few seconds before responding.
+	// Keep this generous so local-stack/E2E doesn't flake on slow machines/CI.
+	ResponseHeaderTimeout: 2 * time.Minute,
+	IdleConnTimeout:       90 * time.Second,
+	MaxIdleConns:          128,
+}
+
+var routerHTTPClient = &http.Client{Transport: routerHTTPTransport}
+
+var routerRetrievalV3HTTPClient = func() *http.Client {
+	transport := routerHTTPTransport.Clone()
+	transport.ResponseHeaderTimeout = retrievalV3DataRouteTimeout
+	return &http.Client{Transport: transport}
+}()
+
+func routerClientForRequest(r *http.Request, targetPath string, retrievalV3 bool) *http.Client {
+	if retrievalV3 && strings.HasPrefix(targetPath, "/sp/retrieval/mdu/") && acceptsRetrievalVersion(r, "3") {
+		return routerRetrievalV3HTTPClient
+	}
+	return routerHTTPClient
 }
 
 func copyUpstreamResponseHeaders(dst http.Header, src http.Header) {
@@ -133,7 +146,7 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 	}
 }
 
-func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string, retryMissingMetadata bool) (bool, error) {
+func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string, retryMissingMetadata, retrievalV3 bool) (bool, error) {
 	base := strings.TrimRight(strings.TrimSpace(providerBaseURL), "/")
 	if base == "" {
 		return false, fmt.Errorf("provider base url is empty")
@@ -156,7 +169,7 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 	req.Header = r.Header.Clone()
 	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 
-	resp, err := routerHTTPClient.Do(req)
+	resp, err := routerClientForRequest(r, targetPath, retrievalV3).Do(req)
 	if err != nil {
 		return false, err
 	}
@@ -396,7 +409,7 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 			lastErr = err
 			continue
 		}
-		ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false)
+		ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false, false)
 		if ok {
 			dealProviderCache.Store(dealID, &dealProviderCacheEntry{
 				provider: providerAddr,
@@ -427,7 +440,7 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 				lastErr = err
 				continue
 			}
-			ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false)
+			ok, err := tryProxyToProviderBaseURL(w, r, baseURL, false, false)
 			if ok {
 				dealProviderCache.Store(dealID, &dealProviderCacheEntry{
 					provider: providerAddr,
@@ -472,7 +485,9 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	incomingCtx := r.Context()
+	v3RouteDeadline := time.Now().Add(retrievalV3DataRouteTimeout)
+	ctx, cancel := context.WithTimeout(incomingCtx, 60*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
 	vars, q := mux.Vars(r), r.URL.Query()
@@ -492,6 +507,7 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var providers []string
+	retrievalV3 := false
 	if sessionID := r.Header.Get("X-PolyStore-Session-Id"); sessionID != "" {
 		if len(r.Header.Values("X-PolyStore-Session-Id")) != 1 {
 			writeJSONError(w, http.StatusBadRequest, "ambiguous session_id", "")
@@ -502,46 +518,72 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response, height, err := queryRetrievalSession(ctx, sessionID)
-		if err != nil {
-			writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
-			return
-		}
-		if response.Session.ChallengeVersion == 0 {
-			RouterGatewayFetch(w, r)
-			return
-		}
-		f, err := freezeRetrievalSessionResponse(response, height)
-		if err != nil {
-			writeJSONError(w, http.StatusConflict, "retrieval challenge unavailable", err.Error())
-			return
-		}
-		c, s := f.Context, f.Session
-		if id != c.DealID || q.Get("owner") != s.Owner || root.Bytes != c.Root || index != c.StartMDU {
-			writeJSONError(w, http.StatusBadRequest, "request does not match frozen session", "")
-			return
-		}
-		media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
-		if err != nil || media != "multipart/form-data" || params["version"] != "2" {
-			writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
-			return
-		}
-		for name, expected := range map[string]string{"X-PolyStore-Start-Blob-Index": strconv.FormatUint(uint64(c.StartLeaf), 10), "X-PolyStore-Blob-Count": strconv.FormatUint(c.BlobCount, 10)} {
-			if values := r.Header.Values(name); len(values) > 1 || (len(values) == 1 && values[0] != expected) {
-				writeJSONError(w, http.StatusBadRequest, "window hint does not match frozen session", "")
+		if errors.Is(err, ErrSessionNotFound) {
+			responseV3, heightV3, errV3 := queryRetrievalSessionV3(ctx, sessionID)
+			if errV3 != nil {
+				writeJSONError(w, http.StatusBadGateway, "session authority unavailable", errV3.Error())
 				return
 			}
+			fV3, errV3 := freezeRetrievalSessionV3Response(responseV3, heightV3)
+			if errV3 != nil {
+				writeJSONError(w, http.StatusConflict, "retrieval v3 authority unavailable", errV3.Error())
+				return
+			}
+			v3Ctx, cancelV3 := context.WithDeadline(incomingCtx, v3RouteDeadline)
+			defer cancelV3()
+			ctx = v3Ctx
+			r = r.WithContext(ctx)
+			retrievalV3 = true
+			provider, status, errV3 := routerRetrievalDataProviderV3(r, fV3, root, index, id, q.Get("owner"))
+			if errV3 != nil {
+				writeJSONError(w, status, "request does not match frozen v3 data chunk", errV3.Error())
+				return
+			}
+			providers = []string{provider}
+			r.Header = r.Header.Clone()
+			r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(fV3.Session.SessionId))
+		} else {
+			if err != nil {
+				writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
+				return
+			}
+			if response.Session.ChallengeVersion == 0 {
+				RouterGatewayFetch(w, r)
+				return
+			}
+			f, err := freezeRetrievalSessionResponse(response, height)
+			if err != nil {
+				writeJSONError(w, http.StatusConflict, "retrieval challenge unavailable", err.Error())
+				return
+			}
+			c, s := f.Context, f.Session
+			if id != c.DealID || q.Get("owner") != s.Owner || root.Bytes != c.Root || index != c.StartMDU {
+				writeJSONError(w, http.StatusBadRequest, "request does not match frozen session", "")
+				return
+			}
+			media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
+			if err != nil || media != "multipart/form-data" || params["version"] != "2" {
+				writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
+				return
+			}
+			for name, expected := range map[string]string{"X-PolyStore-Start-Blob-Index": strconv.FormatUint(uint64(c.StartLeaf), 10), "X-PolyStore-Blob-Count": strconv.FormatUint(c.BlobCount, 10)} {
+				if values := r.Header.Values(name); len(values) > 1 || (len(values) == 1 && values[0] != expected) {
+					writeJSONError(w, http.StatusBadRequest, "window hint does not match frozen session", "")
+					return
+				}
+			}
+			if err := validateSessionFunding(s); err != nil {
+				writeJSONError(w, http.StatusBadGateway, "invalid session funding", err.Error())
+				return
+			}
+			if !c.Window.Contains(height) || (s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED) {
+				writeJSONError(w, http.StatusConflict, "session is no longer eligible for delivery", "")
+				return
+			}
+			providers = []string{s.AuthorizedProofProvider}
+			r.Header = r.Header.Clone()
+			r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(s.SessionId))
 		}
-		if err := validateSessionFunding(s); err != nil {
-			writeJSONError(w, http.StatusBadGateway, "invalid session funding", err.Error())
-			return
-		}
-		if !c.Window.Contains(height) || (s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED) {
-			writeJSONError(w, http.StatusConflict, "session is no longer eligible for delivery", "")
-			return
-		}
-		providers = []string{s.AuthorizedProofProvider}
-		r.Header = r.Header.Clone()
-		r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(s.SessionId))
 	} else {
 		var height uint64
 		if raw, exists := q["committed_height"]; exists {
@@ -602,7 +644,7 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 			lastErr = err
 			continue
 		}
-		handled, err := tryProxyToProviderBaseURL(w, r, base, r.Header.Get("X-PolyStore-Session-Id") == "")
+		handled, err := tryProxyToProviderBaseURL(w, r, base, r.Header.Get("X-PolyStore-Session-Id") == "", retrievalV3)
 		if handled {
 			return
 		}

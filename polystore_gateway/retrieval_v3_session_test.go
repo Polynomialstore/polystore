@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	cosmosmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -19,7 +23,11 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
+func frozenSessionV3Fixture(t testing.TB, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
+	return frozenSessionV3FixtureRange(t, 0, rangeLength, userMDUs)
+}
+
+func frozenSessionV3FixtureRange(t testing.TB, rangeStart, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
 	t.Helper()
 	oldChain := chainID
 	chainID = "polystore-test-1"
@@ -34,7 +42,8 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	for i := range providers {
 		providers[i][19] = byte(i + 1)
 	}
-	rng, err := retrievalchallenge.CheckedRangeV3(0, rangeLength, 0, rangeLength, userMDUs)
+	fileLength := rangeStart + rangeLength
+	rng, err := retrievalchallenge.CheckedRangeV3(0, fileLength, rangeStart, rangeLength, userMDUs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +55,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := (retrievalchallenge.SessionBindingV3{ChainID: chainID, Owner: ownerRaw, DealID: 0, Generation: 1, FileRecordIndex: 3, RangeStart: 0, RangeLength: rangeLength, PlanHash: planHash, Nonce: 7}).ID()
+	id, err := (retrievalchallenge.SessionBindingV3{ChainID: chainID, Owner: ownerRaw, DealID: 0, Generation: 1, FileRecordIndex: 3, RangeStart: rangeStart, RangeLength: rangeLength, PlanHash: planHash, Nonce: 7}).ID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +67,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	copy(setup32[:], setup)
 	c := retrievalchallenge.ContextV3{
 		ChainID: chainID, SetupDigest: setup32, SessionID: id, SessionOwner: ownerRaw,
-		DealID: 0, Generation: 1, FileRecordIndex: 3, FileLength: rangeLength, RangeLength: rangeLength,
+		DealID: 0, Generation: 1, FileRecordIndex: 3, FileLength: fileLength, RangeStart: rangeStart, RangeLength: rangeLength,
 		MetadataMDUs: 4, UserMDUs: userMDUs, PlanHash: planHash, Population: rng.Population,
 		SampleCount: min(rng.Population, retrievalchallenge.MaxLargeSessionSamples), Nonce: 7,
 		PriceDenom: "stake", PricePerBlob: "1", BaseFee: "0",
@@ -71,7 +80,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	s := types.RetrievalSessionV3{
 		SessionId: id[:], ContextHash: hash[:], DealId: 0, Generation: 1, Owner: owner, Payer: owner,
 		PolyfsRoot: c.PolyFSRoot[:], IntegrityRoot: c.IntegrityRoot[:], SetupDigest: setup,
-		FileRecordIndex: 3, FileLength: rangeLength, RangeLength: rangeLength, MetadataMdus: 4, UserMdus: userMDUs,
+		FileRecordIndex: 3, FileLength: fileLength, RangeStart: rangeStart, RangeLength: rangeLength, MetadataMdus: 4, UserMdus: userMDUs,
 		PlanHash: planHash[:], FirstBlob: rng.First, LastBlob: rng.Last, Population: rng.Population,
 		SampleCount: c.SampleCount, Nonce: 7, PriceDenom: "stake", PricePerBlob: cosmosmath.OneInt(), BaseFee: cosmosmath.ZeroInt(),
 		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
@@ -232,13 +241,29 @@ func TestRetrievalV3RecoveryOutcomeDoesNotAttributeRequestedSession(t *testing.T
 	}
 }
 
-func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
+func buildProviderV3ArtifactFixture(t testing.TB) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
+	return buildProviderV3ArtifactFixtureSize(t, 1024)
+}
+
+func buildProviderV3ArtifactFixtureSize(t testing.TB, size uint64) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
 	t.Helper()
 	useTempUploadDir(t)
 	initCryptoForTest(t)
 	const dealID = uint64(0)
 	payload := filepath.Join(t.TempDir(), "payload.bin")
-	if err := os.WriteFile(payload, bytes.Repeat([]byte{0x5a}, 1024), 0600); err != nil {
+	f, err := os.OpenFile(payload, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(int64(size)); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte{0x5a}, 0); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	result, newDir, err := mode2BuildArtifactsWithOptions(context.Background(), payload, dealID, "General:rs=8+4", "payload.bin", 0, mode2BuildOptions{fatVersion: 3})
@@ -248,7 +273,7 @@ func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, re
 	metadataMDUs := uint64(1 + result.witnessMdus)
 	root := result.manifestRoot
 	integrity := result.integrityRoot
-	r, height := frozenSessionV3Fixture(t, 1024, result.userMdus)
+	r, height := frozenSessionV3Fixture(t, size, result.userMdus)
 	r.Session.PolyfsRoot = bytes.Clone(root.Bytes[:])
 	r.Session.IntegrityRoot = integrity[:]
 	r.Session.MetadataMdus = metadataMDUs
@@ -269,6 +294,232 @@ func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, re
 	return frozen, key, newDir
 }
 
+func authenticatedRetrievalMetadataForWithResources(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error), held chan<- struct{}) (*authenticatedGeneration, error) {
+	ctx, releaseResponse, err := admitRetrievalResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseResponse()
+	releaseGeneration, err := leaseGenerationPaths(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseGeneration()
+	if held != nil {
+		close(held)
+	}
+	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepare)
+}
+
+func TestAuthenticatedRetrievalMetadataConcurrentCancellationOwnership(t *testing.T) {
+	cleanup := func(chain string) {
+		retrievalMetadataCache.Lock()
+		defer retrievalMetadataCache.Unlock()
+		for cached := range retrievalMetadataCache.entries {
+			if cached.Chain == chain {
+				delete(retrievalMetadataCache.entries, cached)
+			}
+		}
+	}
+
+	t.Run("v2 canceled waiter promptly releases resources", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-waiter-cancellation", Root: [32]byte{1}, Generation: 1, Version: 2}
+		t.Cleanup(func() { cleanup(key.Chain) })
+		started, finish := make(chan struct{}), make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		var finishOnce sync.Once
+		defer func() {
+			cancelWorkers()
+			finishOnce.Do(func() { close(finish) })
+			workers.Wait()
+		}()
+		var calls atomic.Int32
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) != 1 {
+				return nil, errors.New("concurrent waiter started duplicate metadata preparation")
+			}
+			close(started)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-finish:
+				return &authenticatedGeneration{}, nil
+			}
+		}
+		baselineResponses := len(retrievalResponses)
+		leaderResult := make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(workerCtx, dir, key, prepare, nil)
+			leaderResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, started, "metadata leader")
+
+		waiterBase, cancelWaiter := context.WithCancel(workerCtx)
+		waiterObserved := make(chan struct{})
+		waiterCtx := &observedDoneContextV3{Context: waiterBase, observed: waiterObserved}
+		waiterHeld, waiterResult := make(chan struct{}), make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, waiterHeld)
+			waiterResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, waiterHeld, "metadata waiter resources")
+		waitIntegrityIndexV3Signal(t, waiterObserved, "metadata waiter gate entry")
+		if refs := generationRefsV3Test(t, dir); refs != 2 || len(retrievalResponses) != baselineResponses+2 {
+			t.Fatalf("metadata requests did not hold independent resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
+		cancelWaiter()
+		if err := waitIntegrityIndexV3Result(t, waiterResult, "metadata waiter cancellation"); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled metadata waiter returned %v", err)
+		}
+		if refs := generationRefsV3Test(t, dir); refs != 1 || len(retrievalResponses) != baselineResponses+1 || calls.Load() != 1 {
+			t.Fatalf("canceled metadata waiter retained resources or duplicated work: refs=%d responses=%d calls=%d", refs, len(retrievalResponses)-baselineResponses, calls.Load())
+		}
+		finishOnce.Do(func() { close(finish) })
+		if err := waitIntegrityIndexV3Result(t, leaderResult, "metadata leader completion"); err != nil {
+			t.Fatal(err)
+		}
+		if refs := generationRefsV3Test(t, dir); refs != 0 || len(retrievalResponses) != baselineResponses {
+			t.Fatalf("metadata leader retained resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
+	})
+
+	t.Run("v3 live waiter retries canceled leader", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-leader-cancellation", Root: [32]byte{2}, Generation: 1, Version: 3}
+		t.Cleanup(func() { cleanup(key.Chain) })
+		leaderStarted := make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		defer func() {
+			cancelWorkers()
+			workers.Wait()
+		}()
+		prepared := &authenticatedGeneration{}
+		var calls atomic.Int32
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) == 1 {
+				close(leaderStarted)
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			return prepared, nil
+		}
+		leaderCtx, cancelLeader := context.WithCancel(workerCtx)
+		leaderResult := make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(leaderCtx, dir, key, prepare, nil)
+			leaderResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, leaderStarted, "metadata leader")
+
+		waiterObserved := make(chan struct{})
+		waiterCtx := &observedDoneContextV3{Context: workerCtx, observed: waiterObserved}
+		waiterHeld := make(chan struct{})
+		waiterResult := make(chan struct {
+			value *authenticatedGeneration
+			err   error
+		}, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			value, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, waiterHeld)
+			waiterResult <- struct {
+				value *authenticatedGeneration
+				err   error
+			}{value, err}
+		}()
+		waitIntegrityIndexV3Signal(t, waiterHeld, "metadata waiter resources")
+		waitIntegrityIndexV3Signal(t, waiterObserved, "metadata waiter gate entry")
+		cancelLeader()
+		if err := waitIntegrityIndexV3Result(t, leaderResult, "metadata leader cancellation"); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled metadata leader returned %v", err)
+		}
+		select {
+		case result := <-waiterResult:
+			if result.err != nil || result.value != prepared {
+				t.Fatalf("live metadata waiter did not retry: value=%p err=%v", result.value, result.err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("live metadata waiter did not retry")
+		}
+		if calls.Load() != 2 || generationRefsV3Test(t, dir) != 0 {
+			t.Fatalf("unexpected metadata retry state: calls=%d refs=%d", calls.Load(), generationRefsV3Test(t, dir))
+		}
+	})
+
+	t.Run("concurrent authentication error is prepared once", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-authentication-error", Root: [32]byte{3}, Generation: 1, Version: 3}
+		t.Cleanup(func() { cleanup(key.Chain) })
+		corrupt := errors.New("corrupt authenticated metadata")
+		started, failPreparation := make(chan struct{}), make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		var failOnce sync.Once
+		defer func() {
+			cancelWorkers()
+			failOnce.Do(func() { close(failPreparation) })
+			workers.Wait()
+		}()
+		var calls atomic.Int32
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) == 1 {
+				close(started)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-failPreparation:
+				return nil, corrupt
+			}
+		}
+		baselineResponses := len(retrievalResponses)
+		results := make(chan error, maxRetrievalResponses)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(workerCtx, dir, key, prepare, nil)
+			results <- err
+		}()
+		waitIntegrityIndexV3Signal(t, started, "failed metadata owner")
+
+		for i := 1; i < maxRetrievalResponses; i++ {
+			observed := make(chan struct{})
+			held := make(chan struct{})
+			waiterCtx := &observedDoneContextV3{Context: workerCtx, observed: observed}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				_, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, held)
+				results <- err
+			}()
+			waitIntegrityIndexV3Signal(t, held, "failed metadata waiter resources")
+			waitIntegrityIndexV3Signal(t, observed, "failed metadata waiter gate entry")
+		}
+		if refs := generationRefsV3Test(t, dir); refs != maxRetrievalResponses || len(retrievalResponses) != baselineResponses+maxRetrievalResponses {
+			t.Fatalf("failed metadata waiters did not retain independent resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
+		failOnce.Do(func() { close(failPreparation) })
+		for i := 0; i < maxRetrievalResponses; i++ {
+			if err := waitIntegrityIndexV3Result(t, results, "shared metadata failure"); !errors.Is(err, corrupt) {
+				t.Fatalf("metadata waiter returned %v", err)
+			}
+		}
+		workers.Wait()
+		if calls.Load() != 1 || generationRefsV3Test(t, dir) != 0 || len(retrievalResponses) != baselineResponses {
+			t.Fatalf("authentication failure was rebuilt or retained resources: calls=%d refs=%d responses=%d", calls.Load(), generationRefsV3Test(t, dir), len(retrievalResponses)-baselineResponses)
+		}
+	})
+}
+
 func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testing.T) {
 	frozen, key, dir := buildProviderV3ArtifactFixture(t)
 	signer := frozen.Session.Obligations[0].AssignedProvider
@@ -278,6 +529,9 @@ func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testin
 	}
 	if err := verifyIntegrityVectorV3(t.Context(), dir, key, 0, metadata); err != nil {
 		t.Fatalf("generation ingest verification failed: %v", err)
+	}
+	if err := validateIntegrityIndexV3(filepath.Join(dir, integrityIndexV3File), key.Users*retrievalchallenge.IntegrityLeavesPerUserMDU); err != nil {
+		t.Fatalf("generation ingest did not publish the verified integrity index: %v", err)
 	}
 	slot, proofs, remaining, err := buildProviderProofBatchV3(t.Context(), frozen, signer)
 	if err != nil {

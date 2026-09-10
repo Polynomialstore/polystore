@@ -83,7 +83,13 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 	// before current-deal owner/root checks, which cannot authorize a deputy or a
 	// sponsored request and must not revoke an already funded generation.
 	var onchainSession *types.RetrievalSession
-	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") != "" {
+	sessionHeaders := r.Header.Values("X-PolyStore-Session-Id")
+	if len(sessionHeaders) > 1 {
+		writeJSONError(w, http.StatusBadRequest, "exactly one X-PolyStore-Session-Id header is required", "")
+		return
+	}
+	hasSession := len(sessionHeaders) == 1 && sessionHeaders[0] != ""
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && hasSession {
 		ctx, releaseCapacity, err := admitRetrievalResponse(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "provider proof capacity is busy", "")
@@ -96,19 +102,39 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "invalid session_id", err.Error())
 			return
 		}
-		release, err := claimRetrievalOperations([]string{key}, "")
-		if err != nil {
-			writeJSONError(w, http.StatusServiceUnavailable, "session is busy", err.Error())
+		retrievalV3 := acceptsRetrievalVersion(r, "3")
+		if !retrievalV3 {
+			release, err := claimRetrievalOperations([]string{key}, "")
+			if err != nil {
+				writeJSONError(w, http.StatusServiceUnavailable, "session is busy", err.Error())
+				return
+			}
+			defer release()
+		}
+		response, height, queryErr := queryRetrievalSession(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+		if errors.Is(queryErr, ErrSessionNotFound) {
+			responseV3, heightV3, errV3 := queryRetrievalSessionV3(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+			if errV3 != nil {
+				status := http.StatusBadGateway
+				if errors.Is(errV3, ErrSessionNotFound) {
+					status = http.StatusNotFound
+				}
+				writeJSONError(w, status, "failed to load retrieval session", errV3.Error())
+				return
+			}
+			serveFrozenRetrievalDataV3(w, r, manifestRoot, mduIndex, responseV3, heightV3)
 			return
 		}
-		defer release()
-		response, height, queryErr := queryRetrievalSession(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
 		if queryErr != nil {
 			status := http.StatusBadGateway
 			if errors.Is(queryErr, ErrSessionNotFound) {
 				status = http.StatusNotFound
 			}
 			writeJSONError(w, status, "failed to load retrieval session", queryErr.Error())
+			return
+		}
+		if retrievalV3 {
+			writeJSONError(w, http.StatusNotAcceptable, "session does not support retrieval version 3", "")
 			return
 		}
 		if response.Session.ChallengeVersion == 2 {
@@ -122,7 +148,7 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		onchainSession = &response.Session
 	}
 
-	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") == "" {
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && !hasSession {
 		serveCommittedRetrievalMetadata(w, r, manifestRoot, mduIndex)
 		return
 	}
