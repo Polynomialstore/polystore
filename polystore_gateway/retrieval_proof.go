@@ -89,6 +89,17 @@ func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrieval
 }
 
 func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retrievalGenerationKey) (*authenticatedGeneration, error) {
+	retrievalMetadataCache.Lock()
+	entry, found := retrievalMetadataCache.entries[key]
+	if found {
+		retrievalMetadataCache.clock++
+		entry.used = retrievalMetadataCache.clock
+		retrievalMetadataCache.entries[key] = entry
+	}
+	retrievalMetadataCache.Unlock()
+	if found {
+		return entry.value, nil
+	}
 	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepareRetrievalMetadata, retrievalMetadataCache.group.Do)
 }
 
