@@ -755,6 +755,42 @@ def verify_native_v3_chain_transactions(lifecycle, rows, messages):
     return verified
 
 
+def native_v3_chain_committed_summary(sessions, messages, warmup_rows, measured_rows):
+    """Separate authoritative totals from the measured committed subset."""
+    warmup_ids = {row["id"] for row in warmup_rows}
+    measured_ids = {row["id"] for row in measured_rows}
+    if (len(warmup_ids) != len(warmup_rows) or len(measured_ids) != len(measured_rows) or
+            warmup_ids & measured_ids):
+        raise ValueError("native v3 chain committed transaction identities are inconsistent")
+    message_ids = {row["id"] for row in messages}
+    if len(message_ids) != len(messages) or message_ids != warmup_ids | measured_ids:
+        raise ValueError("native v3 chain messages differ from committed transaction inventory")
+    total_ordinals = measured_ordinals = 0
+    for index, session in enumerate(sessions):
+        accepted = session["accepted_sample_ordinals"]
+        expected = sorted(ordinal for row in messages if row["session_index"] == index
+                          for ordinal in row["ordinals"])
+        measured = sorted(ordinal for row in messages
+                          if row["session_index"] == index and row["id"] in measured_ids
+                          for ordinal in row["ordinals"])
+        if accepted != expected or any(ordinal not in accepted for ordinal in measured):
+            raise ValueError("authoritative session bitmap differs from committed proof messages")
+        total_ordinals += len(accepted)
+        measured_ordinals += len(measured)
+    return dict(total_committed_valid_proof_transactions=len(warmup_rows) + len(measured_rows),
+                measured_committed_valid_proof_transactions=len(measured_rows),
+                total_authoritative_new_sample_ordinals=total_ordinals,
+                measured_authoritative_new_sample_ordinals=measured_ordinals)
+
+
+def native_v3_chain_exporter_identity(value):
+    exporter = Path(value).resolve(strict=True)
+    if not exporter.is_file() or not os.access(exporter, os.X_OK):
+        raise ValueError("native v3 chain exporter must be executable")
+    return exporter, dict(native_chain_exporter=str(exporter),
+                          native_chain_exporter_sha256=artifact.sha256(exporter))
+
+
 def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, exporter, epoch_length):
     """Finite chain-only proof submission diagnostic; proof creation is untimed."""
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False)
@@ -828,7 +864,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, expor
     doc["warmup_scheduler"] = artifact.schedule_transactions(warmup_jobs, max_in_flight=8,
         max_queued=8, max_queued_per_signer=1)
     warmup_rows = doc["warmup_scheduler"]["transactions"]
-    verify_native_v3_chain_transactions(lifecycle, warmup_rows, message_rows[:V3_CHAIN_WARMUPS])
+    warmup_verified = verify_native_v3_chain_transactions(
+        lifecycle, warmup_rows, message_rows[:V3_CHAIN_WARMUPS])
     warmup_height = max(row["height"] for row in warmup_rows)
     wait(warmup_height + 1)
     warm = v3_session_query(lifecycle, sessions[0]["session_id"], warmup_height)
@@ -902,8 +939,6 @@ def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, expor
     final_audits = audits(end_height, False, ready_epoch)
     if final_audits != current_audits:
         raise ValueError("current epoch audit authority/coverage changed during measurement")
-    all_rows = warmup_rows + verified
-    accepted_total = 0
     for index, row in enumerate(sessions):
         state = v3_session_query(lifecycle, row["session_id"], end_height)
         _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
@@ -913,10 +948,11 @@ def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, expor
                           for ordinal in message["ordinals"])
         if accepted != expected or len(accepted) != V3_MAX_SAMPLES:
             raise ValueError("authoritative session bitmap differs from committed proof messages")
-        row["after_proofs"] = state
-        accepted_total += len(accepted)
+        row.update(after_proofs=state, accepted_sample_ordinals=accepted)
+    committed_summary = native_v3_chain_committed_summary(
+        sessions, message_rows, warmup_verified, verified)
     doc.update(offered_proof_transactions=64, warmup_transactions=8, measured_transactions=56,
-        committed_valid_proof_transactions=len(all_rows), authoritative_new_sample_ordinals=accepted_total,
+        **committed_summary,
         measured_gas_wanted=sum(row["gas_wanted"] for row in verified),
         measured_gas_used=sum(row["gas_used"] for row in verified), delivery_verified=False,
         owner_acknowledged=False, qualification=False)
@@ -2222,10 +2258,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             raise ValueError("proof exporter must be executable")
         artifact.integer(sustained["proof_gas"], "proof gas", 1, 64000000)
         sustained_offsets(sustained["step_seconds"], rate_scale)
+    native_chain_exporter = None
     if native_chain is not None:
-        export_binary = Path(native_chain["exporter"]).resolve(strict=True)
-        if not export_binary.is_file() or not os.access(export_binary, os.X_OK):
-            raise ValueError("native v3 chain exporter must be executable")
+        export_binary, native_chain_exporter = native_v3_chain_exporter_identity(native_chain["exporter"])
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
@@ -2332,6 +2367,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             cli_source_sha256=artifact.sha256(source / "polystore_cli/src/main.rs"),
             curl_binary=curl, curl_sha256=artifact.sha256(curl),
             artifact_source_match="supplied binaries/library; build correspondence not attested")
+        if native_chain_exporter is not None:
+            doc["provenance"].update(native_chain_exporter)
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
         lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
@@ -2511,7 +2548,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if native_v3:
             if native_chain is not None:
                 run_native_v3_chain(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
-                                    audits=audits, exporter=native_chain["exporter"], epoch_length=epoch_length)
+                                    audits=audits, exporter=export_binary, epoch_length=epoch_length)
                 doc["status"] = "native_v3_chain_diagnostic_passed"
             else:
                 run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)

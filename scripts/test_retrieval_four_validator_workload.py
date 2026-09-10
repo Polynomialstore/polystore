@@ -677,6 +677,31 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "backwards"):
             workload.validator_cpu_delta(before, after)
 
+    def test_native_chain_summary_excludes_warmup_from_measured_counts(self):
+        sessions = [dict(accepted_sample_ordinals=[0, 1]),
+                    dict(accepted_sample_ordinals=[2, 3, 4])]
+        messages = [dict(id="warmup", session_index=0, ordinals=[0, 1]),
+                    dict(id="measured", session_index=1, ordinals=[2, 3, 4])]
+        summary = workload.native_v3_chain_committed_summary(
+            sessions, messages, [dict(id="warmup")], [dict(id="measured")])
+        self.assertEqual(summary, dict(total_committed_valid_proof_transactions=2,
+            measured_committed_valid_proof_transactions=1,
+            total_authoritative_new_sample_ordinals=5,
+            measured_authoritative_new_sample_ordinals=3))
+        with self.assertRaisesRegex(ValueError, "messages differ"):
+            workload.native_v3_chain_committed_summary(
+                sessions, messages, [dict(id="warmup")], [dict(id="other")])
+
+    def test_native_chain_exporter_identity_records_exact_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exporter = Path(tmp) / "exporter"
+            exporter.write_bytes(b"native-v3-exporter")
+            exporter.chmod(0o700)
+            resolved, identity = workload.native_v3_chain_exporter_identity(exporter)
+            self.assertEqual(resolved, exporter.resolve())
+            self.assertEqual(identity, dict(native_chain_exporter=str(exporter.resolve()),
+                native_chain_exporter_sha256=hashlib.sha256(exporter.read_bytes()).hexdigest()))
+
     def test_generate_only_preflight_pins_exact_default_emitting_message_and_explicit_gas(self):
         message = dict(creator=AUDIT_ADDRESSES[0], session_id=base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
                        slot=0, proofs=[dict(ordinal="0", proof=dict(mdu_index="0", blob_index="0"))])
