@@ -380,11 +380,13 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_provider_wave_and_committed_message_are_exact(self):
         providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
-        rows = [dict(status="success", http_status=200, session_id=self.SESSION, cleanup_status="complete",
+        rows = [dict(status="success", http_status=200, session_id="0x" + self.SESSION, cleanup_status="complete",
                      slot=i, provider=providers[i], proof_count=17 if i < 7 else 13,
                      tx_hash=f"{i + 1:064x}") for i in range(8)]
         self.assertEqual(workload.validate_v3_provider_outcomes(rows, providers, session_id=self.SESSION)["proof_count"], 132)
-        for field, bad in (("http_status", 202), ("cleanup_status", "pending"), ("tx_hash", rows[1]["tx_hash"])):
+        for field, bad in (("http_status", 202), ("cleanup_status", "pending"),
+                           ("tx_hash", rows[1]["tx_hash"]), ("session_id", self.SESSION),
+                           ("session_id", "0x" + "00" * 32)):
             changed = copy.deepcopy(rows)
             changed[0][field] = bad
             with self.subTest(field=field), self.assertRaises(ValueError):
@@ -447,6 +449,34 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             retained = lifecycle.doc["v3_http_phases"]["proofs"]
             self.assertEqual({row["provider"] for row in retained}, {"provider-a", "provider-b"})
             self.assertEqual({row["status"] for row in retained}, {"success", "driver_error"})
+
+    def test_native_v3_provider_routes_use_gateway_auth_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            captured = []
+            def run(argv, deadline, env):
+                captured.append(argv)
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            requests = [
+                ("generation-acceptance", "/sp/generation-v3/accept", {"deal_id": 7, "provider": "provider-a"}),
+                ("session-proof", "/sp/session-proof", {"session_id": self.SESSION}),
+            ]
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                for phase, route, body in requests:
+                    workload.run_v3_http_phase(lifecycle, "/curl", [dict(
+                        provider="provider-a", url="http://provider" + route, body=body,
+                    )], phase, max_in_flight=1)
+            expected = "X-PolyStore-Gateway-Auth: " + workload.V3_PROVIDER_AUTH_TOKEN
+            self.assertEqual(len(captured), 2)
+            for argv, (_, route, body) in zip(captured, requests):
+                headers = [argv[index + 1] for index, value in enumerate(argv[:-1]) if value == "--header"]
+                self.assertIn(expected, headers)
+                self.assertFalse(any(value.startswith("Authorization:") for value in headers))
+                self.assertEqual(json.loads(argv[argv.index("--data") + 1]), body)
+                self.assertTrue(argv[-1].endswith(route))
 
     def test_disk_threshold_fails_closed(self):
         with patch.object(workload.shutil, "disk_usage", return_value=SimpleNamespace(free=99)):

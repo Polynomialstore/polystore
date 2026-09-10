@@ -44,6 +44,7 @@ V3_PILOT_SESSIONS = 2
 V3_MAX_SAMPLES = 132
 V3_BITMAP_BYTES = (V3_MAX_SAMPLES + 7) // 8
 V3_SYSTEMATIC_PROVIDERS = 8
+V3_PROVIDER_AUTH_TOKEN = "healthy-diagnostic-owned-local-stack"
 V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
 V3_ABORT_FREE_BYTES = 768 * 1024**2
 
@@ -154,7 +155,7 @@ def validate_v3_provider_outcomes(rows, providers, *, session_id):
         count = producer.uint(row.get("proof_count", 0))
         txhash = row.get("tx_hash", "")
         if (row.get("status") != "success" or row.get("http_status") != 200 or
-                row.get("session_id") != session_id or
+                row.get("session_id") != "0x" + session_id or
                 row.get("cleanup_status") != "complete" or slot >= V3_SYSTEMATIC_PROVIDERS or
                 providers.get(slot) != row.get("provider") or not 1 <= count <= 64 or
                 not isinstance(txhash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash) or
@@ -224,7 +225,7 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
         result = artifact.run_bounded_command([
             curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
             "--request", "POST", "--header", "Content-Type: application/json",
-            "--header", "Authorization: Bearer healthy-diagnostic-owned-local-stack",
+            "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
             "--data", json.dumps(request["body"], separators=(",", ":")),
             "--max-filesize", str(1024 * 1024), "--output", str(path),
             "--write-out", "%{http_code}", request["url"],
@@ -1925,7 +1926,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 POLYSTORE_FAST_INGEST="0", POLYSTORE_FAST_SHARD="0", POLYSTORE_MODE2_ENCODE_PARALLELISM="1", POLYSTORE_MODE2_UPLOAD_PARALLELISM="2",
                 POLYSTORE_GATEWAY_UPLOAD_TIMEOUT_SECONDS="180", POLYSTORE_CMD_TIMEOUT_SECONDS="30",
                 POLYSTORE_SHARD_TIMEOUT_SECONDS="180", POLYSTORE_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS="60",
-                POLYSTORE_GATEWAY_SP_AUTH="healthy-diagnostic-owned-local-stack")
+                POLYSTORE_GATEWAY_SP_AUTH=V3_PROVIDER_AUTH_TOKEN)
             reservations[i].close()
             if (artifact.sha256(gateway) != doc["provenance"]["gateway_sha256"] or
                     artifact.sha256(cli) != doc["provenance"]["cli_sha256"]):
