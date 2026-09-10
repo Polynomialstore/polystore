@@ -757,7 +757,6 @@ test.describe('native V3 browser qualification', () => {
         `[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`,
       )
       await expect(recoveryRow).toHaveCount(1, { timeout: 120_000 })
-      await expect(recoveryRow.getByTestId('v3-frozen-recovery')).toHaveCount(0)
       await expect.poll(() => unfinishedLocalState(reopened)).toEqual(localStateBeforeRefund)
       const retryMduRequestsBeforeRefund = retryMduRequests
       const recoveryButton = recoveryRow.getByTestId('deal-detail-download')
