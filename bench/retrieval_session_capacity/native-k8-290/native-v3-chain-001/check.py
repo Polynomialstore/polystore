@@ -62,7 +62,14 @@ def main():
         result = run(original)
         assert result.returncode == 0, result.stderr
         summary = json.loads(result.stdout)
-        assert summary["counts"] == dict(total=64, measured=56, total_ordinals=1056, measured_ordinals=924)
+        artifact_dir = Path(__file__).parent
+        summary["inputs"]["harness"] = "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py"
+        assert summary == json.loads((artifact_dir / "summary.json").read_text()), "published summary differs from retained derivation"
+        published = json.loads((artifact_dir / "manifest.json").read_text())["published_files"]
+        assert set(published) == {"README.md", "check.py", "plan.json", "runtime-provenance.json", "summarize.py", "summary.json"}
+        for name, expected in published.items():
+            data = (artifact_dir / name).read_bytes()
+            assert expected == dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest()), f"published hash differs: {name}"
         for index, mutate in enumerate(mutations):
             document = copy.deepcopy(original)
             mutate(document)
