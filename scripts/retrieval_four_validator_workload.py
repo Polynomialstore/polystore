@@ -3652,7 +3652,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             if native_browser is not None else ["No capacity or delivered retrieval qualification"])+[
             ("Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
              if native_v3 else "No deputy retrieval yet"),
-            "Normal mint and audit parameters retained; no economic conservation assertion", "No restart qualification"])
+            ("Normal mint and audit parameters retained; browser payer/provider/supply conservation checked"
+             if native_browser is not None else "Normal mint and audit parameters retained; no economic conservation assertion"),
+            "No validator restart qualification"])
     def check_disk(phase):
         if native_v3:
             free = require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
@@ -3964,6 +3966,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 doc["status"] = "native_v3_cross_audit_diagnostic_passed"
             elif native_browser is not None:
                 set_public_retrieval_policy(lifecycle, deal_id=identity, command=command)
+                doc["status"] = "native_v3_browser_running"
+                lifecycle.save()
                 run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
                     check_providers=check_providers)
