@@ -346,7 +346,8 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
         except BaseException as error:
             attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
                                  request_index=index, request_id=request.get("id"), offered_ns=offered_ns,
-                                 error=str(error)[-8192:], request_finished_ns=artifact.monotonic_ns()))
+                                 request_started_ns=began, error=str(error)[-8192:],
+                                 request_finished_ns=artifact.monotonic_ns()))
             return attempts, error
         finally:
             path.unlink(missing_ok=True)
@@ -465,6 +466,7 @@ def run_v3_http_schedule(lifecycle, curl, requests, phase):
                     active.add(request["provider"])
                     pending[executor.submit(_run_v3_http_request, lifecycle, curl, request, phase,
                         index, directory, phase_deadline, True)] = (index, request)
+                summary["max_in_flight"] = max(summary["max_in_flight"], len(pending))
             timeout = .1
             if not pending and next_index < len(scheduled) and not errors:
                 timeout = min(timeout, max(0, (scheduled[next_index]["offered_ns"] - now) / 1e9))
@@ -490,15 +492,13 @@ def run_v3_http_schedule(lifecycle, curl, requests, phase):
                     errors.append(future_error)
                 else:
                     completed.append(attempts[-1])
+                    summary["max_dispatch_lag_ns"] = max(summary["max_dispatch_lag_ns"],
+                        attempts[0]["request_started_ns"] - attempts[0]["offered_ns"])
                     last_progress = now
             summary.update(offered=next_index, completed=len(completed), queued=len(queued),
                            in_flight=len(pending), elapsed_ns=now-started,
                            seconds_since_progress=(now-last_progress)/1e9)
             summary["max_queued"] = max(summary["max_queued"], len(queued))
-            summary["max_in_flight"] = max(summary["max_in_flight"], len(pending))
-            if completed:
-                summary["max_dispatch_lag_ns"] = max(summary["max_dispatch_lag_ns"],
-                    max(row["request_started_ns"] - row["offered_ns"] for row in completed))
             if now - last_heartbeat >= 60 * 10**9:
                 heartbeat = dict(phase=phase, **{key: summary[key] for key in (
                     "offered", "completed", "queued", "in_flight", "elapsed_ns", "seconds_since_progress")})

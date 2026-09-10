@@ -723,6 +723,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             retained = lifecycle.doc["v3_http_phases"]["retry-parser-error"]
             self.assertEqual((calls, len(retained), retained[0]["http_status"], retained[1]["status"]),
                              (2, 2, 429, "driver_error"))
+            self.assertLessEqual(retained[1]["request_started_ns"],
+                                 retained[1]["request_finished_ns"])
 
     def test_native_v3_provider_routes_use_gateway_auth_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -899,6 +901,32 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             retained = lifecycle.doc["v3_http_phases"]["scheduled-failure"]
             self.assertEqual({row.get("status") for row in retained}, {"driver_error", "success"})
             self.assertIn("Expecting property name", lifecycle.doc["v3_http_schedules"]["scheduled-failure"]["terminal_error"])
+
+    def test_cross_audit_scheduler_metrics_use_initial_dispatch_and_peak_pending(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(id=f"r{index}", provider=f"provider-{index}", offered_offset_ns=0,
+                             url=f"http://provider/{index}", body={}) for index in range(2)]
+
+            def completed_after_retry(_lifecycle, _curl, request, _phase, index, _directory,
+                                      _deadline, _retry):
+                offered = request["offered_ns"]
+                first = dict(http_status=429, provider=request["provider"], request_index=index,
+                    request_id=request["id"], offered_ns=offered, request_started_ns=offered + 3,
+                    request_finished_ns=offered + 4)
+                terminal = dict(status="success", provider=request["provider"], request_index=index,
+                    request_id=request["id"], offered_ns=offered,
+                    request_started_ns=offered + 2_000_000_003,
+                    request_finished_ns=offered + 2_000_000_004)
+                return [first, terminal], None
+
+            with patch.object(workload, "_run_v3_http_request", side_effect=completed_after_retry), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                workload.run_v3_http_schedule(lifecycle, "/curl", requests, "scheduled-metrics")
+            summary = lifecycle.doc["v3_http_schedules"]["scheduled-metrics"]
+            self.assertEqual(summary["max_dispatch_lag_ns"], 3)
+            self.assertEqual(summary["max_in_flight"], 2)
 
     def test_cross_audit_scheduler_enforces_shared_offer_and_drain_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
