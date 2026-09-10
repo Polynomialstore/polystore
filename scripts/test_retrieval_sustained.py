@@ -387,6 +387,11 @@ class SustainedTest(unittest.TestCase):
                 self.assertEqual(summarize.call_count, 4)
                 self.assertEqual(summarize.call_args.args[0], [start, inside, end])
                 self.assertEqual(streams[0]["raw_samples"], 2)
+                phases["custom_before"], phases["custom_after"] = phases["sustained_before"], phases["sustained_after"]
+                life.doc["custom_streams"] = [dict(row) for row in streams]
+                workload.summarize_commit_streams(life, processes, stream_key="custom_streams",
+                    before_phase="custom_before", after_phase="custom_after")
+                self.assertEqual(summarize.call_count, 8)
                 with self.assertRaises(ValueError):
                     workload.summarize_commit_streams(life, processes[:3])
                 processes[0].returncode = 1

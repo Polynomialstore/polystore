@@ -454,6 +454,76 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         for changed in (raw + b"\x00", bytes([raw[0] ^ 1]) + raw[1:], raw.replace(sid, bytes(32))):
             with self.assertRaises(ValueError):
                 workload.opened_v3_session(dict(outcome="committed_success", data=changed.hex()))
+        second = raw.replace(sid, bytes.fromhex("22" * 32))
+        self.assertEqual(workload.opened_v3_sessions(
+            dict(outcome="committed_success", data=(raw + second).hex()), 2),
+            [self.SESSION, "22" * 32])
+        ordered = [raw.replace(sid, bytes([index]) * 32) for index in range(1, 32)]
+        self.assertEqual(workload.opened_v3_sessions(
+            dict(outcome="committed_success", data=b"".join(ordered).hex()), 31),
+            [(bytes([index]) * 32).hex() for index in range(1, 32)])
+        self.assertEqual(len(workload.opened_v3_sessions(
+            dict(outcome="committed_success", data=b"".join(ordered[:15]).hex()), 15)), 15)
+        with self.assertRaisesRegex(ValueError, "repeats"):
+            workload.opened_v3_sessions(
+                dict(outcome="committed_success", data=(raw + raw).hex()), 2)
+
+    def test_native_v3_open_batch_binds_order_gas_bytes_and_response(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            owner = AUDIT_ADDRESSES[0]
+            life = SimpleNamespace(binary=Path("/chain"), chain="chain", env={},
+                deadline=artifact.monotonic_ns() + 10**9, signers={"owner0": owner},
+                nodes=[{"home": str(home), "rpc": 26657}], doc={}, save=Mock())
+            paths, generated = [], []
+            for nonce in range(1, 32):
+                path = home / f"open-{nonce}.json"
+                path.write_text(json.dumps(dict(creator=owner, deal_id="7", generation="1",
+                    range=dict(file_record_index=0, file_start_offset="0",
+                               file_length=str(workload.V3_PILOT_BYTES), range_start="0",
+                               range_length=str(workload.V3_PILOT_BYTES)), nonce=str(nonce),
+                    deadline_height="300")))
+                paths.append(path)
+            def command(args):
+                if "--generate-only" in args:
+                    path = Path(args[args.index("open") + 1])
+                    source = json.loads(path.read_text())
+                    source["range"] = {key: str(value) for key, value in source["range"].items()}
+                    message = {"@type": "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3", **source}
+                    gas = args[args.index("--gas") + 1]
+                    tx = {"body": {"messages": [message]},
+                          "auth_info": {"fee": {"gas_limit": gas}}}
+                    generated.append(tx)
+                    return json.dumps(tx)
+                messages = [row["body"]["messages"][0] for row in generated]
+                gas = sum(int(row["auth_info"]["fee"]["gas_limit"]) for row in generated)
+                Path(args[args.index("--output-document") + 1]).write_text(json.dumps({
+                    "body": {"messages": messages}, "auth_info": {"fee": {"gas_limit": str(gas)}},
+                    "signatures": ["signed"]}))
+                return ""
+            session_ids = [bytes([index]) * 32 for index in range(1, 32)]
+            kind = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
+            suffix = (b"\x10" + workload._encode_varint(workload.V3_PILOT_BYTES) +
+                      b"\x18" + workload._encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
+                      b"\x20" + workload._encode_varint(132))
+            def response(session):
+                body = b"\x0a\x20" + session + suffix
+                any_value = (b"\x0a" + workload._encode_varint(len(kind)) + kind +
+                             b"\x12" + workload._encode_varint(len(body)) + body)
+                return b"\x12" + workload._encode_varint(len(any_value)) + any_value
+            committed = dict(outcome="committed_success", height=12, code=0,
+                gas_wanted=62_100_000, gas_used=15_000_000, txhash="AB" * 32,
+                data=b"".join(response(value) for value in session_ids).hex())
+            with patch.object(artifact, "scheduled_transaction", return_value=committed) as submit, \
+                    patch.object(workload, "verify_transaction_nodes", return_value=[
+                        {"node_id": str(i), "bytes": 4096} for i in range(4)]):
+                ids, height = workload.open_v3_session_batch(life, paths, home / "batch", command)
+            self.assertEqual((ids, height), ([value.hex() for value in session_ids], 12))
+            self.assertEqual([int(row["auth_info"]["fee"]["gas_limit"]) for row in generated],
+                             [2_100_000] + [2_000_000] * 30)
+            self.assertEqual(life.doc["native_v3_open_batches"][0]["signed_gas"], 62_100_000)
+            self.assertEqual(life.doc["native_v3_open_batches"][0]["committed_bytes"], 4096)
+            submit.assert_called_once()
 
     def test_provider_wave_and_committed_message_are_exact(self):
         providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
@@ -826,11 +896,16 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
         profile = workload.native_v3_cross_audit_schedule()
-        self.assertEqual((len(profile), profile[0], profile[-1]), (120,
-            dict(index=0, session_index=1, slot=0, offered_offset_ns=0),
-            dict(index=119, session_index=15, slot=7, offered_offset_ns=59_500_000_000)))
+        self.assertEqual((len(profile), profile[0], profile[-1]), (360,
+            dict(id="measured-1-0", index=0, session_index=1, slot=0, offered_offset_ns=0),
+            dict(id="measured-45-7", index=359, session_index=45, slot=7,
+                 offered_offset_ns=179_500_000_000)))
         self.assertEqual({slot: sum(row["slot"] == slot for row in profile) for slot in range(8)},
-                         {slot: 15 for slot in range(8)})
+                         {slot: 45 for slot in range(8)})
+        oversized = [dict(id=f"r{index}", provider="provider", offered_offset_ns=index,
+                          url="http://provider", body={}) for index in range(361)]
+        with self.assertRaisesRegex(ValueError, "invalid bounded"):
+            workload.run_v3_http_schedule(SimpleNamespace(), "/curl", oversized, "oversized")
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
                 deadline=artifact.monotonic_ns() + 10 * 10**9, save=Mock(), remaining=Mock(return_value=1))
@@ -858,6 +933,35 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             summary = lifecycle.doc["v3_http_schedules"]["fixed-schedule"]
             self.assertEqual((summary["offered"], summary["completed"], summary["queued"], summary["in_flight"]),
                              (8, 8, 0, 0))
+
+    def test_cross_audit_bins_bind_each_offer_start_and_terminal(self):
+        schedule = workload.native_v3_cross_audit_schedule()
+        start = 1_000_000_000
+        outcomes = [dict(request_id=row["id"],
+                         initial_dispatch_ns=start + row["offered_offset_ns"],
+                         request_started_ns=start + row["offered_offset_ns"],
+                         request_finished_ns=start + row["offered_offset_ns"] + 1)
+                    for row in schedule]
+        requests = [dict(row, provider=f"provider-{row['slot']}", url="http://provider", body={})
+                    for row in schedule]
+        bins = workload.v3_http_schedule_bins(requests, outcomes, start_ns=start)
+        self.assertEqual(len(bins), 6)
+        self.assertEqual([row["offered"] for row in bins], [60] * 6)
+        self.assertEqual([row["outstanding_at_end"] for row in bins], [0] * 6)
+        self.assertEqual([row["queued_at_end"] for row in bins], [0] * 6)
+        self.assertEqual([row["in_flight_at_end"] for row in bins], [0] * 6)
+        outcomes[60]["initial_dispatch_ns"] += 30 * 10**9
+        outcomes[60]["request_started_ns"] += 30 * 10**9
+        outcomes[60]["request_finished_ns"] += 30 * 10**9
+        outcomes[61]["request_finished_ns"] += 30 * 10**9
+        bins = workload.v3_http_schedule_bins(requests, outcomes, start_ns=start)
+        self.assertEqual((bins[1]["queued_at_end"], bins[1]["in_flight_at_end"],
+                          bins[1]["outstanding_at_end"]), (1, 1, 2))
+        self.assertEqual(bins[2]["carryover_queued"], 1)
+        self.assertEqual(bins[2]["carryover_in_flight"], 1)
+        outcomes[0]["request_started_ns"] = start - 1
+        with self.assertRaisesRegex(ValueError, "precedes its offer"):
+            workload.v3_http_schedule_bins(requests, outcomes, start_ns=start)
 
     def test_cross_audit_scheduler_retries_only_exact_busy_and_retains_drained_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -948,25 +1052,25 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
     def test_cross_audit_sequence_reconciliation_counts_measured_proofs_and_audits(self):
         providers = dict(enumerate(AUDIT_ADDRESSES))
         before = {address: dict(account_number=slot, sequence=10) for slot, address in providers.items()}
-        views = {slot: {"audit": {"sample_count": "8", "accepted_count": "8"}}
-                 for slot in providers}
+        views = {epoch: {slot: {"audit": {"sample_count": "1", "accepted_count": "1"}}
+                         for slot in providers} for epoch in (4, 5)}
         proofs = []
         for slot in range(8):
-            for index in range(15):
-                proofs.append(dict(txhash=f"{slot * 15 + index + 1:064X}", provider=providers[slot],
+            for index in range(45):
+                proofs.append(dict(txhash=f"{slot * 45 + index + 1:064X}", provider=providers[slot],
                                    outcome="committed_success"))
         audit_transactions = []
         for slot, provider in providers.items():
-            for index in range(8):
+            for index in range(2):
                 audit_transactions.append(dict(txhash=f"{1000 + slot * 8 + index:064X}", provider=provider,
-                                               code=0))
+                                               code=0, epoch=4 + index))
         after = copy.deepcopy(before)
         for slot, address in providers.items():
-            after[address]["sequence"] += 8 + (15 if slot < 8 else 0)
+            after[address]["sequence"] += 2 + (45 if slot < 8 else 0)
         rows = workload.reconcile_cross_audit_sequences(
             before, after, providers, proofs, audit_transactions, views)
         self.assertEqual([(row["proof_transactions"], row["audit_transactions"], row["actual_delta"])
-                          for row in rows], [(15, 8, 23)] * 8 + [(0, 8, 8)] * 4)
+                          for row in rows], [(45, 2, 47)] * 8 + [(0, 2, 2)] * 4)
         after[providers[9]]["sequence"] += 1
         with self.assertRaisesRegex(ValueError, "outside unique workload and audit"):
             workload.reconcile_cross_audit_sequences(
@@ -978,6 +1082,23 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "bitmap does not equal"):
             workload.reconcile_cross_audit_sequences(
                 before, after, providers, proofs, audit_transactions[:-1], views)
+        wrong_epoch = copy.deepcopy(audit_transactions)
+        wrong_epoch[-1]["epoch"] = 4
+        with self.assertRaisesRegex(ValueError, "epoch bitmap"):
+            workload.reconcile_cross_audit_sequences(
+                before, after, providers, proofs, wrong_epoch, views)
+
+    def test_cross_audit_proof_commits_span_exactly_two_anchors(self):
+        self.assertEqual(workload.validate_v3_cross_audit_span(
+            [{"height": "190"}, {"height": "301"}], 190, 201, 100),
+            {"first_height": 190, "last_height": 301, "first_anchor": 201,
+             "second_anchor": 301})
+        for rows in ([{"height": 202}, {"height": 301}],
+                     [{"height": 190}, {"height": 300}],
+                     [{"height": 189}, {"height": 301}],
+                     [{"height": 190}, {"height": 401}]):
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, "span exactly"):
+                workload.validate_v3_cross_audit_span(rows, 190, 201, 100)
 
     def test_cross_audit_cpu_fence_waits_for_delayed_audit_completion(self):
         events = []
@@ -988,9 +1109,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         expected = {AUDIT_ADDRESSES[0]: 1}
         views = {0: {"audit": {"sample_count": "1", "accepted_count": "1"}}}
 
+        signals = iter((303, 403))
         def wait_for_signal(*args):
             events.append("event-signal-and-all-node-fence")
-            return {"height": 303, "signal_height": 303}
+            height = next(signals)
+            return {"height": height, "signal_height": height}
 
         def cpu_snapshot(*args):
             events.append("cpu-after")
@@ -1007,15 +1130,15 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot), \
                 patch.object(workload, "capture_workload_metrics", side_effect=capture), \
                 patch.object(workload, "validator_cpu_delta", return_value={"cpu": "delta"}):
-            crossed = workload.close_cross_audit_measurement(
-                lifecycle, audits, providers, "0", expected, 100, 4, 500, before, 299)
+            crossed, crossed_views = workload.close_cross_audit_measurement(
+                lifecycle, audits, providers, "0", expected, 100, [4, 5], 500, before, 299)
 
-        self.assertEqual(events, ["event-signal-and-all-node-fence", "cpu-after",
-                                  "four-node-audit-validation", "metrics-after"])
-        self.assertEqual(crossed["height"], 303)
-        self.assertEqual(crossed["audits"], views)
+        self.assertEqual(events, ["event-signal-and-all-node-fence"] * 2 + ["cpu-after"] +
+                                 ["four-node-audit-validation"] * 2 + ["metrics-after"])
+        self.assertEqual([row["height"] for row in crossed], [303, 403])
+        self.assertEqual(crossed_views, {4: views, 5: views})
         window = lifecycle.doc["native_v3_cross_audit"]["measured_window"]
-        self.assertEqual(window["crossed_audit_completion_height"], 303)
+        self.assertEqual(window["crossed_audit_completion_heights"], [303, 403])
         self.assertEqual(window["proof_phase_end_height"], 299)
         self.assertIn("crossed-audit completion", window["scope"])
 
@@ -1158,7 +1281,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 self.assertRaisesRegex(TimeoutError, "delayed audit"):
             workload.close_cross_audit_measurement(
                 lifecycle, Mock(), {0: AUDIT_ADDRESSES[0]}, "0", {AUDIT_ADDRESSES[0]: 1},
-                100, 4, 500, {"monotonic_ns": 10}, 299)
+                100, [4, 5], 500, {"monotonic_ns": 10}, 299)
         cpu_snapshot.assert_not_called()
         capture.assert_not_called()
         self.assertNotIn("measured_window", lifecycle.doc["native_v3_cross_audit"])
