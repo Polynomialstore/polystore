@@ -766,6 +766,12 @@ journal. Checkpoint and owner/deal locks prevent another tab from opening a
 replacement payment. An unfinished checkpoint may be discarded only while its
 payment journal is absent, explicitly rejected/prepared, or proven reverted;
 broadcasting, committed and malformed records remain for reconciliation. The
+current browser client requires a connected trusted loopback user-gateway proof
+route before preparing a new native V3 open transaction, including when data is
+fetched directly from providers. Existing broadcasting or committed journals,
+settled output caches and expiry refunds remain available without that route.
+This precondition prevents locking a new retrieval fee when the client cannot
+request provider proof submission; it does not qualify public activation. The
 first cold user-gateway request stays alive for up to 5 minutes 30 seconds,
 including the provider-daemon's 5-minute index-build bound. Caller cancellation
 stops the synchronous build while its response-capacity admission and generation

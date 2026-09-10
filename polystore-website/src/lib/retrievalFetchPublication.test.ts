@@ -47,7 +47,7 @@ function fixture(staleUnbound = false) {
       },
     },
     '../api/providerClient': {},
-    '../config': { appConfig: { cosmosChainId: 'chain' } },
+    '../config': { appConfig: { cosmosChainId: 'chain', gatewayDisabled: true, gatewayBase: '' } },
     '../domain/polyfsLayout': {}, '../lib/providerDiscovery': {}, '../lib/retrieval': {}, '../lib/retrievalFlow': {},
     '../lib/retrievalRecovery': {}, '../lib/retrievalMode': {}, '../lib/retrievalSettlement': {}, '../lib/transport/mode': {},
     '../lib/walletErrors': { classifyWalletError: (error: unknown) => ({ message: error instanceof Error ? error.message : String(error) }) },
