@@ -217,6 +217,13 @@ maximum capacity, WAN behavior, phase RSS peak, pure proof-generation latency,
 or delivered-byte capacity. A retained performance result requires this harness
 to land before collection.
 
+The [retained cross-audit diagnostic](native-v3-cross-audit-001/README.md) ran
+the landed profile for 180 seconds at 2 transactions/s. All 360 measured native
+v3 proof transactions and 5,940 authenticated openings committed, while 24
+normal audit transactions covered two anchors. This accepts that single-host
+local operating point only; the result remains `qualification=false` and makes
+no maximum-capacity, realistic-deployment, WAN, or delivery claim.
+
 ## Native v3 chain-only diagnostic
 
 `native-v3-chain` keeps the same 16 MiB FAT v3 generation and normal audits,

@@ -1,0 +1,40 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "$BENCH_ROOT/worktrees/native-cross-audit-harness-da54964d/scripts/retrieval_four_validator_workload.py",
+    "--mode",
+    "native-v3-providers-cross-audit",
+    "--audit-profile",
+    "normal",
+    "--timeout",
+    "900",
+    "--binary",
+    "$BENCH_ROOT/native-build-5cc77e1a-002/bin/polystorechaind",
+    "--library",
+    "$BENCH_ROOT/worktrees/native-runtime-5cc77e1a-002/polystore_core/target/release/libpolystore_core.so",
+    "--gateway-binary",
+    "$BENCH_ROOT/native-build-5cc77e1a-002/bin/polystore_gateway",
+    "--cli-binary",
+    "$BENCH_ROOT/native-build-5cc77e1a-002/bin/polystore_cli",
+    "--product-source",
+    "$BENCH_ROOT/worktrees/native-runtime-5cc77e1a-002",
+    "--home",
+    "$BENCH_ROOT/runs/native-v3-cross-audit-retained-001"
+  ],
+  "elapsed_seconds": 816.051,
+  "harness_head": "da54964dc502f14bc73096fb6adc5f8ba0b2be6b",
+  "harness_scripts_tree": "0229d8fa6a7ea6faf64d77d6564f640a8e58694f",
+  "host": "single Linux host (identity redacted)",
+  "initial_free_bytes": 1338516119552,
+  "initial_load": [
+    0.16015625,
+    0.04638671875,
+    0.0576171875
+  ],
+  "kind": "fixed180second native provider operating-point diagnostic across2normal audit anchors; no distributed maximum or delivery qualification",
+  "minimum_free_bytes": 1338274324480,
+  "result_scope": "retained local operating-point diagnostic; qualification=false",
+  "returncode": 0,
+  "runtime_provenance": "runtime-provenance.json",
+  "schema": "polystore.retained-run-plan.v1"
+}
