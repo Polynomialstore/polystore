@@ -447,11 +447,21 @@ func runFrozenSystemLiveness(ctx context.Context, height uint64, snapshot *syste
 	if err != nil {
 		return err
 	}
-	release, err := claimRetrievalOperations(nil, signer)
+	release, waited, err := claimPriorityRetrievalSigner(ctx, signer)
 	if err != nil {
 		return err
 	}
 	defer release()
+	if waited {
+		active, currentHeight, err := systemAuditActivation(ctx)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return fmt.Errorf("frozen system audits became inactive while waiting for signer")
+		}
+		height = currentHeight
+	}
 	pending, err := loadPendingSigner(signer)
 	if err != nil {
 		return err

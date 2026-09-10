@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cosmos/gogoproto/jsonpb"
 	bolt "go.etcd.io/bbolt"
@@ -515,6 +516,59 @@ func TestSystemAuditActivatedDispatchUsesOnlyFrozenInventory(t *testing.T) {
 	inventory = `{}`
 	if err := runSystemLivenessOnce(context.Background(), 999); err == nil {
 		t.Fatal("malformed v2 inventory accepted")
+	}
+}
+
+func TestFrozenSystemAuditRefreshesHeightAfterWaitingForSigner(t *testing.T) {
+	submissionTestDB(t)
+	_, _, signer := systemAuditFixture(t, retrievalchallenge.Audit)
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] != "keys" {
+			t.Fatal("unexpected command", args)
+		}
+		return []byte(signer), nil
+	})
+	foreground, err := claimRetrievalOperations(nil, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(foreground)
+	paramsQueries, auditQueries := 0, 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(committedHeightHeader, "13")
+		switch r.URL.Path {
+		case "/polystorechain/polystorechain/v1/params":
+			paramsQueries++
+			fmt.Fprint(w, `{"params":{"retrieval_v2_activation_height":"11"}}`)
+		case "/polystorechain/polystorechain/v1/storage-audits/by-provider/" + signer:
+			auditQueries++
+			if r.Header.Get(committedHeightHeader) != "13" {
+				t.Error("audit inventory used pre-wait height", r.Header.Get(committedHeightHeader))
+			}
+			fmt.Fprint(w, `{"audits":[]}`)
+		default:
+			t.Error("unexpected LCD query", r.URL.Path)
+			http.Error(w, "unexpected", 500)
+		}
+	}))
+	defer srv.Close()
+	oldLCD := lcdBase
+	lcdBase = srv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- runFrozenSystemLiveness(ctx, 12, &systemLivenessSnapshot{})
+	}()
+	waitForPrioritySigner(t, signer)
+	foreground()
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+	if paramsQueries != 1 || auditQueries != 1 {
+		t.Fatal("unexpected refresh queries", paramsQueries, auditQueries)
 	}
 }
 
