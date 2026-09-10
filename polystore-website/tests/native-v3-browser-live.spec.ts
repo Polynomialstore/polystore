@@ -1,4 +1,4 @@
-import { expect, type Download, type Page, type Response } from '@playwright/test'
+import { expect, type APIRequestContext, type Download, type Page, type Response } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 
@@ -7,6 +7,7 @@ import { persistentTest as test } from './utils/persistentBrowser'
 import type { RetrievalDiagnostic } from '../src/lib/retrievalDiagnostics'
 
 const enabled = process.env.E2E_NATIVE_V3_BROWSER === '1'
+const expiryEnabled = process.env.E2E_NATIVE_V3_EXPIRY === '1'
 const dealId = process.env.E2E_NATIVE_V3_DEAL_ID || ''
 const payer = process.env.E2E_NATIVE_V3_PAYER || ''
 const filePath = process.env.E2E_NATIVE_V3_FILE || 'payload.bin'
@@ -47,6 +48,15 @@ async function sessionById(page: Page, sessionId: string): Promise<JsonObject> {
   const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions-v3/${encoded}`)
   expect(response.ok()).toBe(true)
   return (await response.json()).session
+}
+
+async function latestHeight(request: APIRequestContext): Promise<bigint> {
+  const response = await request.get(`${lcd}/cosmos/base/tendermint/v1beta1/blocks/latest`)
+  expect(response.ok()).toBe(true)
+  const body = await response.json() as JsonObject
+  const block = body.block as JsonObject | undefined
+  const header = block?.header as JsonObject | undefined
+  return BigInt(String(header?.height || '0'))
 }
 
 async function hashDownload(download: Download): Promise<{ bytes: number; sha256: string }> {
@@ -156,6 +166,7 @@ test.describe('native V3 browser qualification', () => {
   test.use({ acceptDownloads: true })
 
   test('PUBLIC native deal is paid, verified, acknowledged, cached and downloaded by its sponsor', async ({ page }) => {
+    test.skip(expiryEnabled, 'the dedicated short-deal invocation runs only expiry recovery')
     const retrievalTimeout = expectedBytes >= 2 ** 30 ? 30 * 60_000 : 10 * 60_000
     test.setTimeout(expectedBytes >= 2 ** 30 ? 75 * 60_000 : 15 * 60_000)
     expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
@@ -351,6 +362,7 @@ test.describe('native V3 browser qualification', () => {
 
   for (const fault of ['estimate rejected', 'wallet 4001'] as const) {
     test(`${fault} before payment preserves an unfinished request without spending`, async ({ page }) => {
+      test.skip(expiryEnabled, 'the dedicated short-deal invocation runs only expiry recovery')
       test.setTimeout(5 * 60_000)
       expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
       expect(payer).toMatch(/^nil1[0-9a-z]+$/)
@@ -460,4 +472,197 @@ test.describe('native V3 browser qualification', () => {
       }
     })
   }
+
+  test('expired paid checkpoint refunds without a second open or provider access', async ({ page }) => {
+    test.skip(!expiryEnabled, 'requires the dedicated short-lived native V3 deal')
+    test.setTimeout(8 * 60_000)
+    expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
+    expect(payer).toMatch(/^nil1[0-9a-z]+$/)
+    const context = page.context()
+    const diagnostics: RetrievalDiagnostic[] = []
+    const evmResponseHashes: string[] = []
+    const evmTransactions: JsonObject[] = []
+    const evmReceipts: JsonObject[] = []
+    const durableStages: string[] = []
+    let rawTransactions = 0
+    const summary: Record<string, unknown> = {
+      success: false, dealId, payer, filePath, expectedBytes, expectedHash, diagnostics,
+      evmResponseHashes, evmTransactions, evmReceipts,
+      resultDurability: { atomicReplace: true, verifiedStages: durableStages },
+    }
+    let saved: Promise<void> = Promise.resolve()
+    const persist = () => {
+      if (!resultPath) return
+      const temporary = `${resultPath}.tmp`
+      const json = JSON.stringify(summary, (_key, value) => typeof value === 'bigint' ? value.toString() : value, 2)
+      saved = saved.then(() => fs.writeFile(temporary, json)).then(() => fs.rename(temporary, resultPath))
+      void saved.catch(() => undefined)
+    }
+    const durable = async (stage: string) => {
+      if (!resultPath) return
+      persist()
+      await saved
+      const retained = JSON.parse(await fs.readFile(resultPath, 'utf8')) as JsonObject
+      expect(retained.stage).toBe(stage)
+      durableStages.push(stage)
+    }
+    try {
+      await context.exposeFunction('__nativeV3ExpiryDiagnostic', (event: RetrievalDiagnostic) => diagnostics.push(event))
+      await context.addInitScript(() => {
+        const scope = window as unknown as {
+          __polystoreRetrievalDiagnostic: (event: unknown) => void
+          __nativeV3ExpiryDiagnostic: (event: unknown) => Promise<void>
+        }
+        scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3ExpiryDiagnostic(event) }
+      })
+      context.on('request', (request) => {
+        if (request.method() !== 'POST' || !request.url().startsWith(evm)) return
+        try { if ((JSON.parse(request.postData() || '{}') as EvmRpcRequest).method === 'eth_sendRawTransaction') rawTransactions++ }
+        catch { /* malformed requests cannot count as financial evidence */ }
+      })
+      context.on('response', (response: Response) => {
+        if (response.request().method() !== 'POST' || !response.url().startsWith(evm)) return
+        let request: EvmRpcRequest
+        try { request = JSON.parse(response.request().postData() || '{}') as EvmRpcRequest } catch { return }
+        if (request.method !== 'eth_sendRawTransaction' || !response.ok()) return
+        void response.json().then((body: JsonObject) => {
+          if (typeof body.result === 'string' && /^0x[0-9a-f]{64}$/i.test(body.result)) evmResponseHashes.push(body.result)
+        }).catch(() => undefined)
+      })
+
+      const before = {
+        stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page), deal: await deal(page), height: await latestHeight(page.request),
+      }
+      const endBlock = BigInt(String(before.deal.end_block || '0'))
+      const remaining = endBlock - before.height
+      expect(remaining).toBeGreaterThanOrEqual(60n)
+      expect(remaining).toBeLessThanOrEqual(180n)
+      expect(before.deal.owner).not.toBe(payer)
+      expect((before.deal.retrieval_policy as JsonObject | undefined)?.mode)
+        .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
+
+      const gatewayUrl = await mountDealDetail(page)
+      let abortedDataRequests = 0
+      let requestedSessionId = ''
+      await page.route('**/gateway/mdu/**', async (route) => {
+        const sessionId = route.request().headers()['x-polystore-session-id'] || ''
+        if (!sessionId) return route.continue()
+        abortedDataRequests++
+        requestedSessionId = sessionId
+        await route.abort('failed')
+      })
+      const button = await openDownload(page)
+      await button.click()
+      await expect.poll(() => readDownloadFailureBanner(page), { timeout: 120_000 })
+        .toContain('Download failed:')
+      expect(abortedDataRequests).toBe(1)
+      expect(requestedSessionId).toMatch(/^0x[0-9a-f]{64}$/i)
+      await expect.poll(() => diagnostics.filter((event) => event.phase === 'opened_session').length).toBe(1)
+      const openedSession = diagnostics.find((event) => event.phase === 'opened_session')
+      expect(openedSession?.sessionId).toBe(requestedSessionId)
+      const phaseGuards = {
+        openedSessions: diagnostics.filter((event) => event.phase === 'opened_session').length,
+        verifiedWrites: diagnostics.filter((event) => event.phase === 'verified_write').length,
+        flushedChunks: diagnostics.filter((event) => event.phase === 'flushed').length,
+        verifiedChunks: diagnostics.filter((event) => event.phase === 'verified_chunk').length,
+        acknowledgedObligations: diagnostics.filter((event) => event.phase === 'acked_obligation').length,
+      }
+      expect(phaseGuards).toEqual({
+        openedSessions: 1, verifiedWrites: 0, flushedChunks: 0, verifiedChunks: 0, acknowledgedObligations: 0,
+      })
+
+      const sessionBeforeRefund = await sessionById(page, requestedSessionId)
+      expect(sessionBeforeRefund.owner).toBe(payer)
+      expect(sessionBeforeRefund.payer).toBe(payer)
+      expect(sessionBeforeRefund.funding).toBe('RETRIEVAL_SESSION_FUNDING_REQUESTER')
+      expect(BigInt(String(sessionBeforeRefund.locked_fee))).toBeGreaterThan(0n)
+      expect(BigInt(String(sessionBeforeRefund.acked_slots_mask))).toBe(0n)
+      expect(BigInt(String(sessionBeforeRefund.settled_slots_mask))).toBe(0n)
+      expect(BigInt(String(sessionBeforeRefund.refunded_slots_mask))).toBe(0n)
+      const localStateBeforeRefund = await unfinishedLocalState(page)
+      expect(localStateBeforeRefund).toEqual({
+        checkpoints: 1, unbound: 0, journals: [{ state: 'committed', hasHash: true }],
+      })
+      const afterInterrupted = {
+        stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page), height: await latestHeight(page.request),
+      }
+      const lockedFee = BigInt(String(sessionBeforeRefund.locked_fee))
+      const baseFee = BigInt(String(sessionBeforeRefund.base_fee))
+      expect(before.stake - afterInterrupted.stake).toBe(baseFee + lockedFee)
+      expect(afterInterrupted.aatom).toBeLessThan(before.aatom)
+      expect(afterInterrupted.nonce.found).toBe(true)
+      expect(BigInt(afterInterrupted.nonce.nonce)).toBe(BigInt(before.nonce.nonce) + 1n)
+      Object.assign(summary, {
+        stage: 'interrupted', gatewayUrl, abortedDataRequests, requestedSessionId, sessionBeforeRefund,
+        before, afterInterrupted, localStateBeforeRefund, remainingBlocksAtStart: remaining, phaseGuards,
+      })
+      await durable('interrupted')
+
+      await page.close()
+      const deadline = BigInt(String(sessionBeforeRefund.deadline_height))
+      await expect.poll(() => latestHeight(context.request), { timeout: 4 * 60_000, intervals: [500, 1000] })
+        .toBeGreaterThan(deadline)
+
+      const reopened = await context.newPage()
+      let retryMduRequests = 0
+      await reopened.route('**/gateway/mdu/**', async (route) => {
+        retryMduRequests++
+        await route.abort('failed')
+      })
+      await mountDealDetail(reopened, false)
+      const recoveryRow = reopened.getByTestId('deal-detail-file-row').filter({
+        has: reopened.getByTestId('v3-frozen-recovery').filter({ hasText: 'Paid recovery' }),
+      })
+      await expect(recoveryRow).toHaveCount(1)
+      const retryMduRequestsBeforeRefund = retryMduRequests
+      const recoveryButton = recoveryRow.getByTestId('deal-detail-download')
+      await expect(recoveryButton).toBeVisible({ timeout: 120_000 })
+      await recoveryButton.click()
+      await expect.poll(() => readDownloadFailureBanner(reopened), { timeout: 120_000 })
+        .toContain('remaining fee was refunded')
+      expect(retryMduRequests).toBe(retryMduRequestsBeforeRefund)
+      await expect.poll(() => unfinishedLocalState(reopened)).toEqual({ checkpoints: 0, unbound: 0, journals: [] })
+
+      const session = await sessionById(reopened, requestedSessionId)
+      const obligations = session.obligations as JsonObject[]
+      const expectedMask = obligations.reduce((mask, row) => mask | (1n << BigInt(String(row.slot))), 0n)
+      expect(session.expired).toBe(true)
+      expect(BigInt(String(session.locked_fee))).toBe(0n)
+      expect(BigInt(String(session.acked_slots_mask))).toBe(0n)
+      expect(BigInt(String(session.settled_slots_mask))).toBe(0n)
+      expect(BigInt(String(session.refunded_slots_mask))).toBe(expectedMask)
+      const afterRefund = {
+        stake: await balance(reopened, payer, 'stake'), aatom: await balance(reopened, payer, 'aatom'),
+        nonce: await latestNonce(reopened), height: await latestHeight(reopened.request),
+      }
+      expect(afterRefund.stake).toBe(afterInterrupted.stake + lockedFee)
+      expect(afterRefund.stake).toBe(before.stake - baseFee)
+      expect(afterRefund.aatom).toBeLessThan(afterInterrupted.aatom)
+      expect(afterRefund.nonce).toEqual(afterInterrupted.nonce)
+      expect(rawTransactions).toBe(2)
+      await expect.poll(() => evmResponseHashes.length).toBe(rawTransactions)
+      for (const hash of evmResponseHashes) {
+        const transaction = await evmRpc(reopened, 'eth_getTransactionByHash', [hash])
+        const receipt = await evmRpc(reopened, 'eth_getTransactionReceipt', [hash])
+        expect(transaction && typeof transaction === 'object').toBe(true)
+        expect(receipt && typeof receipt === 'object').toBe(true)
+        const tx = transaction as JsonObject, committed = receipt as JsonObject
+        expect(tx.hash).toBe(hash)
+        expect(committed.transactionHash).toBe(hash)
+        expect(committed.status).toBe('0x1')
+        evmTransactions.push(tx)
+        evmReceipts.push(committed)
+      }
+      Object.assign(summary, {
+        success: true, stage: 'refunded', session, afterRefund, rawTransactions,
+        retryMduRequests, retryMduRequestsBeforeRefund, strictExpiryObserved: afterRefund.height > deadline,
+      })
+      await durable('refunded')
+    } finally {
+      persist()
+      await saved
+    }
+  })
 })
