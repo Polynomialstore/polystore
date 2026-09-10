@@ -340,14 +340,34 @@ test.describe('native V3 browser qualification', () => {
       await expect(page.locator('div').filter({ hasText: /^Download failed:/ }).first()).toBeVisible({ timeout: 120_000 })
       expect(estimates).toBeGreaterThan(0)
       expect(rawTransactions).toBe(0)
-      expect(await balance(page, payer, 'stake')).toBe(before.stake)
-      expect(await balance(page, payer, 'aatom')).toBe(before.aatom)
-      expect(await latestNonce(page)).toEqual(before.nonce)
+      const after = {
+        stake: await balance(page, payer, 'stake'),
+        aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page),
+      }
+      expect(after.stake).toBe(before.stake)
+      expect(after.aatom).toBe(before.aatom)
+      expect(after.nonce).toEqual(before.nonce)
       await expect.poll(() => unfinishedLocalState(page)).toEqual({
         checkpoints: 1,
         unbound: 1,
         journals: fault === 'wallet 4001' ? [{ state: 'prepared', hasHash: false }] : [],
       })
+      const localState = await unfinishedLocalState(page)
+      if (resultPath) {
+        const result = JSON.parse(await fs.readFile(resultPath, 'utf8')) as JsonObject
+        expect(result.success).toBe(true)
+        const outcomes = result.prepayOutcomes && typeof result.prepayOutcomes === 'object'
+          ? result.prepayOutcomes as JsonObject : {}
+        outcomes[fault] = {
+          estimates, rawTransactions, before: { ...before, stake: String(before.stake), aatom: String(before.aatom) },
+          after: { ...after, stake: String(after.stake), aatom: String(after.aatom) }, localState,
+        }
+        result.prepayOutcomes = outcomes
+        const temporary = `${resultPath}.${fault.replace(/ /g, '-')}.tmp`
+        await fs.writeFile(temporary, JSON.stringify(result, null, 2))
+        await fs.rename(temporary, resultPath)
+      }
     })
   }
 })
