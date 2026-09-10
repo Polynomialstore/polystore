@@ -879,8 +879,9 @@ and audits around its 30-minute retrieval allowance:
 | `1073741824` | One large session, 8,457 authorized blobs and 132 sampled challenges; 1,064 bounded transport chunks |
 
 Only start the large measurement after the small correctness cases pass.
-For a separate Mac browser over the LAN, add `--browser-executor-handoff`
-and use `--timeout 3600` on the Linux coordinator. Once it publishes
+For the 1 GiB pilot with a separate Mac browser over the LAN, add
+`--browser-executor-handoff` and use `--timeout 3600` on the Linux coordinator.
+The smaller correctness cases run on the Linux host. Once it publishes
 `browser-executor-request.json`, run this from an exact matching, clean Mac
 checkout with the locked website dependencies and Chrome installed. Set
 `BENCH_SSH` to the fixture host and `REMOTE_RUN_DIR` to its run directory:
