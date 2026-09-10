@@ -651,17 +651,30 @@ def require_provider_quiescence(lifecycle, providers):
 
 
 def v3_generate_only_gas(lifecycle, message_path, provider):
-    source_raw = Path(message_path).read_bytes()
+    message_path = Path(message_path)
+    source_raw = message_path.read_bytes()
     if len(source_raw) > 8 * 1024 * 1024:
         raise ValueError("exported v3 message exceeds bound")
     source = json.loads(source_raw)
+    aliases = [name for name, address in lifecycle.signers.items() if address == provider]
+    if len(aliases) != 1:
+        raise ValueError("provider address does not identify exactly one simulation key")
     job = transaction_job(lifecycle, provider,
         ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas="auto")
     argv = [*job["submit"], "--generate-only"]
+    argv[argv.index("--from") + 1] = aliases[0]
     deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
     result = artifact.run_bounded_command(argv, deadline,
         env={key: lifecycle.env[key] for key in ENV_KEYS if key in lifecycle.env})
-    if result.returncode or len(result.stdout.encode()) > 8 * 1024 * 1024:
+    stdout, stderr = result.stdout.encode(), result.stderr.encode()
+    diagnostic = message_path.with_name(message_path.name + ".gas-simulation.json")
+    with diagnostic.open("x") as output:
+        json.dump(dict(message_path=str(message_path), provider=provider, simulation_key=aliases[0], command=argv,
+            returncode=result.returncode, stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+            stdout_sha256=hashlib.sha256(stdout).hexdigest(), stderr_sha256=hashlib.sha256(stderr).hexdigest(),
+            stdout_tail=stdout[-8192:].decode("utf-8", errors="replace"),
+            stderr_tail=stderr[-8192:].decode("utf-8", errors="replace")), output, separators=(",", ":"))
+    if result.returncode or len(stdout) > 8 * 1024 * 1024:
         raise ValueError("bounded v3 gas simulation failed")
     unsigned = json.loads(result.stdout)
     messages = unsigned.get("body", {}).get("messages", [])
@@ -677,7 +690,8 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     job = transaction_job(lifecycle, provider,
         ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas=str(gas))
     return job, dict(message_sha256=hashlib.sha256(source_raw).hexdigest(), gas_limit=gas,
-                     simulation_stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest())
+                     simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
+                     simulation_diagnostic=str(diagnostic))
 
 
 def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, directories):

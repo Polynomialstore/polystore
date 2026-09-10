@@ -754,21 +754,41 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         unsigned = dict(body=dict(messages=[dict(**{"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"}, **message)]),
                         auth_info=dict(fee=dict(gas_limit="13530000")))
         life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1", deadline=10**18,
-            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"})
+            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"},
+            signers={"provider0": AUDIT_ADDRESSES[0]})
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "message.json"
             path.write_text(json.dumps(message))
             result = SimpleNamespace(returncode=0, stdout=json.dumps(unsigned), stderr="")
             with patch.object(artifact, "run_bounded_command", return_value=result) as run:
                 job, evidence = workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
+            diagnostic = json.loads(Path(evidence["simulation_diagnostic"]).read_text())
+            self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (0, "provider0"))
             self.assertEqual(evidence["gas_limit"], 13_530_000)
             self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
             self.assertEqual(run.call_args.args[0][-1], "--generate-only")
+            self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--from") + 1], "provider0")
+            self.assertEqual(job["submit"][job["submit"].index("--from") + 1], AUDIT_ADDRESSES[0])
             changed = copy.deepcopy(unsigned)
             changed["body"]["messages"][0]["slot"] = 1
+            changed_path = Path(tmp) / "changed.json"
+            changed_path.write_text(json.dumps(message))
             with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
                     returncode=0, stdout=json.dumps(changed), stderr="")), self.assertRaisesRegex(ValueError, "differs"):
-                workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
+                workload.v3_generate_only_gas(life, changed_path, AUDIT_ADDRESSES[0])
+
+            failed_path = Path(tmp) / "failed.json"
+            failed_path.write_text(json.dumps(message))
+            failed = SimpleNamespace(returncode=1, stdout="partial output", stderr="simulation rejected")
+            with patch.object(artifact, "run_bounded_command", return_value=failed), \
+                 self.assertRaisesRegex(ValueError, "bounded v3 gas simulation failed"):
+                workload.v3_generate_only_gas(life, failed_path, AUDIT_ADDRESSES[0])
+            diagnostic = json.loads(Path(str(failed_path) + ".gas-simulation.json").read_text())
+            self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (1, "provider0"))
+            self.assertEqual(diagnostic["stdout_tail"], "partial output")
+            self.assertEqual(diagnostic["stderr_tail"], "simulation rejected")
+            self.assertEqual(diagnostic["stdout_bytes"], len(b"partial output"))
+            self.assertEqual(diagnostic["stderr_bytes"], len(b"simulation rejected"))
 
 
 
