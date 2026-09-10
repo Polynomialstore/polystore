@@ -39,6 +39,12 @@ import (
 
 const openRetrievalSessionV3ABI = `[{"type":"function","name":"openRetrievalSessionV3","stateMutability":"nonpayable","inputs":[{"name":"dealId","type":"uint64"},{"name":"generation","type":"uint64"},{"name":"range","type":"tuple","components":[{"name":"fileRecordIndex","type":"uint32"},{"name":"fileStartOffset","type":"uint64"},{"name":"fileLength","type":"uint64"},{"name":"rangeStart","type":"uint64"},{"name":"rangeLength","type":"uint64"}]},{"name":"nonce","type":"uint64"},{"name":"deadlineHeight","type":"uint64"}],"outputs":[{"name":"sessionId","type":"bytes32"},{"name":"logicalRequestedBytes","type":"uint64"},{"name":"billedEncodedBytes","type":"uint64"},{"name":"sampleCount","type":"uint64"}]},{"type":"event","name":"RetrievalSessionV3Opened","inputs":[{"name":"dealId","type":"uint64","indexed":true},{"name":"requester","type":"address","indexed":true},{"name":"sessionId","type":"bytes32","indexed":false}]}]`
 
+const sponsoredRetrievalSessionV3ABI = `[
+{"type":"function","name":"openRetrievalSessionV3Sponsored","stateMutability":"nonpayable","inputs":[{"name":"dealId","type":"uint64"},{"name":"generation","type":"uint64"},{"name":"range","type":"tuple","components":[{"name":"fileRecordIndex","type":"uint32"},{"name":"fileStartOffset","type":"uint64"},{"name":"fileLength","type":"uint64"},{"name":"rangeStart","type":"uint64"},{"name":"rangeLength","type":"uint64"}]},{"name":"nonce","type":"uint64"},{"name":"deadlineHeight","type":"uint64"},{"name":"maxTotalFee","type":"uint256"},{"name":"authType","type":"uint8"},{"name":"allowlistLeafIndex","type":"uint32"},{"name":"allowlistMerklePath","type":"bytes32[]"},{"name":"voucherRedeemer","type":"string"},{"name":"voucherManifestRoot","type":"bytes"},{"name":"voucherProvider","type":"string"},{"name":"voucherStartMduIndex","type":"uint64"},{"name":"voucherStartBlobIndex","type":"uint32"},{"name":"voucherBlobCount","type":"uint64"},{"name":"voucherExpiresAt","type":"uint64"},{"name":"voucherNonce","type":"uint64"},{"name":"voucherSignature","type":"bytes"}],"outputs":[{"name":"sessionId","type":"bytes32"},{"name":"logicalRequestedBytes","type":"uint64"},{"name":"billedEncodedBytes","type":"uint64"},{"name":"sampleCount","type":"uint64"}]},
+{"type":"function","name":"acknowledgeRetrievalObligationV3","stateMutability":"nonpayable","inputs":[{"name":"sessionId","type":"bytes32"},{"name":"slot","type":"uint32"},{"name":"ackDigest","type":"bytes"}],"outputs":[{"name":"settled","type":"bool"}]},
+{"type":"function","name":"refundRetrievalSessionV3","stateMutability":"nonpayable","inputs":[{"name":"sessionId","type":"bytes32"}],"outputs":[{"name":"refunded","type":"bool"}]}
+]`
+
 type evmRetrievalRangeV3 struct {
 	FileRecordIndex uint32
 	FileStartOffset uint64
@@ -209,6 +215,109 @@ func TestNativeEVMV3OpenReceiptReplayAndRollback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNativeEVMV3SponsoredOpenChargesOnceAndRefundsFrozenPayer(t *testing.T) {
+	owner := common.HexToAddress("0xd031")
+	requester := common.HexToAddress("0xd032")
+	wrongCaller := common.HexToAddress("0xd033")
+	a, ctx, _, deal := setupNativeV3Open(t, owner)
+	deal.RetrievalPolicy = types.RetrievalPolicy{Mode: types.RetrievalPolicyMode_RETRIEVAL_POLICY_MODE_PUBLIC}
+	require.NoError(t, a.PolyStoreChainKeeper.Deals.Set(ctx, deal.Id, deal))
+	requesterNative := sdk.AccAddress(requester.Bytes())
+	initialFunds := sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 10))
+	require.NoError(t, a.BankKeeper.MintCoins(ctx, types.ModuleName, initialFunds))
+	require.NoError(t, a.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, requesterNative, initialFunds))
+	module := authtypes.NewModuleAddress(types.ModuleName)
+	initialModuleBalance := a.BankKeeper.GetBalance(ctx, module, sdk.DefaultBondDenom).Amount
+	api, err := abi.JSON(strings.NewReader(sponsoredRetrievalSessionV3ABI))
+	require.NoError(t, err)
+	packOpen := func(maxFee int64) []byte {
+		input, err := api.Pack("openRetrievalSessionV3Sponsored", deal.Id, deal.CurrentGen,
+			evmRetrievalRangeV3{FileRecordIndex: 1, FileLength: 1024, RangeLength: 1024},
+			uint64(1), uint64(30), big.NewInt(maxFee), uint8(0), uint32(0), []common.Hash{},
+			"", []byte{}, "", uint64(0), uint32(0), uint64(0), uint64(0), uint64(0), []byte{})
+		require.NoError(t, err)
+		return input
+	}
+	call := func(callCtx sdk.Context, caller common.Address, input []byte) ([]byte, error) {
+		evm, state := nativeEVM(t, a, callCtx)
+		output, _, err := evm.Call(caller, polystoreprecompile.Address, input, 8_000_000, uint256.NewInt(0))
+		require.NoError(t, state.Commit())
+		return output, err
+	}
+	balance := func(callCtx sdk.Context) sdkmath.Int {
+		return a.BankKeeper.GetBalance(callCtx, requesterNative, sdk.DefaultBondDenom).Amount
+	}
+	sessionCount := func(callCtx sdk.Context) int {
+		count := 0
+		require.NoError(t, a.PolyStoreChainKeeper.RetrievalSessionsV3.Walk(callCtx, nil, func(_ []byte, _ types.RetrievalSessionV3) (bool, error) {
+			count++
+			return false, nil
+		}))
+		return count
+	}
+	revertReason := func(output []byte) string {
+		reason, err := abi.UnpackRevert(output)
+		require.NoError(t, err)
+		return reason
+	}
+
+	rejected, err := call(ctx, requester, packOpen(4))
+	require.Error(t, err)
+	require.Contains(t, revertReason(rejected), "total fee exceeds max_total_fee")
+	require.Equal(t, sdkmath.NewInt(10), balance(ctx))
+	require.Zero(t, sessionCount(ctx))
+
+	openInput := packOpen(5)
+	opened, err := call(ctx, requester, openInput)
+	require.NoError(t, err)
+	decoded, err := api.Methods["openRetrievalSessionV3Sponsored"].Outputs.Unpack(opened)
+	require.NoError(t, err)
+	sessionID := decoded[0].([32]byte)
+	require.Equal(t, sdkmath.NewInt(5), balance(ctx), "base fee plus one blob fee must be debited")
+	require.Equal(t, initialModuleBalance.AddRaw(3), a.BankKeeper.GetBalance(ctx, module, sdk.DefaultBondDenom).Amount)
+	stored, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, sessionID[:])
+	require.NoError(t, err)
+	require.Equal(t, requesterNative.String(), stored.Owner)
+	require.Equal(t, requesterNative.String(), stored.Payer)
+	require.Equal(t, types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER, stored.Funding)
+	require.Equal(t, sdkmath.NewInt(3), stored.LockedFee)
+
+	retried, err := call(ctx, requester, openInput)
+	require.NoError(t, err)
+	retryDecoded, err := api.Methods["openRetrievalSessionV3Sponsored"].Outputs.Unpack(retried)
+	require.NoError(t, err)
+	require.Equal(t, sessionID, retryDecoded[0].([32]byte))
+	require.Equal(t, sdkmath.NewInt(5), balance(ctx), "exact nonce retry must not charge twice")
+	require.Equal(t, initialModuleBalance.AddRaw(3), a.BankKeeper.GetBalance(ctx, module, sdk.DefaultBondDenom).Amount)
+	require.Equal(t, 1, sessionCount(ctx))
+
+	ackInput, err := api.Pack("acknowledgeRetrievalObligationV3", sessionID, stored.Obligations[0].Slot, bytes.Repeat([]byte{0x11}, 32))
+	require.NoError(t, err)
+	rejected, err = call(ctx, wrongCaller, ackInput)
+	require.Error(t, err)
+	require.Contains(t, revertReason(rejected), "only the frozen session owner may acknowledge")
+	refundInput, err := api.Pack("refundRetrievalSessionV3", sessionID)
+	require.NoError(t, err)
+	rejected, err = call(ctx.WithBlockHeight(31), wrongCaller, refundInput)
+	require.Error(t, err)
+	require.Contains(t, revertReason(rejected), "only the frozen session owner may refund")
+	require.Equal(t, sdkmath.NewInt(5), balance(ctx))
+
+	refunded, err := call(ctx.WithBlockHeight(31), requester, refundInput)
+	require.NoError(t, err)
+	refundDecoded, err := api.Methods["refundRetrievalSessionV3"].Outputs.Unpack(refunded)
+	require.NoError(t, err)
+	require.True(t, refundDecoded[0].(bool))
+	require.Equal(t, sdkmath.NewInt(8), balance(ctx), "three locked stake refund leaves the two stake base fee burned")
+	require.Equal(t, initialModuleBalance, a.BankKeeper.GetBalance(ctx, module, sdk.DefaultBondDenom).Amount)
+	stored, err = a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, sessionID[:])
+	require.NoError(t, err)
+	require.True(t, stored.Expired)
+	require.True(t, stored.LockedFee.IsZero())
+	require.Zero(t, stored.AckedSlotsMask)
+	require.NotZero(t, stored.RefundedSlotsMask)
 }
 
 const submitRetrievalSessionProofV3ABI = `[{"type":"function","name":"submitRetrievalSessionProofV3","stateMutability":"nonpayable","inputs":[{"name":"sessionId","type":"bytes32"},{"name":"slot","type":"uint32"},{"name":"proofs","type":"tuple[]","components":[{"name":"ordinal","type":"uint64"},{"name":"proof","type":"tuple","components":[{"name":"mduIndex","type":"uint64"},{"name":"mduRootFr","type":"bytes"},{"name":"manifestOpening","type":"bytes"},{"name":"rootTableDuCommitment","type":"bytes"},{"name":"rootTableDuMerklePath","type":"bytes[]"},{"name":"blobCommitment","type":"bytes"},{"name":"merklePath","type":"bytes[]"},{"name":"blobIndex","type":"uint32"},{"name":"zValue","type":"bytes"},{"name":"yValue","type":"bytes"},{"name":"kzgOpeningProof","type":"bytes"}]}]}],"outputs":[{"name":"newlyAccepted","type":"uint32"},{"name":"settled","type":"bool"}]}]`
