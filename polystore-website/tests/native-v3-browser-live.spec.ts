@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Download, type Page, type Response } from '@playwright/test'
+import { expect, type APIRequestContext, type Download, type Page, type Response, type Route } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 
@@ -485,6 +485,7 @@ test.describe('native V3 browser qualification', () => {
     const evmReceipts: JsonObject[] = []
     const durableStages: string[] = []
     let rawTransactions = 0
+    let downloads = 0
     const summary: Record<string, unknown> = {
       success: false, dealId, payer, filePath, expectedBytes, expectedHash, diagnostics,
       evmResponseHashes, evmTransactions, evmReceipts,
@@ -507,6 +508,9 @@ test.describe('native V3 browser qualification', () => {
       durableStages.push(stage)
     }
     try {
+      const countDownloads = (candidate: Page) => { candidate.on('download', () => { downloads++ }) }
+      context.on('page', countDownloads)
+      countDownloads(page)
       await context.exposeFunction('__nativeV3ExpiryDiagnostic', (event: RetrievalDiagnostic) => diagnostics.push(event))
       await context.addInitScript(() => {
         const scope = window as unknown as {
@@ -535,9 +539,6 @@ test.describe('native V3 browser qualification', () => {
         nonce: await latestNonce(page), deal: await deal(page), height: await latestHeight(page.request),
       }
       const endBlock = BigInt(String(before.deal.end_block || '0'))
-      const remaining = endBlock - before.height
-      expect(remaining).toBeGreaterThanOrEqual(60n)
-      expect(remaining).toBeLessThanOrEqual(180n)
       expect(before.deal.owner).not.toBe(payer)
       expect((before.deal.retrieval_policy as JsonObject | undefined)?.mode)
         .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
@@ -545,18 +546,25 @@ test.describe('native V3 browser qualification', () => {
       const gatewayUrl = await mountDealDetail(page)
       let abortedDataRequests = 0
       let requestedSessionId = ''
-      await page.route('**/gateway/mdu/**', async (route) => {
+      const abortPaidData = async (route: Route) => {
         const sessionId = route.request().headers()['x-polystore-session-id'] || ''
         if (!sessionId) return route.continue()
         abortedDataRequests++
         requestedSessionId = sessionId
         await route.abort('failed')
-      })
+      }
+      await page.route('**/gateway/mdu/**', abortPaidData)
+      await page.route('**/sp/retrieval/mdu/**', abortPaidData)
+      const heightBeforeOpen = await latestHeight(page.request)
+      const remaining = endBlock - heightBeforeOpen
+      expect(remaining).toBeGreaterThanOrEqual(60n)
+      expect(remaining).toBeLessThanOrEqual(180n)
       const button = await openDownload(page)
       await button.click()
       await expect.poll(() => readDownloadFailureBanner(page), { timeout: 120_000 })
         .toContain('Download failed:')
       expect(abortedDataRequests).toBe(1)
+      expect(downloads).toBe(0)
       expect(requestedSessionId).toMatch(/^0x[0-9a-f]{64}$/i)
       await expect.poll(() => diagnostics.filter((event) => event.phase === 'opened_session').length).toBe(1)
       const openedSession = diagnostics.find((event) => event.phase === 'opened_session')
@@ -596,7 +604,7 @@ test.describe('native V3 browser qualification', () => {
       expect(BigInt(afterInterrupted.nonce.nonce)).toBe(BigInt(before.nonce.nonce) + 1n)
       Object.assign(summary, {
         stage: 'interrupted', gatewayUrl, abortedDataRequests, requestedSessionId, sessionBeforeRefund,
-        before, afterInterrupted, localStateBeforeRefund, remainingBlocksAtStart: remaining, phaseGuards,
+        before, heightBeforeOpen, afterInterrupted, localStateBeforeRefund, remainingBlocksAtOpen: remaining, phaseGuards,
       })
       await durable('interrupted')
 
@@ -607,10 +615,12 @@ test.describe('native V3 browser qualification', () => {
 
       const reopened = await context.newPage()
       let retryMduRequests = 0
-      await reopened.route('**/gateway/mdu/**', async (route) => {
+      const abortRetryMdu = async (route: Route) => {
         retryMduRequests++
         await route.abort('failed')
-      })
+      }
+      await reopened.route('**/gateway/mdu/**', abortRetryMdu)
+      await reopened.route('**/sp/retrieval/mdu/**', abortRetryMdu)
       await mountDealDetail(reopened, false)
       const recoveryRow = reopened.getByTestId('deal-detail-file-row').filter({
         has: reopened.getByTestId('v3-frozen-recovery').filter({ hasText: 'Paid recovery' }),
@@ -623,6 +633,7 @@ test.describe('native V3 browser qualification', () => {
       await expect.poll(() => readDownloadFailureBanner(reopened), { timeout: 120_000 })
         .toContain('remaining fee was refunded')
       expect(retryMduRequests).toBe(retryMduRequestsBeforeRefund)
+      expect(downloads).toBe(0)
       await expect.poll(() => unfinishedLocalState(reopened)).toEqual({ checkpoints: 0, unbound: 0, journals: [] })
 
       const session = await sessionById(reopened, requestedSessionId)
