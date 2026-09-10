@@ -1031,7 +1031,8 @@ test.describe('native V3 browser qualification', () => {
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject, body = row.body as JsonObject, timing = body.timing as JsonObject
         expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)
-        expect(body.session_id).toBe(String(session.session_id))
+        expect(String(body.session_id)).toMatch(/^0x[0-9a-f]{64}$/i)
+        expect(String(body.session_id).slice(2).toLowerCase()).toBe(planned!.sessionId.slice(2).toLowerCase())
         expect(Number(body.slot)).toBeGreaterThanOrEqual(0)
         expect(Number(body.proof_count)).toBeGreaterThan(0)
         expect(timing.schema).toBe('polystore-v3-provider-timing-v1')
