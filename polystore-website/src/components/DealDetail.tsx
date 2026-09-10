@@ -35,7 +35,7 @@ import {
 } from '../lib/polyfsLocal'
 import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
-import { fetchOptionalActiveGenerationV3, generationAsPinnedV2Shape } from '../lib/retrievalV3'
+import { fetchActiveGenerationV3, generationAsPinnedV2Shape } from '../lib/retrievalV3'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { restoreSponsoredRetrievalAuth, withSponsoredRetrievalFeeCap } from '../lib/retrievalSponsoredAuth'
 import { hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, retrievalV3CheckpointMatchesCurrent } from '../lib/retrievalV3Checkpoint'
@@ -1366,7 +1366,7 @@ export function DealDetail({
   const syncDealIndexFromProviders = useCallback(async () => {
     const dealId = String(deal.id)
     const signal = AbortSignal.timeout(60_000)
-    const generationV3 = await fetchOptionalActiveGenerationV3(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    const generationV3 = await fetchActiveGenerationV3(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
     const pinV2 = generationV3 ? generationAsPinnedV2Shape(generationV3) :
       await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
     const manifestRoot = generationV3?.polyfsRoot ?? pinV2.root

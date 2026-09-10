@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import * as publication from './retrievalDownloadPublication'
+import * as retrievalV3 from './retrievalV3'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -86,6 +87,59 @@ function fixture(staleUnbound = false) {
 test('normal file click cannot reuse a same-root checkpoint from an older generation', async () => {
   const f = fixture()
   await assert.rejects(f.fetch('3'), /prior frozen generation/)
+})
+
+test('useFetch reaches the legacy path when the real generation-v3 query returns 404', async () => {
+  let legacyQueries = 0, v3Payments = 0, refIndex = 0, v3Queries = 0
+  const active = { current: null as AbortController | null }
+  const saved = { current: null as { url: string; cleanup: () => Promise<void> } | null }
+  const modules: Record<string, unknown> = {
+    '../lib/retrievalDiagnostics': { retrievalDiagnostic: () => {}, timeRetrieval: (_name: string, work: () => unknown) => work() },
+    react: { useEffect: () => {}, useRef: () => refIndex++ === 0 ? active : saved, useState: (initial: unknown) => [initial, () => {}] },
+    '../api/providerClient': {},
+    '../config': { appConfig: { cosmosChainId: 'chain', lcdBase: 'https://lcd.example' } },
+    '../domain/polyfsLayout': {}, '../lib/providerDiscovery': {},
+    '../lib/retrieval': {
+      account: (value: string) => value,
+      fetchActiveRetrievalGeneration: async () => { legacyQueries++; throw new Error('legacy-v2-reached') },
+    },
+    '../lib/retrievalFlow': {}, '../lib/retrievalRecovery': {}, '../lib/retrievalMode': {}, '../lib/retrievalSettlement': {},
+    '../lib/transport/mode': {},
+    '../lib/walletErrors': { classifyWalletError: (error: unknown) => ({ message: error instanceof Error ? error.message : String(error) }) },
+    '../lib/worker-client': { workerClient: { initRetrievalWasm: async () => {} } },
+    '../lib/retrievalCheckpoint': {}, '../lib/retrievalDownloadPublication': {},
+    '../lib/retrievalV3': {
+      fetchActiveGenerationV3: (lcd: string, chainId: string, dealId: string, signal?: AbortSignal) =>
+        retrievalV3.fetchActiveGenerationV3(lcd, chainId, dealId, signal, (async (url: string) => {
+          assert.match(url, /\/generation-v3$/)
+          v3Queries++
+          return new Response('', { status: 404 })
+        }) as typeof fetch),
+    },
+    '../lib/retrievalV3Checkpoint': {
+      retrievalV3DownloadCheckpointKey: async () => `output-v3:${'12'.repeat(32)}`,
+      readRetrievalV3Checkpoint: () => undefined,
+      hasSettledRetrievalV3Cache: () => false,
+    },
+    '../lib/retrievalV3Flow': {}, '../lib/retrievalV3Recovery': {}, '../lib/retrievalV3Settlement': {},
+    './useRetrievalSessions': { useRetrievalSessions: () => ({
+      requireWallet: () => ({ owner: 'owner' }), scope: () => ['owner'], unavailableReason: undefined,
+      openV3: async () => { v3Payments++; throw new Error('unexpected v3 payment') },
+    }) },
+    './useTransportRouter': { useTransportRouter: () => ({}) },
+  }
+  const source = readFileSync(new URL('../hooks/useFetch.ts', import.meta.url), 'utf8')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const exports: { useFetch?: typeof import('../hooks/useFetch').useFetch } = {}
+  new Function('require', 'exports', code)((name: string) => {
+    if (!(name in modules)) throw new Error('unexpected hook dependency: ' + name)
+    return modules[name]
+  }, exports)
+  const hook = exports.useFetch!()
+  await assert.rejects(hook.fetchFile({ dealId: '1', generation: '2', manifestRoot: `0x${'34'.repeat(32)}`, owner: 'owner', filePath: 'file.bin' }), /legacy-v2-reached/)
+  assert.equal(v3Queries, 1)
+  assert.equal(legacyQueries, 1)
+  assert.equal(v3Payments, 0)
 })
 
 test('saved v3 recovery refreshes state after acquiring its checkpoint lock', async () => {

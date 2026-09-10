@@ -80,21 +80,18 @@ function parseGeneration(payload: unknown, chainId: string, height: bigint, deal
 
 export async function fetchActiveGenerationV3(lcd: string, chainId: string, dealIdRaw: string, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenGenerationV3 | null> {
   const dealId = u64(dealIdRaw)
-  const generation = await committedQuery(lcd, `/polystorechain/polystorechain/v1/deals/${dealId}/generation-v3`, undefined, signal, fetchFn)
+  let generation: Awaited<ReturnType<typeof committedQuery>>
+  try {
+    generation = await committedQuery(lcd, `/polystorechain/polystorechain/v1/deals/${dealId}/generation-v3`, undefined, signal, fetchFn)
+  } catch (error) {
+    if (error instanceof Error && error.message === 'chain query failed (404)') return null
+    throw error
+  }
   const params = await committedQuery(lcd, '/polystorechain/polystorechain/v1/params', generation.height, signal, fetchFn)
   const activation = protoU64(record(record(params.payload).params).retrieval_v3_activation_height)
   if (!activation || activation > generation.height) return null
   const deal = await committedQuery(lcd, `/polystorechain/polystorechain/v1/deals/${dealId}`, generation.height, signal, fetchFn)
   return parseGeneration(generation.payload, chainId, generation.height, dealId, deal.payload)
-}
-
-export async function fetchOptionalActiveGenerationV3(lcd: string, chainId: string, dealIdRaw: string,
-  signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenGenerationV3 | null> {
-  try { return await fetchActiveGenerationV3(lcd, chainId, dealIdRaw, signal, fetchFn) }
-  catch (error) {
-    if (error instanceof Error && error.message === 'chain query failed (404)') return null
-    throw error
-  }
 }
 
 export function generationAsPinnedV2Shape(g: FrozenGenerationV3): PinnedGeneration {
