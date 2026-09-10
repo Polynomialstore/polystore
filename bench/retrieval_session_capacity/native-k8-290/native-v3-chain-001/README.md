@@ -46,12 +46,15 @@ Generate the summary from the retained private inputs with the pinned harness:
 ```sh
 python3 summarize.py "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py" \
   "$RUN_HOME/evidence.json" "$RUN_HOME/native-v3-chain-blocks.jsonl" \
+  "$REFUND_TRANSACTIONS" \
   --run-scope landed-retained-diagnostic > summary.json
 
 python3 check.py "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py" \
-  "$RUN_HOME/evidence.json" "$RUN_HOME/native-v3-chain-blocks.jsonl"
+  "$RUN_HOME/evidence.json" "$RUN_HOME/native-v3-chain-blocks.jsonl" "$REFUND_TRANSACTIONS"
 ```
 
 Run these commands from this artifact directory. `$HARNESS_SOURCE` is a checkout at the landed commit above; `$RUN_HOME` is the retained private run directory. The summary's only publication transform replaces its local harness path with `$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py`. Plans and build manifests replace the machine's benchmark-root path with `$BENCH_ROOT`.
 
-Raw source hashes and published file hashes are listed in [manifest.json](manifest.json). Raw evidence, proof inventory, provider/validator logs, keyrings and generated payloads remain private. The extractor verifies an independently pinned harness hash before importing its shared validators, then checks successful completion, workload counts, signer/transaction identities, authoritative bitmaps, per-session expiry and refunds with four-validator receipts, block hashes and totals, gas simulations, CPU and resource records. Its runnable check accepts this retained success and rejects 32 altered inputs. Failed earlier correctness smokes remain failures and are excluded from this report. This publication changes only the artifact directory; collection harness and runtime bytes remain frozen.
+`$REFUND_TRANSACTIONS` is the retained private `refund-transactions.json` recovered from the stopped run's four CometBFT blockstores. All four extracts contain identical signed bytes. The frozen chain CLI's offline decoder and an independent protobuf wire decoder agree on each refund's type, owner and session. Its independently pinned hash binds those messages and signed transaction bytes to the eight original successful receipts; no workload or node was restarted for recovery.
+
+Raw source hashes and published file hashes are listed in [manifest.json](manifest.json). Raw evidence, refund transactions, proof inventory, provider/validator logs, keyrings and generated payloads remain private. The extractor pins the driver and all three imported helper modules before executing their verified bytes, without adding the supplied directory to Python's import paths. It then checks successful completion, workload counts, signer/transaction identities, authoritative bitmaps, per-session expiry and refunds with four-validator receipts and recovered messages, block hashes and totals, gas simulations, CPU and resource records. Its runnable check accepts this retained success, rejects 38 altered inputs, and prevents sibling modules from shadowing standard-library imports. Failed earlier correctness smokes remain failures and are excluded from this report. This publication changes only the artifact directory; collection harness and runtime bytes remain frozen.

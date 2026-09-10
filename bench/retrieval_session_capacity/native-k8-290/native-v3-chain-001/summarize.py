@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-import argparse, hashlib, importlib.util, json, math, re, statistics, sys
+import argparse, base64, hashlib, json, math, re, statistics, sys, types
 from datetime import datetime, timezone
 from pathlib import Path
 
 HARNESS_SHA256 = "7efd7fa4e8bec5f90f8ac09742220f6fa3f961316fb0ac3edfb20e67974cb662"
+REFUND_TRANSACTIONS_SHA256 = "8f79860f047faecf580848ea4b801b71aa8c8e4ce00f5c5d9e4712f047b98e85"
+HARNESS_MODULES = {
+    "retrieval_bench_artifact": "aeb5f811fb5f93ad4539f49a485c15af3747c765bd3d3997bc38335016a023d8",
+    "retrieval_commit_metrics": "e8b272852684639efe6292d3b72eb2396fee0c2bdb99558d52c611b7d638e11f",
+    "retrieval_fresh_proof": "74ced497d80442a7d463872623879737b7775ad2a49ec4c5a53ced8a8650e67b",
+    "native_chain_harness": HARNESS_SHA256,
+}
 
 
 def require(ok, message):
@@ -30,11 +37,18 @@ def time_ns(value):
 
 
 def load_harness(path):
-    sys.path.insert(0, str(path.parent))
-    spec = importlib.util.spec_from_file_location("native_chain_harness", path)
-    require(spec and spec.loader, f"cannot load harness {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sources = {}
+    for name, digest in HARNESS_MODULES.items():
+        source = path if name == "native_chain_harness" else path.with_name(name + ".py")
+        data = source.read_bytes()
+        require(hashlib.sha256(data).hexdigest() == digest, f"unpinned harness module {source.name}")
+        sources[name] = (source, data)
+    # Execute only verified bytes, without adding the supplied directory to import paths.
+    for name, (source, data) in sources.items():
+        module = types.ModuleType(name)
+        module.__file__ = str(source)
+        sys.modules[name] = module
+        exec(compile(data, str(source), "exec"), module.__dict__)
     return module
 
 
@@ -55,6 +69,7 @@ def main():
     parser.add_argument("harness", type=Path)
     parser.add_argument("evidence", type=Path)
     parser.add_argument("blocks", type=Path)
+    parser.add_argument("refund_transactions", type=Path)
     parser.add_argument("--run-scope", required=True,
                         choices=("premerge-correctness-smoke", "landed-retained-diagnostic"))
     args = parser.parse_args()
@@ -69,6 +84,12 @@ def main():
             "consensus gas/byte limits differ from the fixed report")
     node_ids = {node["node_id"] for node in doc["nodes"]}
     require(len(doc["nodes"]) == len(node_ids) == 4, "validator identities are incomplete")
+    refunds_raw = args.refund_transactions.read_bytes()
+    require(hashlib.sha256(refunds_raw).hexdigest() == REFUND_TRANSACTIONS_SHA256,
+            "refund recovery differs from independently pinned blockstore extraction")
+    recovered = json.loads(refunds_raw)
+    refund_messages = {row["txhash"]: row for row in recovered["transactions"]}
+    require(len(recovered["transactions"]) == len(refund_messages) == 8, "refund recovery set is incomplete")
     require(doc["audit_coverage_verified"] and doc["profile"]["audit_profile"] == "normal",
             "normal audit coverage was not verified")
     audit_rows = doc["audit_after"]["audits"]
@@ -148,6 +169,21 @@ def main():
         require(session["accepted_sample_ordinals"] == list(range(132)), "accepted ordinal inventory differs")
         refund = session["refund_transaction"]
         validate_transaction(refund, node_ids)
+        recovered_refund = refund_messages[refund["txhash"]]
+        raw_tx = base64.b64decode(recovered_refund["raw_tx_base64"], validate=True)
+        require(hashlib.sha256(raw_tx).hexdigest().upper() == refund["txhash"] and
+                len(raw_tx) == refund["validators"][0]["bytes"] == recovered_refund["raw_tx_bytes"] and
+                recovered_refund["height"] == refund["height"], "refund receipt differs from stored transaction bytes")
+        require(recovered_refund["messages"] == [{
+            "type": "/polystorechain.polystorechain.v1.MsgRefundRetrievalSessionV3",
+            "creator": admitted["owner"], "session_id": base64.b64encode(bytes.fromhex(session["session_id"])).decode(),
+            "session_id_hex": session["session_id"]}], "refund message differs from session owner or identity")
+        stored_validators = recovered_refund["validators"]
+        require(len(stored_validators) == 4 and {row["node_id"] for row in stored_validators} == node_ids and
+                all(row["height"] == refund["height"] and row["txhash"] == refund["txhash"] and
+                    row["raw_tx_sha256"].upper() == refund["txhash"] and
+                    row["tx_index"] == recovered_refund["tx_index"] for row in stored_validators),
+                "refund blockstore agreement is incomplete")
         require(refund["txhash"] not in refund_hashes and refund["txhash"] not in {row["txhash"] for row in all_rows},
                 "repeated refund transaction")
         refund_hashes.add(refund["txhash"])
@@ -254,7 +290,8 @@ def main():
                      sample["committed_height"] >= reconciliation["last_height"]), "Commit height does not fence workload")
 
     result = {"inputs": {"harness": str(args.harness.resolve()), "harness_sha256": hashlib.sha256(args.harness.read_bytes()).hexdigest(),
-        "evidence_sha256": hashlib.sha256(args.evidence.read_bytes()).hexdigest(), "reconciled_blocks_sha256": reconciliation["sha256"]},
+        "evidence_sha256": hashlib.sha256(args.evidence.read_bytes()).hexdigest(), "reconciled_blocks_sha256": reconciliation["sha256"],
+        "refund_transactions_sha256": REFUND_TRANSACTIONS_SHA256},
         "scope": {"run_scope": args.run_scope, "qualification": False,
         "scope_note": ("bounded premerge correctness smoke; no retained performance acceptance"
                        if args.run_scope == "premerge-correctness-smoke"

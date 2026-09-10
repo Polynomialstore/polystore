@@ -9,9 +9,18 @@ import tempfile
 
 
 def main():
-    harness, evidence, blocks = map(Path, sys.argv[1:4])
+    harness, evidence, blocks, refunds = map(Path, sys.argv[1:5])
     original = json.loads(evidence.read_text())
     command = [sys.executable, str(Path(__file__).with_name("summarize.py")), str(harness)]
+    def unrelated_receipt(document):
+        receipt = document["native_v3_chain"]["sessions"][0]["refund_transaction"]
+        receipt["txhash"] = "AB" * 32
+        for row in receipt["validators"]:
+            row["txhash"] = receipt["txhash"]
+    def another_session_refund(document):
+        first, second = document["native_v3_chain"]["sessions"][:2]
+        first["refund_transaction"] = copy.deepcopy(second["refund_transaction"])
+        first["after_refund"]["session"]["updated_height"] = str(second["refund_transaction"]["height"])
     mutations = [
         lambda d: d.update(status="failed"),
         lambda d: d["provenance"].update(source_checkout="8d7522588d2eb9b8e5b8eb6f98e11bca09e14f86"),
@@ -41,12 +50,14 @@ def main():
         lambda d: d["native_v3_chain"]["sessions"][0].update(after_refund=d["native_v3_chain"]["sessions"][1]["after_refund"]),
         lambda d: d["native_v3_chain"]["sessions"][0]["expired_before_refund"]["session"].update(locked_fee="1"),
         lambda d: d["native_v3_chain"]["sessions"][0]["expired_before_refund"]["session"].update(accepted_sample_bitmap=""),
+        unrelated_receipt,
+        another_session_refund,
     ]
     with tempfile.TemporaryDirectory() as temporary:
         source = Path(temporary) / "evidence.json"
-        def run(document, block_source=blocks):
+        def run(document, block_source=blocks, refund_source=refunds):
             source.write_text(json.dumps(document))
-            return subprocess.run(command + [str(source), str(block_source), "--run-scope", "landed-retained-diagnostic"],
+            return subprocess.run(command + [str(source), str(block_source), str(refund_source), "--run-scope", "landed-retained-diagnostic"],
                                   capture_output=True, text=True, timeout=10)
         result = run(original)
         assert result.returncode == 0, result.stderr
@@ -68,6 +79,10 @@ def main():
         document["committed_block_reconciliation"]["sha256"] = hashlib.sha256(bad_blocks.read_bytes()).hexdigest()
         result = run(document, bad_blocks)
         assert result.returncode == 2 and not result.stdout, result.stderr
+        bad_refunds = Path(temporary) / "refunds.json"
+        bad_refunds.write_bytes(refunds.read_bytes() + b"\n")
+        result = run(original, refund_source=bad_refunds)
+        assert result.returncode == 2 and not result.stdout, result.stderr
         bad_harness = Path(temporary) / "harness.py"
         marker = Path(temporary) / "executed"
         bad_harness.write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
@@ -78,7 +93,22 @@ def main():
         document["provenance"]["driver_sha256"] = hashlib.sha256(bad_harness.read_bytes()).hexdigest()
         result = run(document)
         assert result.returncode == 2 and not result.stdout and not marker.exists(), result.stderr
-    print(f"Report accepted retained success and rejected {len(mutations) + 4} altered inputs.")
+        bad_harness.write_bytes(harness.read_bytes())
+        siblings = ("retrieval_bench_artifact", "retrieval_commit_metrics", "retrieval_fresh_proof")
+        for name in siblings:
+            (bad_harness.parent / (name + ".py")).write_bytes(harness.with_name(name + ".py").read_bytes())
+        for name in siblings:
+            altered = bad_harness.with_name(name + ".py")
+            correct = altered.read_bytes()
+            altered.write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+            result = run(original)
+            assert result.returncode == 2 and not result.stdout and not marker.exists(), result.stderr
+            altered.write_bytes(correct)
+        # An unrelated sibling must not shadow a standard-library import.
+        bad_harness.with_name("sqlite3.py").write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+        result = run(original)
+        assert result.returncode == 0 and not marker.exists(), result.stderr
+    print(f"Report accepted retained success and rejected {len(mutations) + 8} altered inputs; import shadowing blocked.")
 
 
 if __name__ == "__main__":

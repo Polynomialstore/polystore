@@ -688,7 +688,8 @@
     "evidence_sha256": "8a1ef8084df97121a39d752fb41e063880c11ef8f3c13e9569704b3836f08091",
     "harness": "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
     "harness_sha256": "7efd7fa4e8bec5f90f8ac09742220f6fa3f961316fb0ac3edfb20e67974cb662",
-    "reconciled_blocks_sha256": "458f3ab31f51a6aa1e46f688a542e3fd7745ecd40025c8e7d0b72c0003bdd3ba"
+    "reconciled_blocks_sha256": "458f3ab31f51a6aa1e46f688a542e3fd7745ecd40025c8e7d0b72c0003bdd3ba",
+    "refund_transactions_sha256": "8f79860f047faecf580848ea4b801b71aa8c8e4ce00f5c5d9e4712f047b98e85"
   },
   "latencies": {
     "offer_to_terminal_observation": {
