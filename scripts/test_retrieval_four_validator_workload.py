@@ -259,9 +259,11 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             response_path.write_text("{}")
             lifecycle = SimpleNamespace(home=home, doc={"provenance": {
                 "product_source_commit": "ab" * 20, "product_source_status": ""},
-                "payload": {"bytes": 1024}}, remaining=Mock(return_value=300), save=Mock())
+                "payload": {"bytes": 1 << 30}}, remaining=Mock(return_value=5),
+                deadline=600_000_001_000, save=Mock())
             completed = subprocess.CompletedProcess(["playwright", "test"], 0, "passed", "")
-            with patch.object(artifact, "create_browser_executor_request",
+            with patch.object(artifact, "monotonic_ns", return_value=1_000), \
+                 patch.object(artifact, "create_browser_executor_request",
                     return_value={"id": "cd" * 16, "head": "ab" * 20}) as create, \
                  patch.object(artifact, "read_browser_executor_response",
                     return_value=(completed, {"peak_rss_bytes": 4096}, {"returncode": 0})):
@@ -271,6 +273,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             self.assertEqual(memory["peak_rss_bytes"], 4096)
             self.assertNotIn("mac_source", lifecycle.doc["browser_executor"])
             self.assertEqual(create.call_args.kwargs["source_head"], "ab" * 20)
+            self.assertEqual(create.call_args.kwargs["timeout_seconds"], 600)
+            lifecycle.remaining.assert_called_once_with()
 
     def test_browser_fault_result_is_one_durable_paid_session(self):
         sid = "12" * 32

@@ -2024,10 +2024,13 @@ def browser_http_preflight(lifecycle, origin):
 def run_browser_executor_handoff(lifecycle, *, source, browser_env, faults, check_providers):
     """Publish and await the fixed Mac LAN browser request while the server stack stays owned."""
     request_path = lifecycle.home / "browser-executor-request.json"
+    lifecycle.remaining()
+    timeout_seconds = max(1, min(3600,
+        int((lifecycle.deadline - artifact.monotonic_ns()) / 1e9)))
     request = artifact.create_browser_executor_request(request_path, source=source,
         source_head=lifecycle.doc["provenance"]["product_source_commit"],
         source_status=lifecycle.doc["provenance"]["product_source_status"], env=browser_env,
-        timeout_seconds=max(1, min(3600, int(lifecycle.remaining()))),
+        timeout_seconds=timeout_seconds,
         browser_bytes=lifecycle.doc["payload"]["bytes"], faults=faults)
     response_path = request_path.with_name("browser-executor-response.json")
     lifecycle.doc["browser_executor"] = dict(request=str(request_path), request_id=request["id"],
