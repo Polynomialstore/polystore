@@ -559,6 +559,98 @@ func TestPriorityRetrievalSignerWaitersAreBounded(t *testing.T) {
 	}
 }
 
+func TestPriorityRetrievalSignerCancellationRacesReleaseWithoutLeak(t *testing.T) {
+	type result struct {
+		release func()
+		err     error
+	}
+	for i := 0; i < 100; i++ {
+		signer := fmt.Sprintf("cancel-race-signer-%d", i)
+		foreground, err := claimRetrievalOperations(nil, signer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		resultCh := make(chan result, 1)
+		go func() {
+			release, _, err := claimPriorityRetrievalSigner(ctx, signer)
+			resultCh <- result{release, err}
+		}()
+		waitForPrioritySigner(t, signer)
+		start := make(chan struct{})
+		done := make(chan struct{}, 2)
+		go func() { <-start; cancel(); done <- struct{}{} }()
+		go func() { <-start; foreground(); done <- struct{}{} }()
+		close(start)
+		<-done
+		<-done
+		got := <-resultCh
+		if got.release != nil {
+			got.release()
+		} else if !errors.Is(got.err, context.Canceled) {
+			t.Fatal("raced admission returned neither ownership nor cancellation", got.err)
+		}
+		retrievalOperations.Lock()
+		active := retrievalOperations.signers[signer]
+		waiting := retrievalOperations.priority[signer] != nil
+		queued := false
+		for _, waiter := range retrievalOperations.priorityWaiters {
+			queued = queued || waiter.signer == signer
+		}
+		retrievalOperations.Unlock()
+		if active || waiting || queued {
+			t.Fatal("raced cancellation leaked admission state", i, active, waiting, queued)
+		}
+		next, err := claimRetrievalOperations(nil, signer)
+		if err != nil {
+			t.Fatal("raced cancellation retained signer", i, err)
+		}
+		next()
+	}
+}
+
+func TestPriorityRetrievalSignerGetsNextGlobalSlot(t *testing.T) {
+	active := make([]func(), maxConcurrentRetrievalSigners)
+	for i := range active {
+		var err error
+		active[i], err = claimRetrievalOperations(nil, fmt.Sprintf("active-signer-%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(active[i])
+	}
+	const signer = "waiting-different-signer"
+	type result struct {
+		release func()
+		err     error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		release, _, err := claimPriorityRetrievalSigner(context.Background(), signer)
+		resultCh <- result{release, err}
+	}()
+	waitForPrioritySigner(t, signer)
+	active[0]()
+	got := <-resultCh
+	if got.err != nil || got.release == nil {
+		t.Fatal(got.err)
+	}
+	if release, err := claimRetrievalOperations(nil, signer); err == nil {
+		release()
+		t.Fatal("foreground overlapped globally admitted audit")
+	}
+	retrievalOperations.Lock()
+	activeCount := len(retrievalOperations.signers)
+	retrievalOperations.Unlock()
+	if activeCount != maxConcurrentRetrievalSigners {
+		t.Fatal("reserved audit did not receive the released global slot", activeCount)
+	}
+	got.release()
+	for _, release := range active[1:] {
+		release()
+	}
+}
+
 func TestDelayedCommittedSubmissionThroughBothGatewayModes(t *testing.T) {
 	for _, mode := range []string{"ordinary", "router"} {
 		t.Run(mode, func(t *testing.T) {
