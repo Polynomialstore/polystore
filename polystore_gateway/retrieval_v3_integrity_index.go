@@ -23,21 +23,21 @@ const (
 )
 
 var integrityIndexV3Magic = [8]byte{'N', 'I', 'L', 'I', 'V', '3', 'I', '1'}
-var integrityIndexV3Builds = struct {
+var retrievalPreparations = struct {
 	sync.Mutex
 	active map[string]chan struct{}
 }{active: make(map[string]chan struct{})}
 
-// claimIntegrityIndexV3Build lets a canceled waiter leave without delaying the
-// current owner. An active waiter rechecks the published artifact after wake;
+// claimRetrievalPreparation lets a canceled waiter leave without delaying the
+// current owner. An active waiter rechecks the prepared artifact after wake;
 // if the owner was canceled, one waiter becomes the next synchronous owner.
-func claimIntegrityIndexV3Build(ctx context.Context, key string) (release func(), claimed bool, err error) {
+func claimRetrievalPreparation(ctx context.Context, key string) (release func(), claimed bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	integrityIndexV3Builds.Lock()
-	if done := integrityIndexV3Builds.active[key]; done != nil {
-		integrityIndexV3Builds.Unlock()
+	retrievalPreparations.Lock()
+	if done := retrievalPreparations.active[key]; done != nil {
+		retrievalPreparations.Unlock()
 		select {
 		case <-ctx.Done():
 			return nil, false, ctx.Err()
@@ -49,13 +49,13 @@ func claimIntegrityIndexV3Build(ctx context.Context, key string) (release func()
 		}
 	}
 	done := make(chan struct{})
-	integrityIndexV3Builds.active[key] = done
-	integrityIndexV3Builds.Unlock()
+	retrievalPreparations.active[key] = done
+	retrievalPreparations.Unlock()
 	return func() {
-		integrityIndexV3Builds.Lock()
-		delete(integrityIndexV3Builds.active, key)
+		retrievalPreparations.Lock()
+		delete(retrievalPreparations.active, key)
 		close(done)
-		integrityIndexV3Builds.Unlock()
+		retrievalPreparations.Unlock()
 	}, true, nil
 }
 
@@ -252,9 +252,9 @@ func ensureIntegrityIndexV3WithBuilder(ctx context.Context, dir string, key retr
 			if err != nil {
 				return "", err
 			}
-			buildKey = fmt.Sprintf("%s:%#v", abs, key)
+			buildKey = fmt.Sprintf("integrity-index-v3:%s:%#v", abs, key)
 		}
-		release, claimed, err := claimIntegrityIndexV3Build(ctx, buildKey)
+		release, claimed, err := claimRetrievalPreparation(ctx, buildKey)
 		if err != nil {
 			return "", err
 		}

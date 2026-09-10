@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/blake2s"
-	"golang.org/x/sync/singleflight"
 	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
@@ -77,7 +75,6 @@ var retrievalMetadataCache = struct {
 	sync.Mutex
 	entries map[retrievalGenerationKey]generationCacheEntry
 	clock   uint64
-	group   singleflight.Group
 }{entries: make(map[retrievalGenerationKey]generationCacheEntry)}
 
 func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrievalchallenge.Context) (*authenticatedGeneration, error) {
@@ -100,10 +97,10 @@ func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retr
 	if found {
 		return entry.value, nil
 	}
-	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepareRetrievalMetadata, retrievalMetadataCache.group.Do)
+	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepareRetrievalMetadata)
 }
 
-func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error), do func(string, func() (interface{}, error)) (interface{}, error, bool)) (*authenticatedGeneration, error) {
+func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error)) (*authenticatedGeneration, error) {
 	retrievalMetadataCache.Lock()
 	entry, found := retrievalMetadataCache.entries[key]
 	if found {
@@ -115,15 +112,30 @@ func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key 
 	if found {
 		return entry.value, nil
 	}
-	keyString := fmt.Sprintf("%#v", key)
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	gateKey := fmt.Sprintf("retrieval-metadata:%s:%#v", abs, key)
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		// Callers are already admitted. Synchronous Do keeps native preparation
-		// inside the leader's admission and generation lease. A live waiter retries
-		// if that leader is canceled rather than inheriting its cancellation.
-		value, err, shared := do(keyString, func() (interface{}, error) {
+		release, claimed, err := claimRetrievalPreparation(ctx, gateKey)
+		if err != nil {
+			return nil, err
+		}
+		if !claimed {
+			continue
+		}
+		// Callers are already admitted. The synchronous owner keeps native
+		// preparation inside its own admission and generation lease. A live waiter
+		// rechecks the cache and becomes the next owner if this owner is canceled.
+		value, err := func() (*authenticatedGeneration, error) {
+			defer release()
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			retrievalMetadataCache.Lock()
 			cached, ok := retrievalMetadataCache.entries[key]
 			retrievalMetadataCache.Unlock()
@@ -149,20 +161,14 @@ func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key 
 			retrievalMetadataCache.clock++
 			retrievalMetadataCache.entries[key] = generationCacheEntry{prepared, retrievalMetadataCache.clock}
 			return prepared, nil
-		})
+		}()
 		if err != nil {
-			if callerErr := ctx.Err(); callerErr != nil {
-				return nil, callerErr
-			}
-			if shared && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-				continue
-			}
 			return nil, err
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		return value.(*authenticatedGeneration), nil
+		return value, nil
 	}
 }
 

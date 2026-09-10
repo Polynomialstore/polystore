@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	cosmosmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -290,46 +294,180 @@ func buildProviderV3ArtifactFixtureSize(t testing.TB, size uint64) (*frozenRetri
 	return frozen, key, newDir
 }
 
-func TestAuthenticatedRetrievalMetadataRetriesCanceledSharedLeader(t *testing.T) {
-	key := retrievalGenerationKey{Chain: "shared-cancellation-test", Root: [32]byte{1}, Generation: 1}
-	t.Cleanup(func() {
+func authenticatedRetrievalMetadataForWithResources(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error), held chan<- struct{}) (*authenticatedGeneration, error) {
+	ctx, releaseResponse, err := admitRetrievalResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseResponse()
+	releaseGeneration, err := leaseGenerationPaths(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseGeneration()
+	if held != nil {
+		close(held)
+	}
+	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepare)
+}
+
+func TestAuthenticatedRetrievalMetadataConcurrentCancellationOwnership(t *testing.T) {
+	cleanup := func(chain string) {
 		retrievalMetadataCache.Lock()
 		defer retrievalMetadataCache.Unlock()
 		for cached := range retrievalMetadataCache.entries {
-			if cached.Chain == key.Chain {
+			if cached.Chain == chain {
 				delete(retrievalMetadataCache.entries, cached)
 			}
 		}
-	})
-	prepared := &authenticatedGeneration{}
-	prepareCalls, doCalls := 0, 0
-	prepare := func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error) {
-		prepareCalls++
-		return prepared, nil
-	}
-	do := func(_ string, fn func() (interface{}, error)) (interface{}, error, bool) {
-		doCalls++
-		if doCalls == 1 {
-			return nil, context.Canceled, true
-		}
-		value, err := fn()
-		return value, err, false
-	}
-	got, err := authenticatedRetrievalMetadataForWith(t.Context(), t.TempDir(), key, prepare, do)
-	if err != nil || got != prepared || doCalls != 2 || prepareCalls != 1 {
-		t.Fatalf("active waiter did not retry canceled shared work: got=%p err=%v do=%d prepare=%d", got, err, doCalls, prepareCalls)
 	}
 
-	corrupt := fmt.Errorf("corrupt authenticated metadata")
-	key.Root[0] = 2
-	doCalls = 0
-	_, err = authenticatedRetrievalMetadataForWith(t.Context(), t.TempDir(), key, prepare, func(_ string, _ func() (interface{}, error)) (interface{}, error, bool) {
-		doCalls++
-		return nil, corrupt, true
+	t.Run("v2 canceled waiter promptly releases resources", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-waiter-cancellation", Root: [32]byte{1}, Generation: 1, Version: 2}
+		t.Cleanup(func() { cleanup(key.Chain) })
+		started, finish := make(chan struct{}), make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		var finishOnce sync.Once
+		defer func() {
+			cancelWorkers()
+			finishOnce.Do(func() { close(finish) })
+			workers.Wait()
+		}()
+		var calls atomic.Int32
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) != 1 {
+				return nil, errors.New("concurrent waiter started duplicate metadata preparation")
+			}
+			close(started)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-finish:
+				return &authenticatedGeneration{}, nil
+			}
+		}
+		baselineResponses := len(retrievalResponses)
+		leaderResult := make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(workerCtx, dir, key, prepare, nil)
+			leaderResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, started, "metadata leader")
+
+		waiterBase, cancelWaiter := context.WithCancel(workerCtx)
+		waiterObserved := make(chan struct{})
+		waiterCtx := &observedDoneContextV3{Context: waiterBase, observed: waiterObserved}
+		waiterHeld, waiterResult := make(chan struct{}), make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, waiterHeld)
+			waiterResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, waiterHeld, "metadata waiter resources")
+		waitIntegrityIndexV3Signal(t, waiterObserved, "metadata waiter gate entry")
+		if refs := generationRefsV3Test(t, dir); refs != 2 || len(retrievalResponses) != baselineResponses+2 {
+			t.Fatalf("metadata requests did not hold independent resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
+		cancelWaiter()
+		if err := waitIntegrityIndexV3Result(t, waiterResult, "metadata waiter cancellation"); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled metadata waiter returned %v", err)
+		}
+		if refs := generationRefsV3Test(t, dir); refs != 1 || len(retrievalResponses) != baselineResponses+1 || calls.Load() != 1 {
+			t.Fatalf("canceled metadata waiter retained resources or duplicated work: refs=%d responses=%d calls=%d", refs, len(retrievalResponses)-baselineResponses, calls.Load())
+		}
+		finishOnce.Do(func() { close(finish) })
+		if err := waitIntegrityIndexV3Result(t, leaderResult, "metadata leader completion"); err != nil {
+			t.Fatal(err)
+		}
+		if refs := generationRefsV3Test(t, dir); refs != 0 || len(retrievalResponses) != baselineResponses {
+			t.Fatalf("metadata leader retained resources: refs=%d responses=%d", refs, len(retrievalResponses)-baselineResponses)
+		}
 	})
-	if err != corrupt || doCalls != 1 {
-		t.Fatalf("non-cancellation error was retried: err=%v calls=%d", err, doCalls)
-	}
+
+	t.Run("v3 live waiter retries canceled leader", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-leader-cancellation", Root: [32]byte{2}, Generation: 1, Version: 3}
+		t.Cleanup(func() { cleanup(key.Chain) })
+		leaderStarted := make(chan struct{})
+		workerCtx, cancelWorkers := context.WithCancel(t.Context())
+		var workers sync.WaitGroup
+		defer func() {
+			cancelWorkers()
+			workers.Wait()
+		}()
+		prepared := &authenticatedGeneration{}
+		var calls atomic.Int32
+		prepare := func(ctx context.Context, _ string, _ retrievalGenerationKey) (*authenticatedGeneration, error) {
+			if calls.Add(1) == 1 {
+				close(leaderStarted)
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			return prepared, nil
+		}
+		leaderCtx, cancelLeader := context.WithCancel(workerCtx)
+		leaderResult := make(chan error, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			_, err := authenticatedRetrievalMetadataForWithResources(leaderCtx, dir, key, prepare, nil)
+			leaderResult <- err
+		}()
+		waitIntegrityIndexV3Signal(t, leaderStarted, "metadata leader")
+
+		waiterObserved := make(chan struct{})
+		waiterCtx := &observedDoneContextV3{Context: workerCtx, observed: waiterObserved}
+		waiterHeld := make(chan struct{})
+		waiterResult := make(chan struct {
+			value *authenticatedGeneration
+			err   error
+		}, 1)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			value, err := authenticatedRetrievalMetadataForWithResources(waiterCtx, dir, key, prepare, waiterHeld)
+			waiterResult <- struct {
+				value *authenticatedGeneration
+				err   error
+			}{value, err}
+		}()
+		waitIntegrityIndexV3Signal(t, waiterHeld, "metadata waiter resources")
+		waitIntegrityIndexV3Signal(t, waiterObserved, "metadata waiter gate entry")
+		cancelLeader()
+		if err := waitIntegrityIndexV3Result(t, leaderResult, "metadata leader cancellation"); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled metadata leader returned %v", err)
+		}
+		select {
+		case result := <-waiterResult:
+			if result.err != nil || result.value != prepared {
+				t.Fatalf("live metadata waiter did not retry: value=%p err=%v", result.value, result.err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("live metadata waiter did not retry")
+		}
+		if calls.Load() != 2 || generationRefsV3Test(t, dir) != 0 {
+			t.Fatalf("unexpected metadata retry state: calls=%d refs=%d", calls.Load(), generationRefsV3Test(t, dir))
+		}
+	})
+
+	t.Run("authentication error is not retried", func(t *testing.T) {
+		dir := t.TempDir()
+		key := retrievalGenerationKey{Chain: "metadata-authentication-error", Root: [32]byte{3}, Generation: 1, Version: 3}
+		corrupt := errors.New("corrupt authenticated metadata")
+		var calls atomic.Int32
+		_, err := authenticatedRetrievalMetadataForWith(t.Context(), dir, key, func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error) {
+			calls.Add(1)
+			return nil, corrupt
+		})
+		if !errors.Is(err, corrupt) || calls.Load() != 1 {
+			t.Fatalf("authentication error was retried: err=%v calls=%d", err, calls.Load())
+		}
+	})
 }
 
 func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testing.T) {
