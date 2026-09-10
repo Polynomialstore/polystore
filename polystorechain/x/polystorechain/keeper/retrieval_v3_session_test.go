@@ -13,6 +13,8 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"polystorechain/pkg/retrievalchallenge"
 	"polystorechain/x/crypto_ffi"
@@ -30,6 +32,34 @@ type cryptoSessionV3Fixture struct {
 	rootDU      []byte
 	rootDUPath  [][]byte
 	rootOpening []byte
+}
+
+func TestRetrievalSessionV3NonceQueries(t *testing.T) {
+	g := setupAdmittedSessionV3(t, 3)
+	query := keeper.NewQueryServerImpl(g.fixture.keeper)
+	empty, err := query.GetRetrievalSessionV3Nonce(g.ctx, &types.QueryGetRetrievalSessionV3NonceRequest{Owner: g.owner, DealId: g.deal.Id + 1})
+	require.NoError(t, err)
+	require.False(t, empty.Found)
+	require.Zero(t, empty.Nonce)
+
+	id := bytes.Repeat([]byte{0x42}, 32)
+	require.NoError(t, g.fixture.keeper.RetrievalSessionV3Nonces.Set(g.ctx, collections.Join(g.owner, g.deal.Id), ^uint64(0)))
+	require.NoError(t, g.fixture.keeper.RetrievalSessionV3NonceIDs.Set(g.ctx, collections.Join(collections.Join(g.owner, g.deal.Id), ^uint64(0)), id))
+	latest, err := query.GetRetrievalSessionV3Nonce(g.ctx, &types.QueryGetRetrievalSessionV3NonceRequest{Owner: g.owner, DealId: g.deal.Id})
+	require.NoError(t, err)
+	require.True(t, latest.Found)
+	require.Equal(t, ^uint64(0), latest.Nonce)
+	byNonce, err := query.GetRetrievalSessionV3ByNonce(g.ctx, &types.QueryGetRetrievalSessionV3ByNonceRequest{Owner: g.owner, DealId: g.deal.Id, Nonce: ^uint64(0)})
+	require.NoError(t, err)
+	require.Equal(t, id, byNonce.SessionId)
+	require.NoError(t, g.fixture.keeper.RetrievalSessionV3NonceIDs.Set(g.ctx, collections.Join(collections.Join(g.owner, g.deal.Id), ^uint64(0)), id[:31]))
+	_, err = query.GetRetrievalSessionV3ByNonce(g.ctx, &types.QueryGetRetrievalSessionV3ByNonceRequest{Owner: g.owner, DealId: g.deal.Id, Nonce: ^uint64(0)})
+	require.Equal(t, codes.Internal, status.Code(err))
+
+	_, err = query.GetRetrievalSessionV3ByNonce(g.ctx, &types.QueryGetRetrievalSessionV3ByNonceRequest{Owner: g.owner, DealId: g.deal.Id + 1, Nonce: ^uint64(0)})
+	require.Equal(t, codes.NotFound, status.Code(err))
+	_, err = query.GetRetrievalSessionV3Nonce(g.ctx, &types.QueryGetRetrievalSessionV3NonceRequest{Owner: "not-an-address", DealId: g.deal.Id})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func openOwnerSessionV3(t *testing.T) (generationV3Fixture, types.RetrievalSessionV3) {

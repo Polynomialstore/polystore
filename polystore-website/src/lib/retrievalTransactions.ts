@@ -15,6 +15,7 @@ export interface RetrievalStore {
   get<T>(key: string): T | undefined
   put(key: string, value: unknown): void
   remove(key: string): void
+  keys?(prefix: string): string[]
 }
 // Small control records only. OPFS owns the bytes. Never evict unresolved work
 // by age: a receipt timeout is not evidence that a transaction was dropped.
@@ -38,12 +39,23 @@ export function browserRetrievalStore(storage: Storage = localStorage): Retrieva
       storage.setItem(PREFIX + key, text)
     },
     remove(key) { storage.removeItem(PREFIX + key) },
+    keys(prefix) {
+      const keys: string[] = []
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)
+        if (key?.startsWith(PREFIX + prefix)) keys.push(key.slice(PREFIX.length))
+      }
+      return keys
+    },
   }
 }
 export async function retrievalIntentKey(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(value, (_, v) => typeof v === 'bigint' ? String(v) : v))
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+export async function retrievalV3OpenTransactionKey(scope: unknown, owner: string, dealId: bigint): Promise<string> {
+  return 'open-v3:' + await retrievalIntentKey([scope, owner, dealId])
 }
 export async function withRetrievalLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   if (!navigator.locks) throw new Error('browser retrieval recovery locks are unavailable')

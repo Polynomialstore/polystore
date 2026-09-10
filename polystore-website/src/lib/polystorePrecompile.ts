@@ -818,6 +818,27 @@ export type SponsoredRetrievalSessionV3Input = RetrievalSessionV3Input & {
   voucherSignature: Hex
 }
 
+export function encodeOpenRetrievalSessionV3Data(session: RetrievalSessionV3Input): Hex {
+  return encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'openRetrievalSessionV3',
+    args: [session.dealId, session.generation, session.range, session.nonce, session.deadlineHeight] })
+}
+
+export function encodeOpenRetrievalSessionV3SponsoredData(session: SponsoredRetrievalSessionV3Input): Hex {
+  return encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'openRetrievalSessionV3Sponsored', args: [session.dealId,
+    session.generation, session.range, session.nonce, session.deadlineHeight, session.maxTotalFee, session.authType,
+    session.allowlistLeafIndex, session.allowlistMerklePath, session.voucherRedeemer, session.voucherManifestRoot,
+    session.voucherProvider, session.voucherStartMduIndex, session.voucherStartBlobIndex, session.voucherBlobCount,
+    session.voucherExpiresAt, session.voucherNonce, session.voucherSignature] })
+}
+
+export function encodeAcknowledgeRetrievalObligationV3Data(sessionId: Hex, slot: number, ackDigest: Hex): Hex {
+  return encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'acknowledgeRetrievalObligationV3', args: [sessionId, slot, ackDigest] })
+}
+
+export function encodeRefundRetrievalSessionV3Data(sessionId: Hex): Hex {
+  return encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'refundRetrievalSessionV3', args: [sessionId] })
+}
+
 // Same reviewed ABI tuples with the explicit v2 payee appended. Keep the
 // legacy encoders available to tooling which deliberately targets old sessions.
 const RETRIEVAL_V2_ABI = POLYSTORE_PRECOMPILE_ABI.filter((entry) => entry.type === 'function' &&
