@@ -835,33 +835,88 @@ def reconcile_cross_audit_sequences(before, after, providers, proof_transactions
     return rows
 
 
-def wait_for_crossed_audits(lifecycle, audits, epoch_length, expected_epoch, deadline_height):
-    """Wait briefly for one crossed epoch's complete current audit coverage."""
-    started = artifact.monotonic_ns()
-    deadline = min(lifecycle.deadline, started + 30 * 10**9)
-    attempts, last_error = [], None
-    while artifact.monotonic_ns() < deadline:
-        height = lifecycle.wait_height(1)
-        observed = (height - 1) // epoch_length + 1
-        if observed > expected_epoch or height >= deadline_height - 10:
-            raise ValueError("cross-audit verification left its single-epoch/session margin")
-        if observed < expected_epoch:
-            attempts.append(dict(height=height, waiting_for_epoch=expected_epoch))
-            time.sleep(min(.2, lifecycle.remaining()))
+def crossed_audit_events(results, height, providers, deal_id, expected_counts):
+    """Extract only successful system-audit completion events from one committed block."""
+    if producer.uint(results.get("height", 0)) != height:
+        raise ValueError("cross-audit signal block result has the wrong height")
+    responses = results.get("txs_results")
+    responses = [] if responses is None else responses
+    if not isinstance(responses, list) or len(responses) > 65536:
+        raise ValueError("cross-audit signal has malformed transaction results")
+    accepted = set()
+    for response in responses:
+        if not isinstance(response, dict) or producer.uint(response.get("code", 0)) != 0:
             continue
-        try:
-            views = audits(height, False, expected_epoch)
-            accepted = sum(producer.uint(row["audit"].get("accepted_count", 0)) for row in views.values())
-            required = sum(producer.uint(row["audit"]["sample_count"]) for row in views.values())
-            attempts.append(dict(height=height, accepted=accepted, required=required))
-            if accepted == required:
-                return dict(height=height, audits=views, attempts=attempts)
-            last_error = f"accepted {accepted} of {required}"
-        except ValueError as error:
-            last_error = str(error)[-1024:]
-            attempts.append(dict(height=height, error=last_error))
-        time.sleep(min(.2, lifecycle.remaining()))
-    raise TimeoutError("crossed audit coverage did not complete within 30 seconds: " + str(last_error))
+        events = response.get("events", [])
+        if not isinstance(events, list) or len(events) > 4096:
+            raise ValueError("cross-audit signal has malformed events")
+        for event in events:
+            if not isinstance(event, dict) or event.get("type") != "prove_liveness":
+                continue
+            attributes = event.get("attributes", [])
+            if not isinstance(attributes, list) or len(attributes) > 64:
+                raise ValueError("cross-audit signal has malformed attributes")
+            pairs = []
+            for attribute in attributes:
+                if not isinstance(attribute, dict) or not isinstance(attribute.get("key"), str) or not isinstance(attribute.get("value"), str):
+                    raise ValueError("cross-audit signal has malformed attributes")
+                pairs.append((attribute["key"], attribute["value"]))
+            if len(dict(pairs)) != len(pairs):
+                raise ValueError("cross-audit signal repeats an event attribute")
+            fields = dict(pairs)
+            provider = fields.get("provider")
+            if (fields.get("challenge_kind") != "2" or fields.get("deal_id") != str(deal_id) or
+                    provider not in providers.values()):
+                continue
+            ordinal = producer.uint(fields.get("challenge_ordinal", ""))
+            if ordinal >= expected_counts[provider]:
+                raise ValueError("cross-audit signal reports an out-of-range ordinal")
+            accepted.add((provider, ordinal))
+    return accepted
+
+
+def wait_for_crossed_audit_signal(lifecycle, providers, deal_id, expected_counts,
+                                  epoch_length, expected_epoch, deadline_height):
+    """Use each node-zero block result once as the cheap crossed-audit completion signal."""
+    if (set(expected_counts) != set(providers.values()) or
+            any(not isinstance(count, int) or count <= 0 for count in expected_counts.values())):
+        raise ValueError("cross-audit signal expected counts do not match the providers")
+    started = artifact.monotonic_ns()
+    original_deadline = lifecycle.deadline
+    deadline = min(original_deadline, started + 30 * 10**9)
+    node = lifecycle.nodes[0]
+    next_height = (expected_epoch - 1) * epoch_length + 1
+    accepted, attempts = set(), []
+    lifecycle.deadline = deadline
+    try:
+        while artifact.monotonic_ns() < deadline:
+            status = lifecycle.query(node, "/status")
+            if (status.get("node_info", {}).get("id") != node["node_id"] or
+                    status.get("node_info", {}).get("network") != lifecycle.chain):
+                raise ValueError("cross-audit signal RPC belongs to a different node or chain")
+            latest = producer.uint(status.get("sync_info", {}).get("latest_block_height", 0))
+            while next_height <= latest:
+                if artifact.monotonic_ns() >= deadline:
+                    raise TimeoutError("crossed audit event signal did not complete within 30 seconds")
+                observed = (next_height - 1) // epoch_length + 1
+                if observed > expected_epoch or next_height >= deadline_height - 10:
+                    raise ValueError("cross-audit verification left its single-epoch/session margin")
+                results = lifecycle.query(node, f"/block_results?height={next_height}")
+                accepted.update(crossed_audit_events(
+                    results, next_height, providers, deal_id, expected_counts))
+                attempts.append(dict(height=next_height, accepted=len(accepted),
+                                     required=sum(expected_counts.values())))
+                if all(sum(1 for address, _ in accepted if address == provider) == required
+                       for provider, required in expected_counts.items()):
+                    fenced = lifecycle.wait_height(next_height)
+                    return dict(height=fenced, signal_height=next_height,
+                                signal_node_id=node["node_id"], accepted_events=len(accepted),
+                                required_events=sum(expected_counts.values()), attempts=attempts)
+                next_height += 1
+            time.sleep(min(.2, lifecycle.remaining()))
+        raise TimeoutError("crossed audit event signal did not complete within 30 seconds")
+    finally:
+        lifecycle.deadline = original_deadline
 
 
 def open_cross_audit_measurement(lifecycle, target_height):
@@ -903,12 +958,22 @@ def validate_v3_http_receipt_fence(transactions, fence):
     return maximum
 
 
-def close_cross_audit_measurement(lifecycle, audits, epoch_length, expected_epoch,
-                                  deadline_height, before_cpu, measured_end_height):
-    """Close the CPU fence only after the crossed audit is complete on all validators."""
-    crossed = wait_for_crossed_audits(
-        lifecycle, audits, epoch_length, expected_epoch, deadline_height)
+def close_cross_audit_measurement(lifecycle, audits, providers, deal_id, expected_counts,
+                                  epoch_length, expected_epoch, deadline_height,
+                                  before_cpu, measured_end_height):
+    """Fence audit execution in CPU, then validate its state across all validators."""
+    crossed = wait_for_crossed_audit_signal(
+        lifecycle, providers, deal_id, expected_counts, epoch_length, expected_epoch, deadline_height)
     after_cpu = validator_cpu_snapshot(lifecycle)
+    views = audits(crossed["height"], False, expected_epoch)
+    if set(views) != set(providers):
+        raise ValueError("crossed audit state does not cover every provider slot")
+    for slot, view in views.items():
+        provider = providers[slot]
+        if (producer.uint(view["audit"].get("sample_count", 0)) != expected_counts[provider] or
+                producer.uint(view["audit"].get("accepted_count", 0)) != expected_counts[provider]):
+            raise ValueError("crossed audit state is incomplete after its event signal")
+    crossed["audits"] = views
     capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
     lifecycle.doc["native_v3_cross_audit"]["measured_window"] = dict(
         monotonic_start_ns=before_cpu["monotonic_ns"],
@@ -920,7 +985,9 @@ def close_cross_audit_measurement(lifecycle, audits, epoch_length, expected_epoc
         validator_cpu_after=after_cpu,
         validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
         scope=("fixed HTTP offer, bounded drain, and crossed-audit completion; includes proof generation, "
-               "local verification, gas simulation, signing, broadcast and commit observation; no RSS phase peak"))
+               "local verification, gas simulation, signing, broadcast, bounded node-zero event observation, "
+               "and the all-validator height fence; excludes the later four-validator LCD audit-state validation; "
+               "no RSS phase peak"))
     return crossed
 
 
@@ -1015,8 +1082,11 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
     receipt_fence = doc["proof_receipt_fence"] = fence_v3_http_receipts(lifecycle)
     measured_end_height = receipt_fence["provider_rpc_observed_height"]
-    crossed = close_cross_audit_measurement(lifecycle, audits, epoch_length, ready_epoch + 1,
-        deadline_height, before_cpu, measured_end_height)
+    expected_audit_counts = {providers[slot]: producer.uint(view["audit"]["sample_count"])
+                             for slot, view in current_audits.items()}
+    crossed = close_cross_audit_measurement(lifecycle, audits, providers, deal["id"],
+        expected_audit_counts, epoch_length, ready_epoch + 1, deadline_height,
+        before_cpu, measured_end_height)
     grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
     for outcome in outcomes:
         grouped[schedule[outcome["request_index"]]["session_index"]].append(outcome)

@@ -984,31 +984,118 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         before = {"monotonic_ns": 10, "validators": []}
         after = {"monotonic_ns": 30, "validators": []}
         lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
+        providers = {0: AUDIT_ADDRESSES[0]}
+        expected = {AUDIT_ADDRESSES[0]: 1}
+        views = {0: {"audit": {"sample_count": "1", "accepted_count": "1"}}}
 
-        def wait_for_audits(*args):
-            events.append("audit-complete")
-            return {"height": 303, "audits": {}}
+        def wait_for_signal(*args):
+            events.append("event-signal-and-all-node-fence")
+            return {"height": 303, "signal_height": 303}
 
         def cpu_snapshot(*args):
             events.append("cpu-after")
             return after
 
+        def audits(*args):
+            events.append("four-node-audit-validation")
+            return views
+
         def capture(*args, **kwargs):
             events.append("metrics-after")
 
-        with patch.object(workload, "wait_for_crossed_audits", side_effect=wait_for_audits), \
+        with patch.object(workload, "wait_for_crossed_audit_signal", side_effect=wait_for_signal), \
                 patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot), \
                 patch.object(workload, "capture_workload_metrics", side_effect=capture), \
                 patch.object(workload, "validator_cpu_delta", return_value={"cpu": "delta"}):
             crossed = workload.close_cross_audit_measurement(
-                lifecycle, Mock(), 100, 4, 500, before, 299)
+                lifecycle, audits, providers, "0", expected, 100, 4, 500, before, 299)
 
-        self.assertEqual(events, ["audit-complete", "cpu-after", "metrics-after"])
+        self.assertEqual(events, ["event-signal-and-all-node-fence", "cpu-after",
+                                  "four-node-audit-validation", "metrics-after"])
         self.assertEqual(crossed["height"], 303)
+        self.assertEqual(crossed["audits"], views)
         window = lifecycle.doc["native_v3_cross_audit"]["measured_window"]
         self.assertEqual(window["crossed_audit_completion_height"], 303)
         self.assertEqual(window["proof_phase_end_height"], 299)
         self.assertIn("crossed-audit completion", window["scope"])
+
+    def test_crossed_audit_signal_uses_production_block_events_and_bounded_fence(self):
+        provider = AUDIT_ADDRESSES[0]
+        providers = {0: provider}
+        expected = {provider: 1}
+        event = {"type": "prove_liveness", "attributes": [
+            {"key": "provider", "value": provider},
+            {"key": "deal_id", "value": "0"},
+            {"key": "challenge_kind", "value": "2"},
+            {"key": "challenge_ordinal", "value": "0"},
+            {"key": "tier", "value": "gold"},
+            {"key": "reward_amount", "value": "1stake"},
+        ]}
+        block_results = {"height": "301", "txs_results": [
+            {"code": "0", "gas_wanted": "2000000", "gas_used": "613056",
+             "events": [event]},
+        ]}
+        original_deadline = artifact.monotonic_ns() + 60 * 10**9
+        lifecycle = SimpleNamespace(deadline=original_deadline, chain="chain",
+            nodes=[{"node_id": "node0"}])
+
+        def query(node, path):
+            self.assertLess(lifecycle.deadline, original_deadline)
+            if path == "/status":
+                return {"node_info": {"id": "node0", "network": "chain"},
+                        "sync_info": {"latest_block_height": "301"}}
+            self.assertEqual(path, "/block_results?height=301")
+            return block_results
+
+        def wait_height(height):
+            self.assertEqual(height, 301)
+            self.assertLess(lifecycle.deadline, original_deadline)
+            return 302
+
+        lifecycle.query = Mock(side_effect=query)
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        lifecycle.remaining = lambda: max(0, (lifecycle.deadline - artifact.monotonic_ns()) / 1e9)
+        result = workload.wait_for_crossed_audit_signal(
+            lifecycle, providers, "0", expected, 100, 4, 500)
+        self.assertEqual(result["height"], 302)
+        self.assertEqual(result["signal_height"], 301)
+        self.assertEqual(result["accepted_events"], 1)
+        self.assertEqual(lifecycle.deadline, original_deadline)
+
+        def fail_fence(height):
+            self.assertLess(lifecycle.deadline, original_deadline)
+            raise TimeoutError("bounded all-node fence")
+
+        lifecycle.wait_height.side_effect = fail_fence
+        with self.assertRaisesRegex(TimeoutError, "bounded all-node fence"):
+            workload.wait_for_crossed_audit_signal(
+                lifecycle, providers, "0", expected, 100, 4, 500)
+        self.assertEqual(lifecycle.deadline, original_deadline)
+
+        failed = copy.deepcopy(block_results)
+        failed["txs_results"][0]["code"] = "7"
+        self.assertEqual(workload.crossed_audit_events(
+            failed, 301, providers, "0", expected), set())
+        for index, value in ((0, AUDIT_ADDRESSES[1]), (1, "1"), (2, "1")):
+            wrong_identity = copy.deepcopy(block_results)
+            wrong_identity["txs_results"][0]["events"][0]["attributes"][index]["value"] = value
+            with self.subTest(attribute=index):
+                self.assertEqual(workload.crossed_audit_events(
+                    wrong_identity, 301, providers, "0", expected), set())
+        out_of_range = copy.deepcopy(block_results)
+        out_of_range["txs_results"][0]["events"][0]["attributes"][3]["value"] = "1"
+        with self.assertRaisesRegex(ValueError, "out-of-range ordinal"):
+            workload.crossed_audit_events(out_of_range, 301, providers, "0", expected)
+        duplicate = copy.deepcopy(block_results)
+        duplicate["txs_results"][0]["events"].append(copy.deepcopy(event))
+        self.assertEqual(len(workload.crossed_audit_events(
+            duplicate, 301, providers, "0", expected)), 1)
+        repeated_attribute = copy.deepcopy(block_results)
+        repeated_attribute["txs_results"][0]["events"][0]["attributes"].append(
+            {"key": "provider", "value": provider})
+        with self.assertRaisesRegex(ValueError, "repeats an event attribute"):
+            workload.crossed_audit_events(
+                repeated_attribute, 301, providers, "0", expected)
 
     def test_cross_audit_start_fence_follows_metrics_and_target_wait(self):
         events = []
@@ -1065,12 +1152,13 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_cross_audit_cpu_fence_is_not_closed_after_audit_failure(self):
         lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
-        with patch.object(workload, "wait_for_crossed_audits", side_effect=TimeoutError("delayed audit")), \
+        with patch.object(workload, "wait_for_crossed_audit_signal", side_effect=TimeoutError("delayed audit")), \
                 patch.object(workload, "validator_cpu_snapshot") as cpu_snapshot, \
                 patch.object(workload, "capture_workload_metrics") as capture, \
                 self.assertRaisesRegex(TimeoutError, "delayed audit"):
             workload.close_cross_audit_measurement(
-                lifecycle, Mock(), 100, 4, 500, {"monotonic_ns": 10}, 299)
+                lifecycle, Mock(), {0: AUDIT_ADDRESSES[0]}, "0", {AUDIT_ADDRESSES[0]: 1},
+                100, 4, 500, {"monotonic_ns": 10}, 299)
         cpu_snapshot.assert_not_called()
         capture.assert_not_called()
         self.assertNotIn("measured_window", lifecycle.doc["native_v3_cross_audit"])
