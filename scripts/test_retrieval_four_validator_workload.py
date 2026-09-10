@@ -481,6 +481,24 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.validate_v3_committed_message(duplicate, kind="session-proof",
                 creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
 
+    def test_committed_v3_http_transaction_normalizes_lcd_string_height(self):
+        provider = AUDIT_ADDRESSES[0]
+        txhash = "AB" * 32
+        response = {"hash": txhash, "height": "219", "tx_result": {
+            "code": 0, "gas_wanted": "2000000", "gas_used": "479121"}}
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
+                   "creator": provider, "slot": "0",
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                   "proofs": [{"ordinal": "0"}]}
+        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}], query=Mock(return_value=response),
+            cli=Mock(return_value=json.dumps({"tx": {"body": {"messages": [message]}}})))
+        with patch.object(workload, "verify_transaction_nodes", return_value=[]):
+            transaction = workload.committed_v3_http_tx(lifecycle,
+                {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
+                session_id=self.SESSION, proof_count=1)
+        self.assertEqual(transaction["height"], 219)
+        self.assertIsInstance(transaction["height"], int)
+
 
     def test_provider_endpoint_uses_address_not_assignment_slot(self):
         lifecycle = SimpleNamespace(doc={"providers": [

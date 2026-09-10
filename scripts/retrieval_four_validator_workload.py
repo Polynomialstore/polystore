@@ -580,7 +580,7 @@ def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
     """Bind an HTTP result to exact committed bytes and all four validators."""
     txhash = row["tx_hash"].upper()
     response = lifecycle.query(lifecycle.nodes[0], "/tx?hash=0x" + txhash)
-    result = dict(txhash=response["hash"], height=response["height"],
+    result = dict(txhash=response["hash"], height=producer.uint(response["height"]),
                   code=response["tx_result"].get("code", 0),
                   gas_wanted=response["tx_result"]["gas_wanted"],
                   gas_used=response["tx_result"]["gas_used"],
