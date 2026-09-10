@@ -2029,7 +2029,7 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         POLYSTORE_NODE=f'http://127.0.0.1:{lifecycle.nodes[0]["rpc"]}',
         POLYSTORE_LCD_BASE=f'http://127.0.0.1:{lifecycle.nodes[0]["api"]}',
         POLYSTORECHAIND_BIN=str(lifecycle.binary), POLYSTORE_CLI_BIN=str(source / "polystore_cli/target/release/polystore_cli"),
-        POLYSTORE_ROOT_DIR=str(source), POLYSTORE_GAS_PRICES="0.001aatom",
+        POLYSTORE_ROOT_DIR=str(source), POLYSTORE_GAS_PRICES=artifact.BROWSER_EVM_NATIVE_GAS_PRICES,
         POLYSTORE_UPLOAD_DIR=str(directory), POLYSTORE_SESSION_DB_PATH=str(directory / "sessions.db"),
         POLYSTORE_LISTEN_ADDR=f"127.0.0.1:{gateway_port}", POLYSTORE_P2P_ENABLED="0",
         POLYSTORE_GATEWAY_SP_AUTH=V3_PROVIDER_AUTH_TOKEN, POLYSTORE_CMD_TIMEOUT_SECONDS="120")
@@ -2476,7 +2476,8 @@ def transaction_job(lifecycle, signer, args, *, kind="setup", gas="2000000"):
                _deadline_ns=lifecycle.deadline,
                submit=[str(lifecycle.binary), "tx", "nilchain", *map(str, args), *common,
                        "--from", signer, "--keyring-backend", "test", "--chain-id", lifecycle.chain,
-                       "--gas", gas, "--gas-adjustment", "1.6", "--gas-prices", "0.001aatom",
+                       "--gas", gas, "--gas-adjustment", "1.6", "--gas-prices",
+                       artifact.BROWSER_EVM_NATIVE_GAS_PRICES if getattr(lifecycle, "browser_evm", False) else "0.001aatom",
                        "--broadcast-mode", "sync", "--output", "json", "--yes"],
                query=[str(lifecycle.binary), "query", "tx", *common, "--output", "json"])
     artifact.validate_scheduled_command(job)
@@ -3817,7 +3818,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 POLYSTORE_NODE=f'http://127.0.0.1:{lifecycle.nodes[0]["rpc"]}',
                 POLYSTORE_LCD_BASE=f'http://127.0.0.1:{lifecycle.nodes[0]["api"]}',
                 POLYSTORECHAIND_BIN=str(lifecycle.binary), POLYSTORE_PROVIDER_KEY=f"provider{i}",
-                POLYSTORE_CLI_BIN=str(cli), POLYSTORE_ROOT_DIR=str(source), POLYSTORE_GAS_PRICES="0.001aatom",
+                POLYSTORE_CLI_BIN=str(cli), POLYSTORE_ROOT_DIR=str(source),
+                POLYSTORE_GAS_PRICES=artifact.BROWSER_EVM_NATIVE_GAS_PRICES if native_browser is not None else "0.001aatom",
                 POLYSTORE_PROVIDER_ADDRESS=lifecycle.signers[f"provider{i}"], POLYSTORE_UPLOAD_DIR=str(directory),
                 POLYSTORE_SESSION_DB_PATH=str(directory / "sessions.db"), POLYSTORE_LISTEN_ADDR=f"127.0.0.1:{19091+i}",
                 POLYSTORE_P2P_ENABLED="0", POLYSTORE_DISABLE_SYSTEM_LIVENESS="0", POLYSTORE_SYSTEM_LIVENESS="1",

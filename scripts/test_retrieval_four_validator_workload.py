@@ -147,6 +147,15 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     workload.browser_http_preflight(life, "http://127.0.0.1:4173")
 
+    def test_browser_native_transactions_pay_the_global_evm_fee_floor(self):
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1", deadline=10**18,
+            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"})
+        for browser in (False, True):
+            life.browser_evm = browser
+            job = workload.transaction_job(life, AUDIT_ADDRESSES[0], ["create-deal", "100", "1", "1"])
+            self.assertEqual(job["submit"][job["submit"].index("--gas-prices") + 1],
+                             artifact.BROWSER_EVM_NATIVE_GAS_PRICES if browser else "0.001aatom")
+
     def test_public_policy_uses_one_signed_owner_message_and_committed_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
