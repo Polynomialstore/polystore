@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { encodeFunctionData, type Abi } from 'viem'
+import { encodeFunctionData, type Abi, type Hex } from 'viem'
 import { POLYSTORE_PRECOMPILE_ABI, encodeRetrievalV2Data, type RetrievalSessionV2Input, type SponsoredRetrievalSessionInput } from './polystorePrecompile'
 
 async function chainABI(): Promise<Abi> {
@@ -41,10 +41,11 @@ test('browser mirrors every native v3 method and opening receipt exactly', async
       rootTableDuMerklePath: ['0x04'], blobCommitment: '0x05', merklePath: ['0x06'],
       blobIndex: 0, zValue: '0x07', yValue: '0x08', kzgOpeningProof: '0x09',
     },
-  }
+  } as const
   const chain = await chainABI()
+  const sessionId = `0x${'11'.repeat(32)}` as Hex
   assert.equal(
-    encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'submitRetrievalSessionProofV3', args: [`0x${'11'.repeat(32)}`, 0, [proof]] }),
-    encodeFunctionData({ abi: chain, functionName: 'submitRetrievalSessionProofV3', args: [`0x${'11'.repeat(32)}`, 0, [proof]] }),
+    encodeFunctionData({ abi: POLYSTORE_PRECOMPILE_ABI, functionName: 'submitRetrievalSessionProofV3', args: [sessionId, 0, [proof]] }),
+    encodeFunctionData({ abi: chain, functionName: 'submitRetrievalSessionProofV3', args: [sessionId, 0, [proof]] }),
   )
 })
