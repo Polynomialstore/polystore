@@ -181,6 +181,7 @@ test.describe('native V3 browser qualification', () => {
     const gatewayMduResponses: Array<{ url: string; kind: 'metadata' | 'data'; bodyBytes: number }> = []
     const directSpMduRequests: string[] = []
     const retrievalResponseTasks: Promise<void>[] = []
+    const retrievalObserverErrors: string[] = []
     let rawTransactions = 0
     let failure: Error | undefined
     const summary: Record<string, unknown> = {
@@ -219,13 +220,18 @@ test.describe('native V3 browser qualification', () => {
         const responseUrl = new URL(response.url())
         const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(responseUrl.pathname)
         if (response.ok() && gatewayMdu) {
-          retrievalResponseTasks.push(response.body().then((body) => {
+          const task = (async () => {
+            if (await response.finished()) return
+            const sizes = await response.request().sizes()
             gatewayMduResponses.push({
               url: response.url(),
               kind: responseUrl.searchParams.has('committed_height') ? 'metadata' : 'data',
-              bodyBytes: body.byteLength,
+              bodyBytes: sizes.responseBodySize,
             })
-          }))
+          })().catch((error: unknown) => {
+            retrievalObserverErrors.push(error instanceof Error ? error.message : String(error))
+          })
+          retrievalResponseTasks.push(task)
         }
         if (response.request().method() === 'POST' && response.url().startsWith(evm)) {
           let request: EvmRpcRequest
@@ -321,6 +327,7 @@ test.describe('native V3 browser qualification', () => {
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'end')).toBe(true)
       }
       await Promise.all(retrievalResponseTasks)
+      expect(retrievalObserverErrors).toEqual([])
       const metadataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'metadata')
       const dataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'data')
       expect(metadataResponses.length).toBeGreaterThan(0)
