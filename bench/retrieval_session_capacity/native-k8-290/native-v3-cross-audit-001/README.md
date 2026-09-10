@@ -104,9 +104,13 @@ unmeasured.
 and their three sibling modules. It reuses the owning validators for native v3
 session authority, provider responses, two-anchor span, HTTP receipt fences,
 provider sequences, schedule bins, CPU deltas, and Commit streams. It then joins
-all 440 successful transaction receipts to raw stopped-blockstore bytes from all
-four validators: two batched opens, eight warmups, 360 measured proofs, 24
-system audits, and 46 refunds. The public [`summary.json`](summary.json) contains
+every successful HTTP request ID, transaction hash, provider, and session to its
+exact measured receipt. It then joins all 440 successful transaction receipts to
+raw stopped-blockstore bytes from all four validators. Before inspecting
+messages, it decodes every raw
+transaction with the pinned production chain binary and native library: two
+batched opens, eight warmups, 360 measured proofs, 24 system audits, and 46
+refunds. The public [`summary.json`](summary.json) contains
 no raw transactions, proofs, signatures, keyrings, paths, host identity, or logs.
 
 The private source hashes, sanitized [`plan.json`](plan.json), and sanitized
@@ -115,6 +119,8 @@ The private source hashes, sanitized [`plan.json`](plan.json), and sanitized
 
 ```sh
 python3 bench/retrieval_session_capacity/native-k8-290/native-v3-cross-audit-001/check.py \
+  --decoder "$BENCH_ROOT/native-build-5cc77e1a-002/bin/polystorechaind" \
+  --decoder-library "$BENCH_ROOT/worktrees/native-runtime-5cc77e1a-002/polystore_core/target/release/libpolystore_core.so" \
   scripts/retrieval_four_validator_workload.py \
   "$PRIVATE/evidence.json" \
   "$PRIVATE/native-v3-cross-audit-blocks.jsonl" \
@@ -122,6 +128,7 @@ python3 bench/retrieval_session_capacity/native-k8-290/native-v3-cross-audit-001
   "$PRIVATE"/native-v3-cross-audit-commit-*.jsonl
 ```
 
-The checker requires exact reconstruction of the checked-in summary, exercises
-a small semantic failure set before the final literal evidence pins, and checks
-every published payload hash.
+The checker verifies the decoder and native-library hashes against the frozen
+runtime provenance, requires exact reconstruction of the checked-in summary,
+exercises a small semantic failure set before the final literal evidence pins,
+and checks every published payload hash.

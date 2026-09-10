@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reconstruct the retained native-v3 cross-audit diagnostic from private inputs."""
-import argparse, base64, hashlib, json, math, statistics, sys, types
+import argparse, base64, hashlib, json, math, os, statistics, subprocess, sys, time, types
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -8,6 +8,8 @@ HARNESS_SHA256 = "2ebec09009fad961959ef0dd7fd72a0f471014d97805a782192c92df5cb4a0
 EVIDENCE_SHA256 = "488e4e629641f272bbc2c5138aa2e1539d6d74f84ed5e3240b79679817627ebe"
 BLOCKS_SHA256 = "8a319de7509e73d207252fa9b3dbfb19b1f08a3a366bc438c1396894548bcda4"
 TRANSACTIONS_SHA256 = "97621fb3d5edc49d5c1c81b85a82b23ab33f3eaa0784b344f9212807e5f47ee7"
+DECODER_SHA256 = "f7b9cc758732c159b96f1c0ef4465bbd38190ff0b3364ac54e9e9ec616a33ff3"
+DECODER_LIBRARY_SHA256 = "4735f0777793acb24da0ce4971696aadc5565285a15fa3e9740dbe4ba1155b6d"
 MODULES = {
     "retrieval_bench_artifact": "aeb5f811fb5f93ad4539f49a485c15af3747c765bd3d3997bc38335016a023d8",
     "retrieval_commit_metrics": "e8b272852684639efe6292d3b72eb2396fee0c2bdb99558d52c611b7d638e11f",
@@ -49,6 +51,23 @@ def load_modules(harness_path):
         loaded[name] = module
     return loaded
 
+def native_decode(decoder, library, raw_tx_base64, deadline):
+    require(time.monotonic() < deadline, "native transaction decode exceeded its total deadline")
+    env = os.environ.copy()
+    env["GOMAXPROCS"] = "2"
+    library_dir = str(library.parent)
+    env["LD_LIBRARY_PATH"] = library_dir + ((":" + env["LD_LIBRARY_PATH"]) if env.get("LD_LIBRARY_PATH") else "")
+    try:
+        result = subprocess.run([str(decoder), "tx", "decode", raw_tx_base64], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("pinned native transaction decoder timed out") from error
+    require(result.returncode == 0, "pinned native transaction decoder failed")
+    try:
+        return result.stdout, json.loads(result.stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("pinned native transaction decoder returned invalid JSON") from error
+
 def validate_receipt(row, node_ids):
     require(row["outcome"] == "committed_success" and row["code"] == 0 and row["height"] > 0,
             "non-successful proof/open/refund receipt")
@@ -66,7 +85,10 @@ def main():
     parser.add_argument("blocks", type=Path)
     parser.add_argument("transactions", type=Path)
     parser.add_argument("commit_streams", nargs=4, type=Path)
+    parser.add_argument("--decoder", required=True, type=Path)
+    parser.add_argument("--decoder-library", required=True, type=Path)
     args = parser.parse_args()
+    decoder, decoder_library = args.decoder.resolve(), args.decoder_library.resolve()
     raw_evidence, raw_blocks, raw_transactions = (args.evidence.read_bytes(), args.blocks.read_bytes(),
                                                    args.transactions.read_bytes())
     doc, recovered = json.loads(raw_evidence), json.loads(raw_transactions)
@@ -172,6 +194,18 @@ def main():
                 for rows in retried) and
             all(len(rows) in (1, 2) and rows[-1].get("status") == "success" for rows in attempts_by_request.values()),
             "provider HTTP terminal success inventory differs")
+    successful_by_request = {row["request_id"]: row for row in successful}
+    measured_by_operation = {row["operation_id"]: row for row in native["measured_proof_transactions"]}
+    require(len(successful_by_request) == len(measured_by_operation) == 360 and
+            set(successful_by_request) == set(measured_by_operation) and
+            all(isinstance(receipt["session_index"], int) and 0 <= receipt["session_index"] < len(sessions)
+                for receipt in measured_by_operation.values()) and
+            all(successful_by_request[operation_id]["tx_hash"] == receipt["txhash"] and
+                successful_by_request[operation_id]["provider"] == receipt["provider"] and
+                successful_by_request[operation_id]["session_id"].removeprefix("0x").lower() ==
+                    sessions[int(receipt["session_index"])]["session_id"].lower()
+                for operation_id, receipt in measured_by_operation.items()),
+            "HTTP success identity differs from measured proof receipt")
     by_session = defaultdict(list)
     for row in successful: by_session[int(row["request_id"].split("-")[1])].append(row)
     for index in range(1, 46):
@@ -220,6 +254,11 @@ def main():
     open_sessions = {txhash: sorted([session for session in sessions if session["open_transaction"]["txhash"] == txhash],
                                     key=lambda session: session["nonce"])
                      for txhash in open_counts}
+    require(decoder.is_file() and sha(decoder.read_bytes()) == DECODER_SHA256,
+            "native transaction decoder bytes differ from runtime provenance")
+    require(decoder_library.is_file() and sha(decoder_library.read_bytes()) == DECODER_LIBRARY_SHA256,
+            "native transaction decoder library differs from runtime provenance")
+    decode_deadline = time.monotonic() + 300
     for txhash, row in recovered_by_hash.items():
         raw = base64.b64decode(row["raw_tx_base64"], validate=True)
         require(sha(raw) == row["raw_tx_sha256"] == txhash.lower() and len(raw) == row["raw_tx_bytes"],
@@ -228,7 +267,10 @@ def main():
                 all(v["txhash"] == txhash and v["height"] == row["height"] and
                     v["raw_tx_sha256"] == row["raw_tx_sha256"] and v["tx_index"] == row["tx_index"]
                     for v in row["validators"]), "stopped blockstores disagree on transaction bytes")
-        messages = row["decoded"]["body"]["messages"]
+        decoded_raw, decoded = native_decode(decoder, decoder_library, row["raw_tx_base64"], decode_deadline)
+        require(sha(decoded_raw) == row["decoded_output_sha256"] and decoded == row["decoded"],
+                "native transaction decode differs from recovered representation")
+        messages = decoded["body"]["messages"]
         if row["kind"] == "open":
             expected_sessions = open_sessions[txhash]
             require(row["height"] == expected_sessions[0]["open_height"] and
@@ -245,8 +287,10 @@ def main():
         elif row["kind"] in ("warmup", "proof"):
             receipt = proof_receipts[txhash]
             session = proof_sessions[txhash]
+            expected_session_index = 0 if row["kind"] == "warmup" else int(receipt["session_index"])
             message = messages[0] if len(messages) == 1 else {}
-            require(message.get("@type", "").endswith("MsgSubmitRetrievalSessionProofV3") and
+            require(session == sessions[expected_session_index] and
+                    message.get("@type", "").endswith("MsgSubmitRetrievalSessionProofV3") and
                     message.get("creator") == receipt["provider"] and
                     base64.b64decode(message.get("session_id", ""), validate=True).hex() == session["session_id"] and
                     row["height"] == receipt["height"] and row["raw_tx_bytes"] == receipt["validators"][0]["bytes"] and
