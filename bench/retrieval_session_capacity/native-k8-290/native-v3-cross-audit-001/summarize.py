@@ -393,6 +393,7 @@ def main():
             "HTTP terminal timing combines proof generation, native verification, gas simulation, signing, broadcast, and client commit observation.",
             "Pre-success-start delay includes scheduler delay and, for 13 requests, retry backoff after an HTTP 429; it is not a pure signer-queue measurement.",
             "Commit p95 values are execution upper bounds from the Commit metric; they exclude the documented post-persistence tail.",
+            "Commit streams use a wider window starting before workload alignment and ending after heavy all-validator LCD queries; that window is separate from the CPU and provider HTTP measurement window.",
             "CPU is a fixed-window process tick delta; RSS is a whole-process-lifetime peak, not a phase peak or 2 GiB usage claim.",
             "Consensus header times are not wall-clock commit-completion timestamps, so this report makes no header-time throughput claim.",
             "The retained HTTP receipts do not separate CheckTx latency from block inclusion; only the combined client terminal observation is reported.",

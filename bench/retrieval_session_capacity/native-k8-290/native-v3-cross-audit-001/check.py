@@ -52,6 +52,12 @@ def main():
             path.write_text(json.dumps(doc))
             command = base.copy(); command[3] = str(path)
             run(command, expected)
+        transactions = json.loads(args.transactions.read_text())
+        transactions["transactions"][0]["raw_tx_base64"] = "d3Jvbmc="
+        path = Path(directory) / "transactions-corrupt.json"
+        path.write_text(json.dumps(transactions))
+        command = base.copy(); command[5] = str(path)
+        run(command, "recovered raw transaction hash/size differs")
 
     manifest = json.loads((here / "manifest.json").read_text())
     require(manifest["qualification"] is False, "manifest changed qualification")
@@ -60,7 +66,7 @@ def main():
         require(len(data) == expected["bytes"] and hashlib.sha256(data).hexdigest() == expected["sha256"],
                 f"published file hash differs: {name}")
     print(json.dumps({"status": "passed", "summary_equal": True,
-                      "semantic_negative_checks": len(mutations),
+                      "semantic_negative_checks": len(mutations) + 1,
                       "published_hashes": len(manifest["published_files"])}, sort_keys=True))
 
 if __name__ == "__main__": main()

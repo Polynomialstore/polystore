@@ -76,7 +76,10 @@ All four exact raw Commit streams recompute to 215 fenced block observations.
 Their Commit-step p95 execution upper bounds were 360.593–395.595 ms, below the
 diagnostic's 700 ms bound. This timer covers the documented Commit step and may
 include waiting for a committed block; it excludes the post-persistence state
-transition tail, validator-key refresh, and next-round scheduling.
+transition tail, validator-key refresh, and next-round scheduling. The Commit
+streams use a wider observation window that starts before workload alignment and
+ends after the heavy all-validator LCD queries. It is separate from the narrower
+CPU and provider HTTP measurement window.
 
 Validator CPU is a `/proc` process-tick delta over the 189.759685646-second
 window that includes the fixed HTTP workload, drain, audit transactions, bounded
