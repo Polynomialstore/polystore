@@ -58,6 +58,28 @@ async function hashDownload(download: Download): Promise<{ bytes: number; sha256
   return { bytes, sha256: digest.digest('hex') }
 }
 
+async function readDownloadFailureBanner(page: Page): Promise<string> {
+  const banner = page.locator('div').filter({ hasText: /^Download failed:/ }).first()
+  if (!await banner.isVisible().catch(() => false)) return ''
+  return ((await banner.textContent().catch(() => '')) || '').trim()
+}
+
+async function waitForDownloadEventOrFailure(page: Page, timeout: number, baselineFailure: string): Promise<Download> {
+  const outcomePromise = page.waitForEvent('download', { timeout })
+    .then((download) => ({ kind: 'download' as const, download }))
+    .catch(() => ({ kind: 'timeout' as const }))
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const outcome = await Promise.race([outcomePromise, page.waitForTimeout(500).then(() => null)])
+    if (outcome?.kind === 'download') return outcome.download
+    if (outcome?.kind === 'timeout') break
+    const failure = await readDownloadFailureBanner(page)
+    if (failure && failure !== baselineFailure) throw new Error(`download failed before browser event: ${failure}`)
+  }
+  const failure = await readDownloadFailureBanner(page)
+  throw new Error(`download event not emitted${failure ? `: ${failure}` : ''}`)
+}
+
 async function openDownload(page: Page) {
   const menu = page.locator(`[data-testid="deal-detail-actions-menu"][data-file-path="${filePath}"]`)
   await expect(menu).toBeVisible({ timeout: 120_000 })
@@ -222,7 +244,9 @@ test.describe('native V3 browser qualification', () => {
       const gatewayUrl = await mountDealDetail(page)
       progress.startRetrieval(retrievalTimeout)
       const button = await openDownload(page)
-      const [download] = await Promise.all([page.waitForEvent('download', { timeout: retrievalTimeout }), button.click()])
+      const [download] = await Promise.all([
+        waitForDownloadEventOrFailure(page, retrievalTimeout, await readDownloadFailureBanner(page)), button.click(),
+      ])
       const downloaded = await hashDownload(download)
       await download.delete()
       expect(downloaded).toEqual({ bytes: expectedBytes, sha256: expectedHash })
@@ -308,7 +332,7 @@ test.describe('native V3 browser qualification', () => {
       const paidTransactions = rawTransactions
       const cacheButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
       const [cachedDownload] = await Promise.all([
-        page.waitForEvent('download', { timeout: retrievalTimeout }), cacheButton.click(),
+        waitForDownloadEventOrFailure(page, retrievalTimeout, await readDownloadFailureBanner(page)), cacheButton.click(),
       ])
       const cached = await hashDownload(cachedDownload)
       await cachedDownload.delete()
