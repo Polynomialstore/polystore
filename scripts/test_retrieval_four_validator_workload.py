@@ -94,6 +94,93 @@ class FourValidatorWorkloadTest(unittest.TestCase):
         lifecycle.remaining = Mock(return_value=30)
         return lifecycle
 
+    def test_native_v3_browser_geometry_covers_retained_fixture_sizes(self):
+        self.assertEqual(workload.v3_file_geometry(1024), dict(size=1024, metadata_mdus=2,
+            user_mdus=1, total_mdus=3, witness_mdus=1, integrity_leaf_count=96))
+        self.assertEqual(workload.v3_file_geometry(1_073_741_824), dict(size=1_073_741_824,
+            metadata_mdus=2, user_mdus=133, total_mdus=135, witness_mdus=1,
+            integrity_leaf_count=12_768))
+
+    def test_public_policy_uses_one_signed_owner_message_and_committed_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            owner = ADDRESSES[0]
+            intended = {"@type": "/polystorechain.polystorechain.v1.MsgUpdateDealRetrievalPolicy",
+                "creator": owner, "deal_id": "7", "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC"}}
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_291-1",
+                nodes=[dict(home="/node", rpc=26657)], signers={"owner0": owner}, doc={}, save=Mock(),
+                wait_height=Mock(), cli=Mock(return_value=json.dumps({"tx": {"body": {"messages": [intended]}}})))
+
+            def command(argv):
+                if "--generate-only" in argv:
+                    return json.dumps({"body": {"messages": [{"@type": "template"}]}, "signatures": []})
+                output = Path(argv[argv.index("--output-document") + 1])
+                unsigned = json.loads((home / "browser-public-policy/unsigned.jsonl").read_text())
+                unsigned["signatures"] = ["signed"]
+                output.write_text(json.dumps(unsigned))
+                return ""
+
+            committed = dict(outcome="committed_success", txhash="A" * 64, height=12)
+            lifecycle.query = Mock(return_value={"deal": {"retrieval_policy": {
+                "mode": "RETRIEVAL_POLICY_MODE_PUBLIC", "allowlist_root": "", "voucher_signer": ""}}})
+            with patch.object(workload, "transaction_job", return_value={"submit": ["/chain", "tx", "nilchain",
+                    "create-deal"], "signer": owner}), \
+                 patch.object(artifact, "scheduled_transaction", return_value=committed) as broadcast, \
+                 patch.object(workload, "verify_transaction_nodes", return_value=["four-node-proof"]):
+                evidence = workload.set_public_retrieval_policy(lifecycle, deal_id="7", command=command)
+            self.assertEqual(evidence["message"], intended)
+            self.assertEqual(broadcast.call_count, 1)
+            lifecycle.wait_height.assert_called_once_with(13)
+            lifecycle.save.assert_called_once()
+
+    def test_browser_launcher_pins_canonical_gateway_and_real_e2e_wallet_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            website = root / "polystore-website"
+            for relative in ("node_modules/.bin/vite", "node_modules/.bin/playwright",
+                             "public/wasm/polystore_core_bg.wasm"):
+                path = website / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+            home = root / "run"
+            home.mkdir()
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_291-1",
+                deadline=10**18, env={"POLYSTORE_TRUSTED_SETUP": "/setup", "GOMAXPROCS": "2"},
+                nodes=[dict(home="/node", rpc=26657, api=1317, evm_rpc=8545)],
+                doc={"provenance": {"cli_binary": "/native-cli", "curl_binary": "/curl"},
+                     "payload": {"bytes": 1024, "sha256": "ab" * 32}},
+                remaining=Mock(return_value=30), wait_height=Mock(side_effect=[20, 21, 22]),
+                snapshot=Mock(side_effect=lambda height: {"bank": {"height": height}}), save=Mock())
+            process_ids = iter((101, 102))
+            launched = []
+            def popen(argv, **kwargs):
+                launched.append((argv, kwargs))
+                return SimpleNamespace(pid=next(process_ids), returncode=None)
+            def command(argv, timeout=60):
+                if argv[-1].endswith("/status"):
+                    return json.dumps({"persona": "user-gateway", "allowed_route_families": ["gateway"]})
+                return "ready"
+            def playwright(argv, deadline, *, env=None, cwd=None):
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True}))
+                self.assertEqual(cwd, website)
+                self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
+                    ("1", "262144", workload.V3_BROWSER_PAYER))
+                return SimpleNamespace(returncode=0, stdout="passed", stderr="")
+            ports = {"gateway": 18080, "website": 4173,
+                     "gateway_reservation": Mock(), "website_reservation": Mock()}
+            processes = []
+            with patch.object(workload.subprocess, "Popen", side_effect=popen), \
+                 patch.object(artifact, "run_bounded_command", side_effect=playwright), \
+                 patch.object(workload, "collect_issuance", return_value=17):
+                result = workload.run_native_v3_browser(lifecycle, gateway=Path("/gateway"), source=root,
+                    deal={"id": "7"}, browser_ports=ports, command=command, processes=processes,
+                    check_providers=Mock())
+            self.assertEqual([row[0][0] for row in launched], ["/gateway", str(website / "node_modules/.bin/vite")])
+            self.assertEqual(result["gateway"]["status"]["persona"], "user-gateway")
+            self.assertEqual(result["economics"]["issued_stake"], 17)
+            ports["gateway_reservation"].close.assert_called_once()
+            ports["website_reservation"].close.assert_called_once()
+
     def test_fixed_height_query_retries_only_future_height_error(self):
         lifecycle = self.query_lifecycle()
         delayed = [self.query_error(), self.query_response({"session": {"id": "ready"}})]
@@ -1540,6 +1627,28 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_browser_cli_is_explicit_and_keeps_other_modes_unchanged(self):
+        common = ["diagnostic", "--mode", "native-v3-browser", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
+                  "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra, expected_bytes in (([], 1024), (["--browser-bytes", "1073741824"], 1_073_741_824)):
+            with self.subTest(expected_bytes=expected_bytes), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+                workload.main()
+                constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
+                    timeout=600, browser_evm=True)
+                run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                    native_browser=dict(file_bytes=expected_bytes), audit_profile="normal")
+        invalid = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
+                   "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
+                   "--cli-binary", "/native-cli", "--product-source", "/source",
+                   "--browser-bytes", "1024"]
+        with patch.object(workload.sys, "argv", invalid), patch.object(workload.sys, "stderr"), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, self.assertRaises(SystemExit):
+            workload.main()
+        constructor.assert_not_called()
+
     def test_native_v3_cross_audit_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers-cross-audit", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]

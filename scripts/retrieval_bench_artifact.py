@@ -273,7 +273,7 @@ def stop_owned_process_groups(processes):
         raise errors[0]
 
 
-def run_bounded_command(argv, deadline, *, env=None):
+def run_bounded_command(argv, deadline, *, env=None, cwd=None):
     """Drain both CLI pipes within one absolute deadline and a combined cap."""
     def remaining():
         seconds = (deadline - monotonic_ns()) / 1e9
@@ -284,7 +284,8 @@ def run_bounded_command(argv, deadline, *, env=None):
     remaining()
     # Only failure to launch is an OSError to the caller. Once launched, pipe
     # failures cannot establish that no broadcast took place.
-    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True, env=env)
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+                               env=env, cwd=cwd)
     try:
         failed = True
         try:
@@ -1266,7 +1267,8 @@ def set_toml_value(text, section, key, value):
 class FourValidatorLifecycle:
     """Owned local startup/persistence evidence, not a transaction load driver."""
 
-    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2, *, sustained=False):
+    def __init__(self, binary, library, home, timeout=180, gomaxprocs=2, *, sustained=False,
+                 browser_evm=False):
         self.root = Path(__file__).resolve().parent.parent
         self.binary, self.library = Path(binary).resolve(strict=True), Path(library).resolve(strict=True)
         if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
@@ -1279,7 +1281,8 @@ class FourValidatorLifecycle:
         # including on failure; multi-node receives only a new child directory.
         if os.path.lexists(self.home):
             raise ValueError("home must not already exist: " + str(self.home))
-        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, 7200 if sustained else 900) * 10**9
+        maximum_timeout = 7200 if sustained else 3600 if browser_evm else 900
+        self.deadline = monotonic_ns() + integer(timeout, "timeout", 30, maximum_timeout) * 10**9
         self.env = dict(os.environ, GOMAXPROCS=str(integer(gomaxprocs, "gomaxprocs", 1, 64)),
                         POLYSTORE_TRUSTED_SETUP=str(self.root / "polystorechain/trusted_setup.txt"))
         for variable in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
@@ -1288,6 +1291,9 @@ class FourValidatorLifecycle:
         self.nodes = [{"home": str(self.home / "nodes" / f"validator{i}"), "rpc": 26657 - 3*i,
                        "p2p": 26656 - 3*i, "grpc": 9090 - 2*i, "api": 1317 - i,
                        "metrics": 26660 + i} for i in range(4)]
+        self.browser_evm = bool(browser_evm)
+        if self.browser_evm:
+            self.nodes[0].update(evm_rpc=8545, evm_ws=8546)
         self.processes, self.reservations, self.signers = [], [], {}
         self.doc = {"schema_version": 1, "mode": "four-validator-lifecycle", "qualification": False,
                     "status": "preparing", "topology": "four processes on one local host",
@@ -1318,7 +1324,9 @@ class FourValidatorLifecycle:
 
     def reserve_ports(self):
         for node in self.nodes:
-            for name in ("rpc", "p2p", "grpc", "api", "metrics"):
+            for name in ("rpc", "p2p", "grpc", "api", "metrics", "evm_rpc", "evm_ws"):
+                if name not in node:
+                    continue
                 reservation = socket.socket()
                 self.reservations.append(reservation)
                 # Allow our stopped server's TIME_WAIT connections, while
@@ -1327,7 +1335,8 @@ class FourValidatorLifecycle:
                 reservation.bind(("127.0.0.1", node[name]))
                 reservation.listen(1)
 
-    def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False):
+    def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False,
+                browser_payer=None):
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
         provider_count = integer(provider_count, "provider signer count", 12, 44)
@@ -1348,6 +1357,16 @@ class FourValidatorLifecycle:
             self.signers[name] = address
             self.cli(first, "genesis", "add-genesis-account", address,
                      "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
+        if self.browser_evm:
+            if not isinstance(browser_payer, str) or not re.fullmatch(r"nil1[0-9a-z]{20,80}", browser_payer):
+                raise ValueError("browser qualification requires the canonical E2E payer account")
+            if browser_payer in self.signers.values():
+                raise ValueError("browser payer must remain distinct from lifecycle CLI signers")
+            self.cli(first, "genesis", "add-genesis-account", browser_payer,
+                     "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
+            self.doc["browser_payer"] = browser_payer
+        elif browser_payer is not None:
+            raise ValueError("browser payer requires browser EVM mode")
         genesis = json.loads((first / "config/genesis.json").read_text())
         consensus = json.loads((self.root / "scripts/retrieval_consensus_profile.json").read_text())
         if consensus["block"] != {"max_bytes": "2097152", "max_gas": "64000000"}:
@@ -1422,7 +1441,14 @@ class FourValidatorLifecycle:
                     "--p2p.laddr", f'tcp://127.0.0.1:{node["p2p"]}',
                     "--grpc.address", f'127.0.0.1:{node["grpc"]}',
                     "--api.enable=true",
-                    "--grpc-web.enable=false", "--json-rpc.enable=false", "--minimum-gas-prices", "0.001aatom"]
+                    "--grpc-web.enable=false"]
+            if "evm_rpc" in node:
+                argv += ["--json-rpc.enable=true", "--json-rpc.address", f'127.0.0.1:{node["evm_rpc"]}',
+                         "--json-rpc.ws-address", f'127.0.0.1:{node["evm_ws"]}',
+                         "--json-rpc.api", "eth,net,web3"]
+            else:
+                argv += ["--json-rpc.enable=false"]
+            argv += ["--minimum-gas-prices", "0.001aatom"]
             self.doc["commands"].append(argv)
             with (home / f"{phase}.log").open("xb") as log:
                 process = subprocess.Popen(argv, env=self.env, stdout=log, stderr=subprocess.STDOUT,
