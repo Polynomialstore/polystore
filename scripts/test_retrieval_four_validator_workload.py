@@ -248,6 +248,79 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
+    def test_browser_expiry_launcher_reuses_stack_with_separate_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            website = root / "polystore-website"
+            (website / "node_modules/.bin").mkdir(parents=True)
+            (website / "node_modules/.bin/playwright").write_bytes(b"fixture")
+            home = root / "run"
+            home.mkdir()
+            sid = "00" * 32
+            final = {"session_id": base64.b64encode(bytes(32)).decode()}
+            before = {"bank": {"height": 19}, "retrieval": {"deals": {"8": {"end_block": "150"}}}}
+            after = {"bank": {"height": 30}, "retrieval": {"sessions": {sid: final}}}
+            lifecycle = SimpleNamespace(home=home, chain="polystore_291-1", deadline=10**18,
+                nodes=[dict(api=1317, evm_rpc=8545)], signers={}, doc={}, save=Mock(),
+                wait_height=Mock(side_effect=[20, 31]))
+            hashes = ["0x" + byte * 64 for byte in ("1", "2")]
+            outcome = dict(success=True, stage="refunded", strictExpiryObserved=True, rawTransactions=2,
+                retryMduRequests=0, retryMduRequestsBeforeRefund=0, requestedSessionId="0x" + sid,
+                afterRefund={"height": "30"}, session=final,
+                evmReceipts=[{"transactionHash": value} for value in hashes],
+                evmTransactions=[{"hash": value} for value in hashes])
+            memory = {"memory_peak_bytes": 123}
+            def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps(outcome))
+                self.assertEqual((env["E2E_NATIVE_V3_EXPIRY"], env["E2E_NATIVE_V3_DEAL_ID"],
+                                  env["E2E_NATIVE_V3_BYTES"]), ("1", "8", "1024"))
+                self.assertEqual(memory_output, home / "browser-expiry-memory.json")
+                self.assertEqual(cwd, website)
+                return SimpleNamespace(returncode=0, stdout="passed", stderr=""), memory
+            committed = [dict(receipt={"transactionHash": value}) for value in hashes]
+            with patch.object(artifact, "run_bounded_browser_command", side_effect=playwright), \
+                 patch.object(workload, "browser_v3_snapshot", side_effect=[before, after]), \
+                 patch.object(workload, "collect_issuance", return_value=17), \
+                 patch.object(workload, "browser_v3_committed_receipts", return_value=committed), \
+                 patch.object(workload, "verify_browser_v3_refund_economics", return_value={"issued_stake": 17}):
+                evidence = workload.run_native_v3_browser_expiry(lifecycle, source=root, deal={"id": "8"},
+                    browser_ports={"gateway": 18080, "website": 4173},
+                    payload={"bytes": 1024, "sha256": "ab" * 32}, check_providers=Mock())
+            self.assertEqual(evidence["economics"]["issued_stake"], 17)
+            self.assertEqual(evidence["playwright"]["memory"], memory)
+            self.assertEqual(lifecycle.doc["native_v3_browser_expiry"], evidence)
+
+    def test_short_browser_fixture_has_unique_admission_and_policy_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            main_payload = home / "main.bin"
+            main_payload.write_bytes(bytes(range(256)) * 8)
+            owner = ADDRESSES[0]
+            providers = dict(enumerate(AUDIT_ADDRESSES))
+            slots = [dict(slot=str(slot), provider=provider, status="SLOT_STATUS_ACTIVE", pending_provider="")
+                     for slot, provider in providers.items()]
+            initial = {"mode2_slots": slots}
+            final = dict(initial, manifest_root=base64.b64encode(bytes.fromhex("ab" * 32)).decode(),
+                         size="1024", total_mdus="3", witness_mdus="1", current_gen="1")
+            lifecycle = SimpleNamespace(home=home, nodes=[{}], signers={"owner0": owner},
+                doc={"payload": {"path": str(main_payload)}}, save=Mock())
+            lifecycle.query = Mock(side_effect=[{"deals": [{"id": "7", "owner": owner}, {"id": "8", "owner": owner}]},
+                                                {"deal": initial}, {"deal": final}])
+            send = Mock(return_value={"height": 10})
+            wait = Mock()
+            command = Mock(return_value=json.dumps({"upload": "ok"}))
+            candidate = {"polyfs_root": "0x" + "ab" * 32}
+            with patch.object(workload, "admit_native_v3_generation", return_value=(candidate, 20)) as admit, \
+                 patch.object(workload, "set_public_retrieval_policy", return_value={"public": True}) as policy:
+                fixture = workload.prepare_native_v3_browser_expiry(lifecycle, main_deal={"id": "7"},
+                    providers=providers, send=send, wait=wait, command=command, curl="/curl")
+            self.assertEqual(send.call_args.args[1][:2], ["create-deal", "180"])
+            self.assertEqual(fixture["payload"]["bytes"], 1024)
+            self.assertEqual(admit.call_args.kwargs["evidence_key"], "native_v3_browser_expiry_generation")
+            self.assertEqual(admit.call_args.kwargs["http_phase"], "browser-expiry-generation-acceptance")
+            self.assertEqual(policy.call_args.kwargs["directory_name"], "browser-expiry-public-policy")
+            self.assertEqual(lifecycle.doc["native_v3_browser_expiry_fixture"], fixture)
+
     def test_fixed_height_query_retries_only_future_height_error(self):
         lifecycle = self.query_lifecycle()
         delayed = [self.query_error(), self.query_response({"session": {"id": "ready"}})]
@@ -312,6 +385,57 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             candidate[0]["receipt"][field] = value
             with self.assertRaises(ValueError):
                 verify(observed=candidate)
+
+    def test_browser_expiry_economics_refunds_variable_fee_and_retains_base_and_gas(self):
+        sid = "ab" * 32
+        signers = {"owner0": ADDRESSES[0], "provider0": ADDRESSES[1]}
+        before = dict(bank=dict(height=10, balances={name + ":stake": "1000" for name in signers},
+                               supply={"stake": "10000"}),
+                      payer=dict(address=workload.V3_BROWSER_PAYER, stake="1000", aatom="1000"),
+                      retrieval=dict(params={"fixed": "prices"}, module_stake="1000",
+                                     deals={"8": {"escrow_balance": "1000"}}, sessions={}))
+        after = copy.deepcopy(before)
+        after["bank"].update(height=20, supply={"stake": "10097"})
+        after["payer"].update(stake="997", aatom="970")
+        pending = dict(session_id=base64.b64encode(bytes.fromhex(sid)).decode(), deadline_height="19",
+            payer=workload.V3_BROWSER_PAYER, owner=workload.V3_BROWSER_PAYER,
+            funding="RETRIEVAL_SESSION_FUNDING_REQUESTER", price_denom="stake", base_fee="3",
+            price_per_blob="17", locked_fee="17", acked_slots_mask="0", settled_slots_mask="0",
+            refunded_slots_mask="0", sample_count="1", accepted_sample_bitmap=base64.b64encode(bytes(17)).decode(),
+            obligations=[dict(slot="0", payee=ADDRESSES[1], assigned_provider=ADDRESSES[1],
+                              blob_count="1", locked_fee="17")])
+        final = dict(pending, expired=True, locked_fee="0", refunded_slots_mask="1")
+        after["retrieval"]["sessions"][sid] = final
+        receipts = [dict(height=height, receipt={"from": "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255",
+            "to": "0x0000000000000000000000000000000000000900", "gasUsed": "0x5",
+            "effectiveGasPrice": "0x3"}) for height in (12, 15)]
+        outcome = dict(sessionBeforeRefund=pending, afterRefund={"height": "20"},
+            localStateBeforeRefund={"checkpoints": 1, "unbound": 0,
+                "journals": [{"state": "committed", "hasHash": True}]},
+            phaseGuards={"openedSessions": 1, "verifiedWrites": 0, "flushedChunks": 0,
+                         "verifiedChunks": 0, "acknowledgedObligations": 0},
+            resultDurability={"verifiedStages": ["interrupted", "refunded"]})
+        def verify(candidate=after, result=outcome):
+            return workload.verify_browser_v3_refund_economics(before, candidate, session_id=sid,
+                receipts=receipts, issued_stake=100, signers=signers, outcome=result)
+        self.assertEqual(verify(), dict(retained_base_fee_stake=3, refunded_variable_fee_stake=17,
+            issued_stake=100, payer_gas_aatom=30, refunded_sessions=1))
+        mutations = [
+            lambda d: d["payer"].update(stake="980"),
+            lambda d: d["payer"].update(aatom="969"),
+            lambda d: d["bank"]["balances"].update({"provider0:stake": "1001"}),
+            lambda d: d["bank"]["supply"].update(stake="10114"),
+            lambda d: d["retrieval"]["sessions"][sid].update(refunded_slots_mask="0"),
+        ]
+        for mutate in mutations:
+            candidate = copy.deepcopy(after)
+            mutate(candidate)
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                verify(candidate)
+        incomplete = copy.deepcopy(outcome)
+        incomplete["resultDurability"]["verifiedStages"] = ["interrupted"]
+        with self.assertRaises(ValueError):
+            verify(result=incomplete)
 
     def test_browser_phase_report_does_not_add_overlapping_chunks_as_elapsed_time(self):
         events = [dict(phase="transport", chunkId=chunk, edge=edge, atMs=at)
