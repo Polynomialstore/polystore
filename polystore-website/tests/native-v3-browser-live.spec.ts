@@ -13,6 +13,7 @@ const filePath = process.env.E2E_NATIVE_V3_FILE || 'payload.bin'
 const expectedBytes = Number(process.env.E2E_NATIVE_V3_BYTES || 1024)
 const expectedHash = process.env.E2E_NATIVE_V3_SHA256 || ''
 const lcd = process.env.VITE_LCD_BASE || 'http://127.0.0.1:1317'
+const evm = process.env.VITE_EVM_RPC || 'http://127.0.0.1:8545'
 const resultPath = process.env.E2E_NATIVE_V3_RESULT || ''
 
 async function balance(page: Page, address: string, denom: string): Promise<bigint> {
@@ -22,6 +23,18 @@ async function balance(page: Page, address: string, denom: string): Promise<bigi
 }
 
 type JsonObject = Record<string, unknown>
+
+type EvmRpcRequest = { id?: string | number; method?: string; params?: unknown[] }
+
+async function evmRpc(page: Page, method: string, params: unknown[]): Promise<unknown> {
+  const response = await page.request.post(evm, {
+    data: { jsonrpc: '2.0', id: method, method, params },
+  })
+  expect(response.ok()).toBe(true)
+  const body = await response.json() as JsonObject
+  expect(body.error).toBeUndefined()
+  return body.result
+}
 
 async function deal(page: Page): Promise<JsonObject> {
   const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/deals/${dealId}`)
@@ -62,6 +75,55 @@ async function ensureDealIndex(page: Page): Promise<void> {
   await expect(fileMenu).toBeVisible({ timeout: 120_000 })
 }
 
+async function mountDealDetail(page: Page): Promise<void> {
+  await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
+  const mounted = await page.evaluate(async ({ dealId, payer }) => {
+    const modulePath = '/tests/utils/nativeV3DealDetail.tsx'
+    const driver = await import(/* @vite-ignore */ modulePath) as typeof import('./utils/nativeV3DealDetail')
+    await driver.mountNativeV3DealDetail(dealId, payer)
+    return true
+  }, { dealId, payer })
+  expect(mounted).toBe(true)
+  const driver = page.getByTestId('native-v3-live-driver')
+  await expect(driver).toHaveAttribute('data-ready', 'true', { timeout: 120_000 })
+  await expect(driver).toHaveAttribute('data-gateway-url', /http:\/\/(?:127\.0\.0\.1|localhost):(?:8080|18080)$/)
+  await ensureDealIndex(page)
+  const feeCap = page.getByTestId('retrieval-max-total-fee')
+  await expect(feeCap).toBeVisible({ timeout: 120_000 })
+  await feeCap.fill('1000000000')
+  await feeCap.blur()
+}
+
+async function latestNonce(page: Page): Promise<{ found: boolean; nonce: string }> {
+  const response = await page.request.get(
+    `${lcd}/polystorechain/polystorechain/v1/retrieval-sessions-v3/by-owner/${payer}/deals/${dealId}/nonce`,
+  )
+  expect(response.ok()).toBe(true)
+  const body = await response.json() as JsonObject
+  return { found: body.found === true, nonce: String(body.nonce || '0') }
+}
+
+async function unfinishedLocalState(page: Page): Promise<{ checkpoints: number; unbound: number; journals: Array<{ state: string; hasHash: boolean }> }> {
+  return page.evaluate(async ({ dealId, payer }) => {
+    const checkpointsPath = '/src/lib/retrievalV3Checkpoint.ts'
+    const transactionsPath = '/src/lib/retrievalTransactions.ts'
+    const configPath = '/src/config.ts'
+    const checkpoints = await import(/* @vite-ignore */ checkpointsPath) as typeof import('../src/lib/retrievalV3Checkpoint')
+    const transactions = await import(/* @vite-ignore */ transactionsPath) as typeof import('../src/lib/retrievalTransactions')
+    const { appConfig } = await import(/* @vite-ignore */ configPath) as typeof import('../src/config')
+    const store = transactions.browserRetrievalStore()
+    const rows = checkpoints.listRetrievalV3Checkpoints(BigInt(dealId), payer, appConfig.cosmosChainId, store)
+    return {
+      checkpoints: rows.length,
+      unbound: rows.filter(({ state }) => state.session === undefined).length,
+      journals: (store.keys?.('open-v3:') || []).map((key) => {
+        const value = store.get<{ state?: unknown; hash?: unknown }>(key)
+        return { state: String(value?.state || ''), hasHash: typeof value?.hash === 'string' }
+      }),
+    }
+  }, { dealId, payer })
+}
+
 test.describe('native V3 browser qualification', () => {
   test.skip(!enabled, 'requires the owned four-validator browser stack')
   test.use({ acceptDownloads: true })
@@ -69,15 +131,21 @@ test.describe('native V3 browser qualification', () => {
   test('PUBLIC native deal is paid, verified, acknowledged, cached and downloaded by its sponsor', async ({ page }) => {
     const retrievalTimeout = expectedBytes >= 2 ** 30 ? 30 * 60_000 : 10 * 60_000
     test.setTimeout(expectedBytes >= 2 ** 30 ? 75 * 60_000 : 15 * 60_000)
-    expect(dealId).toMatch(/^[1-9][0-9]*$/)
+    expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
     expect(payer).toMatch(/^nil1[0-9a-z]+$/)
     expect(expectedHash).toMatch(/^[0-9a-f]{64}$/)
     const progress = new RetrievalProgress()
     const diagnostics: RetrievalDiagnostic[] = []
     const providerProofOutcomes: unknown[] = []
+    const evmResponseHashes: string[] = []
+    const evmTransactions: JsonObject[] = []
+    const evmReceipts: JsonObject[] = []
     let rawTransactions = 0
     let failure: Error | undefined
-    const summary: Record<string, unknown> = { dealId, payer, filePath, expectedBytes, expectedHash, diagnostics, providerProofOutcomes }
+    const summary: Record<string, unknown> = {
+      dealId, payer, filePath, expectedBytes, expectedHash, diagnostics, providerProofOutcomes,
+      evmResponseHashes, evmTransactions, evmReceipts,
+    }
     let saved: Promise<void> = Promise.resolve()
     const persist = () => {
       if (!resultPath) return
@@ -104,6 +172,15 @@ test.describe('native V3 browser qualification', () => {
         try { if (JSON.parse(request.postData() || '{}').method === 'eth_sendRawTransaction') rawTransactions++ } catch { /* evidence remains countable */ }
       })
       page.on('response', (response: Response) => {
+        if (response.request().method() === 'POST' && response.url().startsWith(evm)) {
+          let request: EvmRpcRequest
+          try { request = JSON.parse(response.request().postData() || '{}') as EvmRpcRequest } catch { request = {} }
+          if (request.method === 'eth_sendRawTransaction' && response.ok()) {
+            void response.json().then((body: JsonObject) => {
+              if (typeof body.result === 'string' && /^0x[0-9a-f]{64}$/i.test(body.result)) evmResponseHashes.push(body.result)
+            }).catch(() => undefined)
+          }
+        }
         if (new URL(response.url()).pathname !== '/gateway/session-proof' || !response.ok()) return
         void response.json().then((body: unknown) => {
           if (!body || typeof body !== 'object') return
@@ -120,29 +197,16 @@ test.describe('native V3 browser qualification', () => {
       expect(policy && typeof policy === 'object' && (policy as JsonObject).mode)
         .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
       progress.enter('deal_detail')
-      await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
-      const mounted = await page.evaluate(async ({ dealId, payer }) => {
-        const modulePath = '/tests/utils/nativeV3DealDetail.tsx'
-        const driver = await import(/* @vite-ignore */ modulePath) as typeof import('./utils/nativeV3DealDetail')
-        await driver.mountNativeV3DealDetail(dealId, payer)
-        return true
-      }, { dealId, payer })
-      expect(mounted).toBe(true)
-      const driver = page.getByTestId('native-v3-live-driver')
-      await expect(driver).toHaveAttribute('data-ready', 'true', { timeout: 120_000 })
-      await expect(driver).toHaveAttribute('data-gateway-url', /http:\/\/(?:127\.0\.0\.1|localhost):(?:8080|18080)$/)
-      await ensureDealIndex(page)
-      const feeCap = page.getByTestId('retrieval-max-total-fee')
-      await expect(feeCap).toBeVisible({ timeout: 120_000 })
-      await feeCap.fill('1000000000')
-      await feeCap.blur()
+      await mountDealDetail(page)
       progress.startRetrieval(retrievalTimeout)
       const button = await openDownload(page)
       const [download] = await Promise.all([page.waitForEvent('download', { timeout: retrievalTimeout }), button.click()])
       const downloaded = await hashDownload(download)
       await download.delete()
       expect(downloaded).toEqual({ bytes: expectedBytes, sha256: expectedHash })
-      const sessionId = diagnostics.map((event) => event.sessionId).find((value): value is string => typeof value === 'string')
+      const openedSessions = diagnostics.filter((event) => event.phase === 'opened_session')
+      expect(openedSessions).toHaveLength(1)
+      const sessionId = openedSessions[0].sessionId
       expect(sessionId).toMatch(/^0x[0-9a-f]{64}$/)
       const session = await sessionById(page, sessionId!)
       expect(session.owner).toBe(payer)
@@ -163,6 +227,20 @@ test.describe('native V3 browser qualification', () => {
       expect(afterPaid.aatom).toBeLessThan(before.aatom)
       expect(afterPaid.deal.escrow_balance).toBe(before.deal.escrow_balance)
       expect(rawTransactions).toBeGreaterThan(0)
+      await expect.poll(() => evmResponseHashes.length).toBe(rawTransactions)
+      for (const hash of evmResponseHashes) {
+        const transaction = await evmRpc(page, 'eth_getTransactionByHash', [hash])
+        const receipt = await evmRpc(page, 'eth_getTransactionReceipt', [hash])
+        expect(transaction && typeof transaction === 'object').toBe(true)
+        expect(receipt && typeof receipt === 'object').toBe(true)
+        const tx = transaction as JsonObject, committed = receipt as JsonObject
+        expect(tx.hash).toBe(hash)
+        expect(committed.transactionHash).toBe(hash)
+        expect(committed.status).toBe('0x1')
+        expect(BigInt(String(committed.blockNumber))).toBeGreaterThan(0n)
+        evmTransactions.push(tx)
+        evmReceipts.push(committed)
+      }
       await expect.poll(() => providerProofOutcomes.length).toBeGreaterThan(0)
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject
@@ -204,4 +282,72 @@ test.describe('native V3 browser qualification', () => {
       await saved
     }
   })
+
+  for (const fault of ['estimate rejected', 'wallet 4001'] as const) {
+    test(`${fault} before payment preserves an unfinished request without spending`, async ({ page }) => {
+      test.setTimeout(5 * 60_000)
+      expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
+      expect(payer).toMatch(/^nil1[0-9a-z]+$/)
+      let estimates = 0, rawTransactions = 0
+      page.on('request', (request) => {
+        if (request.method() !== 'POST' || !request.url().startsWith(evm)) return
+        try {
+          const body = JSON.parse(request.postData() || '{}') as EvmRpcRequest
+          if (body.method === 'eth_estimateGas') estimates++
+          if (body.method === 'eth_sendRawTransaction') rawTransactions++
+        } catch { /* malformed requests cannot count as payment evidence */ }
+      })
+      if (fault === 'estimate rejected') {
+        await page.route(evm, async (route) => {
+          const request = route.request()
+          let body: EvmRpcRequest
+          try { body = JSON.parse(request.postData() || '{}') as EvmRpcRequest } catch { return route.continue() }
+          if (body.method !== 'eth_estimateGas') return route.continue()
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              jsonrpc: '2.0', id: body.id,
+              error: { code: -32000, message: 'qualification estimate rejection' },
+            }),
+          })
+        })
+      }
+      const before = {
+        stake: await balance(page, payer, 'stake'),
+        aatom: await balance(page, payer, 'aatom'),
+        nonce: await latestNonce(page),
+      }
+      await mountDealDetail(page)
+      if (fault === 'wallet 4001') {
+        await page.evaluate(() => {
+          const provider = (window as unknown as {
+            ethereum: { request: (args: { method: string; params?: unknown }) => Promise<unknown> }
+          }).ethereum
+          const original = provider.request.bind(provider)
+          let reject = true
+          provider.request = async (args) => {
+            if (reject && args.method === 'eth_sendTransaction') {
+              reject = false
+              throw Object.assign(new Error('qualification wallet rejection'), { code: 4001 })
+            }
+            return original(args)
+          }
+        })
+      }
+      const button = await openDownload(page)
+      await button.click()
+      await expect(page.locator('div').filter({ hasText: /^Download failed:/ }).first()).toBeVisible({ timeout: 120_000 })
+      expect(estimates).toBeGreaterThan(0)
+      expect(rawTransactions).toBe(0)
+      expect(await balance(page, payer, 'stake')).toBe(before.stake)
+      expect(await balance(page, payer, 'aatom')).toBe(before.aatom)
+      expect(await latestNonce(page)).toEqual(before.nonce)
+      await expect.poll(() => unfinishedLocalState(page)).toEqual({
+        checkpoints: 1,
+        unbound: 1,
+        journals: fault === 'wallet 4001' ? [{ state: 'prepared', hasHash: false }] : [],
+      })
+    })
+  }
 })
