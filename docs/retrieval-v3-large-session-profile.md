@@ -4,8 +4,9 @@ Status: **contract reviewed; implementation partial and disabled by default**.
 This document fixes the wire-independent protocol choices for issue #291. The
 shared primitives, native generation admission, owner/sponsored session opening,
 sampled proof submission, provider data delivery, per-provider ACK/settlement
-and expiry refunds are implemented. Browser client integration, EVM parity and
-end-to-end activation qualification remain incomplete.
+and expiry refunds are implemented. The EVM precompile exposes the same eight
+native v3 actions. Browser orchestration and end-to-end activation qualification
+remain incomplete.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -752,17 +753,17 @@ allocs/op. This small-fixture check covers index construction and the hot
 verification/allocation boundary; it is not a retrieval-throughput result.
 
 These routes remain unavailable on networks where retrieval v3 activation is
-zero. Browser client and EVM integration are still incomplete, so this
-provider-daemon slice alone does not satisfy the activation gate.
+zero. Browser orchestration is still incomplete, so the provider-daemon and EVM
+adapter slices alone do not satisfy the activation gate.
 
 The authenticated provider-daemon action is `POST /sp/generation-v3/accept`
 with `{"deal_id":0}` and the existing `X-PolyStore-Gateway-Auth` header. An
 optional `provider` must equal the daemon's actual signing address. The action
 queries the proposed generation and derives the provider slot; callers do not
-supply acceptance roots or digests. Owner proposal/finalization remain native
-CLI actions. Acceptance uses the same signer coordination and durable pending
-transaction state as normal audits; an uncertain broadcast requires
-reconciliation before further signing.
+supply acceptance roots or digests. Owners may propose and finalize through the
+native CLI or the EVM adapter. Acceptance uses the same signer coordination and
+durable pending transaction state as normal audits; an uncertain broadcast
+requires reconciliation before further signing.
 
 ## Provider-daemon sampled proof action
 
@@ -786,3 +787,25 @@ remains blocked unless the exact operation's accepted effects establish its
 outcome. A recovered transaction is not evidence that a different requested
 session is complete; callers must query current session state before deciding
 whether more proofs or a delivery acknowledgement are required.
+
+## EVM adapter
+
+The existing PolyStore precompile exposes `proposeDealGenerationV3`,
+`acceptDealGenerationV3`, `finalizeDealGenerationV3`,
+`openRetrievalSessionV3`, `openRetrievalSessionV3Sponsored`,
+`submitRetrievalSessionProofV3`, `acknowledgeRetrievalObligationV3` and
+`refundRetrievalSessionV3`. The EVM caller maps directly to the native message
+creator. In particular, the sponsored-open caller funds the request and each
+provider action remains subject to the native frozen-provider authority check.
+All methods are nonpayable; attached EVM value is rejected before native state
+changes.
+
+Successful owner and sponsored opens emit
+`RetrievalSessionV3Opened(uint64 indexed dealId, address indexed requester,
+bytes32 sessionId)`. The session ID is copied from the native response, including
+an exact idempotent nonce replay. Receipts do not contain the full frozen plan or
+payment state; clients must query the authoritative native session by this ID.
+The adapter uses the existing native-action journal, proof pricing and block
+limits, so EVM revert and out-of-gas roll back generation, session, voucher,
+funding, retention and event effects together. This ABI parity does not enable
+v3 on a deployed network and does not complete browser retrieval orchestration.

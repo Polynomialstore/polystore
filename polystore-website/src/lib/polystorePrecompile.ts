@@ -272,6 +272,439 @@ export const POLYSTORE_PRECOMPILE_ABI = [
     outputs: [{ name: 'ok', type: 'bool' }],
   },
   {
+    type: 'function',
+    name: 'proposeDealGenerationV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+      },
+      {
+        name: 'previousPolyfsRoot',
+        type: 'bytes',
+      },
+      {
+        name: 'polyfsRoot',
+        type: 'bytes',
+      },
+      {
+        name: 'integrityRoot',
+        type: 'bytes',
+      },
+      {
+        name: 'size',
+        type: 'uint64',
+      },
+      {
+        name: 'totalMdus',
+        type: 'uint64',
+      },
+      {
+        name: 'witnessMdus',
+        type: 'uint64',
+      },
+      {
+        name: 'integrityLeafCount',
+        type: 'uint64',
+      },
+      {
+        name: 'expectedCurrentGeneration',
+        type: 'uint64',
+      },
+    ],
+    outputs: [
+      {
+        name: 'generation',
+        type: 'uint64',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'acceptDealGenerationV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+      },
+      {
+        name: 'slot',
+        type: 'uint32',
+      },
+      {
+        name: 'acceptanceDigest',
+        type: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'accepted',
+        type: 'bool',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'finalizeDealGenerationV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+      },
+      {
+        name: 'generation',
+        type: 'uint64',
+      },
+      {
+        name: 'polyfsRoot',
+        type: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'success',
+        type: 'bool',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'openRetrievalSessionV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+      },
+      {
+        name: 'generation',
+        type: 'uint64',
+      },
+      {
+        name: 'range',
+        type: 'tuple',
+        components: [
+          {
+            name: 'fileRecordIndex',
+            type: 'uint32',
+          },
+          {
+            name: 'fileStartOffset',
+            type: 'uint64',
+          },
+          {
+            name: 'fileLength',
+            type: 'uint64',
+          },
+          {
+            name: 'rangeStart',
+            type: 'uint64',
+          },
+          {
+            name: 'rangeLength',
+            type: 'uint64',
+          },
+        ],
+      },
+      {
+        name: 'nonce',
+        type: 'uint64',
+      },
+      {
+        name: 'deadlineHeight',
+        type: 'uint64',
+      },
+    ],
+    outputs: [
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+      },
+      {
+        name: 'logicalRequestedBytes',
+        type: 'uint64',
+      },
+      {
+        name: 'billedEncodedBytes',
+        type: 'uint64',
+      },
+      {
+        name: 'sampleCount',
+        type: 'uint64',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'openRetrievalSessionV3Sponsored',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+      },
+      {
+        name: 'generation',
+        type: 'uint64',
+      },
+      {
+        name: 'range',
+        type: 'tuple',
+        components: [
+          {
+            name: 'fileRecordIndex',
+            type: 'uint32',
+          },
+          {
+            name: 'fileStartOffset',
+            type: 'uint64',
+          },
+          {
+            name: 'fileLength',
+            type: 'uint64',
+          },
+          {
+            name: 'rangeStart',
+            type: 'uint64',
+          },
+          {
+            name: 'rangeLength',
+            type: 'uint64',
+          },
+        ],
+      },
+      {
+        name: 'nonce',
+        type: 'uint64',
+      },
+      {
+        name: 'deadlineHeight',
+        type: 'uint64',
+      },
+      {
+        name: 'maxTotalFee',
+        type: 'uint256',
+      },
+      {
+        name: 'authType',
+        type: 'uint8',
+      },
+      {
+        name: 'allowlistLeafIndex',
+        type: 'uint32',
+      },
+      {
+        name: 'allowlistMerklePath',
+        type: 'bytes32[]',
+      },
+      {
+        name: 'voucherRedeemer',
+        type: 'string',
+      },
+      {
+        name: 'voucherManifestRoot',
+        type: 'bytes',
+      },
+      {
+        name: 'voucherProvider',
+        type: 'string',
+      },
+      {
+        name: 'voucherStartMduIndex',
+        type: 'uint64',
+      },
+      {
+        name: 'voucherStartBlobIndex',
+        type: 'uint32',
+      },
+      {
+        name: 'voucherBlobCount',
+        type: 'uint64',
+      },
+      {
+        name: 'voucherExpiresAt',
+        type: 'uint64',
+      },
+      {
+        name: 'voucherNonce',
+        type: 'uint64',
+      },
+      {
+        name: 'voucherSignature',
+        type: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+      },
+      {
+        name: 'logicalRequestedBytes',
+        type: 'uint64',
+      },
+      {
+        name: 'billedEncodedBytes',
+        type: 'uint64',
+      },
+      {
+        name: 'sampleCount',
+        type: 'uint64',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'submitRetrievalSessionProofV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+      },
+      {
+        name: 'slot',
+        type: 'uint32',
+      },
+      {
+        name: 'proofs',
+        type: 'tuple[]',
+        components: [
+          {
+            name: 'ordinal',
+            type: 'uint64',
+          },
+          {
+            name: 'proof',
+            type: 'tuple',
+            components: [
+              {
+                name: 'mduIndex',
+                type: 'uint64',
+              },
+              {
+                name: 'mduRootFr',
+                type: 'bytes',
+              },
+              {
+                name: 'manifestOpening',
+                type: 'bytes',
+              },
+              {
+                name: 'rootTableDuCommitment',
+                type: 'bytes',
+              },
+              {
+                name: 'rootTableDuMerklePath',
+                type: 'bytes[]',
+              },
+              {
+                name: 'blobCommitment',
+                type: 'bytes',
+              },
+              {
+                name: 'merklePath',
+                type: 'bytes[]',
+              },
+              {
+                name: 'blobIndex',
+                type: 'uint32',
+              },
+              {
+                name: 'zValue',
+                type: 'bytes',
+              },
+              {
+                name: 'yValue',
+                type: 'bytes',
+              },
+              {
+                name: 'kzgOpeningProof',
+                type: 'bytes',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: 'newlyAccepted',
+        type: 'uint32',
+      },
+      {
+        name: 'settled',
+        type: 'bool',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'acknowledgeRetrievalObligationV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+      },
+      {
+        name: 'slot',
+        type: 'uint32',
+      },
+      {
+        name: 'ackDigest',
+        type: 'bytes',
+      },
+    ],
+    outputs: [
+      {
+        name: 'settled',
+        type: 'bool',
+      },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'refundRetrievalSessionV3',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+      },
+    ],
+    outputs: [
+      {
+        name: 'refunded',
+        type: 'bool',
+      },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'RetrievalSessionV3Opened',
+    inputs: [
+      {
+        name: 'dealId',
+        type: 'uint64',
+        indexed: true,
+      },
+      {
+        name: 'requester',
+        type: 'address',
+        indexed: true,
+      },
+      {
+        name: 'sessionId',
+        type: 'bytes32',
+        indexed: false,
+      },
+    ],
+  },
+  {
     type: 'event',
     name: 'DealCreated',
     inputs: [
@@ -348,6 +781,38 @@ export type SponsoredRetrievalSessionInput = RetrievalSessionInput & {
   allowlistMerklePath: Hex[]
   voucherRedeemer: string
   voucherProvider: string
+  voucherExpiresAt: bigint
+  voucherNonce: bigint
+  voucherSignature: Hex
+}
+
+export type RetrievalRangeV3Input = {
+  fileRecordIndex: number
+  fileStartOffset: bigint
+  fileLength: bigint
+  rangeStart: bigint
+  rangeLength: bigint
+}
+
+export type RetrievalSessionV3Input = {
+  dealId: bigint
+  generation: bigint
+  range: RetrievalRangeV3Input
+  nonce: bigint
+  deadlineHeight: bigint
+}
+
+export type SponsoredRetrievalSessionV3Input = RetrievalSessionV3Input & {
+  maxTotalFee: bigint
+  authType: number
+  allowlistLeafIndex: number
+  allowlistMerklePath: Hex[]
+  voucherRedeemer: string
+  voucherManifestRoot: Hex
+  voucherProvider: string
+  voucherStartMduIndex: bigint
+  voucherStartBlobIndex: number
+  voucherBlobCount: bigint
   voucherExpiresAt: bigint
   voucherNonce: bigint
   voucherSignature: Hex
