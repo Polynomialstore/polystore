@@ -753,10 +753,12 @@ test.describe('native V3 browser qualification', () => {
       await reopened.route('**/gateway/mdu/**', abortRetryMdu)
       await reopened.route('**/sp/retrieval/mdu/**', abortRetryMdu)
       await mountDealDetail(reopened, false)
-      const recoveryRow = reopened.getByTestId('deal-detail-file-row').filter({
-        has: reopened.getByTestId('v3-frozen-recovery').filter({ hasText: 'Paid recovery' }),
-      })
-      await expect(recoveryRow).toHaveCount(1)
+      const recoveryRow = reopened.getByTestId('native-v3-live-driver').locator(
+        `[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`,
+      )
+      await expect(recoveryRow).toHaveCount(1, { timeout: 120_000 })
+      await expect(recoveryRow.getByTestId('v3-frozen-recovery')).toHaveCount(0)
+      await expect.poll(() => unfinishedLocalState(reopened)).toEqual(localStateBeforeRefund)
       const retryMduRequestsBeforeRefund = retryMduRequests
       const recoveryButton = recoveryRow.getByTestId('deal-detail-download')
       await expect(recoveryButton).toBeVisible({ timeout: 120_000 })
