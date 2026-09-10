@@ -75,7 +75,7 @@ async function ensureDealIndex(page: Page): Promise<void> {
   await expect(fileMenu).toBeVisible({ timeout: 120_000 })
 }
 
-async function mountDealDetail(page: Page): Promise<void> {
+async function mountDealDetail(page: Page, prepareRetrieval = true): Promise<string> {
   await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
   const mounted = await page.evaluate(async ({ dealId, payer }) => {
     const modulePath = '/tests/utils/nativeV3DealDetail.tsx'
@@ -87,11 +87,16 @@ async function mountDealDetail(page: Page): Promise<void> {
   const driver = page.getByTestId('native-v3-live-driver')
   await expect(driver).toHaveAttribute('data-ready', 'true', { timeout: 120_000 })
   await expect(driver).toHaveAttribute('data-gateway-url', /http:\/\/(?:127\.0\.0\.1|localhost):(?:8080|18080)$/)
-  await ensureDealIndex(page)
-  const feeCap = page.getByTestId('retrieval-max-total-fee')
-  await expect(feeCap).toBeVisible({ timeout: 120_000 })
-  await feeCap.fill('1000000000')
-  await feeCap.blur()
+  const gatewayUrl = await driver.getAttribute('data-gateway-url')
+  if (!gatewayUrl) throw new Error('native V3 gateway URL unavailable')
+  if (prepareRetrieval) {
+    await ensureDealIndex(page)
+    const feeCap = page.getByTestId('retrieval-max-total-fee')
+    await expect(feeCap).toBeVisible({ timeout: 120_000 })
+    await feeCap.fill('1000000000')
+    await feeCap.blur()
+  }
+  return gatewayUrl
 }
 
 async function latestNonce(page: Page): Promise<{ found: boolean; nonce: string }> {
@@ -140,6 +145,9 @@ test.describe('native V3 browser qualification', () => {
     const evmResponseHashes: string[] = []
     const evmTransactions: JsonObject[] = []
     const evmReceipts: JsonObject[] = []
+    const gatewayMduResponses: Array<{ url: string; kind: 'metadata' | 'data'; bodyBytes: number }> = []
+    const directSpMduRequests: string[] = []
+    const retrievalResponseTasks: Promise<void>[] = []
     let rawTransactions = 0
     let failure: Error | undefined
     const summary: Record<string, unknown> = {
@@ -168,10 +176,24 @@ test.describe('native V3 browser qualification', () => {
         scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3Diagnostic(event) }
       })
       page.on('request', (request) => {
+        if (/^\/sp\/retrieval\/mdu\/[^/]+\/[^/]+$/.test(new URL(request.url()).pathname)) {
+          directSpMduRequests.push(request.url())
+        }
         if (request.method() !== 'POST') return
         try { if (JSON.parse(request.postData() || '{}').method === 'eth_sendRawTransaction') rawTransactions++ } catch { /* evidence remains countable */ }
       })
       page.on('response', (response: Response) => {
+        const responseUrl = new URL(response.url())
+        const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(responseUrl.pathname)
+        if (response.ok() && gatewayMdu) {
+          retrievalResponseTasks.push(response.body().then((body) => {
+            gatewayMduResponses.push({
+              url: response.url(),
+              kind: responseUrl.searchParams.has('committed_height') ? 'metadata' : 'data',
+              bodyBytes: body.byteLength,
+            })
+          }))
+        }
         if (response.request().method() === 'POST' && response.url().startsWith(evm)) {
           let request: EvmRpcRequest
           try { request = JSON.parse(response.request().postData() || '{}') as EvmRpcRequest } catch { request = {} }
@@ -197,7 +219,7 @@ test.describe('native V3 browser qualification', () => {
       expect(policy && typeof policy === 'object' && (policy as JsonObject).mode)
         .toBe('RETRIEVAL_POLICY_MODE_PUBLIC')
       progress.enter('deal_detail')
-      await mountDealDetail(page)
+      const gatewayUrl = await mountDealDetail(page)
       progress.startRetrieval(retrievalTimeout)
       const button = await openDownload(page)
       const [download] = await Promise.all([page.waitForEvent('download', { timeout: retrievalTimeout }), button.click()])
@@ -263,7 +285,26 @@ test.describe('native V3 browser qualification', () => {
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'start')).toBe(true)
         expect(diagnostics.some((event) => event.phase === phase && event.edge === 'end')).toBe(true)
       }
-      Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid })
+      await Promise.all(retrievalResponseTasks)
+      const metadataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'metadata')
+      const dataResponses = gatewayMduResponses.filter(({ kind }) => kind === 'data')
+      expect(metadataResponses.length).toBeGreaterThan(0)
+      expect(dataResponses.length).toBeGreaterThan(0)
+      expect(gatewayMduResponses.every(({ url }) => url.startsWith(`${gatewayUrl}/gateway/mdu/`))).toBe(true)
+      expect(gatewayMduResponses.every(({ bodyBytes }) => bodyBytes > 0)).toBe(true)
+      expect(directSpMduRequests).toHaveLength(0)
+      const retrievalHttp = {
+        gateway: {
+          metadata: { count: metadataResponses.length,
+            bodyBytes: metadataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
+            urls: metadataResponses.map(({ url }) => url) },
+          data: { count: dataResponses.length,
+            bodyBytes: dataResponses.reduce((sum, row) => sum + row.bodyBytes, 0),
+            urls: dataResponses.map(({ url }) => url) },
+        },
+        directSpMdu: { count: 0, bodyBytes: 0, urls: [] as string[] },
+      }
+      Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid, retrievalHttp })
       const paidTransactions = rawTransactions
       const cacheButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
       const [cachedDownload] = await Promise.all([
@@ -290,7 +331,8 @@ test.describe('native V3 browser qualification', () => {
       expect(dealId).toMatch(/^(?:0|[1-9][0-9]*)$/)
       expect(payer).toMatch(/^nil1[0-9a-z]+$/)
       let estimates = 0, rawTransactions = 0
-      page.on('request', (request) => {
+      const context = page.context()
+      context.on('request', (request) => {
         if (request.method() !== 'POST' || !request.url().startsWith(evm)) return
         try {
           const body = JSON.parse(request.postData() || '{}') as EvmRpcRequest
@@ -355,6 +397,27 @@ test.describe('native V3 browser qualification', () => {
         journals: fault === 'wallet 4001' ? [{ state: 'prepared', hasHash: false }] : [],
       })
       const localState = await unfinishedLocalState(page)
+      await page.close()
+      const reopened = await context.newPage()
+      await mountDealDetail(reopened, false)
+      await expect.poll(() => unfinishedLocalState(reopened)).toEqual(localState)
+      const discard = reopened.locator(
+        `[data-testid="deal-detail-discard-unbound-v3"][data-file-path="${filePath}"]`,
+      )
+      await expect(discard).toBeVisible({ timeout: 120_000 })
+      await discard.click()
+      const clearedState = { checkpoints: 0, unbound: 0, journals: [] }
+      await expect.poll(() => unfinishedLocalState(reopened)).toEqual(clearedState)
+      await expect(discard).toHaveCount(0)
+      const afterDiscard = {
+        stake: await balance(reopened, payer, 'stake'),
+        aatom: await balance(reopened, payer, 'aatom'),
+        nonce: await latestNonce(reopened),
+      }
+      expect(afterDiscard.stake).toBe(before.stake)
+      expect(afterDiscard.aatom).toBe(before.aatom)
+      expect(afterDiscard.nonce).toEqual(before.nonce)
+      expect(rawTransactions).toBe(0)
       if (resultPath) {
         const result = JSON.parse(await fs.readFile(resultPath, 'utf8')) as JsonObject
         expect(result.success).toBe(true)
@@ -362,7 +425,9 @@ test.describe('native V3 browser qualification', () => {
           ? result.prepayOutcomes as JsonObject : {}
         outcomes[fault] = {
           estimates, rawTransactions, before: { ...before, stake: String(before.stake), aatom: String(before.aatom) },
-          after: { ...after, stake: String(after.stake), aatom: String(after.aatom) }, localState,
+          after: { ...after, stake: String(after.stake), aatom: String(after.aatom) },
+          localState, survivedReopen: true, clearedState,
+          afterDiscard: { ...afterDiscard, stake: String(afterDiscard.stake), aatom: String(afterDiscard.aatom) },
         }
         result.prepayOutcomes = outcomes
         const temporary = `${resultPath}.${fault.replace(/ /g, '-')}.tmp`
