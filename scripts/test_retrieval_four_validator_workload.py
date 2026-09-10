@@ -1010,6 +1010,59 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(window["proof_phase_end_height"], 299)
         self.assertIn("crossed-audit completion", window["scope"])
 
+    def test_cross_audit_start_fence_follows_metrics_and_target_wait(self):
+        events = []
+        lifecycle = SimpleNamespace()
+
+        def capture(*args, **kwargs):
+            events.append("metrics-before")
+
+        def wait_height(minimum):
+            events.append(f"wait-{minimum}")
+            return 271 if minimum == 271 else 272
+
+        def cpu_snapshot(*args):
+            events.append("cpu-before")
+            return {"monotonic_ns": 10, "validators": []}
+
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        with patch.object(workload, "capture_workload_metrics", side_effect=capture), \
+                patch.object(workload, "validator_cpu_snapshot", side_effect=cpu_snapshot):
+            before, height = workload.open_cross_audit_measurement(lifecycle, 271)
+        self.assertEqual((before["monotonic_ns"], height), (10, 272))
+        self.assertEqual(events, ["metrics-before", "wait-271", "cpu-before", "wait-1"])
+
+        lifecycle.wait_height = Mock(side_effect=[271, 273])
+        with patch.object(workload, "capture_workload_metrics"), \
+                patch.object(workload, "validator_cpu_snapshot", return_value=before), \
+                self.assertRaisesRegex(ValueError, "fixed anchor alignment"):
+            workload.open_cross_audit_measurement(lifecycle, 271)
+
+    def test_cross_audit_receipt_fence_uses_provider_rpc_tip(self):
+        node = {"node": "unused", "node_id": "provider-rpc"}
+        status = {"node_info": {"id": "provider-rpc", "network": "chain"},
+                  "sync_info": {"latest_block_height": "219"}}
+
+        def wait_height(minimum):
+            # The old wait_height(1) cutoff could observe the lagging tip 218.
+            return 218 if minimum == 1 else minimum
+
+        lifecycle = SimpleNamespace(nodes=[node], chain="chain", query=Mock(return_value=status),
+                                    wait_height=Mock(side_effect=wait_height))
+        fence = workload.fence_v3_http_receipts(lifecycle)
+        self.assertEqual(fence, {"provider_rpc_node_id": "provider-rpc",
+            "provider_rpc_observed_height": 219, "all_validator_height": 219})
+        lifecycle.wait_height.assert_called_once_with(219)
+        self.assertEqual(workload.validate_v3_http_receipt_fence(
+            [{"height": "217"}, {"height": 219}], fence), 219)
+        with self.assertRaisesRegex(ValueError, "outside its fenced phase"):
+            workload.validate_v3_http_receipt_fence([{"height": "220"}], fence)
+
+        lifecycle.query.return_value = copy.deepcopy(status)
+        lifecycle.query.return_value["node_info"]["id"] = "other-node"
+        with self.assertRaisesRegex(ValueError, "different node or chain"):
+            workload.fence_v3_http_receipts(lifecycle)
+
     def test_cross_audit_cpu_fence_is_not_closed_after_audit_failure(self):
         lifecycle = SimpleNamespace(doc={"native_v3_cross_audit": {}})
         with patch.object(workload, "wait_for_crossed_audits", side_effect=TimeoutError("delayed audit")), \

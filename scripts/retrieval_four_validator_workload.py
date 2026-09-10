@@ -864,6 +864,45 @@ def wait_for_crossed_audits(lifecycle, audits, epoch_length, expected_epoch, dea
     raise TimeoutError("crossed audit coverage did not complete within 30 seconds: " + str(last_error))
 
 
+def open_cross_audit_measurement(lifecycle, target_height):
+    """Capture the expensive metric boundary before the exact schedule-start fence."""
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
+    lifecycle.wait_height(target_height)
+    before_cpu = validator_cpu_snapshot(lifecycle)
+    scheduled_start_height = lifecycle.wait_height(1)
+    if scheduled_start_height > target_height + 1:
+        raise ValueError("cross-audit start moved beyond its fixed anchor alignment")
+    return before_cpu, scheduled_start_height
+
+
+def fence_v3_http_receipts(lifecycle):
+    """Fence all validators to the provider RPC's committed tip after HTTP completion."""
+    node = lifecycle.nodes[0]
+    status = lifecycle.query(node, "/status")
+    if (status.get("node_info", {}).get("id") != node["node_id"] or
+            status.get("node_info", {}).get("network") != lifecycle.chain):
+        raise ValueError("provider RPC status belongs to a different node or chain")
+    observed = producer.uint(status.get("sync_info", {}).get("latest_block_height", 0))
+    if observed < 1:
+        raise ValueError("provider RPC status has no committed height")
+    fenced = lifecycle.wait_height(observed)
+    if fenced < observed:
+        raise ValueError("all-validator proof receipt fence did not reach the provider RPC tip")
+    return dict(provider_rpc_node_id=node["node_id"], provider_rpc_observed_height=observed,
+                all_validator_height=fenced)
+
+
+def validate_v3_http_receipt_fence(transactions, fence):
+    """Bind decoded provider receipts to the post-HTTP committed-height cutoff."""
+    if not transactions:
+        raise ValueError("provider HTTP phase has no committed receipts")
+    heights = [producer.uint(row.get("height", 0)) for row in transactions]
+    maximum = max(heights)
+    if min(heights) < 1 or maximum > producer.uint(fence.get("provider_rpc_observed_height", 0)):
+        raise ValueError("provider HTTP receipt committed outside its fenced phase")
+    return maximum
+
+
 def close_cross_audit_measurement(lifecycle, audits, epoch_length, expected_epoch,
                                   deadline_height, before_cpu, measured_end_height):
     """Close the CPU fence only after the crossed audit is complete on all validators."""
@@ -960,10 +999,6 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
             raise ValueError("prepared cross-audit session changed before timing")
     if lifecycle.wait_height(1) > target_height:
         raise ValueError("cross-audit preflight missed its fixed start alignment")
-    wait(target_height)
-    scheduled_start_height = lifecycle.wait_height(1)
-    if scheduled_start_height > target_height + 1:
-        raise ValueError("cross-audit start moved beyond its fixed anchor alignment")
     schedule = native_v3_cross_audit_schedule()
     requests = []
     for item in schedule:
@@ -972,14 +1007,14 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
             provider=providers[item["slot"]],
             url=provider_http_url(lifecycle, providers[item["slot"]], "/sp/session-proof"),
             body=dict(session_id=session["session_id"])))
+    before_cpu, scheduled_start_height = open_cross_audit_measurement(lifecycle, target_height)
     doc["measurement_preconditions"] = dict(evidence_height=evidence_height, ready_height=ready_height,
         ready_epoch=ready_epoch, next_anchor=next_anchor, target_height=target_height,
         scheduled_start_height=scheduled_start_height,
         session_deadline=deadline_height, audits=current_audits, provider_quiescence=quiescence)
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
-    before_cpu = validator_cpu_snapshot(lifecycle)
     outcomes = run_v3_http_schedule(lifecycle, curl, requests, "cross-audit-measured")
-    measured_end_height = lifecycle.wait_height(1)
+    receipt_fence = doc["proof_receipt_fence"] = fence_v3_http_receipts(lifecycle)
+    measured_end_height = receipt_fence["provider_rpc_observed_height"]
     crossed = close_cross_audit_measurement(lifecycle, audits, epoch_length, ready_epoch + 1,
         deadline_height, before_cpu, measured_end_height)
     grouped = {index: [] for index in range(1, V3_CROSS_AUDIT_SESSIONS)}
@@ -995,12 +1030,14 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
                 session_id=session["session_id"], proof_count=producer.uint(outcome["proof_count"]))
             tx.update(provider=outcome["provider"], operation_id=outcome["request_id"],
                       session_index=session_index)
-            if tx["outcome"] != "committed_success" or producer.uint(tx["height"]) > measured_end_height:
+            if tx["outcome"] != "committed_success":
                 raise ValueError("measured provider outcome is not a committed in-window success")
             transactions.append(tx)
         lifecycle.save()
     if len(transactions) != V3_CROSS_AUDIT_MEASURED:
         raise ValueError("measured provider phase omitted a proof transaction")
+    doc["measured_window"]["proof_receipt_max_height"] = validate_v3_http_receipt_fence(
+        transactions, receipt_fence)
     lifecycle.save()
     post_quiescence = require_provider_quiescence(lifecycle, providers)
     final_height = post_quiescence["second_height"]
