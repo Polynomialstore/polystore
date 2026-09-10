@@ -538,8 +538,13 @@ def _run_v3_http_request(lifecycle, curl, request, phase, index, directory,
             if result.returncode != 0:
                 return attempts, ValueError(
                     f"v3 HTTP request for provider {request['provider']!r} exited {result.returncode}")
+            error = body.get("error")
+            generation_busy = (
+                urllib.parse.urlsplit(request["url"]).path == "/sp/generation-v3/accept" and
+                error in {"provider signer busy",
+                          "provider signer busy after generation verification"})
             busy = (code == 429 and set(body) == {"error", "hint"} and
-                    body.get("error") == "retrieval submission busy" and
+                    (error == "retrieval submission busy" or generation_busy) and
                     body.get("hint") == "retrieval submission capacity or signer busy")
             if not retry_pre_admission_busy or not busy:
                 return attempts, None
@@ -1882,7 +1887,8 @@ def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send,
                      url=provider_http_url(lifecycle, providers[slot], "/sp/generation-v3/accept"),
                      body=dict(deal_id=producer.uint(deal_id), provider=providers[slot]))
                 for slot in range(12)]
-    outcomes = run_v3_http_phase(lifecycle, curl, requests, http_phase, max_in_flight=12)
+    outcomes = run_v3_http_phase(lifecycle, curl, requests, http_phase, max_in_flight=12,
+                                 retry_pre_admission_busy=True)
     seen, transactions = set(), []
     for outcome in outcomes:
         slot = producer.uint(outcome.get("slot", 99))
@@ -1891,7 +1897,13 @@ def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send,
                 outcome.get("http_status") != 200 or outcome.get("curl_returncode") != 0 or
                 slot >= 12 or providers.get(slot) != outcome["provider"] or
                 slot in seen or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash)):
-            raise ValueError("provider generation acceptance was not a unique committed success")
+            raise ValueError(
+                "provider generation acceptance was not a unique committed success: "
+                f"provider={str(outcome.get('provider'))[:128]!r} "
+                f"slot={str(outcome.get('slot'))[:32]!r} "
+                f"http_status={str(outcome.get('http_status'))[:32]!r} "
+                f"status={str(outcome.get('status'))[:128]!r} "
+                f"error={str(outcome.get('error'))[:256]!r}")
         seen.add(slot)
         tx = committed_v3_http_tx(lifecycle, outcome, kind="generation-acceptance",
                                   creator=outcome["provider"], slot=slot, deal_id=deal_id)

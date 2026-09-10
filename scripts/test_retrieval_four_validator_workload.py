@@ -1321,6 +1321,77 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertLessEqual(retained[1]["request_started_ns"],
                                  retained[1]["request_finished_ns"])
 
+    def test_generation_acceptance_retries_only_exact_prebroadcast_signer_busy(self):
+        hint = "retrieval submission capacity or signer busy"
+
+        def run_case(tmp, route, response):
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(provider="provider-a", url="http://provider" + route,
+                             body={"deal_id": 7, "provider": "provider-a"})]
+            calls = 0
+            def run(argv, deadline, env):
+                nonlocal calls
+                calls += 1
+                body, status = response(calls)
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                outcomes = workload.run_v3_http_phase(lifecycle, "/curl", requests,
+                    "generation-busy", max_in_flight=1, retry_pre_admission_busy=True)
+            return calls, lifecycle.doc["v3_http_phases"]["generation-busy"], outcomes
+
+        for error in ("provider signer busy", "provider signer busy after generation verification"):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as tmp:
+                def busy_then_success(attempt, error=error):
+                    if attempt == 1:
+                        return {"error": error, "hint": hint}, 429
+                    return {"status": "success"}, 200
+                calls, retained, outcomes = run_case(tmp, "/sp/generation-v3/accept", busy_then_success)
+                self.assertEqual((calls, len(retained), outcomes[0]["status"]), (2, 2, "success"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            calls, retained, outcomes = run_case(tmp, "/sp/generation-v3/accept",
+                lambda attempt: ({"error": "provider signer busy", "hint": hint}, 429))
+            self.assertEqual((calls, len(retained), outcomes[0]["http_status"], outcomes[0]["attempt"]),
+                             (workload.V3_BUSY_MAX_ATTEMPTS, workload.V3_BUSY_MAX_ATTEMPTS, 429,
+                              workload.V3_BUSY_MAX_ATTEMPTS))
+
+        rejected = [
+            ("/sp/session-proof", {"error": "provider signer busy", "hint": hint}),
+            ("/sp/generation-v3/accept",
+             {"error": "provider signer busy", "hint": hint, "tx_hash": "A" * 64}),
+        ]
+        for route, body in rejected:
+            with self.subTest(route=route, keys=sorted(body)), tempfile.TemporaryDirectory() as tmp:
+                calls, retained, outcomes = run_case(tmp, route, lambda attempt, body=body: (body, 429))
+                self.assertEqual((calls, len(retained), outcomes[0]["http_status"]), (1, 1, 429))
+
+    def test_generation_admission_enables_busy_retry_and_reports_terminal_outcome(self):
+        candidate = dict(deal_id="7", expected_current_generation="0",
+            previous_polyfs_root="", polyfs_root="0x" + self.ROOT,
+            integrity_root="0x" + self.INTEGRITY, size_bytes=str(workload.V3_PILOT_BYTES),
+            total_mdus="5", witness_mdus="1", integrity_leaf_count="288",
+            commit_action="propose-deal-generation-v3", required_acceptances="12")
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        lifecycle = SimpleNamespace(signers={"owner0": AUDIT_ADDRESSES[8]}, nodes=[{}],
+            wait_height=Mock(), doc={"providers": [
+                {"address": provider, "port": 19091 + slot}
+                for slot, provider in providers.items()]})
+        terminal = dict(provider=providers[0], http_status=429, status=None,
+                        error="provider signer busy", hint="retrieval submission capacity or signer busy")
+        phase = Mock(return_value=[terminal])
+        with patch.object(workload, "verify_transaction_nodes", return_value=[]), \
+             patch.object(workload, "run_v3_http_phase", phase), \
+             self.assertRaisesRegex(ValueError,
+                 "provider=.*http_status='429'.*status='None'.*provider signer busy"):
+            workload.admit_native_v3_generation(lifecycle,
+                uploaded={"generation_candidate": candidate}, deal_id="7", providers=providers,
+                send=Mock(return_value={"height": 10}), curl="/curl")
+        self.assertTrue(phase.call_args.kwargs["retry_pre_admission_busy"])
+
     def test_native_v3_provider_routes_use_gateway_auth_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
