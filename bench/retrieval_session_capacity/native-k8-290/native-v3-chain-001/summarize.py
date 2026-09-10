@@ -73,7 +73,8 @@ def main():
     parser.add_argument("--run-scope", required=True,
                         choices=("premerge-correctness-smoke", "landed-retained-diagnostic"))
     args = parser.parse_args()
-    doc = json.loads(args.evidence.read_text())
+    evidence_raw = args.evidence.read_bytes()
+    doc = json.loads(evidence_raw)
     require(hashlib.sha256(args.harness.read_bytes()).hexdigest() == HARNESS_SHA256 ==
             doc["provenance"]["driver_sha256"], "supplied harness differs from independently pinned driver")
     harness = load_harness(args.harness.resolve())
@@ -289,8 +290,16 @@ def main():
             require((sample["committed_height"] < reconciliation["first_height"] if name.endswith("before") else
                      sample["committed_height"] >= reconciliation["last_height"]), "Commit height does not fence workload")
 
+    # Validate semantics first so corrupted records exercise their owning checks;
+    # pin the original measurement bytes before deriving this retained report.
+    if args.run_scope == "landed-retained-diagnostic":
+        require(hashlib.sha256(raw).hexdigest() == "458f3ab31f51a6aa1e46f688a542e3fd7745ecd40025c8e7d0b72c0003bdd3ba",
+                "retained input block bytes differ from the published run")
+        require(hashlib.sha256(evidence_raw).hexdigest() == "8a1ef8084df97121a39d752fb41e063880c11ef8f3c13e9569704b3836f08091",
+                "retained input evidence bytes differ from the published run")
+
     result = {"inputs": {"harness": str(args.harness.resolve()), "harness_sha256": hashlib.sha256(args.harness.read_bytes()).hexdigest(),
-        "evidence_sha256": hashlib.sha256(args.evidence.read_bytes()).hexdigest(), "reconciled_blocks_sha256": reconciliation["sha256"],
+        "evidence_sha256": hashlib.sha256(evidence_raw).hexdigest(), "reconciled_blocks_sha256": reconciliation["sha256"],
         "refund_transactions_sha256": REFUND_TRANSACTIONS_SHA256},
         "scope": {"run_scope": args.run_scope, "qualification": False,
         "scope_note": ("bounded premerge correctness smoke; no retained performance acceptance"

@@ -56,7 +56,7 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         source = Path(temporary) / "evidence.json"
         def run(document, block_source=blocks, refund_source=refunds):
-            source.write_text(json.dumps(document))
+            source.write_bytes(evidence.read_bytes() if document is original else json.dumps(document).encode())
             return subprocess.run(command + [str(source), str(block_source), str(refund_source), "--run-scope", "landed-retained-diagnostic"],
                                   capture_output=True, text=True, timeout=10)
         result = run(original)
@@ -68,10 +68,22 @@ def main():
             mutate(document)
             result = run(document)
             assert result.returncode == 2 and not result.stdout, (index, result.returncode, result.stdout, result.stderr)
+            assert "retained input" not in result.stderr, (index, result.stderr)
+        # A plausible altered measurement passes structural timing checks but
+        # must not be accepted as the original retained run.
+        document = copy.deepcopy(original)
+        for row in document["native_v3_chain"]["scheduler"]["transactions"]:
+            row["checktx_latency_ns"] = 0
+        result = run(document)
+        assert result.returncode == 2 and not result.stdout and "retained input evidence bytes" in result.stderr, result.stderr
         bad_blocks = Path(temporary) / "blocks.jsonl"
         bad_blocks.write_bytes(blocks.read_bytes() + b"\n")
         result = run(original, bad_blocks)
         assert result.returncode == 2 and not result.stdout, result.stderr
+        document = copy.deepcopy(original)
+        document["committed_block_reconciliation"]["sha256"] = hashlib.sha256(bad_blocks.read_bytes()).hexdigest()
+        result = run(document, bad_blocks)
+        assert result.returncode == 2 and not result.stdout and "retained input block bytes" in result.stderr, result.stderr
         changed = [json.loads(line) for line in blocks.read_text().splitlines()]
         changed[0]["gas_wanted"] += 1
         bad_blocks.write_text("".join(json.dumps(row) + "\n" for row in changed))
@@ -108,7 +120,7 @@ def main():
         bad_harness.with_name("sqlite3.py").write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
         result = run(original)
         assert result.returncode == 0 and not marker.exists(), result.stderr
-    print(f"Report accepted retained success and rejected {len(mutations) + 8} altered inputs; import shadowing blocked.")
+    print(f"Report accepted retained success and rejected {len(mutations) + 10} altered inputs; import shadowing blocked.")
 
 
 if __name__ == "__main__":
