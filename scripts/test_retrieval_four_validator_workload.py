@@ -1992,7 +1992,8 @@ class HealthyAuditViewsTest(unittest.TestCase):
                   "--cli-binary", "/native-cli", "--product-source", "/source"]
         for extra, expected_browser in (([], {"file_bytes": 1024}),
                 (["--browser-bytes", "1073741824"], {"file_bytes": 1_073_741_824}),
-                (["--browser-executor-handoff"], {"file_bytes": 1024, "executor_handoff": True})):
+                (["--browser-bytes", "1073741824", "--browser-executor-handoff"],
+                 {"file_bytes": 1_073_741_824, "executor_handoff": True})):
             with self.subTest(expected_browser=expected_browser), patch.object(workload.sys, "argv", common + extra), \
                  patch.object(artifact, "FourValidatorLifecycle") as constructor, \
                  patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
@@ -2009,6 +2010,14 @@ class HealthyAuditViewsTest(unittest.TestCase):
              patch.object(artifact, "FourValidatorLifecycle") as constructor, self.assertRaises(SystemExit):
             workload.main()
         constructor.assert_not_called()
+        for size in ("1024", "16777217"):
+            with self.subTest(handoff_size=size), patch.object(workload.sys, "argv",
+                    common + ["--browser-bytes", size, "--browser-executor-handoff"]), \
+                 patch.object(workload.sys, "stderr"), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 self.assertRaises(SystemExit):
+                workload.main()
+            constructor.assert_not_called()
 
     def test_native_v3_cross_audit_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers-cross-audit", "--binary", "/chain",

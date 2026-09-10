@@ -461,6 +461,8 @@ def validate_browser_executor_request(value):
     integer(value.get("pid"), "coordinator pid", 1)
     integer(value.get("timeout"), "browser timeout", 1, 3600)
     size = integer(value.get("bytes"), "browser bytes", 1, 1 << 30)
+    if faults or size != 1 << 30:
+        raise ValueError("Mac browser executor is reserved for the clean 1 GiB pilot")
     source = value.get("source")
     if not isinstance(source, str) or not re.fullmatch(r"/[A-Za-z0-9._/-]+", source) or ".." in Path(source).parts:
         raise ValueError("invalid coordinator source")
@@ -468,7 +470,7 @@ def validate_browser_executor_request(value):
         "VITE_SP_BASE": "http://127.0.0.1:19091", "VITE_EVM_RPC": "http://127.0.0.1:8545",
         "E2E_BASE_URL": "http://127.0.0.1:4173", "VITE_CHAIN_ID": "262144", "VITE_E2E": "1",
         "E2E_NATIVE_V3_BROWSER": "1", "E2E_NATIVE_V3_EXPIRY": "0",
-        "E2E_NATIVE_V3_FAULTS": "1" if faults else "0", "E2E_NATIVE_V3_BYTES": str(size)}
+        "E2E_NATIVE_V3_FAULTS": "0", "E2E_NATIVE_V3_BYTES": str(size)}
     if any(env.get(key) != item for key, item in expected.items()):
         raise ValueError("browser executor request changed its fixed endpoints or mode")
     return value

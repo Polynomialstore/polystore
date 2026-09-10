@@ -4366,8 +4366,9 @@ def main():
     sustained_deputies = options.pop("sustained_deputies")
     browser_bytes = options.pop("browser_bytes")
     browser_executor_handoff = options.pop("browser_executor_handoff")
-    if browser_executor_handoff and mode != "native-v3-browser":
-        parser.error("browser executor options require native-v3-browser")
+    if browser_executor_handoff and (mode != "native-v3-browser" or
+            (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
+        parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")

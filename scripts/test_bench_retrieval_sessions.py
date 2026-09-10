@@ -301,11 +301,11 @@ class BenchmarkArtifactTest(unittest.TestCase):
                 VITE_GATEWAY_BASE="http://127.0.0.1:8080", VITE_SP_BASE="http://127.0.0.1:19091",
                 VITE_EVM_RPC="http://127.0.0.1:8545", E2E_BASE_URL="http://127.0.0.1:4173",
                 VITE_CHAIN_ID="262144", VITE_E2E="1", E2E_NATIVE_V3_BROWSER="1",
-                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES="1024")
+                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES=str(1 << 30))
             request_path = root / "browser-executor-request.json"
             request = artifact.create_browser_executor_request(request_path, source=source,
                 source_head="ab" * 20, source_status="", env=env, timeout_seconds=600,
-                browser_bytes=1024, faults=False)
+                browser_bytes=1 << 30, faults=False)
             paths = {key: root / name for key, name in request["artifacts"].items()}
             paths["result"].write_text('{"success":true}\n')
             paths["stdout"].write_text("passed\n")
@@ -322,6 +322,23 @@ class BenchmarkArtifactTest(unittest.TestCase):
             result, memory, observed = artifact.read_browser_executor_response(request_path)
             self.assertEqual((result.returncode, result.stdout, memory["peak_rss_bytes"]), (0, "passed\n", 4096))
             self.assertEqual(observed["topology"]["ssh_target"], "runner@server")
+
+            paths["stdout"].write_text("tampered\n")
+            with self.assertRaisesRegex(ValueError, "manifest mismatch"):
+                artifact.read_browser_executor_response(request_path)
+            paths["stdout"].write_text("passed\n")
+            response["head"] = "cd" * 20
+            (root / "browser-executor-response.json").write_text(json.dumps(response))
+            with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                artifact.read_browser_executor_response(request_path)
+            changed = dict(request, env=dict(request["env"], UNKNOWN="value"))
+            with self.assertRaisesRegex(ValueError, "fixed browser executor contract"):
+                artifact.validate_browser_executor_request(changed)
+            for changed in (dict(request, bytes=1024),
+                    dict(request, bytes=16_777_217, faults=True,
+                         artifacts=artifact.browser_executor_artifacts(True))):
+                with self.assertRaisesRegex(ValueError, "clean 1 GiB"):
+                    artifact.validate_browser_executor_request(changed)
 
             first = {10: (1, 1024, "root-start"), 20: (10, 2048, "child-start")}
             retained = artifact.darwin_owned_processes(10, first)
