@@ -1,8 +1,8 @@
 import { createRetrievalOutput, removeRetrievalOutput } from './retrievalFlow'
-import { planV3Chunks, RETRIEVAL_V3_SETUP, sameFrozenGenerationV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
+import { planV3Chunks, RETRIEVAL_V3_SETUP, sameFrozenGenerationV3, sameFrozenRetrievalRequestV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
 import { retrievalV3OutputComplete } from './retrievalV3Flow'
 import { account, type RetrievalFile } from './retrieval'
-import { browserRetrievalStore, retrievalIntentKey, withRetrievalLock, type RetrievalStore } from './retrievalTransactions'
+import { browserRetrievalStore, retrievalIntentKey, retrievalV3OpenTransactionKey, withRetrievalLock, type BrowserTransaction, type RetrievalStore } from './retrievalTransactions'
 
 const SETTLED_CACHE_KEY = 'output-v3:settled-cache'
 export interface SettledRetrievalV3Cache {
@@ -124,6 +124,20 @@ function sameFile(a: RetrievalFile, b: RetrievalFile): boolean {
   return a.path === b.path && a.start_offset === b.start_offset && a.size_bytes === b.size_bytes && a.flags === b.flags
 }
 
+type FrozenRetrievalRequestV3 = Parameters<typeof sameFrozenRetrievalRequestV3>[0]
+function isFrozenRetrievalRequestV3(value: unknown): value is FrozenRetrievalRequestV3 {
+  if (typeof value !== 'object' || value === null) return false
+  const request = value as Partial<FrozenRetrievalRequestV3>, authority = request.authority as Partial<FrozenGenerationV3> | undefined
+  return Boolean(authority && typeof authority.chainId === 'string' && typeof authority.height === 'bigint' && typeof authority.dealId === 'bigint' &&
+    typeof authority.generation === 'bigint' && typeof authority.owner === 'string' && typeof authority.dealEnd === 'bigint' &&
+    typeof authority.polyfsRoot === 'string' && typeof authority.integrityRoot === 'string' && typeof authority.setupDigest === 'string' &&
+    typeof authority.integrityLeafCount === 'bigint' && typeof authority.metadataMdus === 'bigint' && typeof authority.userMdus === 'bigint' &&
+    typeof authority.totalMdus === 'bigint' && typeof authority.witnessMdus === 'bigint' && typeof authority.retrievalPolicyMode === 'number' &&
+    Array.isArray(authority.providers) && authority.providers.every((provider) => typeof provider === 'string') &&
+    Number.isSafeInteger(request.recordIndex) && request.file && typeof request.file.path === 'string' && typeof request.file.start_offset === 'bigint' &&
+    typeof request.file.size_bytes === 'bigint' && Number.isSafeInteger(request.file.flags) && typeof request.rangeStart === 'bigint' && typeof request.rangeLength === 'bigint')
+}
+
 function sessionMatchesState(state: RetrievalV3CheckpointState, session: FrozenSessionV3): boolean {
   return sameFrozenGenerationV3(state.authority, session.authority) && state.fileRecordIndex === session.fileRecordIndex &&
     sameFile(state.file, session.file) && state.rangeStart === session.rangeStart && state.rangeLength === session.rangeLength
@@ -174,6 +188,40 @@ export function listRetrievalV3Checkpoints(dealId: bigint, requester: string, ch
     } catch { /* malformed recovery state stays fail-closed */ }
   }
   return result
+}
+
+export async function discardUnboundRetrievalV3Checkpoint(key: string, scope: unknown, requester: string, chainId: string,
+  store: RetrievalStore = browserRetrievalStore(), removeOutput = removeRetrievalOutput): Promise<void> {
+  if (!navigator.locks) throw new Error('browser retrieval recovery locks are unavailable')
+  await navigator.locks.request(key, { ifAvailable: true }, async (checkpointLock) => {
+    if (!checkpointLock) throw new Error('this retrieval is already running in another tab')
+    const initial = readRetrievalV3Checkpoint(key, store)
+    if (!initial) throw new Error('missing frozen v3 retrieval checkpoint')
+    const paymentKey = await retrievalV3OpenTransactionKey(scope, requester, initial.authority.dealId)
+    await withRetrievalLock(paymentKey, async () => {
+      const current = readRetrievalV3Checkpoint(key, store)
+      if (!current) throw new Error('missing frozen v3 retrieval checkpoint')
+      await assertRetrievalV3CheckpointScope(key, current, scope, requester, chainId)
+      if (current.session) throw new Error('paid v3 recovery cannot be discarded')
+      const transaction = store.get<BrowserTransaction>(paymentKey)
+      let removeTransaction = false
+      if (transaction !== undefined) {
+        const validData = typeof transaction === 'object' && transaction !== null &&
+          typeof transaction.data === 'string' && /^0x[0-9a-f]*$/i.test(transaction.data)
+        const safelyUnpaid = validData && (transaction.state === 'prepared' && transaction.hash === undefined ||
+          transaction.state === 'reverted' && typeof transaction.hash === 'string' && /^0x[0-9a-f]{64}$/i.test(transaction.hash))
+        if (!safelyUnpaid) throw new Error('v3 payment outcome is not safely discardable')
+        if (!isFrozenRetrievalRequestV3(transaction.intent)) throw new Error('malformed v3 payment journal')
+        removeTransaction = sameFrozenRetrievalRequestV3(transaction.intent, {
+          authority: current.authority, recordIndex: current.fileRecordIndex, file: current.file,
+          rangeStart: current.rangeStart, rangeLength: current.rangeLength,
+        })
+      }
+      await removeOutput(current.id)
+      if (removeTransaction) store.remove(paymentKey)
+      store.remove(key)
+    })
+  })
 }
 
 export async function openRetrievalV3Checkpoint(key: string, initial?: Omit<RetrievalV3CheckpointState, 'version' | 'id' | 'cursors'>) {

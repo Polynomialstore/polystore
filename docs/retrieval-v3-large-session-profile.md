@@ -750,19 +750,26 @@ Rust duplicate-last Merkle primitive before returning bytes. The worker also
 exposes canonical context hash, seed and fixed-width challenge derivation from
 the shared golden transcript.
 
-These primitives require already-authenticated frozen authority. They do not
-query a session, select providers, open or acknowledge a session, or obtain an
-authoritative session nonce. Checked range and plan bytes, session-ID derivation
-and the obligation ACK digest are exposed as thin bindings; using them in the
-session lifecycle remains in the next client slice. That client must allow the
-existing bounded 5 minute 30 second first-request window for provider cold
-index preparation.
+The browser client supplies these primitives with authority from the committed
+generation-v3 query, obtains the authoritative owner/deal nonce, opens the
+session through the wallet and EVM adapter, and queries the frozen session before
+requesting provider chunks. It verifies MDU0 and every complete encoded blob
+before writing the output, acknowledges each completed obligation, and retains
+at most one settled verified output, capped at 1 GiB, until explicit cleanup.
+Fetching keeps at most two bounded 1 MiB chunks in flight while writes, flushes
+and durable cursors remain ordered. A missing initial generation-v3 query permits
+the legacy retrieval path; parameter, deal, timeout, malformed and server
+failures remain fatal rather than silently downgrading.
 
-The future native-v3 browser client must keep a first cold user-gateway request
-alive for up to 5 minutes 30 seconds, including the provider-daemon's 5-minute
-index-build bound. Caller cancellation stops the synchronous build while its
-response-capacity admission and generation lease remain held. Warm requests use
-the hot path above.
+Browser recovery persists the frozen request, output cursors and transaction
+journal. Checkpoint and owner/deal locks prevent another tab from opening a
+replacement payment. An unfinished checkpoint may be discarded only while its
+payment journal is absent, explicitly rejected/prepared, or proven reverted;
+broadcasting, committed and malformed records remain for reconciliation. The
+first cold user-gateway request stays alive for up to 5 minutes 30 seconds,
+including the provider-daemon's 5-minute index-build bound. Caller cancellation
+stops the synchronous build while its response-capacity admission and generation
+lease remain held. Warm requests use the hot path above.
 
 The bounded one-user-MDU benchmark
 `BenchmarkRetrievalDataV3Hot1MiB` (Linux amd64, 10 iterations) measured a
@@ -771,9 +778,9 @@ authenticated 1 MiB prepare path measured 479544 ns/op, 1101288 B/op and 633
 allocs/op. This small-fixture check covers index construction and the hot
 verification/allocation boundary; it is not a retrieval-throughput result.
 
-These routes remain unavailable on networks where retrieval v3 activation is
-zero. Browser orchestration is still incomplete, so the provider-daemon and EVM
-adapter slices alone do not satisfy the activation gate.
+These routes and the browser flow remain unavailable on networks where retrieval
+v3 activation is zero. Public activation still requires the complete gate above
+and operational qualification on the target network.
 
 The authenticated provider-daemon action is `POST /sp/generation-v3/accept`
 with `{"deal_id":0}` and the existing `X-PolyStore-Gateway-Auth` header. An
@@ -827,4 +834,5 @@ payment state; clients must query the authoritative native session by this ID.
 The adapter uses the existing native-action journal, proof pricing and block
 limits, so EVM revert and out-of-gas roll back generation, session, voucher,
 funding, retention and event effects together. This ABI parity does not enable
-v3 on a deployed network and does not complete browser retrieval orchestration.
+v3 on a deployed network; activation and target-network qualification remain
+separate operational decisions.

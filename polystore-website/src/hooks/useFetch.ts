@@ -470,5 +470,5 @@ export function useFetch() {
       throw new Error(message)
     } finally { await checkpoint?.retain().catch(() => {}); await checkpointV3?.retain().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
-  return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
+  return { fetchFile, discardUnboundV3: payment.discardUnboundV3, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
 }

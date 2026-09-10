@@ -8,12 +8,13 @@ import { decodeComputeRetrievalSessionIdsResult, encodeAcknowledgeRetrievalOblig
 import { account, fetchFrozenSession, fetchActiveRetrievalGeneration, fetchRetrievalAvailability, type FrozenSession, type PinnedGeneration, type RetrievalWindow, u64, uint, unhex } from '../lib/retrieval'
 import { waitForRetrievalChallenge } from '../lib/retrievalFlow'
 import type { SponsoredRetrievalAuth } from './useFetch'
-import { assertRetrievalWalletScope, browserRetrievalStore, retrievalIntentKey, retrievalGasLimit, settleBrowserTransaction, withRetrievalLock } from '../lib/retrievalTransactions'
+import { assertRetrievalWalletScope, browserRetrievalStore, retrievalIntentKey, retrievalGasLimit, retrievalV3OpenTransactionKey, settleBrowserTransaction, withRetrievalLock } from '../lib/retrievalTransactions'
 import { assertSponsoredPolicyV3, fetchActiveGenerationV3, fetchLatestNonceV3, fetchSessionIDByNonceV3, fetchSessionV3, prepareV3Binding, preserveV3BrowserTransactionKey, sameFrozenGenerationV3, sameFrozenRetrievalRequestV3, type FrozenGenerationV3, type FrozenSessionV3 } from '../lib/retrievalV3'
 import type { RetrievalFile } from '../lib/retrieval'
 import { workerClient } from '../lib/worker-client'
 import { BLOB_SIZE_BYTES } from '../domain/polyfsLayout'
 import { accountBytes } from '../lib/retrieval'
+import { discardUnboundRetrievalV3Checkpoint } from '../lib/retrievalV3Checkpoint'
 
 let lastBrowserNonce = 0n
 
@@ -148,7 +149,7 @@ export function useRetrievalSessions() {
       auth: SponsoredRetrievalAuth = { type: 'none' }, signal?: AbortSignal): Promise<FrozenSessionV3> {
       const { address, wallet, client, owner } = requireWallet()
       const deadline = AbortSignal.any([AbortSignal.timeout(120_000), ...(signal ? [signal] : [])])
-      const ownerDeal = 'open-v3:' + await retrievalIntentKey([scope(), owner, authority.dealId])
+      const ownerDeal = await retrievalV3OpenTransactionKey(scope(), owner, authority.dealId)
       return withRetrievalLock(ownerDeal, async () => {
         const store = browserRetrievalStore()
         let gas = 0n
@@ -200,6 +201,10 @@ export function useRetrievalSessions() {
         const session = await fetchSessionV3(appConfig.lcdBase, transaction.intent.authority, expected, deadline)
         return { ...session, browserTransactionKey: ownerDeal }
       })
+    },
+    async discardUnboundV3(key: string) {
+      const { owner } = requireWallet()
+      await discardUnboundRetrievalV3Checkpoint(key, scope(), owner, appConfig.cosmosChainId)
     },
     async acknowledgeV3(session: FrozenSessionV3, slot: number, signal?: AbortSignal): Promise<FrozenSessionV3> {
       const { address, wallet, client, owner } = requireWallet()

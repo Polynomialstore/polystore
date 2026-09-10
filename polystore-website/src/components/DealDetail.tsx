@@ -185,6 +185,8 @@ interface FileRowProps {
   gatewayModePreferred: boolean
   checkpointKey?: string
   frozenGeneration?: bigint
+  unboundRecovery?: boolean
+  discardUnboundV3?: (key: string) => Promise<void>
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'activity') => void
 }
@@ -236,6 +238,8 @@ function FileRow({
   gatewayModePreferred,
   checkpointKey,
   frozenGeneration,
+  unboundRecovery,
+  discardUnboundV3,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
   const browserAvailable = browserCached || browserMduAvailable
@@ -347,6 +351,14 @@ function FileRow({
     }
   }
 
+  const handleDiscardUnboundRecovery = async () => {
+    if (!checkpointKey || !discardUnboundV3) return
+    setFileActionError(null); setBusyFilePath(checkpointKey)
+    try { await discardUnboundV3(checkpointKey) }
+    catch (error) { setFileActionError(error instanceof Error ? error.message : String(error)) }
+    finally { setBusyFilePath(null) }
+  }
+
   return (
     <div
       data-testid="deal-detail-file-row"
@@ -363,7 +375,7 @@ function FileRow({
           start {String(file.start_offset || 0)}
         </div>
         {frozenGeneration !== undefined ? <div className="mt-1 text-[10px] text-muted-foreground" data-testid="v3-frozen-recovery">
-          Paid recovery from frozen generation {String(frozenGeneration)}
+          {unboundRecovery ? 'Unfinished request' : 'Paid recovery'} from frozen generation {String(frozenGeneration)}
         </div> : null}
       </div>
 
@@ -389,6 +401,15 @@ function FileRow({
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </button> : unboundRecovery ? <button
+          onClick={() => void handleDiscardUnboundRecovery()}
+          disabled={isAnyDownloading || isBusy}
+          data-testid="deal-detail-discard-unbound-v3"
+          data-file-path={file.path}
+          className="p-1 text-destructive hover:bg-destructive/10 border border-transparent transition-colors rounded-none disabled:opacity-50"
+          aria-label={`Discard unfinished request for ${file.path}`}
+        >
+          <Trash2 className="w-4 h-4" />
         </button> : browserCached ? <button
           onClick={() => void handlePurgeCache()}
           disabled={isAnyDownloading || isBusy}
@@ -700,7 +721,7 @@ export function DealDetail({
     [committedManifestRoot, manifestInfo?.manifest_root, slab?.manifest_root],
   )
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan, unavailableReason } = useFetch()
+  const { fetchFile, discardUnboundV3, loading: downloading, receiptStatus, receiptError, progress, lastPlan, unavailableReason } = useFetch()
   const {
     slab: fetchSlabLayout,
     manifestInfo: manifestInfoTransport,
@@ -1688,6 +1709,8 @@ export function DealDetail({
       setActiveTab={setActiveTab}
       checkpointKey={key}
       frozenGeneration={state.authority.generation}
+      unboundRecovery={!state.session}
+      discardUnboundV3={discardUnboundV3}
     />
   })
 

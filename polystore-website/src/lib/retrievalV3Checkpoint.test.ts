@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { assertRetrievalV3CheckpointScope, hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3CheckpointMatchesCurrent, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
+import { assertRetrievalV3CheckpointScope, discardUnboundRetrievalV3Checkpoint, hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3CheckpointMatchesCurrent, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
 import { RETRIEVAL_V3_SETUP, type FrozenSessionV3 } from './retrievalV3'
-import type { RetrievalStore } from './retrievalTransactions'
+import { retrievalV3OpenTransactionKey, settleBrowserTransaction, type BrowserTransaction, type RetrievalStore } from './retrievalTransactions'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 function store(value: RetrievalV3CheckpointState): RetrievalStore {
@@ -29,6 +29,15 @@ function state(): RetrievalV3CheckpointState {
     acceptedBitmap: new Uint8Array(17), ackedMask: 0, settledMask: 0, refundedMask: 0, lockedFee: 9n, expired: false, context: new Uint8Array() } as FrozenSessionV3
   return { version: 3, id: 'output', length, authority, fileRecordIndex: 3, file, rangeStart: 0n, rangeLength: length,
     requestRangeStart: null, requestRangeLength: null, requester: authority.owner, session, cursors: { 0: 64n } }
+}
+
+function unboundState(): RetrievalV3CheckpointState {
+  return { ...state(), session: undefined, cursors: {} }
+}
+
+function transactionIntent(saved: RetrievalV3CheckpointState) {
+  return { authority: saved.authority, recordIndex: saved.fileRecordIndex, file: saved.file,
+    rangeStart: saved.rangeStart, rangeLength: saved.rangeLength, nonce: 1n, expiry: 50n, binding: { sessionId: `0x${'44'.repeat(32)}` } }
 }
 
 test('v3 checkpoint accepts only exact frozen session and durable chunk boundaries', () => {
@@ -76,6 +85,94 @@ test('explicit recovery remains bound to its original wallet and network scope',
   await assert.rejects(assertRetrievalV3CheckpointScope(key, saved, ['other-1', 31337, '0x1234', '0xabcd'], saved.requester,
     saved.authority.chainId), /another wallet or network/)
   await assert.rejects(assertRetrievalV3CheckpointScope(key, saved, scope, saved.requester, 'other-1'), /another wallet or network/)
+})
+
+test('wallet rejection and estimate failure can discard an unbound frozen attempt before the current generation starts', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (_key: string, _options: object, run: (lock: object | null) => unknown) => run({}) } } })
+  try {
+    const scope = ['test-1', 31337, '0x1234', '0xabcd']
+    for (const failure of ['wallet', 'estimate'] as const) {
+      const saved = unboundState()
+      const key = await retrievalV3DownloadCheckpointKey(scope, '7', saved.file.path, undefined, undefined, undefined)
+      const paymentKey = await retrievalV3OpenTransactionKey(scope, saved.requester, saved.authority.dealId)
+      const records = mapStore({ [key]: saved })
+      let payments = 0
+      await assert.rejects(settleBrowserTransaction({ store: records, key: paymentKey,
+        prepare: async () => {
+          if (failure === 'estimate') throw new Error('estimate failed')
+          return { data: '0x1234', intent: transactionIntent(saved) }
+        },
+        send: async () => { payments++; throw { code: 4001 } },
+        receipt: async () => { throw new Error('not reached') }, reconcile: async () => false,
+      }), failure === 'wallet' ? /object Object/ : /estimate failed/)
+      assert.equal(records.get<BrowserTransaction>(paymentKey)?.state, failure === 'wallet' ? 'prepared' : undefined)
+      const removed: string[] = []
+      await discardUnboundRetrievalV3Checkpoint(key, scope, saved.requester, saved.authority.chainId, records, async (id) => { removed.push(id) })
+      assert.deepEqual(removed, [saved.id])
+      assert.equal(records.get(key), undefined)
+      assert.equal(records.get(paymentKey), undefined)
+      assert.equal(payments, failure === 'wallet' ? 1 : 0)
+      const current = { ...saved, authority: { ...saved.authority, generation: 3n, polyfsRoot: `0x${'55'.repeat(32)}` as const } }
+      records.put(key, current)
+      assert.equal(readRetrievalV3Checkpoint(key, records)?.authority.generation, 3n)
+      const opened = await settleBrowserTransaction({ store: records, key: paymentKey,
+        prepare: async () => ({ data: '0x1234', intent: transactionIntent(current) }),
+        send: async () => { payments++; return `0x${'66'.repeat(32)}` },
+        receipt: async (hash) => ({ transactionHash: hash, status: 'success', blockNumber: 12n }), reconcile: async () => false,
+      })
+      assert.equal(opened.state, 'committed')
+      assert.equal(payments, failure === 'wallet' ? 2 : 1)
+    }
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original)
+    else Reflect.deleteProperty(globalThis, 'navigator')
+  }
+})
+
+test('unbound discard retains paid, uncertain, malformed, and locked records while preserving a mismatched safe journal', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  let blocked = ''
+  const held = new Set<string>()
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (key: string, _options: object, run: (lock: object | null) => unknown) => {
+    if (key === blocked || held.has(key)) return run(null)
+    held.add(key)
+    try { return await run({}) } finally { held.delete(key) }
+  } } } })
+  try {
+    const scope = ['test-1', 31337, '0x1234', '0xabcd'], base = unboundState()
+    const key = await retrievalV3DownloadCheckpointKey(scope, '7', base.file.path, undefined, undefined, undefined)
+    const paymentKey = await retrievalV3OpenTransactionKey(scope, base.requester, base.authority.dealId)
+    const cases: Array<[string, RetrievalV3CheckpointState, unknown]> = [
+      ['bound', state(), undefined],
+      ['lost hash', base, { state: 'broadcasting', data: '0x1234', intent: transactionIntent(base) }],
+      ['committed', base, { state: 'committed', data: '0x1234', hash: `0x${'44'.repeat(32)}`, intent: transactionIntent(base) }],
+      ['unknown', base, null],
+      ['missing intent', base, { state: 'prepared', data: '0x1234' }],
+    ]
+    for (const [label, checkpoint, journal] of cases) {
+      const records = mapStore({ [key]: checkpoint, ...(journal === undefined ? {} : { [paymentKey]: journal }) })
+      let removed = 0
+      await assert.rejects(discardUnboundRetrievalV3Checkpoint(key, scope, base.requester, base.authority.chainId, records, async () => { removed++ }))
+      assert.equal(removed, 0, label)
+      assert.equal(held.size, 0, label)
+      assert.notEqual(records.get(key), undefined, label)
+      if (journal !== undefined) assert.notEqual(records.get(paymentKey), undefined, label)
+    }
+    const mismatch = { state: 'prepared', data: '0x1234', intent: { ...transactionIntent(base), rangeLength: base.rangeLength - 1n } }
+    const mismatchedRecords = mapStore({ [key]: base, [paymentKey]: mismatch })
+    await discardUnboundRetrievalV3Checkpoint(key, scope, base.requester, base.authority.chainId, mismatchedRecords, async () => {})
+    assert.equal(mismatchedRecords.get(key), undefined)
+    assert.deepEqual(mismatchedRecords.get(paymentKey), mismatch)
+    for (blocked of [key, `polystore-retrieval-v1:${paymentKey}`]) {
+      const records = mapStore({ [key]: base })
+      await assert.rejects(discardUnboundRetrievalV3Checkpoint(key, scope, base.requester, base.authority.chainId, records, async () => {}), /another tab/)
+      assert.notEqual(records.get(key), undefined)
+    }
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original)
+    else Reflect.deleteProperty(globalThis, 'navigator')
+  }
 })
 
 test('settled output cache is one-entry bounded and never evicts active or unresolved recovery', async () => {

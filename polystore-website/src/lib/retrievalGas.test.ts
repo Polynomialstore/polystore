@@ -75,7 +75,9 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
       retrievalV3ContextHash: async () => new Uint8Array(32), retrievalV3Seed: async () => new Uint8Array(32), retrievalV3Challenges: async () => new Uint8Array() } },
     '../domain/polyfsLayout': { BLOB_SIZE_BYTES: 131_072 },
     '../lib/retrievalTransactions': { ...transactions, browserRetrievalStore: () => store,
-      retrievalIntentKey: async () => 'test', withRetrievalLock: (_key: string, work: () => unknown) => work() },
+      retrievalIntentKey: async () => 'test', retrievalV3OpenTransactionKey: async () => 'open-v3:test',
+      withRetrievalLock: (_key: string, work: () => unknown) => work() },
+    '../lib/retrievalV3Checkpoint': { discardUnboundRetrievalV3Checkpoint: async () => {} },
   }
   const source = readFileSync(new URL('../hooks/useRetrievalSessions.ts', import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText

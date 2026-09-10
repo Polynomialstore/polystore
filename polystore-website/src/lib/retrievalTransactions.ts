@@ -54,6 +54,9 @@ export async function retrievalIntentKey(value: unknown): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
 }
+export async function retrievalV3OpenTransactionKey(scope: unknown, owner: string, dealId: bigint): Promise<string> {
+  return 'open-v3:' + await retrievalIntentKey([scope, owner, dealId])
+}
 export async function withRetrievalLock<T>(key: string, run: () => Promise<T>): Promise<T> {
   if (!navigator.locks) throw new Error('browser retrieval recovery locks are unavailable')
   return navigator.locks.request(PREFIX + key, { ifAvailable: true }, (lock) => {
