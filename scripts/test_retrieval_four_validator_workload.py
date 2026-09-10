@@ -524,9 +524,13 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(transaction["outcome"], "committed_success")
             transaction["operation_id"] = "measured-1-0"
             output = Path(home) / "blocks.jsonl"
-            workload.reconcile_transaction_blocks(lifecycle, [transaction], 219, 219, output)
+            observed = []
+            workload.reconcile_transaction_blocks(
+                lifecycle, [transaction], 219, 219, output,
+                observe_transaction=lambda row, height: observed.append((row, height)))
             retained = json.loads(output.read_text())
             self.assertEqual(retained["transactions"][0]["operation_id"], "measured-1-0")
+            self.assertEqual(observed, [(retained["transactions"][0], 219)])
             self.assertEqual(lifecycle.doc["committed_block_reconciliation"]["committed_workload_transactions"], 1)
             for field, value in (("txhash", "AB" * 32), ("height", "220")):
                 changed = copy.deepcopy(decoded)
@@ -939,21 +943,49 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_cross_audit_transaction_classification_binds_committed_system_proof(self):
         providers = dict(enumerate(AUDIT_ADDRESSES))
-        txhash = "A" * 64
+        raw = b"production-shaped-crossed-audit-transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
         message = {"@type": "/polystorechain.polystorechain.v1.MsgProveLiveness",
                    "creator": providers[3], "deal_id": "7", "epoch_id": "4",
                    "system_proof": {"mdu_index": "2"}}
         decoded = dict(txhash=txhash, height="301", tx={"body": {"messages": [message]}})
-        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}],
-                                    cli=Mock(return_value=json.dumps(decoded)))
-        transaction = dict(txhash=txhash, height=301, code=0, gas_wanted=10, gas_used=9)
-        row = workload.classify_cross_audit_transaction(lifecycle, transaction, providers, "7", 4)
-        self.assertEqual((row["provider"], row["slot"], row["txhash"]),
-                         (providers[3], 3, txhash))
-        message["session_proof"] = {}
-        lifecycle.cli.return_value = json.dumps(decoded)
-        with self.assertRaisesRegex(ValueError, "not a successful"):
-            workload.classify_cross_audit_transaction(lifecycle, transaction, providers, "7", 4)
+        block = {"block_id": {"hash": "CD" * 32}, "block": {
+            "header": {"height": "301", "chain_id": "chain", "time": "time", "app_hash": "EF" * 32},
+            "data": {"txs": [base64.b64encode(raw).decode()]}}}
+        block_results = {"height": "301", "txs_results": [{
+            "code": "0", "gas_wanted": "10", "gas_used": "9"}]}
+        commit = {"canonical": True, "signed_header": {"header": block["block"]["header"],
+            "commit": {"height": "301", "block_id": block["block_id"]}}}
+        def query(node, path):
+            if path.startswith("/block_results"):
+                return block_results
+            if path.startswith("/block?"):
+                return block
+            if path.startswith("/commit?"):
+                return commit
+            raise AssertionError(path)
+        with tempfile.TemporaryDirectory() as home:
+            lifecycle = SimpleNamespace(home=Path(home), chain="chain",
+                nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
+                cli=Mock(return_value=json.dumps(decoded)), query=query, remaining=Mock(), doc={})
+            rows = []
+            def observe(transaction, height):
+                rows.append(workload.classify_cross_audit_transaction(
+                    lifecycle, transaction, height, providers, "7", 4))
+            workload.reconcile_transaction_blocks(
+                lifecycle, [], 301, 301, Path(home) / "blocks.jsonl",
+                observe_transaction=observe)
+            self.assertEqual((rows[0]["provider"], rows[0]["slot"], rows[0]["txhash"], rows[0]["height"]),
+                             (providers[3], 3, txhash, 301))
+            lifecycle.cli.return_value = json.dumps(dict(decoded, height="302"))
+            with self.assertRaisesRegex(ValueError, "identity differs"):
+                workload.classify_cross_audit_transaction(
+                    lifecycle, rows[0], 301, providers, "7", 4)
+            message["session_proof"] = {}
+            lifecycle.cli.return_value = json.dumps(decoded)
+            with self.assertRaisesRegex(ValueError, "not a successful"):
+                workload.classify_cross_audit_transaction(
+                    lifecycle, rows[0], 301, providers, "7", 4)
 
     def test_native_chain_summary_excludes_warmup_from_measured_counts(self):
         sessions = [dict(accepted_sample_ordinals=[0, 1]),

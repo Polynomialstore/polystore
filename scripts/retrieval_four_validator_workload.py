@@ -759,11 +759,11 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
     lifecycle.save()
 
 
-def classify_cross_audit_transaction(lifecycle, transaction, providers, deal_id, epoch):
+def classify_cross_audit_transaction(lifecycle, transaction, height, providers, deal_id, epoch):
     """Return one exact committed system-audit transaction or reject provider extras."""
     txhash = transaction["txhash"].upper()
     decoded = json.loads(lifecycle.cli(lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
-    if decoded.get("txhash", "").upper() != txhash or producer.uint(decoded.get("height", "")) != transaction["height"]:
+    if decoded.get("txhash", "").upper() != txhash or producer.uint(decoded.get("height", "")) != height:
         raise ValueError("decoded cross-audit transaction identity differs from committed block")
     messages = decoded.get("tx", {}).get("body", {}).get("messages", [])
     provider_messages = [row for row in messages if row.get("creator") in providers.values()]
@@ -780,7 +780,7 @@ def classify_cross_audit_transaction(lifecycle, transaction, providers, deal_id,
             producer.uint(transaction.get("code", 0)) != 0):
         raise ValueError("provider transaction is not a successful crossed-epoch system audit")
     provider = message["creator"]
-    return dict(txhash=txhash, height=transaction["height"], provider=provider,
+    return dict(txhash=txhash, height=height, provider=provider,
                 slot=next(slot for slot, address in providers.items() if address == provider),
                 code=producer.uint(transaction.get("code", 0)), gas_wanted=transaction["gas_wanted"],
                 gas_used=transaction["gas_used"])
@@ -1003,11 +1003,11 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
     first_height = min(row["sample"]["committed_height"] for row in before_metrics["nodes"]) + 1
     proof_hashes = {row["txhash"].upper() for row in transactions}
     audit_transactions = []
-    def observe_transaction(transaction):
+    def observe_transaction(transaction, height):
         if transaction["txhash"].upper() in proof_hashes:
             return
         row = classify_cross_audit_transaction(
-            lifecycle, transaction, providers, deal["id"], ready_epoch + 1)
+            lifecycle, transaction, height, providers, deal["id"], ready_epoch + 1)
         if row is not None:
             audit_transactions.append(row)
     reconcile_transaction_blocks(lifecycle, transactions, first_height, final_height,
@@ -2436,7 +2436,7 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_
                 matched.add(tx["txhash"])
             if observe_transaction is not None:
                 for tx in summary["transactions"]:
-                    observe_transaction(tx)
+                    observe_transaction(tx, height)
             output.write(json.dumps(summary, sort_keys=True) + "\n")
     if matched != set(expected):
         raise ValueError("fenced blocks omit a committed workload transaction")
