@@ -1,7 +1,7 @@
 import { retrievalDiagnostic, timeRetrieval } from '../lib/retrievalDiagnostics'
 import { useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
-import { gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
+import { fetchRetrievalChunkV3, gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/providerDiscovery'
@@ -15,6 +15,10 @@ import type { RoutePreference } from '../lib/transport/types'
 import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
 import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
+import { fetchActiveGenerationV3, generationAsPinnedV2Shape, planV3Chunks, sameFrozenGenerationV3, type FrozenSessionV3 } from '../lib/retrievalV3'
+import { openRetrievalV3Checkpoint, readRetrievalV3Checkpoint, retrievalV3CheckpointKey } from '../lib/retrievalV3Checkpoint'
+import { executeRetrievalV3, retrievalV3OutputComplete, type RetrievalV3Execution } from '../lib/retrievalV3Flow'
+import { requestRetrievalProofV3 } from '../lib/retrievalV3Settlement'
 import { useRetrievalSessions } from './useRetrievalSessions'
 import { useTransportRouter } from './useTransportRouter'
 
@@ -105,9 +109,9 @@ export interface VoucherAuthInput {
 }
 
 export type SponsoredRetrievalAuth =
-  | { type: 'none' }
-  | { type: 'allowlist'; leafIndex: number; merklePath: Hex[] }
-  | { type: 'voucher'; voucher: VoucherAuthInput }
+  | { type: 'none'; maxTotalFee?: bigint }
+  | { type: 'allowlist'; leafIndex: number; merklePath: Hex[]; maxTotalFee?: bigint }
+  | { type: 'voucher'; voucher: VoucherAuthInput; maxTotalFee?: bigint }
 
 export function useFetch() {
   const payment = useRetrievalSessions(), transport = useTransportRouter()
@@ -128,17 +132,139 @@ export function useFetch() {
     setLoading(true); setReceiptStatus('idle'); setReceiptError(null); setLastPlan(null)
     setProgress({ phase: 'idle', filePath: input.filePath, chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
     let checkpoint: Awaited<ReturnType<typeof openRetrievalCheckpoint>> | null = null
+    let checkpointV3: Awaited<ReturnType<typeof openRetrievalV3Checkpoint>> | null = null
     try {
       const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
-      const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
       payment.requireWallet()
-      if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
       await workerClient.initRetrievalWasm()
+      const v3Key = await retrievalV3CheckpointKey([payment.scope(), 'download-v3', input.dealId, input.filePath,
+        input.rangeStart ?? null, input.rangeLen ?? null, deputy, input.sponsoredAuth ?? { type: 'none' }])
+      const savedV3 = readRetrievalV3Checkpoint(v3Key)
+      let restoredSession: FrozenSessionV3 | undefined
+      let activeV3: Awaited<ReturnType<typeof fetchActiveGenerationV3>>
+      if (savedV3?.session) {
+        if (input.manifestRoot.toLowerCase() !== savedV3.authority.polyfsRoot || input.owner !== savedV3.authority.owner) {
+          throw new Error('a paid v3 retrieval is retained for the original generation; resume that frozen request explicitly')
+        }
+        restoredSession = await payment.observeV3(savedV3.session, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+        activeV3 = restoredSession.authority
+      } else {
+        activeV3 = await fetchActiveGenerationV3(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId,
+          AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+        if (savedV3 && (!activeV3 || !sameFrozenGenerationV3(savedV3.authority, activeV3))) {
+          checkpointV3 = await openRetrievalV3Checkpoint(v3Key)
+          await checkpointV3.discard(); checkpointV3 = null
+          throw new Error('the unbound saved v3 retrieval no longer matches the active generation')
+        }
+      }
       const endpoints = new Map<string, ProviderEndpoint | null>()
       const endpoint = async (provider: string) => {
         if (!endpoints.has(provider)) endpoints.set(provider, await resolveProviderEndpointByAddress(appConfig.lcdBase, provider))
         return endpoints.get(provider)
       }
+      if (activeV3) {
+        if (!savedV3 && (input.manifestRoot.toLowerCase() !== activeV3.polyfsRoot || input.owner !== activeV3.owner)) throw new Error('displayed file generation changed; refresh before retrieval')
+        const pinV3 = generationAsPinnedV2Shape(activeV3)
+        const metadataBases = new Set([input.serviceBase, appConfig.gatewayDisabled ? undefined : appConfig.gatewayBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
+        for (const provider of activeV3.providers) { const e = await endpoint(provider); if (e?.baseUrl) metadataBases.add(e.baseUrl); if (metadataBases.size >= 4) break }
+        let records: Awaited<ReturnType<typeof workerClient.verifyRetrievalMetadataV3>> | undefined, lastError: unknown
+        for (const base of metadataBases) {
+          try {
+            const get = base.replace(/\/$/, '') === appConfig.gatewayBase.replace(/\/$/, '') ? gatewayFetchRetrievalMetadata : providerFetchRetrievalMetadata
+            records = await workerClient.verifyRetrievalMetadataV3(await get(base, pinV3, 0n, signal), activeV3)
+            break
+          } catch (error) { signal.throwIfAborted(); lastError = error }
+        }
+        if (!records) throw lastError ?? new Error('authenticated v3 metadata unavailable')
+        validateRetrievalAllocation(pinV3, records)
+        const recordIndex = records.findIndex((record) => record.path === input.filePath && record.path !== '')
+        if (recordIndex < 0) throw new Error('file absent from authenticated generation')
+        const file = records[recordIndex]
+        if (savedV3 && (savedV3.fileRecordIndex !== recordIndex || savedV3.file.path !== file.path || savedV3.file.start_offset !== file.start_offset || savedV3.file.size_bytes !== file.size_bytes)) {
+          throw new Error('saved v3 retrieval FAT record does not match its authenticated generation')
+        }
+        const exactNumber = (n: number | undefined, fallback: bigint) => n === undefined ? fallback : Number.isSafeInteger(n) && n >= 0 ? u64(String(n)) : (() => { throw new Error('invalid exact file range') })()
+        const start = savedV3?.rangeStart ?? exactNumber(input.rangeStart, 0n)
+        const length = savedV3?.rangeLength ?? exactNumber(input.rangeLen === 0 ? undefined : input.rangeLen, file.size_bytes - start)
+        if (!length || length > 1n << 30n || start + length > file.size_bytes) throw new Error('v3 file range must contain at most 1 GiB inside the authenticated extent')
+        if (file.flags !== 0) throw new Error('transformed/encrypted v3 retrieval requires a supported bounded decoder before payment')
+        if (deputy !== undefined) throw new Error('alternate v3 proof providers are not supported by the frozen session plan')
+        checkpointV3 = await openRetrievalV3Checkpoint(v3Key, savedV3 ? undefined : { length, authority: activeV3, fileRecordIndex: recordIndex, file, rangeStart: start, rangeLength: length })
+        let session = restoredSession ?? checkpointV3.state.session
+        const readyV3 = (current: FrozenSessionV3, refresh = false) => {
+          const bounded = AbortSignal.any([signal, AbortSignal.timeout(120_000)])
+          return refresh ? payment.observeV3(current, bounded).then((fresh) => payment.readyV3(fresh, bounded)) : payment.readyV3(current, bounded)
+        }
+        if (session) session = await readyV3(session)
+        else {
+          setProgress((progress) => ({ ...progress, phase: 'opening_session_tx' }))
+          session = await payment.openV3(activeV3, recordIndex, file, start, length, input.sponsoredAuth, signal)
+          checkpointV3.bind(session)
+          session = await readyV3(session)
+          checkpointV3.refresh(session)
+        }
+        if (!session) throw new Error('v3 session was not opened')
+        const sessionOwner = session.owner, receiptsTotal = session.obligations.length
+        let chunkCount = 0
+        const chunks = planV3Chunks(session)
+        while (!chunks.next().done) chunkCount++
+        setProgress((progress) => ({ ...progress, chunkCount, bytesTotal: Number(length), receiptsTotal }))
+        const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase,
+          localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
+        let route: string | undefined
+        let result: RetrievalV3Execution
+        if (session.expired || session.height > session.deadline) {
+          if (session.lockedFee !== 0n) session = await payment.refundV3(session, signal)
+          checkpointV3.refresh(session)
+          if (!retrievalV3OutputComplete(session, checkpointV3.cursors)) {
+            await payment.forgetV3(session)
+            await checkpointV3.discard(); checkpointV3 = null
+            throw new Error('the saved v3 session expired before the verified output completed; start the retrieval again')
+          }
+          result = { session, outcomes: [] }
+        } else result = await executeRetrievalV3(session, checkpointV3, {
+          fetch: async (chunk, chunkSignal) => {
+            setProgress((progress) => ({ ...progress, phase: 'fetching' }))
+            const direct = await endpoint(activeV3.providers[chunk.slot])
+            const base = direct?.baseUrl || input.serviceBase || (!appConfig.gatewayDisabled ? appConfig.gatewayBase : undefined)
+            if (!base) throw new Error('no authenticated provider route is available for v3 retrieval')
+            const gateway = base.replace(/\/$/, '') === appConfig.gatewayBase.replace(/\/$/, '')
+            route = gateway ? 'gateway' : 'provider'
+            return fetchRetrievalChunkV3(base, gateway ? '/gateway/mdu' : '/sp/retrieval/mdu', chunk, activeV3.dealId, sessionOwner, chunkSignal)
+          },
+          verify: (chunk, envelope) => workerClient.verifyRetrievalDataV3(chunk, envelope),
+          acknowledge: async (current, slot) => {
+            setProgress((progress) => ({ ...progress, phase: 'confirming_session_tx' }))
+            const next = await payment.acknowledgeV3(current, slot, signal)
+            setProgress((progress) => ({ ...progress, receiptsSubmitted: progress.receiptsSubmitted + 1 }))
+            return next
+          },
+          requestProof: async (current, slot) => {
+            const payee = current.obligations.find((obligation) => obligation.slot === slot)!.payee
+            return proofBase ? requestRetrievalProofV3(proofBase, { dealId: current.authority.dealId, sessionId: current.sessionId, provider: payee }, signal) :
+              { state: 'unknown', sessionId: current.sessionId, responseUnknown: true,
+                message: 'No authenticated provider or user-gateway proof route is available.' }
+          },
+          observe: (current) => readyV3(current, true),
+          progress: (chunksFetched, logicalBytes) => setProgress((progress) => ({ ...progress, chunksFetched, bytesFetched: Number(logicalBytes) })),
+        }, signal)
+        checkpointV3.refresh(result.session)
+        const blob = await checkpointV3.output.file()
+        const url = URL.createObjectURL(blob)
+        let cleanup: (() => Promise<void>) | undefined
+        if (result.session.lockedFee === 0n) await payment.forgetV3(result.session)
+        try { cleanup = await checkpointV3.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
+        if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
+        saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpointV3 = null
+        const unsettled = result.session.lockedFee !== 0n
+        const issue = result.outcomes.find((outcome) => outcome.state !== 'accepted')
+        const message = unsettled ? `Download verified and acknowledged. Provider payment remains unsettled. ${issue?.message ?? ''} Retry this same file to reconcile the saved session without another payment or download.` : undefined
+        setDownloadUrl(url); setReceiptStatus(unsettled ? 'failed' : 'submitted'); setReceiptError(message ?? null)
+        setProgress((progress) => ({ ...progress, phase: 'done', route, message }))
+        return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'frozen_v3_generation' }
+      }
+      const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
+      if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
       const bases = new Set([input.serviceBase, appConfig.gatewayDisabled ? undefined : appConfig.gatewayBase, appConfig.spBase].filter((x): x is string => Boolean(x)))
       for (const assignment of pin.assignments) { const e = await endpoint(assignment.provider); if (e?.baseUrl) bases.add(e.baseUrl); if (bases.size >= 4) break }
       const fetchMetadata = (base: string, index: bigint) => {
@@ -296,7 +422,7 @@ export function useFetch() {
       const message = classifyWalletError(error, 'Fetch failed').message + (checkpoint ? ' Saved retrieval progress is retained in this browser. Retry the same file to resume and reconcile its existing sessions.' : '')
       if (active.current === controller) { setProgress((p) => ({ ...p, phase: 'error', message })); setReceiptStatus('failed'); setReceiptError(message) }
       throw new Error(message)
-    } finally { await checkpoint?.retain().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
+    } finally { await checkpoint?.retain().catch(() => {}); await checkpointV3?.retain().catch(() => {}); if (active.current === controller) { setLoading(false); active.current = null } }
   }
   return { fetchFile, loading, downloadUrl, receiptStatus, receiptError, progress, lastPlan, unavailableReason: payment.unavailableReason }
 }

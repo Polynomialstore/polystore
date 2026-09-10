@@ -2,6 +2,7 @@ import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } fr
 import { fetchWithTimeout } from '../lib/http'
 import { readBoundedResponse, type FrozenSession, type PinnedGeneration } from '../lib/retrieval'
 import { parseRetrievalEnvelope, RETRIEVAL_ACCEPT } from '../lib/retrievalWire'
+import { parseRetrievalEnvelopeV3, RETRIEVAL_V3_ACCEPT, type RetrievalV3ChunkAuthority, type RetrievalV3Envelope } from '../lib/retrievalWire'
 import type { GatewayPlanResponse, UploadResult } from './gatewayClient'
 
 type UnknownRecord = Record<string, unknown>
@@ -414,6 +415,24 @@ export function providerFetchRetrievalMetadata(base: string, pin: PinnedGenerati
 
 export function gatewayFetchRetrievalMetadata(base: string, pin: PinnedGeneration, mduIndex = 0n, signal?: AbortSignal, fetchFn: typeof fetch = fetch) {
   return fetchRetrievalMetadata(base, '/gateway/mdu', pin, mduIndex, signal, fetchFn)
+}
+
+export async function fetchRetrievalChunkV3(base: string, route: '/sp/retrieval/mdu' | '/gateway/mdu', authority: RetrievalV3ChunkAuthority,
+  dealId: bigint, owner: string, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<RetrievalV3Envelope> {
+  const query = new URLSearchParams({ deal_id: dealId.toString(), owner })
+  const deadline = AbortSignal.timeout(345_000)
+  const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
+  const response = await fetchFn(`${base.replace(/\/$/, '')}${route}/${authority.polyfsRoot}/${authority.mduIndex}?${query}`, {
+    signal: activeSignal,
+    headers: {
+      Accept: RETRIEVAL_V3_ACCEPT,
+      'X-PolyStore-Session-Id': authority.sessionId,
+      'X-PolyStore-Slot': String(authority.slot),
+      'X-PolyStore-Start-Blob-Index': String(authority.startBlobIndex),
+      'X-PolyStore-Blob-Count': String(authority.entries.length),
+    },
+  })
+  return parseRetrievalEnvelopeV3(response, authority, activeSignal)
 }
 
 async function fetchRetrievalMetadata(providerBase: string, route: '/sp/retrieval/mdu' | '/gateway/mdu', pin: PinnedGeneration, mduIndex: bigint, signal: AbortSignal | undefined, fetchFn: typeof fetch): Promise<Uint8Array> {

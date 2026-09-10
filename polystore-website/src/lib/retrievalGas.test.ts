@@ -44,6 +44,9 @@ function fixture(mode: 'open' | 'ack') {
     '../lib/retrieval': { fetchActiveRetrievalGeneration: async () => pin, fetchFrozenSession: async () => { if (loseHash) throw new Error('session not observed'); return session },
       unhex: () => new Uint8Array(32) },
     '../lib/retrievalFlow': { waitForRetrievalChallenge: async () => session },
+    '../lib/retrievalV3': {},
+    '../lib/worker-client': { workerClient: {} },
+    '../domain/polyfsLayout': { BLOB_SIZE_BYTES: 131_072 },
     '../lib/retrievalTransactions': { ...transactions, browserRetrievalStore: () => store,
       retrievalIntentKey: async () => 'test', withRetrievalLock: (_key: string, work: () => unknown) => work() },
   }
@@ -55,12 +58,27 @@ function fixture(mode: 'open' | 'ack') {
     return modules[name]
   }, exports)
   const hook = exports.useRetrievalSessions!()
-  return { store, get estimates() { return estimates }, get sends() { return sends },
+  return { store, hook, get estimates() { return estimates }, get sends() { return sends },
     set failEstimate(value: boolean) { failEstimate = value }, set loseHash(value: boolean) { loseHash = value },
     set reverted(value: boolean) { reverted = value },
     run: () => mode === 'open' ? hook.open(pin as unknown as PinnedGeneration, [window as RetrievalWindow]) : hook.confirm([session as unknown as FrozenSession]),
     key: mode === 'open' ? 'open:test' : 'ack:test' }
 }
+
+test('v3 cached cleanup preserves a newer unresolved retrieval for the same owner and deal', async () => {
+  const f = fixture('open')
+  const oldSessionId = `0x${'12'.repeat(32)}` as const
+  const newSessionId = `0x${'34'.repeat(32)}` as const
+  const key = 'open-v3:test'
+  f.store.put(key, { state: 'broadcasting', data: '0x1234', intent: { binding: { sessionId: newSessionId } } })
+
+  await f.hook.forgetV3({ sessionId: oldSessionId, obligations: [], browserTransactionKey: key } as never)
+  assert.equal((f.store.get<{ intent: { binding: { sessionId: string } } }>(key))?.intent.binding.sessionId, newSessionId)
+
+  f.store.put(key, { state: 'committed', data: '0x1234', intent: { binding: { sessionId: oldSessionId } } })
+  await f.hook.forgetV3({ sessionId: oldSessionId, obligations: [], browserTransactionKey: key } as never)
+  assert.equal(f.store.get(key), undefined)
+})
 
 test('retrieval gas margin rounds upward without lossy number conversion', () => {
   assert.equal(transactions.retrievalGasLimit(1n), 10002n)

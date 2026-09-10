@@ -365,6 +365,37 @@ self.onmessage = async (event) => {
                 result = verifyRetrievalDataV3(payload.authority, payload.envelope, polyStoreWasmInstance);
                 break;
             }
+            case 'retrievalV3Range': {
+                result = PolyStoreWasm.checked_retrieval_v3_range(payload.fileStart, payload.fileLength, payload.rangeStart, payload.rangeLength, payload.userMdus);
+                break;
+            }
+            case 'retrievalV3Plan': {
+                result = PolyStoreWasm.retrieval_v3_plan(payload.first, payload.last, payload.population, payload.providers);
+                break;
+            }
+            case 'retrievalV3SessionId': {
+                result = PolyStoreWasm.retrieval_v3_session_id(payload.chainId, payload.owner, payload.dealId, payload.generation,
+                    payload.recordIndex, payload.rangeStart, payload.rangeLength, payload.planHash, payload.nonce);
+                break;
+            }
+            case 'retrievalV3ContextHash': {
+                result = PolyStoreWasm.retrieval_v3_context_hash(payload.context);
+                break;
+            }
+            case 'retrievalV3Seed': {
+                result = PolyStoreWasm.retrieval_v3_seed(payload.context, payload.anchor);
+                break;
+            }
+            case 'retrievalV3Challenges': {
+                result = PolyStoreWasm.derive_retrieval_v3_challenges(payload.context, payload.seed);
+                break;
+            }
+            case 'retrievalV3AckHash': {
+                result = PolyStoreWasm.retrieval_v3_obligation_ack_hash(payload.chainId, payload.sessionId, payload.contextHash,
+                    payload.planHash, payload.slot, payload.assigned, payload.payee, payload.blobCount,
+                    payload.billedEncodedBytes, payload.integrityRoot);
+                break;
+            }
             case 'verifyRetrievalWitness': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 verifyWitnessMdu(payload.bytes, payload.cell, polyStoreWasmInstance);

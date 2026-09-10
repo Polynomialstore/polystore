@@ -434,6 +434,29 @@ export const workerClient = {
   async verifyRetrievalDataV3(authority: RetrievalV3ChunkAuthority, envelope: RetrievalV3Envelope): Promise<Uint8Array> {
     return sendMessageToWorker('verifyRetrievalDataV3', { authority, envelope }, [envelope.bytes.buffer]) as Promise<Uint8Array>
   },
+  async retrievalV3Range(fileStart: bigint, fileLength: bigint, rangeStart: bigint, rangeLength: bigint, userMdus: bigint): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3Range', { fileStart, fileLength, rangeStart, rangeLength, userMdus }) as Promise<Uint8Array>
+  },
+  async retrievalV3Plan(first: bigint, last: bigint, population: bigint, providers: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3Plan', { first, last, population, providers }) as Promise<Uint8Array>
+  },
+  async retrievalV3SessionId(chainId: string, owner: Uint8Array, dealId: bigint, generation: bigint, recordIndex: number,
+    rangeStart: bigint, rangeLength: bigint, planHash: Uint8Array, nonce: bigint): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3SessionId', { chainId, owner, dealId, generation, recordIndex, rangeStart, rangeLength, planHash, nonce }) as Promise<Uint8Array>
+  },
+  async retrievalV3ContextHash(context: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3ContextHash', { context }) as Promise<Uint8Array>
+  },
+  async retrievalV3Seed(context: Uint8Array, anchor: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3Seed', { context, anchor }) as Promise<Uint8Array>
+  },
+  async retrievalV3Challenges(context: Uint8Array, seed: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3Challenges', { context, seed }) as Promise<Uint8Array>
+  },
+  async retrievalV3AckHash(chainId: string, sessionId: Uint8Array, contextHash: Uint8Array, planHash: Uint8Array, slot: number,
+    assigned: Uint8Array, payee: Uint8Array, blobCount: bigint, billedEncodedBytes: bigint, integrityRoot: Uint8Array): Promise<Uint8Array> {
+    return sendMessageToWorker('retrievalV3AckHash', { chainId, sessionId, contextHash, planHash, slot, assigned, payee, blobCount, billedEncodedBytes, integrityRoot }) as Promise<Uint8Array>
+  },
   async verifyRetrievalWitness(bytes: Uint8Array, cell: Uint8Array): Promise<Uint8Array> {
     return sendMessageToWorker('verifyRetrievalWitness', { bytes, cell }, [bytes.buffer]) as Promise<Uint8Array>
   },
