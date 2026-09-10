@@ -502,46 +502,67 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response, height, err := queryRetrievalSession(ctx, sessionID)
-		if err != nil {
-			writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
-			return
-		}
-		if response.Session.ChallengeVersion == 0 {
-			RouterGatewayFetch(w, r)
-			return
-		}
-		f, err := freezeRetrievalSessionResponse(response, height)
-		if err != nil {
-			writeJSONError(w, http.StatusConflict, "retrieval challenge unavailable", err.Error())
-			return
-		}
-		c, s := f.Context, f.Session
-		if id != c.DealID || q.Get("owner") != s.Owner || root.Bytes != c.Root || index != c.StartMDU {
-			writeJSONError(w, http.StatusBadRequest, "request does not match frozen session", "")
-			return
-		}
-		media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
-		if err != nil || media != "multipart/form-data" || params["version"] != "2" {
-			writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
-			return
-		}
-		for name, expected := range map[string]string{"X-PolyStore-Start-Blob-Index": strconv.FormatUint(uint64(c.StartLeaf), 10), "X-PolyStore-Blob-Count": strconv.FormatUint(c.BlobCount, 10)} {
-			if values := r.Header.Values(name); len(values) > 1 || (len(values) == 1 && values[0] != expected) {
-				writeJSONError(w, http.StatusBadRequest, "window hint does not match frozen session", "")
+		if errors.Is(err, ErrSessionNotFound) {
+			responseV3, heightV3, errV3 := queryRetrievalSessionV3(ctx, sessionID)
+			if errV3 != nil {
+				writeJSONError(w, http.StatusBadGateway, "session authority unavailable", errV3.Error())
 				return
 			}
+			fV3, errV3 := freezeRetrievalSessionV3Response(responseV3, heightV3)
+			if errV3 != nil {
+				writeJSONError(w, http.StatusConflict, "retrieval v3 authority unavailable", errV3.Error())
+				return
+			}
+			provider, status, errV3 := routerRetrievalDataProviderV3(r, fV3, root, index, id, q.Get("owner"))
+			if errV3 != nil {
+				writeJSONError(w, status, "request does not match frozen v3 data chunk", errV3.Error())
+				return
+			}
+			providers = []string{provider}
+			r.Header = r.Header.Clone()
+			r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(fV3.Session.SessionId))
+		} else {
+			if err != nil {
+				writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
+				return
+			}
+			if response.Session.ChallengeVersion == 0 {
+				RouterGatewayFetch(w, r)
+				return
+			}
+			f, err := freezeRetrievalSessionResponse(response, height)
+			if err != nil {
+				writeJSONError(w, http.StatusConflict, "retrieval challenge unavailable", err.Error())
+				return
+			}
+			c, s := f.Context, f.Session
+			if id != c.DealID || q.Get("owner") != s.Owner || root.Bytes != c.Root || index != c.StartMDU {
+				writeJSONError(w, http.StatusBadRequest, "request does not match frozen session", "")
+				return
+			}
+			media, params, err := mime.ParseMediaType(r.Header.Get("Accept"))
+			if err != nil || media != "multipart/form-data" || params["version"] != "2" {
+				writeJSONError(w, http.StatusNotAcceptable, "retrieval v2 requires multipart/form-data; version=2", "")
+				return
+			}
+			for name, expected := range map[string]string{"X-PolyStore-Start-Blob-Index": strconv.FormatUint(uint64(c.StartLeaf), 10), "X-PolyStore-Blob-Count": strconv.FormatUint(c.BlobCount, 10)} {
+				if values := r.Header.Values(name); len(values) > 1 || (len(values) == 1 && values[0] != expected) {
+					writeJSONError(w, http.StatusBadRequest, "window hint does not match frozen session", "")
+					return
+				}
+			}
+			if err := validateSessionFunding(s); err != nil {
+				writeJSONError(w, http.StatusBadGateway, "invalid session funding", err.Error())
+				return
+			}
+			if !c.Window.Contains(height) || (s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED) {
+				writeJSONError(w, http.StatusConflict, "session is no longer eligible for delivery", "")
+				return
+			}
+			providers = []string{s.AuthorizedProofProvider}
+			r.Header = r.Header.Clone()
+			r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(s.SessionId))
 		}
-		if err := validateSessionFunding(s); err != nil {
-			writeJSONError(w, http.StatusBadGateway, "invalid session funding", err.Error())
-			return
-		}
-		if !c.Window.Contains(height) || (s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED && s.Status != types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED) {
-			writeJSONError(w, http.StatusConflict, "session is no longer eligible for delivery", "")
-			return
-		}
-		providers = []string{s.AuthorizedProofProvider}
-		r.Header = r.Header.Clone()
-		r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(s.SessionId))
 	} else {
 		var height uint64
 		if raw, exists := q["committed_height"]; exists {

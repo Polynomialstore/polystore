@@ -19,7 +19,11 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
+func frozenSessionV3Fixture(t testing.TB, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
+	return frozenSessionV3FixtureRange(t, 0, rangeLength, userMDUs)
+}
+
+func frozenSessionV3FixtureRange(t testing.TB, rangeStart, rangeLength, userMDUs uint64) (*types.QueryGetRetrievalSessionV3Response, uint64) {
 	t.Helper()
 	oldChain := chainID
 	chainID = "polystore-test-1"
@@ -34,7 +38,8 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	for i := range providers {
 		providers[i][19] = byte(i + 1)
 	}
-	rng, err := retrievalchallenge.CheckedRangeV3(0, rangeLength, 0, rangeLength, userMDUs)
+	fileLength := rangeStart + rangeLength
+	rng, err := retrievalchallenge.CheckedRangeV3(0, fileLength, rangeStart, rangeLength, userMDUs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +51,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := (retrievalchallenge.SessionBindingV3{ChainID: chainID, Owner: ownerRaw, DealID: 0, Generation: 1, FileRecordIndex: 3, RangeStart: 0, RangeLength: rangeLength, PlanHash: planHash, Nonce: 7}).ID()
+	id, err := (retrievalchallenge.SessionBindingV3{ChainID: chainID, Owner: ownerRaw, DealID: 0, Generation: 1, FileRecordIndex: 3, RangeStart: rangeStart, RangeLength: rangeLength, PlanHash: planHash, Nonce: 7}).ID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +63,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	copy(setup32[:], setup)
 	c := retrievalchallenge.ContextV3{
 		ChainID: chainID, SetupDigest: setup32, SessionID: id, SessionOwner: ownerRaw,
-		DealID: 0, Generation: 1, FileRecordIndex: 3, FileLength: rangeLength, RangeLength: rangeLength,
+		DealID: 0, Generation: 1, FileRecordIndex: 3, FileLength: fileLength, RangeStart: rangeStart, RangeLength: rangeLength,
 		MetadataMDUs: 4, UserMDUs: userMDUs, PlanHash: planHash, Population: rng.Population,
 		SampleCount: min(rng.Population, retrievalchallenge.MaxLargeSessionSamples), Nonce: 7,
 		PriceDenom: "stake", PricePerBlob: "1", BaseFee: "0",
@@ -71,7 +76,7 @@ func frozenSessionV3Fixture(t *testing.T, rangeLength, userMDUs uint64) (*types.
 	s := types.RetrievalSessionV3{
 		SessionId: id[:], ContextHash: hash[:], DealId: 0, Generation: 1, Owner: owner, Payer: owner,
 		PolyfsRoot: c.PolyFSRoot[:], IntegrityRoot: c.IntegrityRoot[:], SetupDigest: setup,
-		FileRecordIndex: 3, FileLength: rangeLength, RangeLength: rangeLength, MetadataMdus: 4, UserMdus: userMDUs,
+		FileRecordIndex: 3, FileLength: fileLength, RangeStart: rangeStart, RangeLength: rangeLength, MetadataMdus: 4, UserMdus: userMDUs,
 		PlanHash: planHash[:], FirstBlob: rng.First, LastBlob: rng.Last, Population: rng.Population,
 		SampleCount: c.SampleCount, Nonce: 7, PriceDenom: "stake", PricePerBlob: cosmosmath.OneInt(), BaseFee: cosmosmath.ZeroInt(),
 		Funding:        types.RetrievalSessionFunding_RETRIEVAL_SESSION_FUNDING_REQUESTER,
@@ -232,13 +237,29 @@ func TestRetrievalV3RecoveryOutcomeDoesNotAttributeRequestedSession(t *testing.T
 	}
 }
 
-func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
+func buildProviderV3ArtifactFixture(t testing.TB) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
+	return buildProviderV3ArtifactFixtureSize(t, 1024)
+}
+
+func buildProviderV3ArtifactFixtureSize(t testing.TB, size uint64) (*frozenRetrievalSessionV3, retrievalGenerationKey, string) {
 	t.Helper()
 	useTempUploadDir(t)
 	initCryptoForTest(t)
 	const dealID = uint64(0)
 	payload := filepath.Join(t.TempDir(), "payload.bin")
-	if err := os.WriteFile(payload, bytes.Repeat([]byte{0x5a}, 1024), 0600); err != nil {
+	f, err := os.OpenFile(payload, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(int64(size)); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if _, err := f.WriteAt([]byte{0x5a}, 0); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
 	result, newDir, err := mode2BuildArtifactsWithOptions(context.Background(), payload, dealID, "General:rs=8+4", "payload.bin", 0, mode2BuildOptions{fatVersion: 3})
@@ -248,7 +269,7 @@ func buildProviderV3ArtifactFixture(t *testing.T) (*frozenRetrievalSessionV3, re
 	metadataMDUs := uint64(1 + result.witnessMdus)
 	root := result.manifestRoot
 	integrity := result.integrityRoot
-	r, height := frozenSessionV3Fixture(t, 1024, result.userMdus)
+	r, height := frozenSessionV3Fixture(t, size, result.userMdus)
 	r.Session.PolyfsRoot = bytes.Clone(root.Bytes[:])
 	r.Session.IntegrityRoot = integrity[:]
 	r.Session.MetadataMdus = metadataMDUs
@@ -278,6 +299,9 @@ func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testin
 	}
 	if err := verifyIntegrityVectorV3(t.Context(), dir, key, 0, metadata); err != nil {
 		t.Fatalf("generation ingest verification failed: %v", err)
+	}
+	if err := validateIntegrityIndexV3(filepath.Join(dir, integrityIndexV3File), key.Users*retrievalchallenge.IntegrityLeavesPerUserMDU); err != nil {
+		t.Fatalf("generation ingest did not publish the verified integrity index: %v", err)
 	}
 	slot, proofs, remaining, err := buildProviderProofBatchV3(t.Context(), frozen, signer)
 	if err != nil {

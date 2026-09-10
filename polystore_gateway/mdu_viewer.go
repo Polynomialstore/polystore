@@ -83,7 +83,13 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 	// before current-deal owner/root checks, which cannot authorize a deputy or a
 	// sponsored request and must not revoke an already funded generation.
 	var onchainSession *types.RetrievalSession
-	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") != "" {
+	sessionHeaders := r.Header.Values("X-PolyStore-Session-Id")
+	if len(sessionHeaders) > 1 {
+		writeJSONError(w, http.StatusBadRequest, "exactly one X-PolyStore-Session-Id header is required", "")
+		return
+	}
+	hasSession := len(sessionHeaders) == 1 && sessionHeaders[0] != ""
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && hasSession {
 		ctx, releaseCapacity, err := admitRetrievalResponse(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusServiceUnavailable, "provider proof capacity is busy", "")
@@ -103,6 +109,19 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		}
 		defer release()
 		response, height, queryErr := queryRetrievalSession(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+		if errors.Is(queryErr, ErrSessionNotFound) {
+			responseV3, heightV3, errV3 := queryRetrievalSessionV3(r.Context(), r.Header.Get("X-PolyStore-Session-Id"))
+			if errV3 != nil {
+				status := http.StatusBadGateway
+				if errors.Is(errV3, ErrSessionNotFound) {
+					status = http.StatusNotFound
+				}
+				writeJSONError(w, status, "failed to load retrieval session", errV3.Error())
+				return
+			}
+			serveFrozenRetrievalDataV3(w, r, manifestRoot, mduIndex, responseV3, heightV3)
+			return
+		}
 		if queryErr != nil {
 			status := http.StatusBadGateway
 			if errors.Is(queryErr, ErrSessionNotFound) {
@@ -122,7 +141,7 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		onchainSession = &response.Session
 	}
 
-	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && r.Header.Get("X-PolyStore-Session-Id") == "" {
+	if strings.HasPrefix(r.URL.Path, "/sp/retrieval/") && !hasSession {
 		serveCommittedRetrievalMetadata(w, r, manifestRoot, mduIndex)
 		return
 	}
