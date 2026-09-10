@@ -33,6 +33,21 @@ type V3CheckpointObservation = {
   lockedFee: string; cursors: Record<string, string>; chunks: V3PlannedChunk[]; unsampled: string[]
 }
 
+type MduRequestCounts = {
+  gatewayMetadata: number; gatewayData: number; directMetadata: number; directData: number
+}
+
+function proofOutcomeSlots(outcomes: unknown[]): number[] {
+  const slots = outcomes.flatMap((observed) => {
+    if (!observed || typeof observed !== 'object') return []
+    const body = (observed as JsonObject).body
+    if (!body || typeof body !== 'object') return []
+    const slot = Number((body as JsonObject).slot)
+    return Number.isInteger(slot) ? [slot] : []
+  })
+  return [...new Set(slots)].sort((a, b) => a - b)
+}
+
 async function evmRpc(page: Page, method: string, params: unknown[]): Promise<unknown> {
   const response = await page.request.post(evm, {
     data: { jsonrpc: '2.0', id: method, method, params },
@@ -263,6 +278,10 @@ test.describe('native V3 browser qualification', () => {
     const gatewayMduResponses: Array<{ url: string; kind: 'metadata' | 'data'; bodyBytes: number }> = []
     const gatewayMduCanceled: Array<{ url: string; kind: 'metadata' | 'data'; error: string }> = []
     const directSpMduRequests: string[] = []
+    const mduNetworkRequests: MduRequestCounts = {
+      gatewayMetadata: 0, gatewayData: 0, directMetadata: 0, directData: 0,
+    }
+    const snapshotMduRequests = (): MduRequestCounts => ({ ...mduNetworkRequests })
     const retrievalResponseTasks: Promise<void>[] = []
     const retrievalObserverErrors: string[] = []
     let rawTransactions = 0
@@ -293,7 +312,17 @@ test.describe('native V3 browser qualification', () => {
         scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3Diagnostic(event) }
       })
       page.on('request', (request) => {
-        if (/^\/sp\/retrieval\/mdu\/[^/]+\/[^/]+$/.test(new URL(request.url()).pathname)) {
+        const path = new URL(request.url()).pathname
+        const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)
+        const directMdu = /^\/sp\/retrieval\/mdu\/[^/]+\/[^/]+$/.test(path)
+        if (gatewayMdu || directMdu) {
+          const data = Boolean(request.headers()['x-polystore-session-id'])
+          if (gatewayMdu && data) mduNetworkRequests.gatewayData++
+          else if (gatewayMdu) mduNetworkRequests.gatewayMetadata++
+          else if (data) mduNetworkRequests.directData++
+          else mduNetworkRequests.directMetadata++
+        }
+        if (directMdu) {
           directSpMduRequests.push(request.url())
         }
         if (request.method() !== 'POST') return
@@ -392,7 +421,8 @@ test.describe('native V3 browser qualification', () => {
         evmTransactions.push(tx)
         evmReceipts.push(committed)
       }
-      await expect.poll(() => providerProofOutcomes.length).toBeGreaterThan(0)
+      const obligationSlots = (obligations as JsonObject[]).map((row) => Number(row.slot)).sort((a, b) => a - b)
+      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(obligationSlots)
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject
         expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)
@@ -438,18 +468,22 @@ test.describe('native V3 browser qualification', () => {
       }
       Object.assign(summary, { paidDiagnosticCount: diagnostics.length, progressAfterPaid, retrievalHttp })
       const paidTransactions = rawTransactions
+      const cacheMduRequests = { before: snapshotMduRequests(), after: snapshotMduRequests() }
       const cacheButton = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
       const [cachedDownload] = await Promise.all([
         waitForDownloadEventOrFailure(page, retrievalTimeout, await readDownloadFailureBanner(page)), cacheButton.click(),
       ])
       const cached = await hashDownload(cachedDownload)
       await cachedDownload.delete()
+      cacheMduRequests.after = snapshotMduRequests()
       expect(cached).toEqual(downloaded)
+      expect(cacheMduRequests.after).toEqual(cacheMduRequests.before)
       expect(rawTransactions).toBe(paidTransactions)
       expect(await balance(page, payer, 'stake')).toBe(afterPaid.stake)
       expect(await balance(page, payer, 'aatom')).toBe(afterPaid.aatom)
       if (failure) throw failure
-      Object.assign(summary, { success: true, before, afterPaid, chargedStake: String(chargedStake), session, rawTransactions, downloaded })
+      Object.assign(summary, { success: true, before, afterPaid, chargedStake: String(chargedStake), session,
+        rawTransactions, downloaded, cached, cacheMduRequests })
     } finally {
       stopWatchdog()
       persist()
@@ -772,6 +806,10 @@ test.describe('native V3 browser qualification', () => {
     const evmTransactions: JsonObject[] = []
     const evmReceipts: JsonObject[] = []
     const providerProofOutcomes: unknown[] = []
+    const mduNetworkRequests: MduRequestCounts = {
+      gatewayMetadata: 0, gatewayData: 0, directMetadata: 0, directData: 0,
+    }
+    const snapshotMduRequests = (): MduRequestCounts => ({ ...mduNetworkRequests })
     const durableStages: string[] = []
     const faultDeliveries = { corrupt: 0, 'multipart-order': 0, truncate: 0 }
     const faultFailures: Record<string, string> = {}
@@ -875,7 +913,13 @@ test.describe('native V3 browser qualification', () => {
 
     const mutateTarget = async (route: Route) => {
       const request = route.request(), headers = request.headers()
+      const path = new URL(request.url()).pathname
       const sessionId = headers['x-polystore-session-id'] || ''
+      const direct = path.startsWith('/sp/retrieval/mdu/')
+      if (direct && sessionId) mduNetworkRequests.directData++
+      else if (direct) mduNetworkRequests.directMetadata++
+      else if (sessionId) mduNetworkRequests.gatewayData++
+      else mduNetworkRequests.gatewayMetadata++
       if (!sessionId) return route.continue()
       dataRequests++
       if (!planned) {
@@ -1027,7 +1071,8 @@ test.describe('native V3 browser qualification', () => {
         evmTransactions.push(tx)
         evmReceipts.push(committed)
       }
-      await expect.poll(() => providerProofOutcomes.length).toBeGreaterThan(0)
+      const obligationSlots = obligations.map((row) => Number(row.slot)).sort((a, b) => a - b)
+      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(obligationSlots)
       for (const observed of providerProofOutcomes) {
         const row = observed as JsonObject, body = row.body as JsonObject, timing = body.timing as JsonObject
         expect(row.txHash).toMatch(/^[0-9a-f]{64}$/i)
@@ -1052,13 +1097,16 @@ test.describe('native V3 browser qualification', () => {
       await expect.poll(() => unfinishedLocalState(activePage)).toEqual({ checkpoints: 1, unbound: 0, journals: [] })
 
       const requestsBeforeCache = { data: dataRequests, target: targetRequests, raw: rawTransactions }
+      const cacheMduRequests = { before: snapshotMduRequests(), after: snapshotMduRequests() }
       const cacheButton = activePage.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`).first()
       const [cachedDownload] = await Promise.all([
         waitForDownloadEventOrFailure(activePage, 120_000, await readDownloadFailureBanner(activePage)), cacheButton.click(),
       ])
       const cached = await hashDownload(cachedDownload)
       await cachedDownload.delete()
+      cacheMduRequests.after = snapshotMduRequests()
       expect(cached).toEqual(downloaded)
+      expect(cacheMduRequests.after).toEqual(cacheMduRequests.before)
       expect({ data: dataRequests, target: targetRequests, raw: rawTransactions }).toEqual(requestsBeforeCache)
       const phaseGuards = {
         openedSessions: diagnostics.filter((event) => event.phase === 'opened_session').length,
@@ -1070,7 +1118,8 @@ test.describe('native V3 browser qualification', () => {
         success: true, stage: 'settled-cache', session, before, afterUnknown, after, rawTransactions,
         rawTransactionAttempts,
         downloaded, cached, chargedStake: String(chargedStake), requestsBeforeCache, dataRequests, targetRequests,
-        paidDiagnosticCount: diagnostics.length, phaseGuards, localState: await unfinishedLocalState(activePage),
+        cacheMduRequests, paidDiagnosticCount: diagnostics.length, phaseGuards,
+        localState: await unfinishedLocalState(activePage),
       })
       await durable('settled-cache')
     } finally {
