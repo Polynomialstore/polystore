@@ -1,0 +1,347 @@
+{
+  "claim": "single-host native-v3 provider-route operating-point diagnostic; no maximum-capacity, WAN, or delivered-byte qualification",
+  "limitations": [
+    "Four validators and twelve provider-daemons ran on one Linux host; this is not a realistic deployment.",
+    "The 2 transactions/s schedule is an accepted local operating point, not a measured maximum.",
+    "HTTP terminal timing combines proof generation, native verification, gas simulation, signing, broadcast, and client commit observation.",
+    "Pre-success-start delay includes scheduler delay and, for 13 requests, retry backoff after an HTTP 429; it is not a pure signer-queue measurement.",
+    "Commit p95 values are execution upper bounds from the Commit metric; they exclude the documented post-persistence tail.",
+    "CPU is a fixed-window process tick delta; RSS is a whole-process-lifetime peak, not a phase peak or 2 GiB usage claim.",
+    "Consensus header times are not wall-clock commit-completion timestamps, so this report makes no header-time throughput claim.",
+    "The retained HTTP receipts do not separate CheckTx latency from block inclusion; only the combined client terminal observation is reported.",
+    "No owner ACK or byte delivery was performed; delivery, resume, cache, WAN, and maximum capacity remain unqualified."
+  ],
+  "private_inputs": {
+    "blocks": {
+      "bytes": 138694,
+      "sha256": "8a319de7509e73d207252fa9b3dbfb19b1f08a3a366bc438c1396894548bcda4"
+    },
+    "commit_streams": {
+      "2dc1ec9c1cfdcfcd97799d8579faa4378bc292b4": {
+        "sha256": "c50674a94095903ec6031fe04cca4c0abbfb5c040ad736401a480681f80539e9"
+      },
+      "303e1ba96a846764fc2540d64e2cde2beba4e77b": {
+        "sha256": "4d6c5d59e014f7c94a6cc512bb05b51e1cc6fa867fce7618e086c0a76baa171a"
+      },
+      "39bf300568acd1729f714b4abece18157fb7278a": {
+        "sha256": "4ecbd72bc6c780f427ad8daf5722e47f1fe994a72511fa17c5f1566c984a6d83"
+      },
+      "c7bad61aa9f70e24353b72c68671a6d6522a4294": {
+        "sha256": "50945719d13b631cdc6627fb7dbed82ec698cc75b9fce22c425b7cbb2a481ed4"
+      }
+    },
+    "evidence": {
+      "bytes": 4302802,
+      "sha256": "488e4e629641f272bbc2c5138aa2e1539d6d74f84ed5e3240b79679817627ebe"
+    },
+    "transactions": {
+      "bytes": 19532486,
+      "sha256": "97621fb3d5edc49d5c1c81b85a82b23ab33f3eaa0784b344f9212807e5f47ee7"
+    }
+  },
+  "profile": {
+    "budgets_measured_for_qualification": false,
+    "commit_p95_budget_ms": 700,
+    "measured_offer_seconds": 180,
+    "measured_openings": 5940,
+    "measured_proof_transactions": 360,
+    "normal_audit_epochs": 2,
+    "normal_audit_transactions": 24,
+    "offered_openings_per_second": 33,
+    "offered_transactions_per_second": 2,
+    "open_batch_sizes": [
+      31,
+      15
+    ],
+    "provider_daemons": 12,
+    "sessions": 46,
+    "systematic_providers": 8,
+    "validator_memory_ceiling_bytes": 2147483648,
+    "validators": 4,
+    "warmup_transactions": 8
+  },
+  "qualification": false,
+  "reproduction": {
+    "harness": "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
+    "inputs_are_private": true
+  },
+  "result": {
+    "audits": {
+      "all_assignments_accepted": true,
+      "epochs": [
+        4,
+        5
+      ],
+      "missed": 0,
+      "transactions": 24
+    },
+    "authoritative_openings_per_scheduler_second": 32.62539357630565,
+    "client_observation_bins": [
+      {
+        "carryover_in_flight": 0,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 53,
+        "end_offset_ns": 30000000000,
+        "in_flight_at_end": 7,
+        "index": 0,
+        "offered": 60,
+        "outstanding_at_end": 7,
+        "queued_at_end": 0,
+        "start_offset_ns": 0,
+        "terminal": 53
+      },
+      {
+        "carryover_in_flight": 7,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 52,
+        "end_offset_ns": 60000000000,
+        "in_flight_at_end": 8,
+        "index": 1,
+        "offered": 60,
+        "outstanding_at_end": 8,
+        "queued_at_end": 0,
+        "start_offset_ns": 30000000000,
+        "terminal": 59
+      },
+      {
+        "carryover_in_flight": 8,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 53,
+        "end_offset_ns": 90000000000,
+        "in_flight_at_end": 7,
+        "index": 2,
+        "offered": 60,
+        "outstanding_at_end": 7,
+        "queued_at_end": 0,
+        "start_offset_ns": 60000000000,
+        "terminal": 61
+      },
+      {
+        "carryover_in_flight": 7,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 54,
+        "end_offset_ns": 120000000000,
+        "in_flight_at_end": 6,
+        "index": 3,
+        "offered": 60,
+        "outstanding_at_end": 6,
+        "queued_at_end": 0,
+        "start_offset_ns": 90000000000,
+        "terminal": 61
+      },
+      {
+        "carryover_in_flight": 6,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 55,
+        "end_offset_ns": 150000000000,
+        "in_flight_at_end": 5,
+        "index": 4,
+        "offered": 60,
+        "outstanding_at_end": 5,
+        "queued_at_end": 0,
+        "start_offset_ns": 120000000000,
+        "terminal": 61
+      },
+      {
+        "carryover_in_flight": 5,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 55,
+        "end_offset_ns": 180000000000,
+        "in_flight_at_end": 5,
+        "index": 5,
+        "offered": 60,
+        "outstanding_at_end": 5,
+        "queued_at_end": 0,
+        "start_offset_ns": 150000000000,
+        "terminal": 60
+      }
+    ],
+    "commit_step": [
+      {
+        "fenced_samples": 1424,
+        "observed_blocks": 215,
+        "p95_upper_bound_ms": 371.40020100197995,
+        "raw_samples": 1423,
+        "validator": "2dc1ec9c1cfdcfcd97799d8579faa4378bc292b4",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1424,
+        "observed_blocks": 215,
+        "p95_upper_bound_ms": 360.59342700199227,
+        "raw_samples": 1423,
+        "validator": "303e1ba96a846764fc2540d64e2cde2beba4e77b",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1424,
+        "observed_blocks": 215,
+        "p95_upper_bound_ms": 363.8384780019843,
+        "raw_samples": 1423,
+        "validator": "39bf300568acd1729f714b4abece18157fb7278a",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1424,
+        "observed_blocks": 215,
+        "p95_upper_bound_ms": 395.594755001095,
+        "raw_samples": 1423,
+        "validator": "c7bad61aa9f70e24353b72c68671a6d6522a4294",
+        "within_700ms_budget": true
+      }
+    ],
+    "committed_valid_transactions_per_scheduler_second": 1.9772965803821605,
+    "http_attempts": {
+      "backpressure_http_429": 13,
+      "retried_requests": 13,
+      "scheduled_requests": 360,
+      "successful_http_200": 360,
+      "terminal_failures": 0,
+      "total_attempts": 373,
+      "unclassified_attempts": 0
+    },
+    "initial_dispatch_lag": {
+      "count": 360,
+      "max_ms": 2034.033726,
+      "median_ms": 48.236209,
+      "p50_ms": 48.220304,
+      "p95_ms": 280.756737,
+      "p99_ms": 1797.525747,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "maximum_dispatch_lag_ms": 2034.033726,
+    "maximum_in_flight": 8,
+    "maximum_queued": 2,
+    "measured_authoritative_new_openings": 5940,
+    "measured_committed_valid_proof_transactions": 360,
+    "measured_gas": {
+      "peak_block_gas_used": 35516833,
+      "peak_block_gas_wanted": 57742085,
+      "peak_block_height_by_used_gas": 408,
+      "proof_count_distribution": {
+        "15": 18,
+        "16": 144,
+        "17": 198
+      },
+      "used_per_authoritative_opening": 513464.8621212121,
+      "used_per_transaction_max": 8725999,
+      "used_per_transaction_median": 8725836.0,
+      "used_per_transaction_min": 7710824,
+      "used_total": 3049981281,
+      "wanted_total": 4870622929
+    },
+    "pre_success_start_delay": {
+      "count": 360,
+      "max_ms": 2157.521673,
+      "median_ms": 49.5371705,
+      "p50_ms": 49.514476,
+      "p95_ms": 1303.981341,
+      "p99_ms": 2137.684498,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "proof_commit_height_span": {
+      "first_anchor": 301,
+      "first_height": 293,
+      "last_height": 425,
+      "second_anchor": 401
+    },
+    "rate_denominator": "all 360 client-observed committed successes over scheduler start through final terminal observation, including drain",
+    "reconciled_block_span": {
+      "all_four_headers_agree": true,
+      "all_four_results_agree": true,
+      "blocks": 218,
+      "committed_measured_proof_transactions": 360,
+      "first_height": 217,
+      "last_height": 434
+    },
+    "refunds": {
+      "all_verified": true,
+      "refund_transactions": 46,
+      "sessions_expired": 46
+    },
+    "request_duration": {
+      "count": 360,
+      "max_ms": 4097.037565,
+      "median_ms": 2827.030934,
+      "p50_ms": 2826.685516,
+      "p95_ms": 3730.673672,
+      "p99_ms": 3867.149297,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "scheduler_drain_seconds": 2.066769129,
+    "scheduler_elapsed_seconds": 182.066769129,
+    "terminal_observation_latency": {
+      "count": 360,
+      "max_ms": 6030.771424,
+      "median_ms": 2933.4897445,
+      "p50_ms": 2928.885982,
+      "p95_ms": 4277.033451,
+      "p99_ms": 5794.835161,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "validator_cpu": [
+      {
+        "mean_cores_over_window": 0.36440827652402696,
+        "system_cpu_seconds": 0.5,
+        "user_cpu_seconds": 68.65,
+        "validator": "c7bad61aa9f70e24353b72c68671a6d6522a4294",
+        "window_seconds": 189.759685646
+      },
+      {
+        "mean_cores_over_window": 0.19103109217636988,
+        "system_cpu_seconds": 0.29,
+        "user_cpu_seconds": 35.96,
+        "validator": "2dc1ec9c1cfdcfcd97799d8579faa4378bc292b4",
+        "window_seconds": 189.759685646
+      },
+      {
+        "mean_cores_over_window": 0.19066220455009827,
+        "system_cpu_seconds": 0.3,
+        "user_cpu_seconds": 35.88,
+        "validator": "39bf300568acd1729f714b4abece18157fb7278a",
+        "window_seconds": 189.759685646
+      },
+      {
+        "mean_cores_over_window": 0.19087299747939632,
+        "system_cpu_seconds": 0.32,
+        "user_cpu_seconds": 35.9,
+        "validator": "303e1ba96a846764fc2540d64e2cde2beba4e77b",
+        "window_seconds": 189.759685646
+      }
+    ],
+    "validator_resources": [
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 356466688,
+        "returncode": 0,
+        "validator": "c7bad61aa9f70e24353b72c68671a6d6522a4294"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 332103680,
+        "returncode": 0,
+        "validator": "2dc1ec9c1cfdcfcd97799d8579faa4378bc292b4"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 330551296,
+        "returncode": 0,
+        "validator": "39bf300568acd1729f714b4abece18157fb7278a"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 329969664,
+        "returncode": 0,
+        "validator": "303e1ba96a846764fc2540d64e2cde2beba4e77b"
+      }
+    ]
+  },
+  "schema": "polystore.native-v3-cross-audit-retained.v1",
+  "source": {
+    "chain_id": "polystore_260-1",
+    "harness_commit": "da54964dc502f14bc73096fb6adc5f8ba0b2be6b",
+    "product_source_commit": "5cc77e1aa28b17082cc851363b6fa7ada1ed9ce3",
+    "runtime_artifact_source_match": "supplied binaries/library; build correspondence not attested"
+  },
+  "status": "passed"
+}

@@ -1,0 +1,102 @@
+{
+  "claim": "single-host native-v3 provider-route operating-point diagnostic; no maximum-capacity, WAN, or delivery qualification",
+  "excluded_private_data": [
+    "raw transactions and signatures",
+    "proof messages and session state",
+    "keyrings and wallet material",
+    "raw blocks and Commit streams",
+    "host identity, absolute paths, and logs"
+  ],
+  "private_inputs": {
+    "evidence.json": {
+      "bytes": 4302802,
+      "sha256": "488e4e629641f272bbc2c5138aa2e1539d6d74f84ed5e3240b79679817627ebe"
+    },
+    "native-build-5cc77e1a-002-provenance.json": {
+      "bytes": 3256,
+      "sha256": "35ce884356baecc7f8356335a977f37b90f5447158dd3fbc99b4780a04df8c78"
+    },
+    "native-v3-cross-audit-blocks.jsonl": {
+      "bytes": 138694,
+      "sha256": "8a319de7509e73d207252fa9b3dbfb19b1f08a3a366bc438c1396894548bcda4"
+    },
+    "native-v3-cross-audit-commit-2dc1ec9c1cfdcfcd97799d8579faa4378bc292b4.jsonl": {
+      "bytes": 277212,
+      "sha256": "c50674a94095903ec6031fe04cca4c0abbfb5c040ad736401a480681f80539e9"
+    },
+    "native-v3-cross-audit-commit-303e1ba96a846764fc2540d64e2cde2beba4e77b.jsonl": {
+      "bytes": 275313,
+      "sha256": "4d6c5d59e014f7c94a6cc512bb05b51e1cc6fa867fce7618e086c0a76baa171a"
+    },
+    "native-v3-cross-audit-commit-39bf300568acd1729f714b4abece18157fb7278a.jsonl": {
+      "bytes": 276049,
+      "sha256": "4ecbd72bc6c780f427ad8daf5722e47f1fe994a72511fa17c5f1566c984a6d83"
+    },
+    "native-v3-cross-audit-commit-c7bad61aa9f70e24353b72c68671a6d6522a4294.jsonl": {
+      "bytes": 276929,
+      "sha256": "50945719d13b631cdc6627fb7dbed82ec698cc75b9fce22c425b7cbb2a481ed4"
+    },
+    "native-v3-cross-audit-retained-001.guard.json": {
+      "bytes": 4903,
+      "sha256": "c508492c4cca5cd2589170297198e168cc9aa9ad0c9bca304514e0d52dfb04f8"
+    },
+    "native-v3-cross-audit-retained-001.plan.json": {
+      "bytes": 4853,
+      "sha256": "db5f113af9ed9af5d66c98c78505d764f2c70d3d0810c8040d48824f44d2c3ce"
+    },
+    "transaction-recovery-private/transactions.json": {
+      "bytes": 19532486,
+      "sha256": "97621fb3d5edc49d5c1c81b85a82b23ab33f3eaa0784b344f9212807e5f47ee7"
+    },
+    "transaction-recovery-private/validator0.json": {
+      "bytes": 6421050,
+      "sha256": "adb1b942aa46437c221d7b3eaa3b508dee2d2329fa4045d03e90d47f02d86ed9"
+    },
+    "transaction-recovery-private/validator1.json": {
+      "bytes": 6421050,
+      "sha256": "adb1b942aa46437c221d7b3eaa3b508dee2d2329fa4045d03e90d47f02d86ed9"
+    },
+    "transaction-recovery-private/validator2.json": {
+      "bytes": 6421050,
+      "sha256": "adb1b942aa46437c221d7b3eaa3b508dee2d2329fa4045d03e90d47f02d86ed9"
+    },
+    "transaction-recovery-private/validator3.json": {
+      "bytes": 6421050,
+      "sha256": "adb1b942aa46437c221d7b3eaa3b508dee2d2329fa4045d03e90d47f02d86ed9"
+    }
+  },
+  "published_files": {
+    "README.md": {
+      "bytes": 6917,
+      "sha256": "ce56e8878714b5d643d45861cbf0652a570305be89b0c0c6fc2fa93a667a06c4"
+    },
+    "check.py": {
+      "bytes": 3908,
+      "sha256": "11945643c3eff1ca37e7a5a3b50a1a61a3f9bc2803129ec5f99d2a283a2be7ee"
+    },
+    "plan.json": {
+      "bytes": 1525,
+      "sha256": "4ade88469200d9f332ea7d30b43b7b790dac63d65c5f528e5125c200162a6079"
+    },
+    "runtime-provenance.json": {
+      "bytes": 3243,
+      "sha256": "1c2d298f66d51cf3264b62495098dc20d92efcde0be723613410dd3b991e1fe5"
+    },
+    "summarize.py": {
+      "bytes": 32017,
+      "sha256": "4f7b616418a97478d1fd9e6d3aa037a59d1eb86b0df59f71eb878076298d3967"
+    },
+    "summary.json": {
+      "bytes": 11766,
+      "sha256": "a132ccf6414198d061a732018867abd42c444b1eb4305f20b55d25a3dd49deed"
+    }
+  },
+  "qualification": false,
+  "schema": "polystore.retained-publication.v1",
+  "status": "passed",
+  "transformations": [
+    "summary.json is reconstructed by summarize.py from exact private evidence, stopped-blockstore transactions, reconciled blocks, and four raw Commit streams",
+    "plan.json is the completed run guard with hostname removed, runtime manifest replaced by runtime-provenance.json, and benchmark-root paths replaced by $BENCH_ROOT",
+    "runtime-provenance.json is the frozen build manifest with benchmark-root paths replaced by $BENCH_ROOT"
+  ]
+}
