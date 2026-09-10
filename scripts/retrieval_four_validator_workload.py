@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as wait_futures
 
 import retrieval_bench_artifact as artifact
 import retrieval_commit_metrics as commit_metrics
@@ -38,6 +39,568 @@ OPEN_SESSION_PREPARATION_GAS = 400_000
 OPEN_SESSION_BATCH_BASE_GAS = 100_000
 OPEN_SESSION_BATCH_MAX = 64
 OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_BATCH_BASE_GAS + OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
+V3_PILOT_BYTES = 16 * 1024 * 1024
+V3_PILOT_SESSIONS = 2
+V3_MAX_SAMPLES = 132
+V3_BITMAP_BYTES = (V3_MAX_SAMPLES + 7) // 8
+V3_SYSTEMATIC_PROVIDERS = 8
+V3_PROVIDER_AUTH_TOKEN = "healthy-diagnostic-owned-local-stack"
+V3_BUSY_MAX_ATTEMPTS = 4
+V3_BUSY_RETRY_SECONDS = 2
+V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
+V3_ABORT_FREE_BYTES = 768 * 1024**2
+
+
+def require_free_disk(path, minimum, phase):
+    free = shutil.disk_usage(path).free
+    if free < minimum:
+        raise ValueError(f"{phase} requires {minimum} free bytes; found {free}")
+    return free
+
+
+def provider_http_url(lifecycle, address, route):
+    matches = [row for row in lifecycle.doc.get("providers", []) if row.get("address") == address]
+    if len(matches) != 1:
+        raise ValueError("provider address does not identify exactly one owned daemon")
+    port = producer.uint(matches[0].get("port", 0))
+    if not 1 <= port <= 65535 or not route.startswith("/"):
+        raise ValueError("owned provider daemon has an invalid HTTP endpoint")
+    return f"http://127.0.0.1:{port}{route}"
+
+
+def v3_bitmap_ordinals(session):
+    """Return authoritative accepted sample ordinals from one v3 query."""
+    count = producer.uint(session.get("sample_count", 0))
+    if not 1 <= count <= V3_MAX_SAMPLES:
+        raise ValueError("v3 session sample count is outside the protocol bound")
+    try:
+        bitmap = base64.b64decode(session["accepted_sample_bitmap"], validate=True)
+    except (KeyError, ValueError) as error:
+        raise ValueError("v3 session has invalid accepted sample bitmap") from error
+    if len(bitmap) != V3_BITMAP_BYTES or bitmap[-1] & 0xf0:
+        raise ValueError("v3 session has noncanonical accepted sample bitmap")
+    ordinals = [ordinal for ordinal in range(V3_MAX_SAMPLES)
+                if bitmap[ordinal // 8] & (1 << (ordinal % 8))]
+    if any(ordinal >= count for ordinal in ordinals):
+        raise ValueError("v3 bitmap accepts an ordinal beyond the frozen sample count")
+    return ordinals
+
+
+def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonce,
+                        polyfs_root, integrity_root, chain_id, deadline_height,
+                        file_bytes=V3_PILOT_BYTES, expired=False, refunded=False):
+    """Fail closed on the v3 fields that define pilot claims and liabilities."""
+    session = response.get("session")
+    if not isinstance(session, dict):
+        raise ValueError("v3 session query is missing session state")
+    try:
+        got_id = base64.b64decode(session["session_id"], validate=True).hex()
+    except (KeyError, ValueError) as error:
+        raise ValueError("v3 session query has an invalid identity") from error
+    if (got_id != session_id or producer.uint(session.get("deal_id", 0)) != producer.uint(deal_id) or
+            session.get("owner") != owner or session.get("payer") != owner or
+            producer.uint(session.get("nonce", 0)) != nonce or
+            producer.uint(session.get("file_record_index", 1)) != 0 or
+            producer.uint(session.get("file_start_offset", 1)) != 0 or
+            producer.uint(session.get("file_length", 0)) != file_bytes or
+            producer.uint(session.get("range_start", 1)) != 0 or
+            producer.uint(session.get("range_length", 0)) != file_bytes or
+            producer.uint(session.get("generation", 0)) != 1 or
+            producer.uint(session.get("metadata_mdus", 0)) != 2 or
+            producer.uint(session.get("user_mdus", 0)) != 3 or
+            producer.uint(session.get("first_blob", 1)) != 0 or
+            producer.uint(session.get("last_blob", 0)) != 132 or
+            producer.uint(session.get("population", 0)) != 133 or
+            producer.uint(session.get("sample_count", 0)) != V3_MAX_SAMPLES or
+            producer.uint(session.get("deadline_height", 0)) != deadline_height or
+            session.get("chain_id") != chain_id or
+            producer.b64(session.get("polyfs_root", ""), 32).hex() != polyfs_root or
+            producer.b64(session.get("integrity_root", ""), 32).hex() != integrity_root or
+            producer.b64(session.get("setup_digest", ""), 32).hex() != producer.SETUP_DIGEST or
+            not any(producer.b64(session.get("plan_hash", ""), 32)) or
+            bool(session.get("expired", False)) is not expired):
+        raise ValueError("v3 session differs from the fixed pilot authority")
+    obligations = session.get("obligations")
+    if not isinstance(obligations, list) or len(obligations) != V3_SYSTEMATIC_PROVIDERS:
+        raise ValueError("v3 session must bind all eight systematic providers")
+    slots = []
+    for obligation in obligations:
+        slot = producer.uint(obligation.get("slot", 99))
+        if (slot >= V3_SYSTEMATIC_PROVIDERS or obligation.get("assigned_provider") != providers.get(slot) or
+                obligation.get("payee") != providers.get(slot) or
+                producer.uint(obligation.get("blob_count", 0)) == 0):
+            raise ValueError("v3 session obligation differs from the finalized assignment")
+        slots.append(slot)
+    if (slots != list(range(V3_SYSTEMATIC_PROVIDERS)) or
+            sum(producer.uint(row["blob_count"]) for row in obligations) != 133):
+        raise ValueError("v3 systematic obligations must be ordered and unique")
+    ordinals = v3_bitmap_ordinals(session)
+    if refunded and not expired:
+        raise ValueError("v3 session cannot be refunded before expiry")
+    expected_mask = (1 << V3_SYSTEMATIC_PROVIDERS) - 1
+    if (producer.uint(session.get("refunded_slots_mask", 0)) != (expected_mask if refunded else 0) or
+            producer.uint(session.get("settled_slots_mask", 0)) != 0 or
+            producer.uint(session.get("acked_slots_mask", 0)) != 0 or
+            (producer.uint(session.get("locked_fee", 0), 256) == 0) is not refunded):
+        raise ValueError("unacknowledged v3 session has inconsistent settlement liabilities")
+    return session, ordinals
+
+
+def validate_v3_provider_outcomes(rows, providers, *, session_id):
+    """Validate one production proof wave without treating HTTP as chain authority."""
+    if len(rows) != V3_SYSTEMATIC_PROVIDERS:
+        raise ValueError("v3 proof wave must contact all eight systematic providers")
+    slots, hashes = set(), set()
+    proofs = 0
+    for row in rows:
+        slot = producer.uint(row.get("slot", 99))
+        count = producer.uint(row.get("proof_count", 0))
+        txhash = row.get("tx_hash", "")
+        if (row.get("status") != "success" or row.get("http_status") != 200 or
+                row.get("curl_returncode") != 0 or
+                row.get("session_id") != "0x" + session_id or
+                row.get("cleanup_status") != "complete" or slot >= V3_SYSTEMATIC_PROVIDERS or
+                providers.get(slot) != row.get("provider") or not 1 <= count <= 64 or
+                not isinstance(txhash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash) or
+                slot in slots or txhash.upper() in hashes):
+            error = str(row.get("error", ""))[-512:]
+            raise ValueError(
+                f"v3 provider {row.get('provider')!r} response rejected: "
+                f"http_status={row.get('http_status')!r} status={row.get('status')!r} error={error!r}")
+        slots.add(slot)
+        hashes.add(txhash.upper())
+        proofs += count
+    if slots != set(range(V3_SYSTEMATIC_PROVIDERS)):
+        raise ValueError("v3 proof wave omitted a systematic provider")
+    return dict(unique_tx_hashes=sorted(hashes), proof_count=proofs,
+                slot_count=len(slots), payees=[providers[slot] for slot in sorted(slots)])
+
+
+def _encode_varint(value):
+    if type(value) is not int or value < 0 or value > (1 << 64) - 1:
+        raise ValueError("protobuf integer outside uint64")
+    out = bytearray()
+    while value >= 128:
+        out.append((value & 0x7f) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
+    """Decode the exact native v3 open response retained in a committed tx."""
+    data = result.get("data", "")
+    if (result.get("outcome") != "committed_success" or not isinstance(data, str) or
+            len(data) > 2048 or len(data) % 2 or not re.fullmatch(r"[0-9a-fA-F]+", data)):
+        raise ValueError("invalid committed v3 open response")
+    raw = bytes.fromhex(data)
+    expected_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
+    suffix = (b"\x10" + _encode_varint(logical_bytes) +
+              b"\x18" + _encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
+              b"\x20" + _encode_varint(V3_MAX_SAMPLES))
+    response = b"\x0a\x20" + bytes(32) + suffix
+    any_value = (b"\x0a" + _encode_varint(len(expected_type)) + expected_type +
+                 b"\x12" + _encode_varint(len(response)) + response)
+    expected = b"\x12" + _encode_varint(len(any_value)) + any_value
+    sid_offset = len(expected) - len(suffix) - 32
+    if (len(raw) != len(expected) or raw[:sid_offset] != expected[:sid_offset] or
+            raw[sid_offset + 32:] != expected[sid_offset + 32:] or
+            not any(raw[sid_offset:sid_offset + 32])):
+        raise ValueError("v3 open response differs from the fixed pilot geometry")
+    return raw[sid_offset:sid_offset + 32].hex()
+
+
+def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
+                      retry_pre_admission_busy=False):
+    """Run one bounded disjoint-signer HTTP phase and retain every outcome."""
+    if (not requests or not 1 <= max_in_flight <= 12 or
+            len({row["provider"] for row in requests}) != len(requests)):
+        raise ValueError("v3 HTTP phase requires distinct provider signers")
+    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+    directory = lifecycle.home / "v3-http"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    started = artifact.monotonic_ns()
+    phase_deadline = min(lifecycle.deadline,
+                         started + max(row.get("timeout_seconds", 180) for row in requests) * 10**9)
+    last_heartbeat = started
+    last_progress = started
+    completed = []
+    retained = lifecycle.doc.setdefault("v3_http_phases", {}).setdefault(phase, [])
+
+    def execute(index, request):
+        attempts = []
+        limit = V3_BUSY_MAX_ATTEMPTS if retry_pre_admission_busy else 1
+        request_deadline = min(phase_deadline,
+                               started + request.get("timeout_seconds", 180) * 10**9)
+        for attempt in range(1, limit + 1):
+            if attempt > 1:
+                if artifact.monotonic_ns() + V3_BUSY_RETRY_SECONDS * 10**9 >= request_deadline:
+                    break
+                time.sleep(V3_BUSY_RETRY_SECONDS)
+            path = directory / f"{phase}-{index}-{attempt}.json"
+            began = artifact.monotonic_ns()
+            try:
+                result = artifact.run_bounded_command([
+                    curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
+                    "--request", "POST", "--header", "Content-Type: application/json",
+                    "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
+                    "--data", json.dumps(request["body"], separators=(",", ":")),
+                    "--max-filesize", str(1024 * 1024), "--output", str(path),
+                    "--write-out", "%{http_code}", request["url"],
+                ], request_deadline, env=lifecycle.env)
+                with path.open("rb") as source:
+                    raw = source.read(1024 * 1024 + 1)
+                if len(raw) > 1024 * 1024:
+                    raise ValueError("v3 HTTP response exceeds 1 MiB")
+                body = json.loads(raw)
+                if not isinstance(body, dict):
+                    raise ValueError("v3 HTTP response must be a JSON object")
+                try:
+                    code = producer.uint(result.stdout.strip())
+                except ValueError as error:
+                    raise ValueError("v3 HTTP request did not return a status code") from error
+                row = dict(body, http_status=code, provider=request["provider"], attempt=attempt,
+                           request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
+                           stderr=result.stderr[-8192:], curl_returncode=result.returncode)
+                attempts.append(row)
+                if result.returncode != 0:
+                    return attempts, ValueError(
+                        f"v3 HTTP request for provider {request['provider']!r} exited {result.returncode}")
+                busy = (code == 429 and set(body) == {"error", "hint"} and
+                        body.get("error") == "retrieval submission busy" and
+                        body.get("hint") == "retrieval submission capacity or signer busy")
+                if not retry_pre_admission_busy or not busy:
+                    return attempts, None
+            except BaseException as error:
+                attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
+                                     error=str(error)[-8192:], request_finished_ns=artifact.monotonic_ns()))
+                return attempts, error
+            finally:
+                path.unlink(missing_ok=True)
+        return attempts, None
+
+    errors = []
+    with ThreadPoolExecutor(max_workers=max_in_flight) as executor:
+        pending = {executor.submit(execute, index, request): request
+                   for index, request in enumerate(requests)}
+        while pending:
+            done, _ = wait_futures(pending, timeout=1, return_when=FIRST_COMPLETED)
+            now = artifact.monotonic_ns()
+            for future in done:
+                request = pending.pop(future)
+                future_error = None
+                try:
+                    attempts, future_error = future.result()
+                except BaseException as error:
+                    attempts = [dict(status="driver_error", provider=request["provider"],
+                               error=str(error)[-8192:], request_finished_ns=now)
+                    ]
+                    future_error = error
+                retained.extend(attempts)
+                if future_error is not None:
+                    errors.append(future_error)
+                    lifecycle.save()
+                    continue
+                row = attempts[-1]
+                completed.append(row)
+                lifecycle.save()
+                last_progress = now
+            if not errors and now - last_progress >= 600 * 10**9:
+                errors.append(TimeoutError(f"{phase} made no progress for 600 seconds"))
+            if now - last_heartbeat >= 60 * 10**9:
+                heartbeat = dict(
+                    phase=phase, completed=len(completed), total=len(requests),
+                    elapsed_ns=now - started, seconds_since_progress=(now - last_progress) / 1e9)
+                lifecycle.doc.setdefault("progress", []).append(heartbeat)
+                lifecycle.save()
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = now
+            if not errors:
+                try:
+                    lifecycle.remaining()
+                    require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+                except BaseException as error:
+                    errors.append(error)
+    if errors:
+        raise errors[0]
+    heartbeat = dict(
+        phase=phase, completed=len(completed), total=len(requests),
+        elapsed_ns=artifact.monotonic_ns() - started, seconds_since_progress=0)
+    lifecycle.doc.setdefault("progress", []).append(heartbeat)
+    lifecycle.save()
+    print(json.dumps(heartbeat, sort_keys=True), flush=True)
+    return sorted(completed, key=lambda row: row["provider"])
+
+
+def v3_session_query(lifecycle, session_id, height=None):
+    if height is None:
+        height = lifecycle.wait_height(1)
+    encoded = base64.urlsafe_b64encode(bytes.fromhex(session_id)).decode()
+    route = API + "/retrieval-sessions-v3/" + encoded
+    rows = [lifecycle.query(node, route, height) for node in lifecycle.nodes]
+    if any(row != rows[0] for row in rows[1:]):
+        raise ValueError("four validators disagree on v3 session state")
+    return rows[0]
+
+
+def v3_retained_generations(lifecycle, *, deal_id, root, height=None):
+    """Record the all-validator retention union without attributing its source."""
+    if height is None:
+        height = lifecycle.wait_height(1)
+    rows = [lifecycle.query(node, API + "/retained-generations", height) for node in lifecycle.nodes]
+    if any(row != rows[0] for row in rows[1:]):
+        raise ValueError("four validators disagree on retained generations")
+    expected = dict(deal_id=str(deal_id), generation="1",
+                    manifest_root=base64.b64encode(bytes.fromhex(root)).decode())
+    if expected not in rows[0].get("generations", []):
+        raise ValueError("active v3 generation is absent from the retention union")
+    return rows[0]
+
+
+def validate_v3_committed_message(message, *, kind, creator, slot, deal_id=None,
+                                  session_id=None, proof_count=None):
+    """Bind a committed hash to the one native message the HTTP route intended."""
+    expected_type = {
+        "generation-acceptance": "/polystorechain.polystorechain.v1.MsgAcceptDealGenerationV3",
+        "session-proof": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
+    }.get(kind)
+    if expected_type is None or message.get("@type") != expected_type or message.get("creator") != creator or producer.uint(message.get("slot", 99)) != slot:
+        raise ValueError("committed HTTP transaction message differs from route intent")
+    if kind == "generation-acceptance":
+        if producer.uint(message.get("deal_id", 0)) != producer.uint(deal_id) or not any(producer.b64(message.get("acceptance_digest", ""), 32)):
+            raise ValueError("committed generation acceptance differs from frozen intent")
+        return []
+    if producer.b64(message.get("session_id", ""), 32).hex() != session_id:
+        raise ValueError("committed proof transaction targets the wrong session")
+    proofs = message.get("proofs")
+    if not isinstance(proofs, list) or len(proofs) != proof_count or not 1 <= len(proofs) <= 64:
+        raise ValueError("committed proof count differs from provider response")
+    ordinals = [producer.uint(proof.get("ordinal", V3_MAX_SAMPLES)) for proof in proofs]
+    if len(set(ordinals)) != len(ordinals) or any(value >= V3_MAX_SAMPLES for value in ordinals):
+        raise ValueError("committed proof transaction has duplicate or out-of-range ordinals")
+    return ordinals
+
+
+def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
+                         session_id=None, proof_count=None):
+    """Bind an HTTP result to exact committed bytes and all four validators."""
+    txhash = row["tx_hash"].upper()
+    response = lifecycle.query(lifecycle.nodes[0], "/tx?hash=0x" + txhash)
+    result = dict(txhash=response["hash"], height=response["height"],
+                  code=response["tx_result"].get("code", 0),
+                  gas_wanted=response["tx_result"]["gas_wanted"],
+                  gas_used=response["tx_result"]["gas_used"],
+                  raw_log=response["tx_result"].get("log", ""),
+                  outcome="committed_success" if not response["tx_result"].get("code", 0) else "committed_failure")
+    artifact.committed_tx(result, txhash)
+    result["validators"] = verify_transaction_nodes(lifecycle, result)
+    decoded = json.loads(lifecycle.cli(lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
+    messages = decoded.get("tx", {}).get("body", {}).get("messages", [])
+    if len(messages) != 1:
+        raise ValueError("committed HTTP transaction must contain exactly one message")
+    result["ordinals"] = validate_v3_committed_message(messages[0], kind=kind, creator=creator,
+        slot=slot, deal_id=deal_id, session_id=session_id, proof_count=proof_count)
+    return result
+
+
+def validate_v3_candidate(value, *, deal_id):
+    candidate = value.get("generation_candidate")
+    if not isinstance(candidate, dict):
+        raise ValueError("FAT v3 upload omitted the generation candidate")
+    roots = []
+    for name in ("polyfs_root", "integrity_root"):
+        raw = candidate.get(name, "")
+        if not isinstance(raw, str) or len(raw) != 66 or not raw.startswith("0x"):
+            raise ValueError("FAT v3 candidate has an invalid root")
+        roots.append(bytes.fromhex(raw[2:]))
+    if (not all(any(root) for root in roots) or
+            [producer.uint(candidate.get(name, 0)) for name in (
+                "deal_id", "expected_current_generation", "size_bytes", "total_mdus",
+                "witness_mdus", "integrity_leaf_count")] !=
+            [producer.uint(deal_id), 0, V3_PILOT_BYTES, 5, 1, 288] or
+            candidate.get("previous_polyfs_root", "") not in ("", "0x") or
+            candidate.get("commit_action") != "propose-deal-generation-v3" or
+            producer.uint(candidate.get("required_acceptances", 0)) != 12):
+        raise ValueError("FAT v3 candidate differs from the fixed pilot geometry")
+    return candidate
+
+
+def validate_v3_generation(response, candidate, providers, *, owner, admitted):
+    value = response.get("admitted" if admitted else "pending")
+    if not isinstance(value, dict) or response.get("pending" if admitted else "admitted"):
+        raise ValueError("v3 generation query has the wrong admission state")
+    if ([producer.uint(value.get(name, 0)) for name in (
+            "deal_id", "generation", "size", "total_mdus", "witness_mdus",
+            "metadata_mdus", "user_mdus", "integrity_leaf_count", "accepted_slots_mask")] !=
+            [producer.uint(candidate["deal_id"]), 1, V3_PILOT_BYTES, 5, 1, 2, 3, 288,
+             4095] or
+            value.get("owner") != owner or
+            producer.b64(value.get("polyfs_root", ""), 32).hex() != candidate["polyfs_root"][2:] or
+            producer.b64(value.get("integrity_root", ""), 32).hex() != candidate["integrity_root"][2:] or
+            value.get("providers") != [providers[index] for index in range(12)]):
+        raise ValueError("v3 generation authority differs from the accepted candidate")
+    return value
+
+
+def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
+    """Two real preopened sessions; production providers generate and submit proofs."""
+    doc = lifecycle.doc.setdefault("native_v3", {})
+    owner = lifecycle.signers["owner0"]
+    opened_at = lifecycle.wait_height(3)
+    deadline_height = opened_at + 180
+    if deadline_height >= producer.uint(deal["end_block"]):
+        raise ValueError("v3 pilot session deadline reaches the deal end")
+    polyfs_root = producer.b64(deal["manifest_root"], 32).hex()
+    integrity_root = lifecycle.doc["native_v3_generation"]["candidate"]["integrity_root"][2:]
+    doc["retained_generations_before_sessions"] = v3_retained_generations(
+        lifecycle, deal_id=deal["id"], root=polyfs_root)
+    sessions = []
+    doc["sessions"] = sessions
+    lifecycle.save()
+    for nonce in range(1, V3_PILOT_SESSIONS + 1):
+        path = lifecycle.home / f"v3-open-{nonce}.json"
+        message = dict(creator=owner, deal_id=str(deal["id"]), generation="1",
+            range=dict(file_record_index=0, file_start_offset="0", file_length=str(V3_PILOT_BYTES),
+                       range_start="0", range_length=str(V3_PILOT_BYTES)),
+            nonce=str(nonce), deadline_height=str(deadline_height))
+        with path.open("x") as output:
+            json.dump(message, output, separators=(",", ":"))
+        result = send("owner0", ["retrieval-session-v3", "open", str(path)])
+        result["validators"] = verify_transaction_nodes(lifecycle, result)
+        sid = opened_v3_session(result)
+        sessions.append(dict(session_id=sid, nonce=nonce, open_transaction=result))
+        lifecycle.save()
+    wait(max(row["open_transaction"]["height"] for row in sessions) + 2)
+    for row in sessions:
+        before = v3_session_query(lifecycle, row["session_id"])
+        _, ordinals = validate_v3_session(before, session_id=row["session_id"], deal_id=deal["id"],
+            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=polyfs_root,
+            integrity_root=integrity_root, chain_id=lifecycle.chain, deadline_height=deadline_height)
+        if ordinals or before.get("anchor_seed", "") in ("", None):
+            raise ValueError("preopened v3 session lacks an anchor or starts with accepted samples")
+        row["before_proofs"] = before
+    capture_workload_metrics(lifecycle, "native_v3_before_proofs", fenced=True)
+    for row in sessions:
+        requests = [dict(provider=providers[slot],
+                         url=provider_http_url(lifecycle, providers[slot], "/sp/session-proof"),
+                         body=dict(session_id=row["session_id"]))
+                    for slot in range(V3_SYSTEMATIC_PROVIDERS)]
+        outcomes = run_v3_http_phase(lifecycle, curl, requests,
+                                     f"session-{row['nonce']}-proofs", max_in_flight=8,
+                                     retry_pre_admission_busy=True)
+        summary = validate_v3_provider_outcomes(outcomes, providers, session_id=row["session_id"])
+        transactions = []
+        for outcome in outcomes:
+            transaction = committed_v3_http_tx(lifecycle, outcome, kind="session-proof",
+                creator=outcome["provider"], slot=producer.uint(outcome["slot"]),
+                session_id=row["session_id"], proof_count=producer.uint(outcome["proof_count"]))
+            if transaction["outcome"] != "committed_success":
+                raise ValueError("provider reported success for a failed v3 proof transaction")
+            transactions.append(transaction)
+        at = max(producer.uint(tx["height"]) for tx in transactions)
+        wait(at + 1)
+        after = v3_session_query(lifecycle, row["session_id"], at)
+        _, accepted = validate_v3_session(after, session_id=row["session_id"], deal_id=deal["id"],
+            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=polyfs_root,
+            integrity_root=integrity_root, chain_id=lifecycle.chain, deadline_height=deadline_height)
+        tx_ordinals = sorted(ordinal for tx in transactions for ordinal in tx["ordinals"])
+        if accepted != tx_ordinals or len(accepted) != V3_MAX_SAMPLES or summary["proof_count"] != V3_MAX_SAMPLES:
+            raise ValueError("committed v3 proof messages do not equal authoritative bitmap deltas")
+        row.update(provider_outcomes=outcomes, outcome_summary=summary,
+                   proof_transactions=transactions, committed_height=at,
+                   accepted_sample_ordinals=accepted)
+        lifecycle.save()
+    capture_workload_metrics(lifecycle, "native_v3_after_proofs", fenced=True)
+    wait(deadline_height + 2)
+    for row in sessions:
+        expired = v3_session_query(lifecycle, row["session_id"])
+        validate_v3_session(expired, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
+                            providers=providers, nonce=row["nonce"], polyfs_root=polyfs_root,
+                            integrity_root=integrity_root, chain_id=lifecycle.chain,
+                            deadline_height=deadline_height, expired=True)
+        if expired.get("anchor_seed", "") not in ("", None):
+            raise ValueError("expired v3 session retained its anchor")
+        row["expired_before_refund"] = expired
+        refunded = send("owner0", ["retrieval-session-v3", "refund", str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
+        refunded["validators"] = verify_transaction_nodes(lifecycle, refunded)
+        wait(refunded["height"] + 1)
+        after = v3_session_query(lifecycle, row["session_id"], refunded["height"])
+        validate_v3_session(after, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
+                            providers=providers, nonce=row["nonce"], polyfs_root=polyfs_root,
+                            integrity_root=integrity_root, chain_id=lifecycle.chain,
+                            deadline_height=deadline_height, expired=True, refunded=True)
+        row.update(refund_transaction=refunded, after_refund=after)
+        lifecycle.save()
+    doc["retained_generations_after_refund"] = v3_retained_generations(
+        lifecycle, deal_id=deal["id"], root=polyfs_root)
+    doc.update(offered_proof_transactions=16,
+               committed_valid_proof_transactions=sum(len(row["proof_transactions"]) for row in sessions),
+               authoritative_new_sample_ordinals=sum(len(row["accepted_sample_ordinals"]) for row in sessions),
+               logical_bytes_per_session=V3_PILOT_BYTES, sample_population=133,
+               samples_per_session=V3_MAX_SAMPLES, delivery_verified=False, owner_acknowledged=False,
+               qualification=False, timing_scope="provider HTTP includes proof generation, local verification, gas simulation, signing, broadcast and commit observation",
+               retention_limit="normal audits retain the same generation, so retained-generation union cannot independently attribute session reference release")
+    lifecycle.save()
+
+
+def _write_v3_refund(lifecycle, owner, session_id):
+    path = lifecycle.home / ("v3-refund-" + session_id + ".json")
+    with path.open("x") as output:
+        json.dump(dict(creator=owner, session_id=base64.b64encode(bytes.fromhex(session_id)).decode()),
+                  output, separators=(",", ":"))
+    return path
+
+
+def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send, curl):
+    """Use only the owner CLI and production provider admission routes."""
+    candidate = validate_v3_candidate(uploaded, deal_id=deal_id)
+    owner = lifecycle.signers["owner0"]
+    proposed = send("owner0", ["propose-deal-generation-v3", "--deal-id", deal_id,
+        "--expected-current-generation", candidate["expected_current_generation"],
+        "--previous-polyfs-root", candidate["previous_polyfs_root"] or "0x",
+        "--polyfs-root", candidate["polyfs_root"], "--integrity-root", candidate["integrity_root"],
+        "--size", candidate["size_bytes"], "--total-mdus", candidate["total_mdus"],
+        "--witness-mdus", candidate["witness_mdus"],
+        "--integrity-leaf-count", candidate["integrity_leaf_count"]])
+    proposed["validators"] = verify_transaction_nodes(lifecycle, proposed)
+    lifecycle.wait_height(proposed["height"] + 1)
+    requests = [dict(provider=providers[slot],
+                     url=provider_http_url(lifecycle, providers[slot], "/sp/generation-v3/accept"),
+                     body=dict(deal_id=producer.uint(deal_id), provider=providers[slot]))
+                for slot in range(12)]
+    outcomes = run_v3_http_phase(lifecycle, curl, requests, "generation-acceptance", max_in_flight=12)
+    seen, transactions = set(), []
+    for outcome in outcomes:
+        slot = producer.uint(outcome.get("slot", 99))
+        txhash = outcome.get("tx_hash", "")
+        if (outcome.get("status") != "success" or outcome.get("cleanup_status") != "complete" or
+                outcome.get("http_status") != 200 or outcome.get("curl_returncode") != 0 or
+                slot >= 12 or providers.get(slot) != outcome["provider"] or
+                slot in seen or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash)):
+            raise ValueError("provider generation acceptance was not a unique committed success")
+        seen.add(slot)
+        tx = committed_v3_http_tx(lifecycle, outcome, kind="generation-acceptance",
+                                  creator=outcome["provider"], slot=slot, deal_id=deal_id)
+        if tx["outcome"] != "committed_success":
+            raise ValueError("provider reported success for failed generation acceptance")
+        transactions.append(tx)
+    if seen != set(range(12)):
+        raise ValueError("generation admission omitted a provider")
+    height = max(producer.uint(tx["height"]) for tx in transactions)
+    lifecycle.wait_height(height + 1)
+    pending = lifecycle.query(lifecycle.nodes[0], API + f"/deals/{deal_id}/generation-v3", height)
+    validate_v3_generation(pending, candidate, providers, owner=owner, admitted=False)
+    finalized = send("owner0", ["finalize-deal-generation-v3", "--deal-id", deal_id,
+                                "--generation", "1", "--polyfs-root", candidate["polyfs_root"]])
+    finalized["validators"] = verify_transaction_nodes(lifecycle, finalized)
+    lifecycle.wait_height(finalized["height"] + 1)
+    admitted = lifecycle.query(lifecycle.nodes[0], API + f"/deals/{deal_id}/generation-v3", finalized["height"])
+    validate_v3_generation(admitted, candidate, providers, owner=owner, admitted=True)
+    lifecycle.doc["native_v3_generation"] = dict(candidate=candidate, proposal_transaction=proposed,
+        provider_outcomes=outcomes, acceptance_transactions=transactions,
+        finalize_transaction=finalized, admitted=admitted)
+    lifecycle.save()
+    return candidate, finalized["height"]
 
 
 def mode2_layout(k, deputy_count=8):
@@ -149,6 +712,19 @@ def require_retrieval_cli(lifecycle):
         except (ValueError, OSError) as error:
             raise ValueError(f"#257 compatible CLI required: {command}: {error}") from error
     lifecycle.doc["retrieval_cli_capabilities"] = required
+
+
+def require_v3_cli(lifecycle):
+    required = {
+        "retrieval-session-v3": ("open", "prove", "refund"),
+        "propose-deal-generation-v3": ("--integrity-root", "--integrity-leaf-count"),
+        "finalize-deal-generation-v3": ("--generation", "--polyfs-root"),
+    }
+    for command, tokens in required.items():
+        help_text = lifecycle.cli(lifecycle.home, "tx", "nilchain", command, "--help")
+        if any(token not in help_text for token in (command, *tokens)):
+            raise ValueError("native v3 compatible CLI required: " + command)
+    lifecycle.doc["retrieval_v3_cli_capabilities"] = required
 
 
 def smoke_genesis(lifecycle):
@@ -542,15 +1118,21 @@ def verify_transaction_nodes(lifecycle, result):
     if len(lifecycle.nodes) != 4 or len({node["node_id"] for node in lifecycle.nodes}) != 4:
         raise ValueError("four distinct validators required")
     expected = artifact.committed_tx(result, result["txhash"])
+    height = producer.uint(expected["height"])
+    # A node can report the committed transaction before its peers' transaction
+    # indexes expose it. Fence every validator, then read the authoritative block
+    # bytes/results rather than polling eventually consistent secondary indexes.
+    lifecycle.wait_height(height + 1)
     observed = []
     for node in lifecycle.nodes:
-        response = lifecycle.query(node, "/tx?hash=0x" + expected["txhash"])
-        raw = base64.b64decode(response["tx"], validate=True)
-        if not raw or len(raw) > 1048576 or hashlib.sha256(raw).hexdigest().upper() != expected["txhash"].upper():
-            raise ValueError("validator returned different committed transaction bytes")
-        row = dict(txhash=response["hash"], height=response["height"], **{
-            key: response["tx_result"].get(key, 0) if key == "code" else response["tx_result"][key]
-            for key in ("code", "gas_wanted", "gas_used")})
+        summary = artifact.committed_block_summary(
+            lifecycle.query(node, f"/block?height={height}"),
+            lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+        matches = [tx for tx in summary["transactions"]
+                   if tx["txhash"].upper() == expected["txhash"].upper()]
+        if len(matches) != 1:
+            raise ValueError("validator block does not contain the exact committed transaction")
+        row = dict(matches[0], height=height)
         artifact.committed_tx(row, expected["txhash"])
         if any(producer.uint(row[key]) != producer.uint(expected[key]) for key in ("height", "code", "gas_wanted", "gas_used")):
             raise ValueError("validators disagree on committed transaction outcome/gas")
@@ -779,7 +1361,8 @@ def run(lifecycle, fixture_k8, fixture_k2, *, proof_only=False):
     return lifecycle.home / "evidence.json"
 
 
-def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized, expected_samples=None, k=2):
+def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, finalized,
+                        expected_samples=None, k=2, user_mdus=1):
     """Check committed inventory/coverage without treating absent audits as success."""
     layout = mode2_layout(k)
     found = {}
@@ -795,12 +1378,12 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
                 producer.uint(assignment.get("deal_start", 0)) != producer.uint(deal.get("start_block", 0)) or
                 assignment["manifest_root"] != deal["manifest_root"] or producer.uint(assignment["kind"]) != 2 or
                 snapshot["chain_id"] != chain or producer.uint(snapshot["generation"]) != producer.uint(deal["current_gen"]) or
-                [producer.uint(snapshot[n]) for n in ("layout", "k", "m", "metadata_mdus", "user_mdus")] != [2, k, layout["m"], 2, 1] or
+                [producer.uint(snapshot[n]) for n in ("layout", "k", "m", "metadata_mdus", "user_mdus")] != [2, k, layout["m"], 2, user_mdus] or
                 snapshot["setup_digest"] != base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode() or
                 producer.uint(snapshot["deal_end"]) != producer.uint(deal["end_block"])):
             raise ValueError(f"audit differs from the committed K{k} assignment")
         count = producer.uint(audit["sample_count"])
-        if not 1 <= count <= layout["openings_per_bundle"] or (expected_samples is not None and count != expected_samples):
+        if not 1 <= count <= user_mdus * layout["openings_per_bundle"] or (expected_samples is not None and count != expected_samples):
             raise ValueError("invalid audit sample count")
         coverage = producer.b64(audit["coverage"], (count + 7) // 8)
         accepted = producer.uint(audit.get("accepted_count", 0))
@@ -813,7 +1396,7 @@ def healthy_audit_views(value, deal, providers, epoch, epoch_length, chain, *, f
             context_id="00" * 32, deal_id=producer.uint(deal["id"]), generation=producer.uint(deal["current_gen"]),
             root=producer.b64(deal["manifest_root"], 32).hex(), assigned=producer.account(providers[slot]).hex(),
             payee=producer.account(providers[slot]).hex(), layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2,
-            user_mdus=1, start_mdu=0, start_leaf=0, blob_count=0, epoch_id=epoch, epoch_length=epoch_length,
+            user_mdus=user_mdus, start_mdu=0, start_leaf=0, blob_count=0, epoch_id=epoch, epoch_length=epoch_length,
             sample_count=count, snapshot_height=snapshot_height, anchor_height=snapshot_height + 1,
             first_response_height=snapshot_height + 2, deadline_height=min(epoch * epoch_length, producer.uint(deal["end_block"]) - 1),
             deal_end=producer.uint(deal["end_block"]))
@@ -1218,9 +1801,12 @@ def run_sustained(lifecycle, deal, providers, send, command, audits, wait, expor
                 raise ValueError("audit monitor failed: " + str(failures[0]))
 
 
-def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None, audit_profile="normal"):
+def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustained=None,
+                native_v3=False, audit_profile="normal"):
     """Real canonical ingest and normal audits; optional bounded retrieval workload."""
-    k = sustained.get("k", 2) if sustained is not None else 2
+    if native_v3 and sustained is not None:
+        raise ValueError("native v3 diagnostic and sustained v2 workload are distinct modes")
+    k = 8 if native_v3 else sustained.get("k", 2) if sustained is not None else 2
     deputy_count = sustained.get("deputy_count", 8) if sustained is not None else 8
     rate_scale = sustained.get("rate_scale", 1) if sustained is not None else 1
     layout = mode2_layout(k, deputy_count)
@@ -1241,6 +1827,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
+    preflight_free = None
+    if native_v3:
+        preflight_free = require_free_disk(lifecycle.home.parent, V3_PREFLIGHT_FREE_BYTES,
+                                           "native v3 preflight")
     lifecycle.home.mkdir(mode=0o700)
     processes, reservations = [], []
     previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -1250,17 +1840,33 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         signal.signal(sig, interrupted)
     doc = lifecycle.doc
     doc.pop("transactions_submitted", None)
-    doc.update(mode="four-validator-healthy-provider-diagnostic", setup_transactions=[], providers=[],
-        workload=f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch",
-        qualification=False, limits=["No capacity or delivered retrieval qualification", "No deputy retrieval yet",
+    if native_v3:
+        doc["disk_guard"] = dict(preflight_free_bytes=preflight_free,
+                                 preflight_minimum_bytes=V3_PREFLIGHT_FREE_BYTES,
+                                 runtime_minimum_bytes=V3_ABORT_FREE_BYTES)
+    doc.update(mode="four-validator-native-v3-provider-diagnostic" if native_v3 else "four-validator-healthy-provider-diagnostic",
+        setup_transactions=[], providers=[],
+        workload=("one 16 MiB FAT v3 K8 deal; twelve production provider-daemons; two preopened native sessions"
+                  if native_v3 else f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch"),
+        qualification=False, limits=["No capacity or delivered retrieval qualification",
+            ("Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
+             if native_v3 else "No deputy retrieval yet"),
             "Normal mint and audit parameters retained; no economic conservation assertion", "No restart qualification"])
+    def check_disk(phase):
+        if native_v3:
+            free = require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
+            doc["disk_guard"]["last_checked_free_bytes"] = free
+            doc["disk_guard"]["last_checked_phase"] = phase
+        return None
     def command(args, timeout=60):
         lifecycle.remaining()
+        check_disk("command")
         result = artifact.run_bounded_command(args, min(lifecycle.deadline, artifact.monotonic_ns() + timeout * 10**9), env=lifecycle.env)
         if result.returncode:
             raise ValueError("owned diagnostic command failed: " + (result.stderr + result.stdout)[-8192:])
         return result.stdout
     def send(name, args):
+        check_disk("transaction")
         job = transaction_job(lifecycle, lifecycle.signers[name], args)
         result = artifact.scheduled_transaction(job)
         doc["setup_transactions"].append(dict(result, signer=job["signer"], submit=job["submit"]))
@@ -1276,14 +1882,31 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             os.kill(process.pid, 0)
     def wait(height):
         # Keep provider failures visible while the validators advance.
+        started = last_heartbeat = last_progress = artifact.monotonic_ns()
+        previous_height = 0
         while True:
             check_providers()
+            check_disk("height wait")
             current = lifecycle.wait_height(1)
+            now = artifact.monotonic_ns()
+            if current > previous_height:
+                previous_height = current
+                last_progress = now
+            if now - last_heartbeat >= 60 * 10**9:
+                heartbeat = dict(phase="height-wait", current_height=current,
+                    target_height=height, elapsed_ns=now - started,
+                    seconds_since_progress=(now - last_progress) / 1e9)
+                doc.setdefault("progress", []).append(heartbeat)
+                lifecycle.save()
+                print(json.dumps(heartbeat, sort_keys=True), flush=True)
+                last_heartbeat = now
             if current >= height:
                 return current
             time.sleep(min(0.2, lifecycle.remaining()))
     try:
         require_retrieval_cli(lifecycle)
+        if native_v3:
+            require_v3_cli(lifecycle)
         if sustained is not None and "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
             raise ValueError("sustained workload requires SDK sign-batch --append")
         lifecycle.reserve_ports()
@@ -1306,9 +1929,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             artifact_source_match="supplied binaries/library; build correspondence not attested")
         if doc["provenance"]["trusted_setup_sha256"] != producer.SETUP_DIGEST:
             raise ValueError("diagnostic requires the maintained trusted setup")
-        lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"])
+        lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
+                          enable_retrieval_v3=native_v3)
         # Normal mint is retained for both explicit audit profiles.
-        population = layout["openings_per_bundle"]
+        population = layout["openings_per_bundle"] * (3 if native_v3 else 1)
         quotas = {min(population, producer.uint(doc["frozen_module_params"]["quota_max_blobs"]),
                       max(producer.uint(doc["frozen_module_params"]["quota_min_blobs"]),
                           (population * producer.uint(doc["frozen_module_params"][key]) + 9999) // 10000))
@@ -1345,7 +1969,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 POLYSTORE_FAST_INGEST="0", POLYSTORE_FAST_SHARD="0", POLYSTORE_MODE2_ENCODE_PARALLELISM="1", POLYSTORE_MODE2_UPLOAD_PARALLELISM="2",
                 POLYSTORE_GATEWAY_UPLOAD_TIMEOUT_SECONDS="180", POLYSTORE_CMD_TIMEOUT_SECONDS="30",
                 POLYSTORE_SHARD_TIMEOUT_SECONDS="180", POLYSTORE_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS="60",
-                POLYSTORE_GATEWAY_SP_AUTH="healthy-diagnostic-owned-local-stack")
+                POLYSTORE_GATEWAY_SP_AUTH=V3_PROVIDER_AUTH_TOKEN)
             reservations[i].close()
             if (artifact.sha256(gateway) != doc["provenance"]["gateway_sha256"] or
                     artifact.sha256(cli) != doc["provenance"]["cli_sha256"]):
@@ -1372,31 +1996,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if len(owned) != 1:
             raise ValueError("expected exactly one owner deal")
         identity = str(owned[0].get("id", "0"))
-        payload = lifecycle.home / "payload.bin"
-        block = bytes((i * 37 + i // 97) % 256 for i in range(4096))
-        with payload.open("xb") as output:
-            for _ in range(8126464 // len(block)):
-                output.write(block)
-        doc["payload"] = dict(path=str(payload), bytes=payload.stat().st_size, sha256=artifact.sha256(payload))
-        uploaded = json.loads(command([curl, "--silent", "--show-error", "--fail", "--max-time", "180",
-            "--form-string", "owner=" + lifecycle.signers["owner0"], "--form-string", "file_path=payload.bin",
-            "--form", "file=@" + str(payload), f"http://127.0.0.1:19091/sp/retrieval/upload?deal_id={identity}"], 185))
-        root = uploaded["manifest_root"]
-        if (not isinstance(root, str) or len(root) != 66 or root != "0x" + bytes.fromhex(root[2:]).hex() or
-                [producer.uint(uploaded[n]) for n in ("size_bytes", "file_size_bytes", "logical_size_bytes", "total_mdus", "witness_mdus")] != [8126464, 8126464, 8126464, 3, 1] or
-                uploaded.get("content_encoding") != "none"):
-            raise ValueError(f"canonical K{k} ingest returned unexpected content")
-        doc["ingest"] = uploaded
-        updated = send("owner0", ["update-deal-content", "--deal-id", identity, "--cid", root,
-            "--size", "8126464", "--total-mdus", "3", "--witness-mdus", "1"])
-        height = updated["height"]
-        wait(height + 1)
-        deal = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, height)["deal"]
-        deal["id"] = identity
-        if producer.b64(deal["manifest_root"], 32).hex() != root[2:]:
-            raise ValueError("committed root differs from ingest")
+        initial_deal = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, created["height"])["deal"]
         providers = {}
-        for slot in deal["mode2_slots"]:
+        for slot in initial_deal["mode2_slots"]:
             index = producer.uint(slot.get("slot", 0))
             if index in providers or slot["status"] != "SLOT_STATUS_ACTIVE" or slot.get("pending_provider"):
                 raise ValueError(f"K{k} slots must be distinct and ACTIVE")
@@ -1404,13 +2006,53 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if (set(providers) != set(range(layout["assignments"])) or
                 set(providers.values()) != {lifecycle.signers[f"provider{i}"] for i in range(layout["assignments"])}):
             raise ValueError(f"K{k} placement differs from the owned providers")
+        payload = lifecycle.home / "payload.bin"
+        block = bytes((i * 37 + i // 97) % 256 for i in range(4096))
+        payload_bytes = V3_PILOT_BYTES if native_v3 else 8126464
+        with payload.open("xb") as output:
+            for _ in range(payload_bytes // len(block)):
+                output.write(block)
+        doc["payload"] = dict(path=str(payload), bytes=payload.stat().st_size, sha256=artifact.sha256(payload))
+        uploaded = json.loads(command([curl, "--silent", "--show-error", "--fail", "--max-time", "180",
+            "--form-string", "owner=" + lifecycle.signers["owner0"], "--form-string", "file_path=payload.bin",
+            "--form", "file=@" + str(payload),
+            f"http://127.0.0.1:19091/sp/retrieval/upload?deal_id={identity}" + ("&fat_version=3" if native_v3 else "")], 185))
+        doc["ingest"] = uploaded
+        if native_v3:
+            candidate, height = admit_native_v3_generation(lifecycle, uploaded=uploaded, deal_id=identity,
+                                                            providers=providers, send=send, curl=curl)
+            root = candidate["polyfs_root"]
+        else:
+            root = uploaded["manifest_root"]
+            if (not isinstance(root, str) or len(root) != 66 or root != "0x" + bytes.fromhex(root[2:]).hex() or
+                    [producer.uint(uploaded[n]) for n in ("size_bytes", "file_size_bytes", "logical_size_bytes", "total_mdus", "witness_mdus")] != [8126464, 8126464, 8126464, 3, 1] or
+                    uploaded.get("content_encoding") != "none"):
+                raise ValueError(f"canonical K{k} ingest returned unexpected content")
+            updated = send("owner0", ["update-deal-content", "--deal-id", identity, "--cid", root,
+                "--size", "8126464", "--total-mdus", "3", "--witness-mdus", "1"])
+            height = updated["height"]
+        wait(height + 1)
+        deal = lifecycle.query(lifecycle.nodes[0], API + "/deals/" + identity, height)["deal"]
+        deal["id"] = identity
+        if producer.b64(deal["manifest_root"], 32).hex() != root[2:]:
+            raise ValueError("committed root differs from ingest")
+        if native_v3 and [producer.uint(deal.get(name, 0)) for name in
+                          ("size", "total_mdus", "witness_mdus", "current_gen")] != [V3_PILOT_BYTES, 5, 1, 1]:
+            raise ValueError("finalized FAT v3 deal differs from fixed pilot geometry")
+        if deal["mode2_slots"] != initial_deal["mode2_slots"]:
+            raise ValueError("content admission changed frozen provider assignments")
         doc["deal"] = deal
         doc["canonical_artifacts"] = []
+        user_mdus = 3 if native_v3 else 1
         for slot, address in providers.items():
             provider = next(row for row in doc["providers"] if row["address"] == address)
             directory = Path(provider["directory"]) / "deals" / identity / root[2:]
-            for filename, size in (("mdu_0.bin", 8388608), ("mdu_1.bin", 8388608),
-                                   (f"mdu_2_slot_{slot}.bin", layout["bytes_per_bundle"])):
+            expected_artifacts = [("mdu_0.bin", 8388608), ("mdu_1.bin", 8388608)]
+            expected_artifacts += [(f"mdu_{mdu}_slot_{slot}.bin", layout["bytes_per_bundle"])
+                                   for mdu in range(2, 2 + user_mdus)]
+            if native_v3:
+                expected_artifacts.append(("integrity_leaves_v3.bin", user_mdus * 96 * 32))
+            for filename, size in expected_artifacts:
                 path = directory / filename
                 if path.stat().st_size != size:
                     raise ValueError("provider canonical artifact has wrong size")
@@ -1419,13 +2061,17 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         epoch = (height - 1) // epoch_length + 2
         def audits(at, finalized, observed_epoch=None):
             selected_epoch = epoch if observed_epoch is None else observed_epoch
+            observation = dict(height=at, epoch=selected_epoch, finalized=finalized, nodes=[])
+            doc["current_audit_observation"] = observation
             rows = []
-            for node in lifecycle.nodes:
+            for node_index, node in enumerate(lifecycle.nodes):
                 values = []
+                observation["nodes"].append(dict(node_index=node_index, audits=values))
                 for address in providers.values():
                     values.extend(lifecycle.query(node, API + "/storage-audits/by-provider/" + address, at)["audits"])
                 checked = healthy_audit_views(values, deal, providers, selected_epoch, epoch_length, lifecycle.chain,
-                                              finalized=finalized, expected_samples=expected_samples, k=k)
+                                              finalized=finalized, expected_samples=expected_samples, k=k,
+                                              user_mdus=user_mdus)
                 anchor_height = (selected_epoch - 1) * epoch_length + 1
                 anchor = lifecycle.query(node, f"/block?height={anchor_height}")
                 if (producer.uint(anchor["block"]["header"]["height"]) != anchor_height or
@@ -1457,7 +2103,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 raise ValueError("healthy audit changed active placement/content")
         check_providers()
         doc.update(status="healthy_provider_audit_diagnostic_passed", audit_coverage_verified=True)
-        if sustained is not None:
+        if native_v3:
+            run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)
+            doc["status"] = "native_v3_provider_diagnostic_passed"
+        elif sustained is not None:
             run_sustained(lifecycle, deal, providers, send, command, audits, wait, **sustained)
     except BaseException as error:
         doc.update(status="failed", error=str(error)[-8192:])
@@ -1490,7 +2139,8 @@ def main():
         parser.add_argument("--" + flag, required=True)
     for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source", "proof-exporter"):
         parser.add_argument("--" + flag)
-    parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers"), default="settlement-smoke")
+    parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers",
+                                           "native-v3-providers"), default="settlement-smoke")
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
@@ -1522,6 +2172,12 @@ def main():
     elif (exporter or proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
           sustained_rate_scale != 1 or sustained_deputies != 8):
         parser.error("exporter, proof gas, sustained K and pilot duration require sustained-providers")
+    elif mode == "native-v3-providers":
+        if (not gateway or not cli or not source or k8 or k2 or proof_only or
+                options["timeout"] > 600 or audit_profile != "normal"):
+            parser.error("native-v3-providers requires product binaries/source, normal audits, timeout <= 600, and excludes fixtures/--proof-only")
+        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source,
+                          native_v3=True, audit_profile="normal"))
     elif mode == "healthy-providers":
         if not gateway or not cli or not source or k8 or k2 or proof_only or options["timeout"] > 600:
             parser.error("healthy-providers requires --gateway-binary/--cli-binary/--product-source, timeout <= 600, and excludes fixtures/--proof-only")

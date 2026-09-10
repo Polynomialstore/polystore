@@ -1327,7 +1327,7 @@ class FourValidatorLifecycle:
                 reservation.bind(("127.0.0.1", node[name]))
                 reservation.listen(1)
 
-    def prepare(self, *, audit_profile="normal", provider_count=12):
+    def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False):
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
         provider_count = integer(provider_count, "provider signer count", 12, 44)
@@ -1357,6 +1357,10 @@ class FourValidatorLifecycle:
         if "retrieval_v2_activation_height" not in params:
             raise ValueError("binary genesis does not expose v2 activation")
         params["retrieval_v2_activation_height"] = "1"
+        if enable_retrieval_v3:
+            if "retrieval_v3_activation_height" not in params:
+                raise ValueError("binary genesis does not expose v3 activation")
+            params["retrieval_v3_activation_height"] = "1"
         if audit_profile == "c6":
             params.update(quota_min_blobs="132", quota_max_blobs="132")
         metadata = genesis["app_state"]["bank"].setdefault("denom_metadata", [])
@@ -1425,7 +1429,9 @@ class FourValidatorLifecycle:
                                            start_new_session=True)
             self.processes.append(process)
             self.doc["validator_resources"].append({"pid": process.pid, "node_id": node["node_id"],
-                "phase": phase, "peak_rss_bytes": None, "source": "wait4 ru_maxrss"})
+                "phase": phase, "peak_rss_bytes": None, "user_cpu_seconds": None,
+                "system_cpu_seconds": None, "measurement_scope": "whole validator process lifetime",
+                "source": "wait4 rusage"})
 
     def poll_validator(self, process):
         # wait4 is the sole reaper: Popen.poll/wait would discard per-child peak
@@ -1441,6 +1447,9 @@ class FourValidatorLifecycle:
                 return process.returncode
             if pid:
                 process.returncode = os.waitstatus_to_exitcode(status)
+                record["measurement_scope"] = "whole validator process lifetime"
+                record["user_cpu_seconds"] = usage.ru_utime
+                record["system_cpu_seconds"] = usage.ru_stime
                 system = platform.system()
                 if system in ("Darwin", "Linux") and usage.ru_maxrss > 0:
                     record["peak_rss_bytes"] = int(usage.ru_maxrss) * (1 if system == "Darwin" else 1024)

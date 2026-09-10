@@ -502,7 +502,11 @@ func runFrozenSystemLiveness(ctx context.Context, height uint64, snapshot *syste
 		if err != nil {
 			return err
 		}
-		dir, err := resolveDealDirForDeal(c.DealID, root, root.Canonical)
+		// Frozen proof generation leases the selected generation and authenticates
+		// its root table, witness commitments, and selected shard. Avoid the legacy
+		// slab-metadata fallback here: a sparse FAT v3 provider has those exact
+		// artifacts but intentionally has no gateway-authored slab sidecar.
+		dir, err := lookupDealGeneration(c.DealID, root, root.Canonical)
 		if err != nil {
 			snapshot.MissingDataSkips++
 			snapshot.LastError = err.Error()

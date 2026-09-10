@@ -341,6 +341,144 @@ func TestFrozenSystemProofNativeGenerationAndDomains(t *testing.T) {
 	}
 }
 
+func TestSystemAuditFATV3SparseProviderArtifacts(t *testing.T) {
+	for caseIndex, name := range []string{"valid", "corrupt_metadata", "corrupt_witness", "corrupt_shard"} {
+		t.Run(name, func(t *testing.T) {
+			submissionTestDB(t)
+			initCryptoForTest(t)
+			dealID := uint64(1200 + caseIndex)
+			payloadPath := filepath.Join(t.TempDir(), "payload.bin")
+			if err := os.WriteFile(payloadPath, bytes.Repeat([]byte{byte(0x50 + caseIndex)}, 4096), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			result, dir, err := mode2BuildArtifactsWithOptions(t.Context(), payloadPath, dealID, "General:rs=8+4", "payload.bin", 0, mode2BuildOptions{fatVersion: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A provider bundle carries authenticated metadata and its assigned
+			// shards, without the uploader's local slab sidecar or publication marker.
+			for _, path := range []string{slabMetadataPathForDealDir(dir), filepath.Join(dir, mode2SlabCompleteMarker), activeDealGenerationPointerPath(dealID)} {
+				if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+					t.Fatal(err)
+				}
+			}
+			shards, err := filepath.Glob(filepath.Join(dir, "mdu_*_slot_*.bin"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range shards {
+				if !strings.HasSuffix(path, "_slot_0.bin") {
+					if err := os.Remove(path); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			view, _, signer := systemAuditFixture(t, retrievalchallenge.Audit)
+			view.EpochLength = 2
+			view.Audit.EpochId = 6
+			view.Audit.Assignment.DealId = dealID
+			view.Audit.Assignment.ManifestRoot = bytes.Clone(result.manifestRoot.Bytes[:])
+			view.Audit.Assignment.Snapshot.MetadataMdus = 1 + result.witnessMdus
+			view.Audit.Assignment.Snapshot.UserMdus = result.userMdus
+			c, err := types.StorageAuditContext(*view.Audit, view.EpochLength)
+			if err != nil {
+				t.Fatal(err)
+			}
+			view.CanonicalContext, _ = c.Bytes()
+			challenges, err := c.Challenges(view.Seed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			flip := func(path string, offset int64) {
+				t.Helper()
+				f, err := os.OpenFile(path, os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				var original [1]byte
+				if _, err := f.ReadAt(original[:], offset); err != nil {
+					t.Fatal(err)
+				}
+				original[0] ^= 0xff
+				if _, err := f.WriteAt(original[:], offset); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch name {
+			case "corrupt_metadata":
+				flip(filepath.Join(dir, "mdu_0.bin"), 17)
+			case "corrupt_witness":
+				flip(filepath.Join(dir, "mdu_1.bin"), 1)
+			case "corrupt_shard":
+				challenge := challenges[0]
+				offset := int64(uint64(challenge.LeafIndex)%uint64(64/c.K)*types.BLOB_SIZE + 17)
+				flip(filepath.Join(dir, fmt.Sprintf("mdu_%d_slot_0.bin", challenge.MDUIndex)), offset)
+			}
+
+			t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
+			committed, commands := false, 0
+			hash := strings.Repeat("F", 64)
+			setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "keys" {
+					return []byte(signer), nil
+				}
+				commands++
+				if name != "valid" {
+					t.Fatal("corrupted provider artifact reached broadcast", args)
+				}
+				raw, err := os.ReadFile(args[5])
+				if err != nil {
+					t.Fatal(err)
+				}
+				var proof types.ChainedProof
+				if err := json.Unmarshal(raw, &proof); err != nil {
+					t.Fatal(err)
+				}
+				expected, err := c.ChallengeForPosition(view.Seed, proof.MduIndex, proof.BlobIndex)
+				if err != nil || !bytes.Equal(expected.Z[:], proof.ZValue) {
+					t.Fatal("producer sent wrong fresh challenge", err)
+				}
+				view.Audit.Coverage[expected.Ordinal/8] |= 1 << (expected.Ordinal % 8)
+				view.Audit.AcceptedCount++
+				committed = true
+				return []byte(fmt.Sprintf(`{"code":0,"txhash":%q}`, hash)), nil
+			})
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				height := "11"
+				if committed {
+					height = "12"
+				}
+				w.Header().Set(committedHeightHeader, height)
+				if strings.Contains(r.URL.Path, "/txs/") {
+					fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"12","code":0}}`, hash)
+					return
+				}
+				response := types.QueryListStorageAuditsByProviderResponse{Audits: []types.StorageAuditView{view}}
+				if err := (&jsonpb.Marshaler{OrigName: true, EmitDefaults: true}).Marshal(w, &response); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer srv.Close()
+			oldLCD := lcdBase
+			lcdBase = srv.URL
+			t.Cleanup(func() { lcdBase = oldLCD })
+			var snapshot systemLivenessSnapshot
+			if err := runFrozenSystemLiveness(context.Background(), 11, &snapshot); err != nil {
+				t.Fatal(err)
+			}
+			if name == "valid" {
+				if commands != 1 || snapshot.ProofsSubmitted != 1 || snapshot.ProofGenFailures != 0 {
+					t.Fatal(commands, snapshot)
+				}
+			} else if commands != 0 || snapshot.ProofGenFailures != 1 || snapshot.LastError == "" {
+				t.Fatal(commands, snapshot)
+			}
+		})
+	}
+}
+
 func TestSystemAuditActivatedDispatchUsesOnlyFrozenInventory(t *testing.T) {
 	submissionTestDB(t)
 	_, _, signer := systemAuditFixture(t, retrievalchallenge.Audit)

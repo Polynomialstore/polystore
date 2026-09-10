@@ -71,6 +71,36 @@ def settlement_fixture():
 
 
 class FourValidatorWorkloadTest(unittest.TestCase):
+    def test_transaction_verification_uses_fenced_blocks_not_tx_indexes(self):
+        raw = b"signed transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
+        fenced = [False]
+        lifecycle = SimpleNamespace(
+            chain="polystore_291-1", nodes=[{"node_id": str(i)} for i in range(4)])
+        def wait_height(height):
+            self.assertEqual(height, 20)
+            fenced[0] = True
+            return height
+        def query(node, route):
+            self.assertTrue(fenced[0])
+            self.assertNotIn("/tx?hash", route)
+            if route == "/block?height=19":
+                return {"block_id": {"hash": "11" * 32}, "block": {
+                    "header": {"height": "19", "chain_id": lifecycle.chain,
+                               "app_hash": "22" * 32, "time": "2026-01-01T00:00:00Z"},
+                    "data": {"txs": [base64.b64encode(raw).decode()]}}}
+            if route == "/block_results?height=19":
+                return {"height": "19", "txs_results": [
+                    {"code": 0, "gas_wanted": "500000", "gas_used": "400000"}]}
+            self.fail("unexpected query " + route)
+        lifecycle.wait_height = Mock(side_effect=wait_height)
+        lifecycle.query = Mock(side_effect=query)
+        rows = workload.verify_transaction_nodes(lifecycle, dict(
+            txhash=txhash, height=19, code=0, gas_wanted=500000, gas_used=400000))
+        self.assertEqual(len(rows), 4)
+        self.assertEqual(lifecycle.query.call_count, 8)
+        lifecycle.wait_height.assert_called_once_with(20)
+
     def test_commit_captures_share_phase_deadline_and_never_qualify(self):
         sample = dict(chain_id="polystore_260-1", count=12, sum_seconds="0.15",
                       wall_time_ns=123, monotonic_start_ns=456, monotonic_end_ns=789)
@@ -308,7 +338,341 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 workload.journal_results(path, [operation])
 
 
+class NativeV3PilotHelpersTest(unittest.TestCase):
+    ROOT = "11" * 32
+    INTEGRITY = "22" * 32
+    SESSION = "33" * 32
+
+    def session(self, *, expired=False, refunded=False):
+        bitmap = bytearray(17)
+        for ordinal in range(132):
+            if ordinal != 17:
+                bitmap[ordinal // 8] |= 1 << (ordinal % 8)
+        counts = [17] * 7 + [14]
+        return dict(session=dict(
+            session_id=base64.b64encode(bytes.fromhex(self.SESSION)).decode(), deal_id="7",
+            generation="1", owner=AUDIT_ADDRESSES[8], payer=AUDIT_ADDRESSES[8], nonce="1",
+            polyfs_root=base64.b64encode(bytes.fromhex(self.ROOT)).decode(),
+            integrity_root=base64.b64encode(bytes.fromhex(self.INTEGRITY)).decode(),
+            setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode(), plan_hash=base64.b64encode(bytes([8]) * 32).decode(),
+            file_record_index=0, file_start_offset="0", file_length=str(workload.V3_PILOT_BYTES),
+            range_start="0", range_length=str(workload.V3_PILOT_BYTES), metadata_mdus="2", user_mdus="3",
+            first_blob="0", last_blob="132", population="133", sample_count="132", nonce_string="unused",
+            deadline_height="250", chain_id="polystore_291-1", accepted_sample_bitmap=base64.b64encode(bitmap).decode(),
+            obligations=[dict(slot=i, assigned_provider=AUDIT_ADDRESSES[i], payee=AUDIT_ADDRESSES[i],
+                              blob_count=str(count), sample_count="0", locked_fee=str(count))
+                         for i, count in enumerate(counts)],
+            acked_slots_mask=0, settled_slots_mask=0,
+            refunded_slots_mask=255 if refunded else 0, locked_fee="0" if refunded else "133",
+            expired=expired))
+
+    def validate_session(self, value, **kwargs):
+        return workload.validate_v3_session(value, session_id=self.SESSION, deal_id="7",
+            owner=AUDIT_ADDRESSES[8], providers=dict(enumerate(AUDIT_ADDRESSES[:8])), nonce=1,
+            polyfs_root=self.ROOT, integrity_root=self.INTEGRITY, chain_id="polystore_291-1",
+            deadline_height=250, **kwargs)
+
+    def test_session_bitmap_and_refund_authorities_fail_closed(self):
+        session, accepted = self.validate_session(self.session())
+        self.assertEqual((len(accepted), 17 in accepted, sum(int(o["blob_count"]) for o in session["obligations"])),
+                         (131, False, 133))
+        self.validate_session(self.session(expired=True), expired=True)
+        self.validate_session(self.session(expired=True, refunded=True), expired=True, refunded=True)
+        mutations = {
+            "wrong root": lambda s: s.update(polyfs_root=base64.b64encode(bytes(32)).decode()),
+            "wrong chain": lambda s: s.update(chain_id="other"),
+            "wrong deadline": lambda s: s.update(deadline_height="251"),
+            "wrong setup": lambda s: s.update(setup_digest=base64.b64encode(bytes([9]) * 32).decode()),
+            "wrong partition": lambda s: s["obligations"][0].update(blob_count="18"),
+            "premature refund": lambda s: s.update(refunded_slots_mask=255, locked_fee="0"),
+            "settled without ack": lambda s: s.update(settled_slots_mask=1),
+            "padding bit": lambda s: s.update(accepted_sample_bitmap=base64.b64encode(bytes([255]) * 17).decode()),
+        }
+        for name, mutate in mutations.items():
+            value = self.session()
+            mutate(value["session"])
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.validate_session(value)
+
+    def test_open_response_is_exact_and_nonzero(self):
+        sid = bytes.fromhex(self.SESSION)
+        kind = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
+        suffix = (b"\x10" + workload._encode_varint(workload.V3_PILOT_BYTES) +
+                  b"\x18" + workload._encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
+                  b"\x20" + workload._encode_varint(132))
+        response = b"\x0a\x20" + sid + suffix
+        any_value = b"\x0a" + workload._encode_varint(len(kind)) + kind + b"\x12" + workload._encode_varint(len(response)) + response
+        raw = b"\x12" + workload._encode_varint(len(any_value)) + any_value
+        self.assertEqual(workload.opened_v3_session(dict(outcome="committed_success", data=raw.hex())), self.SESSION)
+        for changed in (raw + b"\x00", bytes([raw[0] ^ 1]) + raw[1:], raw.replace(sid, bytes(32))):
+            with self.assertRaises(ValueError):
+                workload.opened_v3_session(dict(outcome="committed_success", data=changed.hex()))
+
+    def test_provider_wave_and_committed_message_are_exact(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+        rows = [dict(status="success", http_status=200, curl_returncode=0,
+                     session_id="0x" + self.SESSION, cleanup_status="complete",
+                     slot=i, provider=providers[i], proof_count=17 if i < 7 else 13,
+                     tx_hash=f"{i + 1:064x}") for i in range(8)]
+        self.assertEqual(workload.validate_v3_provider_outcomes(rows, providers, session_id=self.SESSION)["proof_count"], 132)
+        for field, bad in (("http_status", 202), ("cleanup_status", "pending"),
+                           ("tx_hash", rows[1]["tx_hash"]), ("session_id", self.SESSION),
+                           ("session_id", "0x" + "00" * 32)):
+            changed = copy.deepcopy(rows)
+            changed[0][field] = bad
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                workload.validate_v3_provider_outcomes(changed, providers, session_id=self.SESSION)
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
+                   "creator": providers[0], "slot": 0,
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                   "proofs": [{"ordinal": str(i)} for i in range(17)]}
+        self.assertEqual(workload.validate_v3_committed_message(message, kind="session-proof",
+            creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17), list(range(17)))
+        duplicate = copy.deepcopy(message)
+        duplicate["proofs"][-1]["ordinal"] = "0"
+        with self.assertRaises(ValueError):
+            workload.validate_v3_committed_message(duplicate, kind="session-proof",
+                creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
+
+
+    def test_provider_endpoint_uses_address_not_assignment_slot(self):
+        lifecycle = SimpleNamespace(doc={"providers": [
+            {"address": AUDIT_ADDRESSES[1], "port": 19091},
+            {"address": AUDIT_ADDRESSES[0], "port": 19092},
+        ]})
+        self.assertEqual(workload.provider_http_url(lifecycle, AUDIT_ADDRESSES[0], "/sp/session-proof"),
+                         "http://127.0.0.1:19092/sp/session-proof")
+        with self.assertRaises(ValueError):
+            workload.provider_http_url(lifecycle, AUDIT_ADDRESSES[2], "/sp/session-proof")
+
+    def test_unfenced_v3_queries_choose_one_common_height(self):
+        calls = []
+        lifecycle = SimpleNamespace(nodes=[{"id": i} for i in range(4)],
+            wait_height=Mock(return_value=77))
+        session = self.session()
+        retained = {"generations": [{"deal_id": "7", "generation": "1",
+            "manifest_root": base64.b64encode(bytes.fromhex(self.ROOT)).decode()}]}
+        def query(node, route, height):
+            calls.append((node["id"], route, height))
+            return retained if route.endswith("retained-generations") else session
+        lifecycle.query = query
+        self.assertEqual(workload.v3_session_query(lifecycle, self.SESSION), session)
+        self.assertEqual(workload.v3_retained_generations(
+            lifecycle, deal_id="7", root=self.ROOT), retained)
+        self.assertEqual(lifecycle.wait_height.call_count, 2)
+        self.assertEqual({row[2] for row in calls}, {77})
+
+    def test_http_phase_drains_and_retains_provider_tagged_outcomes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(provider="provider-a", url="http://a/ok", body={}),
+                        dict(provider="provider-b", url="http://b/fail", body={})]
+            def run(argv, deadline, env):
+                if "/fail" in argv[-1]:
+                    raise ValueError("expected provider failure")
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                with self.assertRaisesRegex(ValueError, "expected provider failure"):
+                    workload.run_v3_http_phase(lifecycle, "/curl", requests, "proofs", max_in_flight=2)
+            retained = lifecycle.doc["v3_http_phases"]["proofs"]
+            self.assertEqual({row["provider"] for row in retained}, {"provider-a", "provider-b"})
+            self.assertEqual({row["status"] for row in retained}, {"success", "driver_error"})
+
+    def test_session_proof_phase_retries_only_exact_pre_admission_busy(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+        requests = [dict(provider=providers[slot], url=f"http://provider/{slot}", body={})
+                    for slot in range(8)]
+
+        def run_case(tmp, phase, response):
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = {}
+            def run(argv, deadline, env):
+                slot = int(argv[-1].rsplit("/", 1)[-1])
+                calls[slot] = calls.get(slot, 0) + 1
+                body, status, returncode = response(slot, calls[slot])
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=returncode)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                outcomes = workload.run_v3_http_phase(lifecycle, "/curl", requests, phase,
+                    max_in_flight=8, retry_pre_admission_busy=True)
+            return lifecycle, calls, outcomes
+
+        def success(slot):
+            return dict(status="success", session_id="0x" + self.SESSION,
+                        cleanup_status="complete", slot=slot, proof_count=17 if slot < 7 else 13,
+                        tx_hash=f"{slot + 1:064x}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def one_busy(slot, attempt):
+                if slot == 5 and attempt == 1:
+                    return ({"error": "retrieval submission busy",
+                             "hint": "retrieval submission capacity or signer busy"}, 429, 0)
+                return success(slot), 200, 0
+            lifecycle, calls, outcomes = run_case(tmp, "busy-then-success", one_busy)
+            self.assertEqual(calls, {slot: 2 if slot == 5 else 1 for slot in range(8)})
+            self.assertEqual(len(lifecycle.doc["v3_http_phases"]["busy-then-success"]), 9)
+            self.assertEqual(len(outcomes), 8)
+            self.assertEqual(workload.validate_v3_provider_outcomes(
+                outcomes, providers, session_id=self.SESSION)["proof_count"], 132)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def unknown(slot, attempt):
+                if slot == 5:
+                    return ({"error": "retrieval submission busy",
+                             "hint": "retrieval submission capacity or signer busy",
+                             "tx_hash": "A" * 64}, 429, 0)
+                return success(slot), 200, 0
+            _, calls, outcomes = run_case(tmp, "unknown-429", unknown)
+            self.assertEqual(calls, {slot: 1 for slot in range(8)})
+            with self.assertRaisesRegex(ValueError,
+                    "provider .*http_status=429.*status=None.*retrieval submission busy"):
+                workload.validate_v3_provider_outcomes(outcomes, providers, session_id=self.SESSION)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def nonzero_curl(slot, attempt):
+                return success(slot), 200, 7 if slot == 5 else 0
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = {}
+            def run(argv, deadline, env):
+                slot = int(argv[-1].rsplit("/", 1)[-1])
+                calls[slot] = calls.get(slot, 0) + 1
+                body, status, returncode = nonzero_curl(slot, calls[slot])
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="curl failed", returncode=returncode)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                with self.assertRaisesRegex(ValueError, "provider .*exited 7"):
+                    workload.run_v3_http_phase(lifecycle, "/curl", requests, "nonzero-curl",
+                        max_in_flight=8, retry_pre_admission_busy=True)
+            retained = lifecycle.doc["v3_http_phases"]["nonzero-curl"]
+            self.assertEqual(len(retained), 8)
+            self.assertEqual(next(row for row in retained if row["provider"] == providers[5])["curl_returncode"], 7)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = 0
+            def run(argv, deadline, env):
+                nonlocal calls
+                calls += 1
+                path = Path(argv[argv.index("--output") + 1])
+                if calls == 1:
+                    path.write_text(json.dumps({"error": "retrieval submission busy",
+                        "hint": "retrieval submission capacity or signer busy"}))
+                    return SimpleNamespace(stdout="429", stderr="", returncode=0)
+                path.write_text("{")
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                with self.assertRaises(ValueError):
+                    workload.run_v3_http_phase(lifecycle, "/curl", [requests[5]], "retry-parser-error",
+                        max_in_flight=1, retry_pre_admission_busy=True)
+            retained = lifecycle.doc["v3_http_phases"]["retry-parser-error"]
+            self.assertEqual((calls, len(retained), retained[0]["http_status"], retained[1]["status"]),
+                             (2, 2, 429, "driver_error"))
+
+    def test_native_v3_provider_routes_use_gateway_auth_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            captured = []
+            def run(argv, deadline, env):
+                captured.append(argv)
+                Path(argv[argv.index("--output") + 1]).write_text('{"status":"success"}')
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            requests = [
+                ("generation-acceptance", "/sp/generation-v3/accept", {"deal_id": 7, "provider": "provider-a"}),
+                ("session-proof", "/sp/session-proof", {"session_id": self.SESSION}),
+            ]
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                for phase, route, body in requests:
+                    workload.run_v3_http_phase(lifecycle, "/curl", [dict(
+                        provider="provider-a", url="http://provider" + route, body=body,
+                    )], phase, max_in_flight=1)
+            expected = "X-PolyStore-Gateway-Auth: " + workload.V3_PROVIDER_AUTH_TOKEN
+            self.assertEqual(len(captured), 2)
+            for argv, (_, route, body) in zip(captured, requests):
+                headers = [argv[index + 1] for index, value in enumerate(argv[:-1]) if value == "--header"]
+                self.assertIn(expected, headers)
+                self.assertFalse(any(value.startswith("Authorization:") for value in headers))
+                self.assertEqual(json.loads(argv[argv.index("--data") + 1]), body)
+                self.assertTrue(argv[-1].endswith(route))
+
+    def test_disk_threshold_fails_closed(self):
+        with patch.object(workload.shutil, "disk_usage", return_value=SimpleNamespace(free=99)):
+            with self.assertRaisesRegex(ValueError, "found 99"):
+                workload.require_free_disk(Path("/"), 100, "pilot")
+
+    def test_session_list_is_retained_before_first_open_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={"native_v3_generation": {
+                "candidate": {"integrity_root": "0x" + self.INTEGRITY}}},
+                signers={"owner0": AUDIT_ADDRESSES[8]}, chain="polystore_291-1",
+                wait_height=Mock(return_value=70), save=Mock())
+            deal = {"id": "7", "end_block": "1000",
+                    "manifest_root": base64.b64encode(bytes.fromhex(self.ROOT)).decode()}
+            with patch.object(workload, "v3_retained_generations", return_value={}), \
+                 self.assertRaisesRegex(ValueError, "open failed"):
+                workload.run_native_v3_sessions(lifecycle, deal=deal,
+                    providers=dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    send=Mock(side_effect=ValueError("open failed")), wait=Mock(), curl="/curl")
+            self.assertEqual(lifecycle.doc["native_v3"]["sessions"], [])
+            lifecycle.save.assert_called()
+
+    def test_first_generation_empty_root_is_canonical_cli_hex(self):
+        candidate = dict(deal_id="7", expected_current_generation="0",
+            previous_polyfs_root="", polyfs_root="0x" + self.ROOT,
+            integrity_root="0x" + self.INTEGRITY, size_bytes=str(workload.V3_PILOT_BYTES),
+            total_mdus="5", witness_mdus="1", integrity_leaf_count="288",
+            commit_action="propose-deal-generation-v3", required_acceptances="12")
+        lifecycle = SimpleNamespace(signers={"owner0": AUDIT_ADDRESSES[8]},
+            nodes=[{"home": "/home", "rpc": 26657}], env={}, deadline=artifact.monotonic_ns() + 10**9,
+            binary=Path("/chain"), chain="polystore_291-1")
+        for spelling in ("", "0x"):
+            candidate["previous_polyfs_root"] = spelling
+            captured = []
+            def send(name, args):
+                captured.append(workload.transaction_job(lifecycle, lifecycle.signers[name], args))
+                raise ValueError("stop after scheduled proposal")
+            with self.subTest(spelling=spelling), self.assertRaisesRegex(ValueError, "stop after scheduled proposal"):
+                workload.admit_native_v3_generation(lifecycle,
+                    uploaded={"generation_candidate": copy.deepcopy(candidate)}, deal_id="7",
+                    providers=dict(enumerate(AUDIT_ADDRESSES)), send=send, curl="/curl")
+            argv = captured[0]["submit"]
+            self.assertNotIn("", argv)
+            self.assertEqual(argv[argv.index("--previous-polyfs-root") + 1], "0x")
+
+
+
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
+        common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home"]
+        required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra in ([], required + ["--timeout", "601"], required + ["--audit-profile", "c6"],
+                      required + ["--proof-only"]):
+            with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
+                with self.assertRaises(SystemExit) as error:
+                    workload.main()
+                self.assertEqual(error.exception.code, 2)
+                constructor.assert_not_called()
+        with patch.object(workload.sys, "argv", common + required + ["--timeout", "600"]), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                                        native_v3=True, audit_profile="normal")
+
     def test_healthy_cli_requires_explicit_binaries_and_bounded_timeout(self):
         common = ["diagnostic", "--mode", "healthy-providers", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]

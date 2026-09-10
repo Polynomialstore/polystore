@@ -1303,7 +1303,8 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                     config.mkdir(parents=True)
                     genesis = {"consensus": {"params": {"block": {}}}, "app_state": {
                         "bank": {"denom_metadata": []}, "nilchain": {"params": {
-                            "retrieval_v2_activation_height": "0", "unchanged_fee": "17"}}}}
+                            "retrieval_v2_activation_height": "0", "retrieval_v3_activation_height": "0",
+                            "unchanged_fee": "17"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
                     (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
                     (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\n')
@@ -1448,6 +1449,16 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertEqual((params["quota_min_blobs"], params["quota_max_blobs"]), ("132", "132"))
             self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"), self.runner.doc["genesis_sha256"])
 
+    def test_v3_activation_is_explicit_and_default_remains_off(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                runner = artifact.FourValidatorLifecycle(self.binary, self.library, self.root / ("v3" if enabled else "default"))
+                runner.home.mkdir(mode=0o700)
+                runner.prepare(enable_retrieval_v3=enabled)
+                genesis = json.loads((Path(runner.nodes[0]["home"]) / "config/genesis.json").read_text())
+                self.assertEqual(genesis["app_state"]["nilchain"]["params"]["retrieval_v3_activation_height"],
+                                 "1" if enabled else "0")
+
     def test_prepare_provisions_bounded_high_load_signer_population(self):
         self.runner.home.mkdir(mode=0o700)
         self.runner.prepare(provider_count=44)
@@ -1476,6 +1487,9 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                         os.kill(process.pid, signal.SIGKILL)
                     self.runner.stop()
                     self.assertGreater(record["peak_rss_bytes"], 32 * 1024 * 1024)
+                    self.assertIsNotNone(record["user_cpu_seconds"])
+                    self.assertIsNotNone(record["system_cpu_seconds"])
+                    self.assertEqual(record["measurement_scope"], "whole validator process lifetime")
                     self.assertIn(record["raw_unit"], ("bytes", "KiB"))
                     self.assertIsNotNone(process.returncode)
                     with self.assertRaises(ChildProcessError):
