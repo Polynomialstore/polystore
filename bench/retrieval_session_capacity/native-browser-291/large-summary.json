@@ -1,0 +1,304 @@
+{
+  "schema": "polystore-native-v3-large-public-summary-v1",
+  "evidence": {
+    "harness_head": "3e15b2380c8340e4f2188f4b6fa585ec4a9c02f9",
+    "runtime_source_head": "071b2a9fa7f482dcd188c44c85c0d678ac5f3d96",
+    "runtime_component_trees": {
+      "polystore_core": "52e6c75c3c67a2811c3f7d85df0f77cd61ece7fc",
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystorechain": "9c7741a5ae7beebe05fefb58d6ebabce46ba1b99",
+      "polystore_gateway": "00afcf23970b77ce8f85391148a2f35ecf1bfe2f"
+    },
+    "raw_evidence_file_count": 10,
+    "raw_evidence_manifest_sha256": "7555b8df95036058faa7776b7ee073dcc15c8641883402829f7c49fd015d1c02",
+    "run_return_code": 0,
+    "total_elapsed_seconds": 1268.177,
+    "measurement_class": "single production-browser paid and cached retrieval pilot over LAN; includes qualification assertions, not a WAN or p95 benchmark"
+  },
+  "geometry": {
+    "validator_count": 4,
+    "provider_slot_count": 12,
+    "redundancy": {
+      "k": 8,
+      "m": 4
+    },
+    "file_bytes": 1073741824,
+    "requested_range_bytes": 1073741824,
+    "metadata_mdu_count": 2,
+    "user_mdu_count": 133,
+    "total_mdu_count": 135,
+    "sample_population_u": 8457,
+    "sample_count_q": 132,
+    "obligation_count": 8,
+    "transport_chunk_count": 1064
+  },
+  "main_retrieval": {
+    "success": true,
+    "downloaded_bytes": 1073741824,
+    "output_matches_expected_sha256": true,
+    "verified_logical_bytes_written": 1073741824,
+    "flushed_logical_bytes": 1073741824,
+    "verified_chunk_count": 1064,
+    "acknowledged_obligation_count": 8,
+    "chain_confirmed_completed_session_count": 1,
+    "session_final": {
+      "accepted_sample_count": 132,
+      "acked_slots_mask": 255,
+      "settled_slots_mask": 255,
+      "refunded_slots_mask": 0,
+      "locked_fee_stake": 0,
+      "expired": false
+    },
+    "mdu_network_requests": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1064,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "wire_bytes_measured": false,
+    "paid_snapshot_elapsed_ms_since_progress_tracker_start": 695441.771208,
+    "paid_retrieval_phase_elapsed_ms": 654051.9580420001,
+    "first_verified_byte_elapsed_ms_since_progress_tracker_start": 52881.721708,
+    "first_verified_byte_elapsed_ms_since_retrieval_phase_start": 11491.908542000107,
+    "final_snapshot_elapsed_ms_since_progress_tracker_start_including_cache": 700517.363416,
+    "final_retrieval_phase_elapsed_ms_including_cache": 659127.550292,
+    "cache_qualification_elapsed_ms": 5075.592249999987,
+    "timing_scope": "Harness monotonic clock. The progress tracker starts before page mount. The retrieval phase starts before opening the download controls and includes locating and clicking Download. The paid snapshot follows download hashing, final session/accounting and receipt/proof checks, and precedes the cache retrieval. The final snapshot also includes cache download hashing and cache invariants.",
+    "first_verified_byte_scope": "First completed chunk fetched, parsed, authenticated, decoded and written, immediately before its flush; not HTTP time to first byte."
+  },
+  "cache": {
+    "success": true,
+    "downloaded_bytes": 1073741824,
+    "mdu_network_requests_before": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1064,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "mdu_network_requests_after": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1064,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "mdu_network_request_delta": {
+      "gatewayMetadata": 0,
+      "gatewayData": 0,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "additional_raw_transaction_count": 0,
+    "additional_stake_charged": 0
+  },
+  "chain_transactions": {
+    "sampled_proof": {
+      "sample_count_q": 132,
+      "accepted_sample_count": 132,
+      "transaction_count": 8,
+      "successful_transaction_count": 8,
+      "gas_used": 68027328,
+      "gas_wanted": 108634863,
+      "serialized_bytes": 102457
+    },
+    "main_control": {
+      "transaction_count": 9,
+      "successful_transaction_count": 9,
+      "gas_used": 2825440,
+      "gas_wanted": 3480539,
+      "serialized_bytes": 4446
+    }
+  },
+  "accounting": {
+    "denominations": {
+      "retrieval": "stake",
+      "gas": "aatom"
+    },
+    "main_retrieval": {
+      "charged_stake": 8458,
+      "burned_stake": 425,
+      "provider_payout_stake": 8033,
+      "payer_gas_aatom": 2825440,
+      "completed_session_count": 1,
+      "concurrent_chain_issuance_stake": 49027643
+    }
+  },
+  "provider_phases": {
+    "transaction_count": 8,
+    "sequence_retry_attempts": 0,
+    "phases": {
+      "authority_ns": {
+        "count": 8,
+        "total_ns": 9346278,
+        "min_ns": 1016029,
+        "max_ns": 1239822
+      },
+      "proof_preparation_ns": {
+        "count": 8,
+        "total_ns": 8372479523,
+        "min_ns": 760075415,
+        "max_ns": 1406614831
+      },
+      "pre_broadcast_ns": {
+        "count": 8,
+        "total_ns": 701418746,
+        "min_ns": 70542230,
+        "max_ns": 111058425
+      },
+      "broadcast_tx_sync_ns": {
+        "count": 8,
+        "total_ns": 11355458,
+        "min_ns": 842028,
+        "max_ns": 4329362
+      },
+      "commit_observation_ns": {
+        "count": 8,
+        "total_ns": 11045244936,
+        "min_ns": 1004162025,
+        "max_ns": 2007038907
+      },
+      "provider_total_ns": {
+        "count": 8,
+        "total_ns": 20784455912,
+        "min_ns": 2262524335,
+        "max_ns": 2922423679
+      },
+      "unattributed_ns": {
+        "count": 8,
+        "total_ns": 644610971,
+        "min_ns": 72184387,
+        "max_ns": 85170079
+      }
+    },
+    "scope": "same-process monotonic durations; provider total starts at V3 dispatch after route selection and signer admission; pre-broadcast starts at CLI RunE, not process start; unattributed includes process startup, journal work, retry backoff and other local overhead; consensus header times remain separate inter-block wall time"
+  },
+  "browser_phases": {
+    "phase_category_count": 13,
+    "phases": {
+      "metadata_authentication": {
+        "count": 1,
+        "summed_work_ms": 5696.615000009537,
+        "occupied_elapsed_ms": 5696.615000009537
+      },
+      "open_send": {
+        "count": 1,
+        "summed_work_ms": 28.950000047683716,
+        "occupied_elapsed_ms": 28.950000047683716
+      },
+      "open_inclusion": {
+        "count": 1,
+        "summed_work_ms": 768.164999961853,
+        "occupied_elapsed_ms": 768.164999961853
+      },
+      "open_transaction": {
+        "count": 1,
+        "summed_work_ms": 933.1050000190735,
+        "occupied_elapsed_ms": 933.1050000190735
+      },
+      "session_observation": {
+        "count": 21,
+        "summed_work_ms": 524.1149998903275,
+        "occupied_elapsed_ms": 524.1149998903275
+      },
+      "challenge_ready": {
+        "count": 10,
+        "summed_work_ms": 3298.9350003004074,
+        "occupied_elapsed_ms": 3298.9350003004074
+      },
+      "chunk_transport": {
+        "count": 1064,
+        "summed_work_ms": 1196516.5100007057,
+        "occupied_elapsed_ms": 601477.4550000429
+      },
+      "browser_verify": {
+        "count": 1064,
+        "summed_work_ms": 4996.999998688698,
+        "occupied_elapsed_ms": 4993.114998698235
+      },
+      "decode_write": {
+        "count": 1064,
+        "summed_work_ms": 9113.80999982357,
+        "occupied_elapsed_ms": 9113.80999982357
+      },
+      "flush": {
+        "count": 1064,
+        "summed_work_ms": 2709.185001730919,
+        "occupied_elapsed_ms": 2709.185001730919
+      },
+      "ack_send": {
+        "count": 8,
+        "summed_work_ms": 245.27499985694885,
+        "occupied_elapsed_ms": 245.27499985694885
+      },
+      "ack_inclusion": {
+        "count": 8,
+        "summed_work_ms": 10957.169999837875,
+        "occupied_elapsed_ms": 10957.169999837875
+      },
+      "provider_settlement": {
+        "count": 8,
+        "summed_work_ms": 21536.580000042915,
+        "occupied_elapsed_ms": 21536.580000042915
+      }
+    },
+    "all_category_union_ms": 644470.9999995232,
+    "scope": "one browser page monotonic clock; summed work may overlap; phase elapsed unions must not be added together"
+  },
+  "memory": {
+    "schema": "polystore-browser-darwin-sampled-rss-v1",
+    "peak_rss_bytes": 1596964864,
+    "samples": 2931,
+    "interval_ms": 250,
+    "scope": "sampled RSS sum for the Playwright worker and discovered Chromium descendants; excludes remote server services, may double-count shared pages and miss between-sample peaks"
+  },
+  "independent_audits": {
+    "coverage_verified": true,
+    "accepted_samples": 72,
+    "required_samples": 72
+  },
+  "redaction": {
+    "excluded": [
+      "account addresses",
+      "session identifiers",
+      "host names and addresses",
+      "absolute paths",
+      "transaction hashes",
+      "raw transaction bytes",
+      "signatures",
+      "proof material",
+      "private keys"
+    ]
+  },
+  "deployment": {
+    "client": {
+      "cpu": "Apple M3",
+      "model": "Mac15,13",
+      "ram_bytes": 17179869184,
+      "os": "macOS 26.2",
+      "browser": "Google Chrome 152.0.7977.83",
+      "node": "v22.23.2"
+    },
+    "server": {
+      "cpu": "AMD Ryzen 7 9700X",
+      "os": "Linux",
+      "cohosted_services": [
+        "four validators",
+        "twelve provider-daemons",
+        "user-gateway",
+        "website"
+      ]
+    },
+    "transport": "LAN SSH loopback forwards, SSH compression disabled",
+    "wallet": "automated fixture EVM signer; no human approval delay",
+    "payload": "deterministic repeating 4 KiB nonconstant pattern; no response-compression middleware on the gateway route"
+  },
+  "performance_target": {
+    "metric": "main_retrieval.paid_retrieval_phase_elapsed_ms",
+    "scope": "same LAN client/server topology and complete paid qualification assertions; single completed pilot, not WAN, p95 or service SLA",
+    "observed_ms": 654051.9580420001,
+    "margin_fraction": 0.25,
+    "round_up_to_ms": 60000,
+    "target_ms": 840000,
+    "observed_within_target": true,
+    "recalibrate_when": "hardware, topology or concurrency changes"
+  }
+}

@@ -1,6 +1,6 @@
 # Retrieval v3 native large-session contract
 
-Status: **implemented; end-to-end qualification pending; disabled by default**.
+Status: **implemented; isolated production-browser qualification passed; disabled by default**.
 This document fixes the wire-independent protocol choices for issue #291. The
 shared primitives, native generation admission, owner/sponsored session opening,
 sampled proof submission, provider data delivery, per-provider ACK/settlement
@@ -913,5 +913,19 @@ Linux reports aggregate cgroup charged memory, including file cache. macOS
 reports sampled process-tree RSS, which can double-count shared pages and
 miss peaks between samples. Neither is JavaScript heap usage. Keep the
 60-second progress heartbeat, ten-minute no-progress watchdog and absolute
-execution deadline. Execution limits cap test cost; choose the practical
-retrieval target only from the retained deployment measurement.
+execution deadline. Execution limits cap test cost. The
+[retained production-browser report](../bench/retrieval_session_capacity/native-browser-291/README.md)
+records the passing small, multi-MDU and Mac LAN 1 GiB cases. Its measured
+654.052-second paid interval establishes a provisional **14-minute target**
+for that topology, including 25% operating margin rounded up to a minute.
+This is a single-pilot regression target, not a WAN or p95 service promise.
+After a matching run, require both full qualification and the measured target:
+
+```sh
+jq -e '.qualification == true and
+  (.native_v3_browser.playwright.outcome.progressAfterPaid.phaseMs <= 840000)' \
+  "$RUN_DIR/evidence.json"
+```
+
+Recalibrate from retained measurements when deployment hardware, topology
+or concurrency changes. Public activation remains a separate decision.

@@ -1,20 +1,48 @@
 # Native V3 browser qualification
 
-Status: small and multi-MDU correctness passed; realistic 1 GiB pilot pending.
+Status: small, multi-MDU and realistic 1 GiB production-browser qualification passed.
 
 The production browser retrieves one logical range through one paid native V3 session. Complete encoded bytes are authenticated before decode, durable write and acknowledgment. KZG challenges remain sampled: 1 for the aligned 1 KiB case and 132 for both the 16 MiB + 1 and 1 GiB cases.
 
-The small and multi-MDU correctness runs used a Linux browser with four validators and twelve provider-daemons on one host. The 1 GiB pilot uses a separate Mac browser over LAN SSH forwards to the same server topology. The fixed EVM test wallet signs automatically; human MetaMask interaction is outside these timings. The synthetic payload repeats a deterministic 4 KiB nonconstant pattern; SSH compression is disabled and the gateway streaming route has no response-compression middleware. This is a controlled LAN deployment measurement, not an entropy or WAN comparison. Public activation remains disabled by default.
+The small and multi-MDU correctness runs used a Linux browser with four validators and twelve provider-daemons on one host. The 1 GiB pilot used a separate Mac browser over LAN SSH forwards to the same server topology: Apple M3, 16 GiB RAM, macOS 26.2 and Chrome 152.0.7977.83, with an AMD Ryzen 7 9700X Linux server. The fixed EVM test wallet signs automatically; human MetaMask interaction is outside these timings. The synthetic payload repeats a deterministic 4 KiB nonconstant pattern; SSH compression is disabled and the gateway streaming route has no response-compression middleware. This is a controlled LAN deployment measurement, not an entropy or WAN comparison. Public activation remains disabled by default.
 
 ## Correctness evidence
 
 - 1 KiB: one paid session, verified output, cached download without additional MDU requests or payment, estimation rejection and wallet cancellation before payment, and strict post-deadline refund without a second open or provider access.
 - 16 MiB + 1: one paid session spanning three user MDUs; rejected corruption of its sole unsampled coordinate, wrong multipart order and truncation; reconciled an unknown open; reloaded from flushed output without refetching the completed target chunk; completed all eight obligations and reused the authenticated cache.
+- 1 GiB: one paid session, 1,064 bounded transport chunks, 132 accepted samples across eight provider proof transactions, nine browser control transactions, all bytes verified/flushed, and the same SHA-256 for paid and cached output. The cache made no additional MDU requests or payments. Normal independent storage audits accepted all 72 required samples. Both pre-payment rejection cases also passed.
 - Each completed paid retrieval joins canonical committed receipts on all four validators and checks every sampled ordinal exactly once. Completed and expiry cases reconcile payer, provider, burn, escrow, refund and concurrent mint accounting.
 
 The live pre-payment cases cover estimation rejection and wallet cancellation. Unsupported authority, provider, transform, legacy, replay and rollback cases are covered by the public unit/integration tests in the landed implementation PRs. State evidence is structural: one session, bounded obligations and bitmap, one cumulative browser checkpoint, and terminal journal cleanup; it is not a serialized database-size measurement.
 
 The 1 KiB run uses source `36692ac6`; the later test-only change accepts zero-sample obligations without requiring a provider proof transaction. Its one-positive-sample assertion and expiry flow are unchanged. A unit regression still requires all assigned data to be verified and flushed before a zero-sample obligation is acknowledged.
+
+## Measured 1 GiB result and target
+
+The [retained large summary](large-summary.json) records one completed pilot at browser/harness source `3e15b238` and native runtime `071b2a9f`. Its **paid retrieval qualification took 654.052 seconds (10m54s)**, including verification, durable output, sampled proof settlement and final assertions. Effective logical payload throughput for that entire interval was 13.13 Mbit/s. The cache qualification took **5.076 seconds**, including hashing the saved output. Fixture construction, generation admission, storage audits and the additional rejection tests bring the entire harness to 1,268.177 seconds; that is not download time.
+
+| Browser phase | Calls | Summed work | Occupied elapsed time |
+| --- | ---: | ---: | ---: |
+| Frozen metadata authentication | 1 | 5.697 s | 5.697 s |
+| Chunk fetch and parsing | 1,064 | 1,196.517 s | 601.477 s |
+| Encoded-byte integrity verification | 1,064 | 4.997 s | 4.993 s |
+| Decode and output write | 1,064 | 9.114 s | 9.114 s |
+| Durable flush | 1,064 | 2.709 s | 2.709 s |
+| Open transaction, including inclusion | 1 | 0.933 s | 0.933 s |
+| ACK inclusion | 8 | 10.957 s | 10.957 s |
+| Provider settlement request | 8 | 21.537 s | 21.537 s |
+
+Two chunks can be fetched concurrently. Occupied time is the union of intervals in that category; categories themselves overlap and must not be summed into a wall-time breakdown. The first verified output write occurred 11.492 seconds after the paid interval began; this includes fetching, parsing, verifying and decoding the complete first chunk, so it is not HTTP time to first byte.
+
+Provider timing across the eight successful proof submissions totals 8.372 seconds for proof preparation, 0.701 seconds before broadcast, 0.011 seconds for broadcast and 11.045 seconds observing commitment. The provider total is 20.784 seconds, including 0.009 seconds of authority checks and 0.645 seconds of other local work. Proof preparation includes metadata/root work, commitment/opening generation and self-verification; it is not an isolated KZG-operation benchmark. Browser and provider clocks describe overlapping work.
+
+The dominant measured category is chunk fetch and parsing. It wraps endpoint resolution, gateway/provider authority and preparation, response transfer, complete-body buffering and multipart parsing. These measurements do not separate LAN time from server reads/queries or browser parsing. The data route authenticates bytes with SHA/Merkle proofs; sampled KZG generation runs separately during settlement. Further optimization should profile that composite fetch path before attributing its time to the network, storage or proof system.
+
+The chain accepted 68,027,328 gas and 102,457 serialized bytes across eight proof transactions, versus 68,019,728 gas and 102,450 bytes in the 16 MiB + 1 run. Both cover 132 samples. The 1 GiB browser's nine control transactions used 2,825,440 gas and 4,446 bytes. Accounting charged 8,458 stake, paid providers 8,033 stake and burned 425 stake, with no locked fee remaining; gas is accounted separately in aatom. One bounded session and eight obligations cover the complete range. Sampled Mac browser-tree peak RSS was 1,596,964,864 bytes; see the memory scope below. These are retrieval measurements; [#290](https://github.com/Polynomialstore/polystore/issues/290) owns the separate chain-capacity result.
+
+**Provisional practical target: complete the 1 GiB paid retrieval qualification within 14 minutes on this topology.** This is the measured 654.052 seconds plus an explicit 25% operating margin, rounded up to a whole minute (`ceil(654.052 × 1.25 / 60) × 60 = 840 seconds`). It is a regression target derived from one completed deployment pilot, not a p95, WAN or public-service SLA. Use the same phase boundary and correctness checks when comparing future runs; recalibrate from retained measurements when hardware, topology or concurrency changes. The 30-minute retrieval allowance and outer timeout remain test-cost limits.
+
+An earlier large pilot stopped during pre-payment file-index synchronization, before any retrieval opened. Replays with both its original browser profile and a fresh profile succeeded; the cause was not established. The final harness adds immediate synchronization-error reporting and bounded browser failure diagnostics. The passing run does not establish a failure-rate estimate.
 
 ## Measurement boundaries
 
