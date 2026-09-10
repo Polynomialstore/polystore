@@ -50,8 +50,8 @@ async function deal(page: Page): Promise<JsonObject> {
 }
 
 async function sessionById(page: Page, sessionId: string): Promise<JsonObject> {
-  const encoded = Buffer.from(sessionId.slice(2), 'hex').toString('base64url')
-  const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions-v3/${encoded}`)
+  const encoded = Buffer.from(sessionId.slice(2), 'hex').toString('base64').replace(/\+/g, '-').replace(/\//g, '_')
+  const response = await page.request.get(`${lcd}/polystorechain/polystorechain/v1/retrieval-sessions-v3/${encodeURIComponent(encoded)}`)
   expect(response.ok()).toBe(true)
   return (await response.json()).session
 }
