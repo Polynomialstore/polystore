@@ -692,6 +692,52 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.native_v3_chain_committed_summary(
                 sessions, messages, [dict(id="warmup")], [dict(id="other")])
 
+    def test_native_chain_inventory_assembles_all_exported_provider_messages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+            sessions = []
+            for index in range(8):
+                sessions.append(dict(session_id=f"{index + 1:064x}", evidence_height=70,
+                    before_proofs={}, context_hash=f"{index + 9:064x}", seed=f"{index + 17:064x}"))
+            directories = {}
+            for provider in providers.values():
+                directories[provider] = home / provider
+                directories[provider].mkdir()
+            lifecycle = SimpleNamespace(home=home, chain="polystore_290-1",
+                env={"POLYSTORE_TRUSTED_SETUP": "/setup"},
+                deadline=artifact.monotonic_ns() + 30 * 10**9)
+
+            def export(argv, deadline, env):
+                manifest_path = Path(env["POLYSTORE_RETRIEVAL_EXPORT_MANIFEST"])
+                manifest = json.loads(manifest_path.read_text())
+                provider = manifest["v3_provider"]
+                slot = next(index for index, address in providers.items() if address == provider)
+                rows = []
+                for index, request in enumerate(manifest["v3_sessions"]):
+                    message_path = Path(request["output_path"])
+                    message = dict(creator=provider,
+                        session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
+                        slot=str(slot), proofs=[dict(ordinal=str(slot))])
+                    raw = json.dumps(message, separators=(",", ":")).encode()
+                    message_path.write_bytes(raw)
+                    rows.append(dict(session_id=request["session_id"], message_path=str(message_path),
+                        message_sha256=hashlib.sha256(raw).hexdigest(),
+                        context_hash=sessions[index]["context_hash"], seed=sessions[index]["seed"],
+                        slot=slot, ordinals=[slot], generation_ms=1.0))
+                Path(str(manifest_path) + ".result.json").write_text(json.dumps({"messages": rows}))
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch.object(artifact, "run_bounded_command", side_effect=export):
+                inventory = workload.export_native_v3_chain_inventory(
+                    lifecycle, Path("/exporter"), sessions, providers, directories)
+            self.assertEqual(len(inventory["manifests"]), 8)
+            self.assertEqual(len(inventory["messages"]), 64)
+            self.assertEqual([(row["session_index"], row["slot"]) for row in inventory["messages"]],
+                             [(session, slot) for session in range(8) for slot in range(8)])
+            self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
+                             list(providers.values()))
+
     def test_native_chain_exporter_identity_records_exact_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
             exporter = Path(tmp) / "exporter"

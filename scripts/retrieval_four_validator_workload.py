@@ -729,7 +729,7 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
                     producer.uint(message.get("slot", 0)) != slot or
                     [producer.uint(proof.get("ordinal", V3_MAX_SAMPLES)) for proof in message.get("proofs", [])] != row.get("ordinals")):
                 raise ValueError("v3 exporter changed frozen message/context/provider intent")
-            ordered.append(dict(session_index=session_index, slot=slot, provider=provider, **row))
+            ordered.append(dict(row, session_index=session_index, provider=provider))
     return dict(directory=str(inventory), manifests=[str(row[1]) for row in manifests], messages=ordered)
 
 
