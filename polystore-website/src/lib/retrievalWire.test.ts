@@ -151,21 +151,32 @@ test('native v3 WASM matches shared context, FAT and odd-tree integrity vectors'
     assert.throws(() => PolyStoreWasm.retrieval_v3_session_id('polystore-test-1', new Uint8Array(19), 42n, 7n, 3, 0n, 1n, bytes(transcript.plan_hash), 9n))
     assert.throws(() => PolyStoreWasm.retrieval_v3_obligation_ack_hash('polystore-test-1', bytes(transcript.session_id), bytes(transcript.context_hash),
       bytes(transcript.plan_hash), obligation.slot, bytes(obligation.assigned), bytes(obligation.payee), BigInt(obligation.blob_count), 1n, bytes(golden.integrity.root)))
-    const context = bytes(transcript.context_hex), anchor = bytes(transcript.anchor_hash)
+    const context = bytes(transcript.context_hex)
     assert.equal(hex(PolyStoreWasm.retrieval_v3_context_hash(context)), `0x${transcript.context_hash}`)
     assert.throws(() => PolyStoreWasm.retrieval_v3_context_hash(context.subarray(0, context.length - 1)))
     assert.throws(() => PolyStoreWasm.retrieval_v3_context_hash(Buffer.concat([context, Buffer.from([0])])))
-    const seed = PolyStoreWasm.retrieval_v3_seed(context, anchor)
-    assert.equal(hex(seed), `0x${transcript.seed}`)
-    const challenges = PolyStoreWasm.derive_retrieval_v3_challenges(context, seed)
-    assert.equal(challenges.length, golden.small_samples.length * 72)
-    const view = new DataView(challenges.buffer, challenges.byteOffset, challenges.byteLength)
-    golden.small_samples.forEach((sample: Record<string, number | string>, i: number) => {
-      const at = i * 72
-      assert.deepEqual([view.getBigUint64(at), view.getBigUint64(at + 8), view.getBigUint64(at + 16), view.getBigUint64(at + 24), view.getUint32(at + 32), view.getUint32(at + 36)],
-        [BigInt(sample.ordinal), BigInt(sample.position), BigInt(sample.t), BigInt(sample.mdu_index), sample.leaf_index, sample.slot])
-      assert.equal(hex(challenges.subarray(at + 40, at + 72)), `0x${sample.z}`)
-    })
+    for (const name of ['small', 'offset', 'large']) {
+      const candidate = golden[`${name}_transcript`]
+      const candidateContext = bytes(candidate.context_hex)
+      assert.equal(hex(PolyStoreWasm.retrieval_v3_context_hash(candidateContext)), `0x${candidate.context_hash}`)
+      const seed = PolyStoreWasm.retrieval_v3_seed(candidateContext, bytes(candidate.anchor_hash))
+      assert.equal(hex(seed), `0x${candidate.seed}`)
+      const challenges = PolyStoreWasm.derive_retrieval_v3_challenges(candidateContext, seed)
+      assert.equal(challenges.length, candidate.sample_count * 72)
+      const view = new DataView(challenges.buffer, challenges.byteOffset, challenges.byteLength)
+      if (name === 'large') {
+        const positions = Array.from({ length: candidate.sample_count }, (_, i) => challenges.subarray(i * 72 + 8, i * 72 + 16))
+        assert.equal(createHash('sha256').update(Buffer.concat(positions)).digest('hex'), golden.large_sample.positions_sha256)
+        assert.deepEqual(positions.slice(0, 8).map((position) => Number(new DataView(position.buffer, position.byteOffset, 8).getBigUint64(0))), golden.large_sample.first_eight)
+      } else {
+        golden[`${name}_samples`].forEach((sample: Record<string, number | string>, i: number) => {
+          const at = i * 72
+          assert.deepEqual([view.getBigUint64(at), view.getBigUint64(at + 8), view.getBigUint64(at + 16), view.getBigUint64(at + 24), view.getUint32(at + 32), view.getUint32(at + 36)],
+            [BigInt(sample.ordinal), BigInt(sample.position), BigInt(sample.t), BigInt(sample.mdu_index), sample.leaf_index, sample.slot])
+          assert.equal(hex(challenges.subarray(at + 40, at + 72)), `0x${sample.z}`)
+        })
+      }
+    }
     const header = bytes(golden.fat_header.header_hex)
     assert.equal(wasm.verify_fat_v3_header(header, bytes(golden.integrity.root), 96n), 2)
     assert.throws(() => wasm.verify_fat_v3_header(header, bytes(golden.integrity.root), -1n))
