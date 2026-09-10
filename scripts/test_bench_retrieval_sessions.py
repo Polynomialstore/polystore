@@ -205,6 +205,81 @@ exec(compile(code, "<benchmark home>", "exec"))
 
 
 class BenchmarkArtifactTest(unittest.TestCase):
+    def test_browser_memory_wrapper_retains_kernel_peak_and_child_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "cgroup"
+            proc.write_text("0::/user.slice/browser.scope\n")
+            cgroup = root / "sys" / "user.slice" / "browser.scope"
+            cgroup.mkdir(parents=True)
+            (cgroup / "memory.peak").write_text("33554432\n")
+            output = root / "memory.json"
+            with patch.object(artifact, "PROC_SELF_CGROUP", proc), \
+                 patch.object(artifact, "CGROUP_ROOT", root / "sys"), \
+                 patch.object(artifact.subprocess, "run",
+                              return_value=subprocess.CompletedProcess(["playwright"], 7)) as run:
+                self.assertEqual(artifact.browser_memory_wrapper(output, ["playwright", "test"]), 7)
+            run.assert_called_once_with(["playwright", "test"])
+            self.assertEqual(artifact.read_browser_memory(output), {
+                "schema": artifact.BROWSER_MEMORY_SCHEMA,
+                "memory_peak_bytes": 33554432,
+                "source": artifact.BROWSER_MEMORY_SOURCE,
+                "measurement_scope": artifact.BROWSER_MEMORY_SCOPE,
+            })
+            self.assertEqual(list(root.glob(".*.tmp")), [])
+            with patch.object(artifact.subprocess, "run") as rerun, self.assertRaisesRegex(ValueError, "already exist"):
+                artifact.browser_memory_wrapper(output, ["playwright"])
+            rerun.assert_not_called()
+
+    def test_bounded_browser_command_uses_native_scope_and_requires_success_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            systemd_run = root / "systemd-run"
+            systemd_run.write_text("#!/bin/sh\n")
+            systemd_run.chmod(0o755)
+            output = root / "memory.json"
+            expected = {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 4096,
+                        "source": artifact.BROWSER_MEMORY_SOURCE,
+                        "measurement_scope": artifact.BROWSER_MEMORY_SCOPE}
+            def command(argv, deadline, **options):
+                self.assertEqual(deadline, 123)
+                self.assertEqual(options, {"env": {"ONLY": "this"}, "cwd": root})
+                self.assertEqual(argv[:4], [str(systemd_run), "--user", "--scope", "--quiet"])
+                self.assertIn("--property=MemoryAccounting=yes", argv)
+                self.assertEqual(argv[-2:], ["playwright", "test"])
+                output.write_text(json.dumps(expected))
+                return subprocess.CompletedProcess(argv, 0, "ok", "")
+            with patch.object(artifact.platform, "system", return_value="Linux"), \
+                 patch.object(artifact, "SYSTEMD_RUN", systemd_run), \
+                 patch.object(artifact, "run_bounded_command", side_effect=command):
+                result, measurement = artifact.run_bounded_browser_command(
+                    ["playwright", "test"], 123, output, env={"ONLY": "this"}, cwd=root)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(measurement, expected)
+
+            output.unlink()
+            with patch.object(artifact.platform, "system", return_value="Linux"), \
+                 patch.object(artifact, "SYSTEMD_RUN", systemd_run), \
+                 patch.object(artifact, "run_bounded_command",
+                              return_value=subprocess.CompletedProcess([], 0, "", "")), \
+                 self.assertRaisesRegex(ValueError, "did not retain"):
+                artifact.run_bounded_browser_command(["playwright"], 123, output)
+
+    def test_browser_memory_evidence_rejects_wrong_scope_or_peak(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.json"
+            for value in (
+                None,
+                {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 0,
+                 "source": artifact.BROWSER_MEMORY_SOURCE, "measurement_scope": artifact.BROWSER_MEMORY_SCOPE},
+                {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 1,
+                 "source": "JS heap", "measurement_scope": artifact.BROWSER_MEMORY_SCOPE},
+            ):
+                with self.subTest(value=value):
+                    path.write_text(json.dumps(value))
+                    with self.assertRaises(ValueError):
+                        artifact.read_browser_memory(path)
+
     def test_committed_block_pairs_real_payload_hash_with_ordered_results(self):
         block = dict(block_id=dict(hash="ab" * 32), block=dict(header=dict(height="7", chain_id="bench", app_hash="cd" * 32, time="2026-09-08T00:00:00Z"), data=dict(txs=[base64.b64encode(b"transaction").decode()])))
         results = dict(height="7", txs_results=[dict(code=1, gas_wanted="100", gas_used="90")])

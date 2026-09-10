@@ -42,6 +42,12 @@ MAX_AUDIT_SAMPLES = 4096
 # bodies out of scheduler records; only bounded TxMsgData is retained.
 MAX_COMMAND_OUTPUT_BYTES = 4 * 1024 * 1024
 MAX_RESPONSE_DATA_BYTES = 16 * 1024
+BROWSER_MEMORY_SCHEMA = "polystore-browser-cgroup-memory-v1"
+BROWSER_MEMORY_SOURCE = "Linux cgroup v2 memory.peak"
+BROWSER_MEMORY_SCOPE = "aggregate charged memory for the Playwright worker and owned Chromium process tree"
+SYSTEMD_RUN = Path("/usr/bin/systemd-run")
+PROC_SELF_CGROUP = Path("/proc/self/cgroup")
+CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
 def monotonic_ns():
@@ -324,6 +330,72 @@ def run_bounded_command(argv, deadline, *, env=None, cwd=None):
     finally:
         process.stdout.close()
         process.stderr.close()
+
+
+def read_browser_memory(path):
+    value = json.loads(Path(path).read_text())
+    expected = {
+        "schema": BROWSER_MEMORY_SCHEMA,
+        "memory_peak_bytes": value.get("memory_peak_bytes") if isinstance(value, dict) else None,
+        "source": BROWSER_MEMORY_SOURCE,
+        "measurement_scope": BROWSER_MEMORY_SCOPE,
+    }
+    if value != expected:
+        raise ValueError("invalid browser cgroup memory evidence")
+    integer(value["memory_peak_bytes"], "memory_peak_bytes", 1)
+    return value
+
+
+def browser_memory_wrapper(output, argv):
+    """Run Playwright inside the current scope and retain its kernel peak."""
+    output = Path(output)
+    if not argv:
+        raise ValueError("browser memory wrapper requires a command")
+    if os.path.lexists(output):
+        raise ValueError("browser memory output must not already exist")
+    completed = subprocess.run(argv)
+    entries = [line.split(":", 2) for line in PROC_SELF_CGROUP.read_text().splitlines()]
+    paths = [fields[2] for fields in entries if len(fields) == 3 and fields[:2] == ["0", ""]]
+    if len(paths) != 1 or not paths[0].startswith("/") or ".." in Path(paths[0]).parts:
+        raise ValueError("browser memory wrapper requires one cgroup v2 path")
+    peak = integer((CGROUP_ROOT / paths[0].lstrip("/") / "memory.peak").read_text().strip(),
+                   "memory_peak_bytes", 1)
+    value = {"schema": BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": peak,
+             "source": BROWSER_MEMORY_SOURCE, "measurement_scope": BROWSER_MEMORY_SCOPE}
+    temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("x") as stream:
+            json.dump(value, stream, indent=1)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, output)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return completed.returncode
+
+
+def run_bounded_browser_command(argv, deadline, memory_output, *, env=None, cwd=None):
+    """Run one browser worker in a native Linux memory-accounting scope."""
+    if platform.system() != "Linux":
+        raise ValueError("browser memory accounting requires Linux cgroup v2")
+    if not SYSTEMD_RUN.is_file() or not os.access(SYSTEMD_RUN, os.X_OK):
+        raise ValueError("browser memory accounting requires /usr/bin/systemd-run")
+    if not argv:
+        raise ValueError("browser command must not be empty")
+    output = Path(memory_output)
+    output = output.parent.resolve(strict=True) / output.name
+    if os.path.lexists(output):
+        raise ValueError("browser memory output must not already exist")
+    command = [str(SYSTEMD_RUN), "--user", "--scope", "--quiet",
+               f"--unit=polystore-291-browser-{os.getpid()}", "--property=MemoryAccounting=yes", "--",
+               sys.executable, str(Path(__file__).resolve(strict=True)), "browser-memory-wrapper", str(output), "--",
+               *argv]
+    result = run_bounded_command(command, deadline, env=env, cwd=cwd)
+    measurement = read_browser_memory(output) if output.is_file() else None
+    if result.returncode == 0 and measurement is None:
+        raise ValueError("successful browser command did not retain cgroup memory evidence")
+    return result, measurement
 
 
 def scheduled_environment(job):
@@ -1703,6 +1775,10 @@ def main():
     action, *args = sys.argv[1:]
     if action == "four-validator-lifecycle":
         four_validator_main(args)
+    elif action == "browser-memory-wrapper":
+        if len(args) < 3 or args[1] != "--":
+            raise ValueError("browser-memory-wrapper requires OUTPUT -- COMMAND")
+        raise SystemExit(browser_memory_wrapper(args[0], args[2:]))
     elif action == "arithmetic":
         if args:
             raise ValueError("arithmetic takes no arguments: it reports the frozen C3/C6 planning profile")
