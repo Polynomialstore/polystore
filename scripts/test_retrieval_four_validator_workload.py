@@ -172,7 +172,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             def playwright(argv, deadline, *, env=None, cwd=None):
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
                     "session": {"session_id": base64.b64encode(bytes(32)).decode()},
-                    "evmReceipts": [], "providerProofOutcomes": []}))
+                    "evmReceipts": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
+                    "diagnostics": [dict(phase="transport", edge="start", atMs=1), dict(phase="transport", edge="end", atMs=2)]}))
                 self.assertEqual(cwd, website)
                 self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
                     ("1", "262144", workload.V3_BROWSER_PAYER))
@@ -260,6 +261,18 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             candidate[0]["receipt"][field] = value
             with self.assertRaises(ValueError):
                 verify(observed=candidate)
+
+    def test_browser_phase_report_does_not_add_overlapping_chunks_as_elapsed_time(self):
+        events = [dict(phase="transport", chunkId=chunk, edge=edge, atMs=at)
+                  for chunk, edge, at in (("a", "start", 0), ("b", "start", 1), ("a", "end", 3), ("b", "end", 4))]
+        phase = workload.browser_phase_intervals(events)["phases"]["transport"]
+        self.assertEqual(phase["summed_work_ms"], 6)
+        self.assertEqual(phase["occupied_elapsed_ms"], 4)
+        self.assertEqual(phase["count"], 2)
+        for invalid in (events[:-1], events[1:], [dict(events[0], atMs=float("nan"))],
+                        [events[0], events[0], *events[1:]], [events[0], dict(events[2], atMs=-1)]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                workload.browser_phase_intervals(invalid)
 
     def test_browser_evm_receipts_join_committed_bytes_and_reject_disagreement(self):
         raw = b"actual signed transaction"

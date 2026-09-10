@@ -13,6 +13,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -2077,13 +2078,15 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         raise ValueError("browser proof receipts do not cover each sampled ordinal exactly once")
     economics = verify_browser_v3_economics(before, after, session_id=sid, receipts=receipts,
                                            issued_stake=issued, signers=lifecycle.signers)
+    paid_count = artifact.integer(outcome["paidDiagnosticCount"], "paid diagnostic count", 1, len(outcome["diagnostics"]))
+    browser_phases = browser_phase_intervals(outcome["diagnostics"][:paid_count])
     evidence = dict(gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
         playwright=dict(command=argv, stdout=str(lifecycle.home / "playwright.stdout.log"),
                         stderr=str(lifecycle.home / "playwright.stderr.log"), result=str(result_path), outcome=outcome),
         economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
-        proof_transactions=proof_transactions, provider_phases=phases)
+        proof_transactions=proof_transactions, provider_phases=phases, browser_phases=browser_phases)
     lifecycle.doc["native_v3_browser"] = evidence
     lifecycle.save()
     return evidence
@@ -2108,6 +2111,48 @@ def browser_v3_snapshot(lifecycle, height, deal, *, session_id=None):
     if session_id is not None:
         snapshot["retrieval"]["sessions"][session_id] = v3_session_query(lifecycle, session_id, height)["session"]
     return snapshot
+
+
+def browser_phase_intervals(events):
+    """Report concurrent phase work separately from elapsed time on one page clock."""
+    if not isinstance(events, list) or not 1 <= len(events) <= 100_000:
+        raise ValueError("browser diagnostic count is outside its bound")
+    pending, intervals = {}, {}
+    for event in events:
+        at = event.get("atMs")
+        if type(at) not in (int, float) or not math.isfinite(at) or at < 0:
+            raise ValueError("browser phase has an invalid monotonic timestamp")
+        edge = event.get("edge")
+        if edge is None:
+            continue
+        key = tuple(event.get(field) for field in ("phase", "sessionId", "chunkId", "slot"))
+        if not isinstance(key[0], str) or not key[0]:
+            raise ValueError("browser phase identity is missing")
+        if edge == "start":
+            if key in pending:
+                raise ValueError("overlapping browser phase lacks a unique chunk identity")
+            pending[key] = at
+        elif edge == "end":
+            start = pending.pop(key, None)
+            if start is None or at < start:
+                raise ValueError("browser phase ends without its matching monotonic start")
+            intervals.setdefault(key[0], []).append([start, at])
+        else:
+            raise ValueError("unknown browser diagnostic edge")
+    if pending or not intervals:
+        raise ValueError("browser phase intervals are incomplete")
+    summary = {}
+    for phase, ranges in intervals.items():
+        merged = []
+        for start, end in sorted(ranges):
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        summary[phase] = dict(count=len(ranges), summed_work_ms=sum(b-a for a, b in ranges),
+            occupied_elapsed_ms=sum(b-a for a, b in merged), intervals_ms=ranges)
+    return dict(phases=summary,
+        scope="one browser page monotonic clock; summed work may overlap; phase elapsed unions must not be added together")
 
 
 def browser_v3_committed_receipts(lifecycle, receipts):
