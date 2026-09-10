@@ -565,6 +565,36 @@ def darwin_owned_processes(root, table, retained=None):
     return retained
 
 
+def cleanup_darwin_browser(process, retained):
+    errors = []
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            table = darwin_process_table()
+            retained = darwin_owned_processes(process.pid, table, retained)
+            for pid, started in retained.items():
+                if pid in table and table[pid][2] == started:
+                    try:
+                        os.kill(pid, sig)
+                    except ProcessLookupError:
+                        pass
+                    except Exception as error:
+                        errors.append(error)
+        except Exception as error:
+            errors.append(error)
+        try:
+            signal_owned_process_group(process.pid, sig)
+        except Exception as error:
+            errors.append(error)
+        if sig == signal.SIGTERM:
+            time.sleep(1)
+    try:
+        process.wait(timeout=5)
+    except Exception as error:
+        errors.append(error)
+    if errors:
+        raise errors[0]
+
+
 def run_darwin_browser(argv, deadline, memory_path, *, env, cwd, tunnel):
     if platform.system() != "Darwin":
         raise ValueError("browser-executor requires macOS")
@@ -597,16 +627,7 @@ def run_darwin_browser(argv, deadline, memory_path, *, env, cwd, tunnel):
                     last_progress = monotonic_ns()
                 time.sleep(0.25)
         finally:
-            for sig in (signal.SIGTERM, signal.SIGKILL):
-                table = darwin_process_table()
-                retained = darwin_owned_processes(process.pid, table, retained)
-                for pid, started in retained.items():
-                    if pid in table and table[pid][2] == started:
-                        try: os.kill(pid, sig)
-                        except OSError: pass
-                signal_owned_process_group(process.pid, sig)
-                if sig == signal.SIGTERM: time.sleep(1)
-            process.wait(timeout=5)
+            cleanup_darwin_browser(process, retained)
     memory = {"schema": DARWIN_BROWSER_MEMORY_SCHEMA, "peak_rss_bytes": integer(peak, "peak RSS", 1),
               "samples": integer(samples, "RSS samples", 1), "interval_ms": 250, "scope": DARWIN_BROWSER_MEMORY_SCOPE}
     write_new_json(memory_path, memory)

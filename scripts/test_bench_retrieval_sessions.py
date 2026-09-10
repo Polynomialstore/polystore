@@ -22,7 +22,7 @@ import textwrap
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
 
@@ -345,6 +345,23 @@ class BenchmarkArtifactTest(unittest.TestCase):
             second = dict(first)
             second[30] = (20, 4096, "late-grandchild")
             self.assertEqual(artifact.darwin_owned_processes(10, second, retained)[30], "late-grandchild")
+
+    def test_darwin_browser_cleanup_reaps_after_snapshot_and_permission_failures(self):
+        process = Mock(pid=10)
+        table = {10: (1, 1024, "root"), 20: (10, 2048, "child")}
+        for snapshots, kill_error, expected in (
+                ([OSError("snapshot failed"), table], None, "snapshot failed"),
+                ([table, table], PermissionError("signal denied"), "signal denied")):
+            process.reset_mock()
+            with self.subTest(expected=expected), \
+                 patch.object(artifact, "darwin_process_table", side_effect=snapshots), \
+                 patch.object(artifact.os, "kill", side_effect=kill_error), \
+                 patch.object(artifact, "signal_owned_process_group") as group, \
+                 patch.object(artifact.time, "sleep"), \
+                 self.assertRaisesRegex(OSError, expected):
+                artifact.cleanup_darwin_browser(process, {20: "child"})
+            self.assertEqual(group.call_count, 2)
+            process.wait.assert_called_once_with(timeout=5)
 
     def test_committed_block_pairs_real_payload_hash_with_ordered_results(self):
         block = dict(block_id=dict(hash="ab" * 32), block=dict(header=dict(height="7", chain_id="bench", app_hash="cd" * 32, time="2026-09-08T00:00:00Z"), data=dict(txs=[base64.b64encode(b"transaction").decode()])))
