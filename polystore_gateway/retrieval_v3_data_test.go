@@ -209,6 +209,201 @@ func TestGatewayMduV3ServesOnlyVerifiedRequestedBytes(t *testing.T) {
 	}
 }
 
+func TestGatewayMduV3AllowsConcurrentChunksForOneSession(t *testing.T) {
+	frozen, key, _ := buildProviderV3ArtifactFixtureSize(t, RawMduCapacity+1024)
+	response := responseFromFrozenV3(frozen)
+	var chunks []retrievalDataChunkV3
+	for _, obligation := range frozen.Session.Obligations {
+		chunks = chunks[:0]
+		for mdu := key.Metadata; mdu < key.Metadata+key.Users; mdu++ {
+			chunk, err := frozenRetrievalDataChunkV3(frozen, ManifestRoot{Bytes: key.Root}, mdu, key.Deal, frozen.Session.Owner, obligation.Slot)
+			if err == nil {
+				chunks = append(chunks, chunk)
+			}
+		}
+		if len(chunks) >= 2 {
+			break
+		}
+	}
+	if len(chunks) < 2 || chunks[0].mdu == chunks[1].mdu || chunks[0].slot != chunks[1].slot {
+		t.Fatalf("fixture did not produce two distinct chunks for one provider: %+v", chunks)
+	}
+	signer := chunks[0].payee
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if len(args) >= 2 && args[0] == "keys" && args[1] == "show" {
+			return []byte(signer), nil
+		}
+		return nil, fmt.Errorf("unexpected command")
+	})
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", signer)
+	initRetrievalDataTestDB(t)
+
+	firstQuery := make(chan struct{})
+	secondQuery := make(chan struct{})
+	releaseQueries := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseQueries) }) }
+	var queryMu sync.Mutex
+	v3Queries := 0
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/retrieval-sessions-v3/"):
+			queryMu.Lock()
+			v3Queries++
+			queryNumber := v3Queries
+			queryMu.Unlock()
+			if queryNumber == 1 {
+				close(firstQuery)
+			} else if queryNumber == 2 {
+				close(secondQuery)
+			}
+			select {
+			case <-releaseQueries:
+			case <-r.Context().Done():
+				return
+			}
+			w.Header().Set(committedHeightHeader, strconv.FormatUint(frozen.Height, 10))
+			if err := (&jsonpb.Marshaler{OrigName: true}).Marshal(w, &response); err != nil {
+				t.Error(err)
+			}
+		case strings.Contains(r.URL.Path, "/retrieval-sessions/"):
+			http.NotFound(w, r)
+		default:
+			t.Errorf("unexpected LCD query %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	testCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	var requests sync.WaitGroup
+	defer func() {
+		release()
+		cancel()
+		requests.Wait()
+		lcd.Close()
+		lcdBase = oldLCD
+	}()
+	root := "0x" + hex.EncodeToString(key.Root[:])
+	session := "0x" + hex.EncodeToString(frozen.Session.SessionId)
+	request := func(chunk retrievalDataChunkV3) *httptest.ResponseRecorder {
+		q := url.Values{"deal_id": {strconv.FormatUint(key.Deal, 10)}, "owner": {frozen.Session.Owner}}
+		r := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+root+"/"+strconv.FormatUint(chunk.mdu, 10)+"?"+q.Encode(), nil).WithContext(testCtx)
+		r = mux.SetURLVars(r, map[string]string{"cid": root, "index": strconv.FormatUint(chunk.mdu, 10)})
+		r.Header.Set("X-PolyStore-Session-Id", session)
+		r.Header.Set("Accept", "multipart/form-data; version=3")
+		r.Header.Set("X-PolyStore-Slot", strconv.FormatUint(uint64(chunk.slot), 10))
+		w := httptest.NewRecorder()
+		GatewayMdu(w, r)
+		return w
+	}
+	results := []chan *httptest.ResponseRecorder{make(chan *httptest.ResponseRecorder, 1), make(chan *httptest.ResponseRecorder, 1)}
+	start := func(i int) {
+		requests.Add(1)
+		go func() {
+			defer requests.Done()
+			results[i] <- request(chunks[i])
+		}()
+	}
+	start(0)
+	select {
+	case <-firstQuery:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first chunk did not reach the v3 authority query")
+	}
+	start(1)
+	select {
+	case <-secondQuery:
+		release()
+	case response := <-results[1]:
+		release()
+		t.Fatalf("second chunk was rejected before its v3 authority query: %d %s", response.Code, response.Body.String())
+	case <-time.After(2 * time.Second):
+		release()
+		t.Fatal("second chunk did not reach the v3 authority query")
+	}
+	for i, result := range results {
+		select {
+		case response := <-result:
+			if response.Code != http.StatusOK {
+				t.Fatalf("concurrent chunk %d failed: %d %s", i, response.Code, response.Body.String())
+			}
+			metadata, payload := decodeRetrievalDataResponseV3(t, response)
+			if metadata.MDUIndex != strconv.FormatUint(chunks[i].mdu, 10) || metadata.Slot != chunks[i].slot || len(payload) != len(chunks[i].t)*types.BLOB_SIZE {
+				t.Fatalf("concurrent chunk %d returned the wrong authenticated bytes: metadata=%+v bytes=%d", i, metadata, len(payload))
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("concurrent chunk %d did not complete", i)
+		}
+	}
+}
+
+func TestGatewayMduV3RejectsOlderSessionWithoutPersistence(t *testing.T) {
+	initRetrievalDataTestDB(t)
+	var id, root [32]byte
+	id[0], root[0] = 0x33, 0x44
+	response := types.QueryGetRetrievalSessionResponse{Session: types.RetrievalSession{
+		SessionId: id[:], ManifestRoot: root[:], OpenedHeight: 1, UpdatedHeight: 1, ExpiresAt: 100,
+		Status: types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN, BlobCount: 1, TotalBytes: types.BlobSizeBytes,
+	}}
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/retrieval-sessions/") {
+			t.Errorf("unexpected LCD query %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if err := (&jsonpb.Marshaler{OrigName: true}).Marshal(w, &response); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcdBase = oldLCD }()
+	rootHex := "0x" + hex.EncodeToString(root[:])
+	r := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+rootHex+"/0?deal_id=0&owner=owner", nil)
+	r = mux.SetURLVars(r, map[string]string{"cid": rootHex, "index": "0"})
+	r.Header.Set("X-PolyStore-Session-Id", "0x"+hex.EncodeToString(id[:]))
+	r.Header.Set("Accept", "multipart/form-data; version=3")
+	r.Header.Set("X-PolyStore-Slot", "0")
+	w := httptest.NewRecorder()
+	GatewayMdu(w, r)
+	if w.Code != http.StatusNotAcceptable || !strings.Contains(w.Body.String(), "session does not support retrieval version 3") {
+		t.Fatalf("older session was not rejected at the version boundary: %d %s", w.Code, w.Body.String())
+	}
+	if frozenProofExists(t, frozenProofKey(id)) {
+		t.Fatal("version mismatch persisted a v2 proof")
+	}
+}
+
+func TestGatewayMduV2RetainsExclusiveSessionClaim(t *testing.T) {
+	id := strings.Repeat("55", 32)
+	release, err := claimRetrievalOperations([]string{"0x" + id}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	queries := 0
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries++
+		http.NotFound(w, r)
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcdBase = oldLCD }()
+	root := "0x" + strings.Repeat("00", 32)
+	r := httptest.NewRequest(http.MethodGet, "/sp/retrieval/mdu/"+root+"/0", nil)
+	r = mux.SetURLVars(r, map[string]string{"cid": root, "index": "0"})
+	r.Header.Set("X-PolyStore-Session-Id", "0x"+id)
+	r.Header.Set("Accept", "multipart/form-data; version=2")
+	w := httptest.NewRecorder()
+	GatewayMdu(w, r)
+	if w.Code != http.StatusServiceUnavailable || queries != 0 {
+		t.Fatalf("v2 request escaped its exclusive claim: status=%d queries=%d body=%s", w.Code, queries, w.Body.String())
+	}
+}
+
 func TestFrozenRetrievalDataChunksCoverExactRange(t *testing.T) {
 	for _, tc := range []struct {
 		name               string

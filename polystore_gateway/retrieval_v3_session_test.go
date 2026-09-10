@@ -290,6 +290,48 @@ func buildProviderV3ArtifactFixtureSize(t testing.TB, size uint64) (*frozenRetri
 	return frozen, key, newDir
 }
 
+func TestAuthenticatedRetrievalMetadataRetriesCanceledSharedLeader(t *testing.T) {
+	key := retrievalGenerationKey{Chain: "shared-cancellation-test", Root: [32]byte{1}, Generation: 1}
+	t.Cleanup(func() {
+		retrievalMetadataCache.Lock()
+		defer retrievalMetadataCache.Unlock()
+		for cached := range retrievalMetadataCache.entries {
+			if cached.Chain == key.Chain {
+				delete(retrievalMetadataCache.entries, cached)
+			}
+		}
+	})
+	prepared := &authenticatedGeneration{}
+	prepareCalls, doCalls := 0, 0
+	prepare := func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error) {
+		prepareCalls++
+		return prepared, nil
+	}
+	do := func(_ string, fn func() (interface{}, error)) (interface{}, error, bool) {
+		doCalls++
+		if doCalls == 1 {
+			return nil, context.Canceled, true
+		}
+		value, err := fn()
+		return value, err, false
+	}
+	got, err := authenticatedRetrievalMetadataForWith(t.Context(), t.TempDir(), key, prepare, do)
+	if err != nil || got != prepared || doCalls != 2 || prepareCalls != 1 {
+		t.Fatalf("active waiter did not retry canceled shared work: got=%p err=%v do=%d prepare=%d", got, err, doCalls, prepareCalls)
+	}
+
+	corrupt := fmt.Errorf("corrupt authenticated metadata")
+	key.Root[0] = 2
+	doCalls = 0
+	_, err = authenticatedRetrievalMetadataForWith(t.Context(), t.TempDir(), key, prepare, func(_ string, _ func() (interface{}, error)) (interface{}, error, bool) {
+		doCalls++
+		return nil, corrupt, true
+	})
+	if err != corrupt || doCalls != 1 {
+		t.Fatalf("non-cancellation error was retried: err=%v calls=%d", err, doCalls)
+	}
+}
+
 func TestBuildProviderProofBatchV3UsesAuthenticatedArtifactsAndRealKZG(t *testing.T) {
 	frozen, key, dir := buildProviderV3ArtifactFixture(t)
 	signer := frozen.Session.Obligations[0].AssignedProvider

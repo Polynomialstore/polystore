@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -88,6 +89,10 @@ func authenticatedRetrievalMetadata(ctx context.Context, dir string, c retrieval
 }
 
 func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retrievalGenerationKey) (*authenticatedGeneration, error) {
+	return authenticatedRetrievalMetadataForWith(ctx, dir, key, prepareRetrievalMetadata, retrievalMetadataCache.group.Do)
+}
+
+func authenticatedRetrievalMetadataForWith(ctx context.Context, dir string, key retrievalGenerationKey, prepare func(context.Context, string, retrievalGenerationKey) (*authenticatedGeneration, error), do func(string, func() (interface{}, error)) (interface{}, error, bool)) (*authenticatedGeneration, error) {
 	retrievalMetadataCache.Lock()
 	entry, found := retrievalMetadataCache.entries[key]
 	if found {
@@ -99,42 +104,55 @@ func authenticatedRetrievalMetadataFor(ctx context.Context, dir string, key retr
 	if found {
 		return entry.value, nil
 	}
-	// Callers are already admitted. Do (rather than detached work) keeps native
-	// preparation inside that admission bound even if the requesting client leaves.
-	value, err, _ := retrievalMetadataCache.group.Do(fmt.Sprintf("%#v", key), func() (interface{}, error) {
-		retrievalMetadataCache.Lock()
-		cached, ok := retrievalMetadataCache.entries[key]
-		retrievalMetadataCache.Unlock()
-		if ok {
-			return cached.value, nil
-		}
-		prepared, err := prepareRetrievalMetadata(ctx, dir, key)
-		if err != nil {
+	keyString := fmt.Sprintf("%#v", key)
+	for {
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		retrievalMetadataCache.Lock()
-		defer retrievalMetadataCache.Unlock()
-		if len(retrievalMetadataCache.entries) >= maxRetrievalResponses {
-			var oldest retrievalGenerationKey
-			age := ^uint64(0)
-			for k, v := range retrievalMetadataCache.entries {
-				if v.used < age {
-					oldest, age = k, v.used
-				}
+		// Callers are already admitted. Synchronous Do keeps native preparation
+		// inside the leader's admission and generation lease. A live waiter retries
+		// if that leader is canceled rather than inheriting its cancellation.
+		value, err, shared := do(keyString, func() (interface{}, error) {
+			retrievalMetadataCache.Lock()
+			cached, ok := retrievalMetadataCache.entries[key]
+			retrievalMetadataCache.Unlock()
+			if ok {
+				return cached.value, nil
 			}
-			delete(retrievalMetadataCache.entries, oldest)
+			prepared, err := prepare(ctx, dir, key)
+			if err != nil {
+				return nil, err
+			}
+			retrievalMetadataCache.Lock()
+			defer retrievalMetadataCache.Unlock()
+			if len(retrievalMetadataCache.entries) >= maxRetrievalResponses {
+				var oldest retrievalGenerationKey
+				age := ^uint64(0)
+				for k, v := range retrievalMetadataCache.entries {
+					if v.used < age {
+						oldest, age = k, v.used
+					}
+				}
+				delete(retrievalMetadataCache.entries, oldest)
+			}
+			retrievalMetadataCache.clock++
+			retrievalMetadataCache.entries[key] = generationCacheEntry{prepared, retrievalMetadataCache.clock}
+			return prepared, nil
+		})
+		if err != nil {
+			if callerErr := ctx.Err(); callerErr != nil {
+				return nil, callerErr
+			}
+			if shared && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				continue
+			}
+			return nil, err
 		}
-		retrievalMetadataCache.clock++
-		retrievalMetadataCache.entries[key] = generationCacheEntry{prepared, retrievalMetadataCache.clock}
-		return prepared, nil
-	})
-	if err != nil {
-		return nil, err
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return value.(*authenticatedGeneration), nil
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return value.(*authenticatedGeneration), nil
 }
 
 func readExactArtifactRange(path string, size, offset, length uint64) ([]byte, error) {
