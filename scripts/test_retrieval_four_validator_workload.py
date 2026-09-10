@@ -100,14 +100,47 @@ class FourValidatorWorkloadTest(unittest.TestCase):
         self.assertEqual(workload.v3_file_geometry(1_073_741_824), dict(size=1_073_741_824,
             metadata_mdus=2, user_mdus=133, total_mdus=135, witness_mdus=1,
             integrity_leaf_count=12_768))
+        multi = 16_777_217
+        self.assertIn(multi, workload.V3_BROWSER_SIZES)
+        self.assertNotEqual(multi % 126_976, 0)
+        self.assertEqual((multi + 126_975) // 126_976, 133)
+        self.assertEqual(workload.v3_file_geometry(multi)["user_mdus"], 3)
 
     def test_browser_profile_enables_bounded_app_mempool_without_changing_existing_profile(self):
-        generated = '[api]\naddress = "tcp://localhost:1317"\n[mempool]\nmax-txs = -1\n'
+        generated = '[api]\naddress = "tcp://localhost:1317"\nenabled-unsafe-cors = false\n[mempool]\nmax-txs = -1\n'
         existing = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317")
         browser = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317", browser_evm=True)
         self.assertIn('[mempool]\nmax-txs = -1\n', existing)
         self.assertIn(f'[mempool]\nmax-txs = {artifact.BROWSER_EVM_MEMPOOL_MAX_TXS}\n', browser)
         self.assertEqual(artifact.BROWSER_EVM_MEMPOOL_MAX_TXS, 5000)
+        self.assertIn('enabled-unsafe-cors = false', existing)
+        self.assertIn('enabled-unsafe-cors = true', browser)
+
+    def test_browser_http_preflight_rejects_missing_cors_or_wrong_chain(self):
+        life = SimpleNamespace(nodes=[dict(api=1317, evm_rpc=8545)], remaining=lambda: 30)
+        def responses():
+            rows = [self.query_response(dict(params={})), self.query_response({}),
+                    self.query_response(dict(result="0x40000"))]
+            for row in rows:
+                row.headers.update({"Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "Content-Type"})
+            return rows
+        with patch.object(workload.urllib.request, "urlopen", side_effect=responses()) as get:
+            evidence = workload.browser_http_preflight(life, "http://127.0.0.1:4173")
+            self.assertEqual([row["method"] for row in evidence["checks"]], ["GET", "OPTIONS", "POST"])
+            self.assertTrue(all(call.args[0].get_header("Origin") == evidence["origin"] for call in get.call_args_list))
+        for change in ("cors", "content-type", "chain"):
+            rows = responses()
+            if change == "cors":
+                rows[0].headers.pop("Access-Control-Allow-Origin")
+            elif change == "content-type":
+                rows[1].headers["Access-Control-Allow-Headers"] = "unrelated"
+            else:
+                rows[2] = self.query_response(dict(result="0x1"))
+                rows[2].headers["Access-Control-Allow-Origin"] = "*"
+            with self.subTest(change=change), patch.object(workload.urllib.request, "urlopen", side_effect=rows):
+                with self.assertRaises(ValueError):
+                    workload.browser_http_preflight(life, "http://127.0.0.1:4173")
 
     def test_public_policy_uses_one_signed_owner_message_and_committed_query(self):
         with tempfile.TemporaryDirectory() as tmp:

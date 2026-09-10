@@ -25,6 +25,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+import urllib.request
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as wait_futures
 
 import retrieval_bench_artifact as artifact
@@ -44,7 +45,7 @@ OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_BATCH_BASE_GAS + OPEN_SESSION_PREPARAT
 V3_PILOT_BYTES = 16 * 1024 * 1024
 V3_USER_MDU_BYTES = 8_126_464
 V3_BROWSER_DEFAULT_BYTES = 1024
-V3_BROWSER_SIZES = (1024, 16_252_928, 130_023_424, 1_073_741_824)
+V3_BROWSER_SIZES = (1024, 16_777_217, 130_023_424, 1_073_741_824)
 V3_BROWSER_PAYER = "nil1ser7fv30x7e7xr7n62tlr7m7z07ldqj4thdezk"
 V3_PILOT_SESSIONS = 2
 V3_MAX_SAMPLES = 132
@@ -1968,6 +1969,39 @@ def set_public_retrieval_policy(lifecycle, *, deal_id, command):
     return evidence
 
 
+def browser_http_preflight(lifecycle, origin):
+    """Check the browser's actual REST and JSON-RPC CORS contract before ingest."""
+    node = lifecycle.nodes[0]
+    lcd = f'http://127.0.0.1:{node["api"]}{API}/params'
+    evm = f'http://127.0.0.1:{node["evm_rpc"]}'
+    checks = []
+    for url, method, headers, data in (
+        (lcd, "GET", {}, None),
+        (evm, "OPTIONS", {"Access-Control-Request-Method": "POST",
+                          "Access-Control-Request-Headers": "content-type"}, None),
+        (evm, "POST", {"Content-Type": "application/json"},
+         b'{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}'),
+    ):
+        request = urllib.request.Request(url, method=method, headers={"Origin": origin, **headers}, data=data)
+        with urllib.request.urlopen(request, timeout=min(5, lifecycle.remaining())) as response:
+            body = response.read(1_048_577)
+            allow_origin = response.headers.get("Access-Control-Allow-Origin")
+            if not 200 <= response.status < 300 or len(body) > 1_048_576 or allow_origin not in (origin, "*"):
+                raise ValueError(f"browser HTTP preflight failed for {method} {url}: missing CORS or invalid response")
+            if method == "OPTIONS":
+                methods = response.headers.get("Access-Control-Allow-Methods", "").upper().replace(" ", "").split(",")
+                allowed = response.headers.get("Access-Control-Allow-Headers", "").lower().replace(" ", "").split(",")
+                if "POST" not in methods or "content-type" not in allowed:
+                    raise ValueError("browser JSON-RPC preflight does not allow POST application/json")
+            else:
+                value = json.loads(body)
+                if not isinstance(value, dict) or (method == "GET" and not isinstance(value.get("params"), dict)) or \
+                        (method == "POST" and value.get("result") != "0x40000"):
+                    raise ValueError("browser endpoint returned the wrong chain or REST schema")
+            checks.append(dict(url=url, method=method, status=response.status, allow_origin=allow_origin))
+    return dict(origin=origin, checks=checks)
+
+
 def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, command,
                           processes, check_providers):
     """Run one real sponsored DealDetail retrieval through the owned browser stack."""
@@ -3759,6 +3793,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         lifecycle.save()
         lifecycle.start("initial")
         lifecycle.wait_height(3)
+        if native_browser is not None:
+            doc["browser_http_preflight"] = browser_http_preflight(lifecycle,
+                f'http://127.0.0.1:{browser_ports["website"]}')
+            lifecycle.save()
         for i in range(layout["assignments"]):
             send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", f"/ip4/127.0.0.1/tcp/{19091+i}/http"])
             directory = lifecycle.home / f"provider{i}"
