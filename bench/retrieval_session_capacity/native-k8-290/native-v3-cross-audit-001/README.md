@@ -116,12 +116,14 @@ no raw transactions, proofs, signatures, keyrings, paths, host identity, or logs
 The private source hashes, sanitized [`plan.json`](plan.json), and sanitized
 [`runtime-provenance.json`](runtime-provenance.json) are pinned in
 [`manifest.json`](manifest.json). With the retained inputs available locally:
+`HARNESS_SOURCE` must be a checkout of
+`da54964dc502f14bc73096fb6adc5f8ba0b2be6b`, the pinned collection source.
 
 ```sh
 python3 bench/retrieval_session_capacity/native-k8-290/native-v3-cross-audit-001/check.py \
   --decoder "$BENCH_ROOT/native-build-5cc77e1a-002/bin/polystorechaind" \
   --decoder-library "$BENCH_ROOT/worktrees/native-runtime-5cc77e1a-002/polystore_core/target/release/libpolystore_core.so" \
-  scripts/retrieval_four_validator_workload.py \
+  "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py" \
   "$PRIVATE/evidence.json" \
   "$PRIVATE/native-v3-cross-audit-blocks.jsonl" \
   "$PRIVATE/transaction-recovery-private/transactions.json" \
@@ -131,4 +133,6 @@ python3 bench/retrieval_session_capacity/native-k8-290/native-v3-cross-audit-001
 The checker verifies the decoder and native-library hashes against the frozen
 runtime provenance, requires exact reconstruction of the checked-in summary,
 exercises a small semantic failure set before the final literal evidence pins,
-and checks every published payload hash.
+and checks every published payload hash. The shared checker also tests header
+interval arithmetic for later retained reports; this run's summary and timing
+claims remain unchanged.

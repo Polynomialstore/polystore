@@ -1,0 +1,99 @@
+{
+  "artifacts": {
+    "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystore_cli": "08518a215d0e8cc142a9bd49d6024c1ad18a76461ef0c2b46d53777aa5fb8a65",
+    "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystore_gateway": "199164aa86628436f122c7985f3dfcfe5a9c319b1595fecd257e1ed02c6f28ef",
+    "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystorechaind": "dbd794c784eb1f8c46ca1cc66c47fa252de9adf8dc9701e018f3e5d249cfe615",
+    "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da/polystore_core/target/release/libpolystore_core.so": "7cbfe98f513a215de84c599289de082471466395b9ffb57eab9be0a898214092",
+    "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da/polystorechain/trusted_setup.txt": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "component_trees": {
+    "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+    "polystore_core": "52e6c75c3c67a2811c3f7d85df0f77cd61ece7fc",
+    "polystore_gateway": "00afcf23970b77ce8f85391148a2f35ecf1bfe2f",
+    "polystorechain": "ba47d3e9eb92c1b363ef996deb6b4e4ed8b56253"
+  },
+  "note": "Sanitized copy of the frozen build provenance; absolute benchmark root replaced by $BENCH_ROOT.",
+  "reused_components": [],
+  "schema": "polystore.runtime-provenance.v1",
+  "source": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da",
+  "source_commit": "70ce16da02e3790ba128ae883f33be4e70d30a9f",
+  "source_manifest_private_sha256": "963d777eb4fbde8b681e05afc7e4b1a8583d06024f33c77721762626353b5f69",
+  "status": "passed",
+  "steps": [
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "2"
+      ],
+      "cwd": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da/polystore_core",
+      "elapsed_seconds": 14.339,
+      "exit_code": 0,
+      "name": "core"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "2"
+      ],
+      "cwd": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da/polystore_cli",
+      "elapsed_seconds": 30.863,
+      "exit_code": 0,
+      "name": "cli"
+    },
+    {
+      "command": [
+        "./scripts/chain_go.sh",
+        "build",
+        "-p",
+        "2",
+        "-o",
+        "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystorechaind",
+        "./cmd/polystorechaind"
+      ],
+      "cwd": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da",
+      "elapsed_seconds": 75.777,
+      "exit_code": 0,
+      "name": "chain"
+    },
+    {
+      "command": [
+        "go",
+        "build",
+        "-mod=readonly",
+        "-p=2",
+        "-o",
+        "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystore_gateway",
+        "."
+      ],
+      "cwd": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da/polystore_gateway",
+      "elapsed_seconds": 5.421,
+      "exit_code": 0,
+      "name": "gateway"
+    },
+    {
+      "command": [
+        "/usr/bin/python3",
+        "scripts/test_validator_setup_startup.py",
+        "$BENCH_ROOT/native-phase-build-70ce16da/bin/polystorechaind",
+        "polystorechain/trusted_setup.txt"
+      ],
+      "cwd": "$BENCH_ROOT/worktrees/native-phase-runtime-70ce16da",
+      "elapsed_seconds": 3.123,
+      "exit_code": 0,
+      "name": "startup"
+    }
+  ],
+  "toolchains": {
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "go": "go version go1.25.5 linux/amd64",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+  }
+}

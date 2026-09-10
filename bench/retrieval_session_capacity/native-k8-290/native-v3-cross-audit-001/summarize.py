@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reconstruct the retained native-v3 cross-audit diagnostic from private inputs."""
-import argparse, base64, hashlib, json, math, os, statistics, subprocess, sys, time, types
+import argparse, base64, calendar, datetime, hashlib, json, math, os, re, statistics, subprocess, sys, time, types
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -38,9 +38,47 @@ def quantiles_ns(values):
             "max_ms": values[-1] / 1e6,
             "percentile_method": "nearest rank; median uses conventional midpoint"}
 
-def load_modules(harness_path):
+def header_time_ns(value):
+    match = re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z", value)
+    require(match, "invalid UTC block header timestamp")
+    seconds = calendar.timegm(datetime.datetime.strptime(match[1], "%Y-%m-%dT%H:%M:%S").timetuple())
+    return seconds * 1_000_000_000 + int((match[2] or "").ljust(9, "0"))
+
+def header_summary(blocks, receipts):
+    by_height = {block["height"]: block for block in blocks}
+    first, last = min(row["height"] for row in receipts), max(row["height"] for row in receipts)
+    require(all(height in by_height for height in range(first - 1, last + 1)),
+            "missing preceding header or gap in measured header span")
+    stamps = [header_time_ns(by_height[height]["time"]) for height in range(first - 1, last + 1)]
+    intervals = [right - left for left, right in zip(stamps, stamps[1:])]
+    require(all(value >= 0 for value in intervals) and stamps[-1] > stamps[0],
+            "nonmonotonic or empty block header interval")
+    elapsed = stamps[-1] - stamps[0]
+    return dict(first_proof_height=first, last_proof_height=last, preceding_height=first - 1,
+                first_timestamp=by_height[first - 1]["time"], last_timestamp=by_height[last]["time"],
+                elapsed_ns=elapsed, committed_proof_transactions=len(receipts),
+                committed_proof_transactions_per_header_second=len(receipts) * 1e9 / elapsed,
+                inter_block_intervals=quantiles_ns(intervals),
+                timestamp_definition="Consensus header proposal timestamps, including the header preceding the first measured proof; not commit-completion timestamps or transaction inclusion latency.")
+
+def provider_phase_summary(harness, outcomes, receipts, embedded):
+    checked = harness.validate_v3_provider_phase_timings(outcomes, receipts)
+    require(checked["qualification"] and checked == embedded,
+            "provider phase timing differs or lacks authoritative qualification")
+    attempts = sum(len(row["timing"]["submission_attempts"]) for row in outcomes)
+    return dict(transaction_count=len(receipts), submission_attempt_count=attempts,
+                explicit_sequence_retry_attempts=checked["sequence_retry_attempts"],
+                scope=checked["scope"], percentile_method="nearest rank; per-phase observations, never percentile subtraction",
+                phases={name.removesuffix("_ns"): dict(
+                    count=attempts if name in ("pre_broadcast_ns", "broadcast_tx_sync_ns") else len(receipts),
+                    **{key + "_ms": value / 1e6 for key, value in values.items()})
+                    for name, values in checked["percentiles_ns"].items()})
+
+def load_modules(harness_path, module_pins):
     loaded = {}
-    for name, digest in MODULES.items():
+    require(set(module_pins) == set(MODULES), "harness module inventory differs")
+    for name in MODULES:
+        digest = module_pins[name]
         path = harness_path if name == "native_harness" else harness_path.with_name(name + ".py")
         data = path.read_bytes()
         require(sha(data) == digest, f"unpinned harness module {path.name}")
@@ -87,19 +125,26 @@ def main():
     parser.add_argument("commit_streams", nargs=4, type=Path)
     parser.add_argument("--decoder", required=True, type=Path)
     parser.add_argument("--decoder-library", required=True, type=Path)
+    parser.add_argument("--pins", type=Path, help="Frozen identities and observations for a later retained run")
     args = parser.parse_args()
+    pins = dict(source="da54964dc502f14bc73096fb6adc5f8ba0b2be6b", modules=MODULES,
+                evidence=EVIDENCE_SHA256, blocks=BLOCKS_SHA256, transactions=TRANSACTIONS_SHA256,
+                decoder=DECODER_SHA256, decoder_library=DECODER_LIBRARY_SHA256, commits=COMMIT_SHA256,
+                first_block=217, last_block=434, http_retries=13, elapsed_ns=182_066_769_129)
+    if args.pins:
+        pins = json.loads(args.pins.read_text())
     decoder, decoder_library = args.decoder.resolve(), args.decoder_library.resolve()
     raw_evidence, raw_blocks, raw_transactions = (args.evidence.read_bytes(), args.blocks.read_bytes(),
                                                    args.transactions.read_bytes())
     doc, recovered = json.loads(raw_evidence), json.loads(raw_transactions)
-    modules = load_modules(args.harness.resolve())
+    modules = load_modules(args.harness.resolve(), pins["modules"])
     harness, commit_metrics = modules["native_harness"], modules["retrieval_commit_metrics"]
 
     require(doc["status"] == "native_v3_cross_audit_diagnostic_passed" and
             doc["mode"] == "four-validator-native-v3-cross-audit-diagnostic" and
             doc["qualification"] is False, "top-level diagnostic status/scope differs")
-    require(doc["provenance"]["source_checkout"] == "da54964dc502f14bc73096fb6adc5f8ba0b2be6b" and
-            doc["provenance"]["driver_sha256"] == HARNESS_SHA256,
+    require(doc["provenance"]["source_checkout"] == pins["source"] and
+            doc["provenance"]["driver_sha256"] == pins["modules"]["native_harness"],
             "retained run does not use the landed reviewed harness")
     require(doc["profile"]["audit_profile"] == "normal" and
             doc["profile"]["consensus"]["block"] == {"max_bytes": "2097152", "max_gas": "64000000"} and
@@ -185,8 +230,8 @@ def main():
     attempts_by_request = defaultdict(list)
     for row in outcomes: attempts_by_request[row["request_id"]].append(row)
     retried = [rows for rows in attempts_by_request.values() if len(rows) == 2]
-    require(len(outcomes) == 373 and len(successful) == 360 and len(attempts_by_request) == 360 and
-            len(retried) == 13 and all([row["attempt"] for row in rows] == [1, 2] and
+    require(len(outcomes) == 360 + pins["http_retries"] and len(successful) == 360 and len(attempts_by_request) == 360 and
+            len(retried) == pins["http_retries"] and all([row["attempt"] for row in rows] == [1, 2] and
                 rows[0]["http_status"] == 429 and rows[0]["error"] == "retrieval submission busy" and
                 rows[1].get("status") == "success" and rows[1]["http_status"] == 200 and
                 all(rows[0][key] == rows[1][key] for key in
@@ -206,6 +251,15 @@ def main():
                     sessions[int(receipt["session_index"])]["session_id"].lower()
                 for operation_id, receipt in measured_by_operation.items()),
             "HTTP success identity differs from measured proof receipt")
+    measured_timing = warmup_timing = None
+    if args.pins:
+        measured_timing = provider_phase_summary(harness, sorted(successful, key=lambda row: row["request_index"]),
+            native["measured_proof_transactions"], native["provider_phase_timing"])
+        warmup_outcomes = [row for row in doc["v3_http_phases"]["cross-audit-warmup"]
+                           if row.get("status") == "success"]
+        require(len(warmup_outcomes) == 8, "warmup timing population differs")
+        warmup_timing = provider_phase_summary(harness, sorted(warmup_outcomes, key=lambda row: row["provider"]),
+            native["warmup_proof_transactions"], native["warmup_provider_phase_timing"])
     by_session = defaultdict(list)
     for row in successful: by_session[int(row["request_id"].split("-")[1])].append(row)
     for index in range(1, 46):
@@ -254,9 +308,9 @@ def main():
     open_sessions = {txhash: sorted([session for session in sessions if session["open_transaction"]["txhash"] == txhash],
                                     key=lambda session: session["nonce"])
                      for txhash in open_counts}
-    require(decoder.is_file() and sha(decoder.read_bytes()) == DECODER_SHA256,
+    require(decoder.is_file() and sha(decoder.read_bytes()) == pins["decoder"],
             "native transaction decoder bytes differ from runtime provenance")
-    require(decoder_library.is_file() and sha(decoder_library.read_bytes()) == DECODER_LIBRARY_SHA256,
+    require(decoder_library.is_file() and sha(decoder_library.read_bytes()) == pins["decoder_library"],
             "native transaction decoder library differs from runtime provenance")
     decode_deadline = time.monotonic() + 300
     for txhash, row in recovered_by_hash.items():
@@ -313,12 +367,12 @@ def main():
                     "refund bytes differ from owner/session")
 
     reconciliation = doc["committed_block_reconciliation"]
-    require(reconciliation == {"path": reconciliation["path"], "sha256": BLOCKS_SHA256,
-            "first_height": 217, "last_height": 434, "committed_workload_transactions": 360,
+    require(reconciliation == {"path": reconciliation["path"], "sha256": pins["blocks"],
+            "first_height": pins["first_block"], "last_height": pins["last_block"], "committed_workload_transactions": 360,
             "all_four_headers_agree": True, "all_four_results_agree": True, "qualification": False},
             "block reconciliation scope differs")
     blocks = [json.loads(line) for line in raw_blocks.splitlines() if line.strip()]
-    require([row["height"] for row in blocks] == list(range(217, 435)), "reconciled block range is not contiguous")
+    require([row["height"] for row in blocks] == list(range(pins["first_block"], pins["last_block"] + 1)), "reconciled block range is not contiguous")
     workload = [(block["height"], tx) for block in blocks for tx in block["transactions"] if tx.get("operation_id")]
     measured_by_hash = {row["txhash"]: row for row in native["measured_proof_transactions"]}
     require({tx["txhash"] for _, tx in workload} == set(measured_by_hash) and len(workload) == 360 and
@@ -339,8 +393,8 @@ def main():
     seen_commit_nodes = set()
     for path in args.commit_streams:
         node_id = path.stem.rsplit("-", 1)[-1]
-        require(node_id in COMMIT_SHA256 and node_id not in seen_commit_nodes and
-                sha(path.read_bytes()) == COMMIT_SHA256[node_id], "Commit stream hash/identity differs")
+        require(node_id in pins["commits"] and node_id not in seen_commit_nodes and
+                sha(path.read_bytes()) == pins["commits"][node_id], "Commit stream hash/identity differs")
         seen_commit_nodes.add(node_id)
         samples = [json.loads(line) for line in path.read_text().splitlines() if line]
         start, end = before_commit[node_id], after_commit[node_id]
@@ -354,13 +408,13 @@ def main():
                             "observed_blocks": recomputed["observed_blocks"],
                             "p95_upper_bound_ms": float(recomputed["p95_upper_bound_seconds"]) * 1000,
                             "within_700ms_budget": True})
-    require(seen_commit_nodes == set(COMMIT_SHA256), "Commit stream validator set differs")
+    require(seen_commit_nodes == set(pins["commits"]), "Commit stream validator set differs")
 
     schedule_doc = doc["v3_http_schedules"]["cross-audit-measured"]
     require(schedule_doc["offered"] == schedule_doc["completed"] == 360 and schedule_doc["queued"] == schedule_doc["in_flight"] == 0 and
             schedule_doc["terminal_error"] is None, "HTTP scheduler did not fully drain")
     require(schedule_doc["offered_window_ns"] == 180_000_000_000 and
-            schedule_doc["elapsed_ns"] == schedule_doc["monotonic_end_ns"] - schedule_doc["monotonic_start_ns"] == 182_066_769_129 and
+            schedule_doc["elapsed_ns"] == schedule_doc["monotonic_end_ns"] - schedule_doc["monotonic_start_ns"] == pins["elapsed_ns"] and
             max(row["request_finished_ns"] for row in successful) <= schedule_doc["monotonic_end_ns"],
             "HTTP scheduler monotonic boundaries or offered window differ")
     cpu = native["measured_window"]["validator_cpu_delta"]
@@ -417,9 +471,9 @@ def main():
                    "rate_denominator": "all 360 client-observed committed successes over scheduler start through recorded completion after terminal observation, including drain and the final orchestration tail",
                    "maximum_queued": schedule_doc["max_queued"], "maximum_in_flight": schedule_doc["max_in_flight"],
                    "maximum_dispatch_lag_ms": schedule_doc["max_dispatch_lag_ns"] / 1e6,
-                   "http_attempts": {"scheduled_requests": 360, "total_attempts": 373,
-                                     "successful_http_200": 360, "backpressure_http_429": 13,
-                                     "retried_requests": 13, "terminal_failures": 0,
+                   "http_attempts": {"scheduled_requests": 360, "total_attempts": len(outcomes),
+                                     "successful_http_200": 360, "backpressure_http_429": pins["http_retries"],
+                                     "retried_requests": len(retried), "terminal_failures": 0,
                                      "unclassified_attempts": 0},
                    "terminal_observation_latency": quantiles_ns(terminal),
                    "pre_success_start_delay": quantiles_ns(pre_success),
@@ -427,7 +481,7 @@ def main():
                    "request_duration": quantiles_ns(request),
                    "client_observation_bins": native["schedule_bins"],
                    "proof_commit_height_span": native["proof_anchor_span"],
-                   "reconciled_block_span": {"first_height": 217, "last_height": 434, "blocks": 218,
+                   "reconciled_block_span": {"first_height": pins["first_block"], "last_height": pins["last_block"], "blocks": len(blocks),
                                                "committed_measured_proof_transactions": 360,
                                                "all_four_headers_agree": True, "all_four_results_agree": True},
                    "measured_gas": {"wanted_total": gas_wanted_total, "used_total": gas_used_total,
@@ -448,7 +502,7 @@ def main():
             "Four validators and twelve provider-daemons ran on one Linux host; this is not a realistic deployment.",
             "The 2 transactions/s schedule is an accepted local operating point, not a measured maximum.",
             "HTTP terminal timing combines proof generation, native verification, gas simulation, signing, broadcast, and client commit observation.",
-            "Pre-success-start delay includes scheduler delay and, for 13 requests, retry backoff after an HTTP 429; it is not a pure signer-queue measurement.",
+            f"Pre-success-start delay includes scheduler delay and, for {len(retried)} requests, retry backoff after an HTTP 429; it is not a pure signer-queue measurement.",
             "Commit p95 values are execution upper bounds from the Commit metric; they exclude the documented post-persistence tail.",
             "Commit streams use a wider window starting before workload alignment and ending after heavy all-validator LCD queries; that window is separate from the CPU and provider HTTP measurement window.",
             "CPU is a fixed-window process tick delta; RSS is a whole-process-lifetime peak, not a phase peak or 2 GiB usage claim.",
@@ -458,14 +512,21 @@ def main():
         "private_inputs": {"evidence": {"sha256": sha(raw_evidence), "bytes": len(raw_evidence)},
                            "blocks": {"sha256": sha(raw_blocks), "bytes": len(raw_blocks)},
                            "transactions": {"sha256": sha(raw_transactions), "bytes": len(raw_transactions)},
-                           "commit_streams": {node: {"sha256": digest} for node, digest in sorted(COMMIT_SHA256.items())}},
+                           "commit_streams": {node: {"sha256": digest} for node, digest in sorted(pins["commits"].items())}},
         "reproduction": {"harness": "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
                          "inputs_are_private": True}
     }
+    if args.pins:
+        summary["result"]["provider_phase_timing"] = measured_timing
+        summary["result"]["warmup_provider_phase_timing"] = warmup_timing
+        summary["result"]["block_header_timing"] = header_summary(blocks, native["measured_proof_transactions"])
+        summary["limitations"][2] = "Provider phases separate authority, proof preparation, CLI pre-broadcast, BroadcastTxSync/CheckTx round-trip and later commit observation; none is exact consensus inclusion latency."
+        summary["limitations"][7] = "Consensus header proposal timestamps provide a separate inter-block denominator; they are not wall-clock commit completion and cannot be subtracted from process-monotonic phases."
+        summary["limitations"][8] = "Provider commit observation includes polling and the index/RPC path after successful CheckTx; signer admission remains immediate or HTTP 429, with audit admission priority."
     # Literal input pins are checked only after the semantic reconstruction above.
-    require(sha(raw_evidence) == EVIDENCE_SHA256, "retained evidence bytes differ from the publication pin")
-    require(sha(raw_blocks) == BLOCKS_SHA256, "retained block bytes differ from the publication pin")
-    require(sha(raw_transactions) == TRANSACTIONS_SHA256, "recovered transaction bytes differ from the publication pin")
+    require(sha(raw_evidence) == pins["evidence"], "retained evidence bytes differ from the publication pin")
+    require(sha(raw_blocks) == pins["blocks"], "retained block bytes differ from the publication pin")
+    require(sha(raw_transactions) == pins["transactions"], "recovered transaction bytes differ from the publication pin")
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 if __name__ == "__main__": main()
