@@ -597,10 +597,11 @@ def run_darwin_browser(argv, deadline, memory_path, *, env, cwd, tunnel):
         finally:
             for sig in (signal.SIGTERM, signal.SIGKILL):
                 table = darwin_process_table()
+                retained = darwin_owned_processes(process.pid, table, retained)
                 for pid, started in retained.items():
                     if pid in table and table[pid][2] == started:
                         try: os.kill(pid, sig)
-                        except ProcessLookupError: pass
+                        except OSError: pass
                 signal_owned_process_group(process.pid, sig)
                 if sig == signal.SIGTERM: time.sleep(1)
             process.wait(timeout=5)
