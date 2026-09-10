@@ -189,6 +189,8 @@ test('native v3 WASM matches shared context, FAT and odd-tree integrity vectors'
     golden.integrity.paths.forEach((path: string[], i: number) => {
       const flat = Buffer.concat(path.map(bytes))
       assert.equal(wasm.verify_integrity_v3_blob(10n, i, BigInt(i), 3n, patterns[i], flat, bytes(golden.integrity.root)), true)
+      assert.equal(wasm.verify_integrity_v3_blob(10n, i, BigInt(i), 3n, patterns[(i + 1) % patterns.length], flat, bytes(golden.integrity.root)), false)
+      assert.equal(wasm.verify_integrity_v3_blob(11n, i, BigInt(i), 3n, patterns[i], flat, bytes(golden.integrity.root)), false)
     })
     const oddPath = Buffer.concat(golden.integrity.paths[2].map(bytes))
     assert.equal(wasm.verify_integrity_v3_blob(10n, 2, 2n, 3n, patterns[2], oddPath.subarray(0, oddPath.length - 32), bytes(golden.integrity.root)), false)
@@ -225,6 +227,7 @@ test('v3 multipart binds every complete blob to frozen coordinates before return
     entries: envelope.entries.map((entry, i) => i ? entry : { ...entry, integrityPath: Array(24).fill(new Uint8Array(32)) }),
   }, crypto), /path exceeds protocol depth/)
   await assert.rejects(parseRetrievalEnvelopeV3(responseV3({ ...metadata, entries: [{ ...metadata.entries[0], t: '8' }, metadata.entries[1]] }, bytes), authority), /authority/)
+  await assert.rejects(parseRetrievalEnvelopeV3(responseV3({ ...metadata, entries: [...metadata.entries].reverse() }, bytes), authority), /authority/)
   await assert.rejects(parseRetrievalEnvelopeV3(response(metadata, bytes), authority), /content type/)
 })
 
