@@ -114,7 +114,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             home = Path(tmp)
             owner = ADDRESSES[0]
             intended = {"@type": "/polystorechain.polystorechain.v1.MsgUpdateDealRetrievalPolicy",
-                "creator": owner, "deal_id": "7", "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC"}}
+                "creator": owner, "deal_id": "7", "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC",
+                    "allowlist_root": None, "voucher_signer": ""}}
             lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_291-1",
                 nodes=[dict(home="/node", rpc=26657)], signers={"owner0": owner}, doc={}, save=Mock(),
                 wait_height=Mock(), cli=Mock(return_value=json.dumps({"tx": {"body": {"messages": [intended]}}})))
@@ -158,7 +159,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 doc={"provenance": {"cli_binary": "/native-cli", "curl_binary": "/curl"},
                      "payload": {"bytes": 1024, "sha256": "ab" * 32}},
                 remaining=Mock(return_value=30), wait_height=Mock(side_effect=[20, 21, 22]),
-                snapshot=Mock(side_effect=lambda height: {"bank": {"height": height}}), save=Mock())
+                signers={}, save=Mock())
             process_ids = iter((101, 102))
             launched = []
             def popen(argv, **kwargs):
@@ -169,7 +170,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                     return json.dumps({"persona": "user-gateway", "allowed_route_families": ["gateway"]})
                 return "ready"
             def playwright(argv, deadline, *, env=None, cwd=None):
-                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True}))
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
+                    "session": {"session_id": base64.b64encode(bytes(32)).decode()},
+                    "evmReceipts": [], "providerProofOutcomes": []}))
                 self.assertEqual(cwd, website)
                 self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
                     ("1", "262144", workload.V3_BROWSER_PAYER))
@@ -179,7 +182,11 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             processes = []
             with patch.object(workload.subprocess, "Popen", side_effect=popen), \
                  patch.object(artifact, "run_bounded_command", side_effect=playwright), \
-                 patch.object(workload, "collect_issuance", return_value=17):
+                 patch.object(workload, "collect_issuance", return_value=17), \
+                 patch.object(workload, "browser_v3_snapshot", return_value={"bank": {"height": 19}, "retrieval": {"sessions": {"00" * 32: {"sample_count": 0}}}}), \
+                 patch.object(workload, "browser_v3_committed_receipts", return_value=[]), \
+                 patch.object(workload, "validate_v3_provider_phase_timings", return_value={"qualification": True}), \
+                 patch.object(workload, "verify_browser_v3_economics", return_value={"issued_stake": 17}):
                 result = workload.run_native_v3_browser(lifecycle, gateway=Path("/gateway"), source=root,
                     deal={"id": "7"}, browser_ports=ports, command=command, processes=processes,
                     check_providers=Mock())
@@ -204,6 +211,83 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "node query HTTP 500"):
                     lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
                 opened.assert_called_once()
+
+    def test_browser_economics_checks_real_blob_fees_rounding_payer_and_conservation(self):
+        sid = "ab" * 32
+        signers = {"owner0": ADDRESSES[0], "provider0": ADDRESSES[1], "provider1": ADDRESSES[2]}
+        before = dict(bank=dict(height=10, balances={name + ":stake": "1000" for name in signers},
+                               supply={"stake": "10000"}),
+                      payer=dict(address=workload.V3_BROWSER_PAYER, stake="1000", aatom="1000"),
+                      retrieval=dict(module_stake="1000", deals={"0": {"escrow_balance": "1000"}}, sessions={}))
+        after = copy.deepcopy(before)
+        after["bank"].update(height=20, supply={"stake": "10073"})  # 100 mint - 27 burn
+        after["bank"]["balances"].update({"provider0:stake": "1022", "provider1:stake": "1022"})
+        after["payer"].update(stake="929", aatom="970")
+        session = dict(payer=workload.V3_BROWSER_PAYER, owner=workload.V3_BROWSER_PAYER,
+            funding="RETRIEVAL_SESSION_FUNDING_REQUESTER", price_denom="stake", base_fee="3",
+            price_per_blob="17", completion_burn_bps=3333, acked_slots_mask=3, settled_slots_mask=3,
+            refunded_slots_mask=0, locked_fee="0", sample_count=2,
+            accepted_sample_bitmap=base64.b64encode(bytes([3]) + bytes(16)).decode(),
+            obligations=[dict(slot=i, payee=ADDRESSES[i+1], assigned_provider=ADDRESSES[i+1],
+                blob_count=2, locked_fee="34") for i in range(2)])
+        after["retrieval"]["sessions"][sid] = session
+        receipts = [dict(height=15, receipt={"from": "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255",
+            "to": "0x0000000000000000000000000000000000000900", "gasUsed": "0xa", "effectiveGasPrice": "0x3"})]
+        def verify(candidate=after, observed=receipts):
+            return workload.verify_browser_v3_economics(before, candidate, session_id=sid,
+                receipts=observed, issued_stake=100, signers=signers)
+        self.assertEqual(verify(), dict(charged_stake=71, provider_payouts={ADDRESSES[1]: 22, ADDRESSES[2]: 22},
+            burned_stake=27, issued_stake=100, payer_gas_aatom=30, completed_sessions=1))
+        mutations = [
+            lambda d: d["payer"].update(stake="894"),
+            lambda d: d["payer"].update(aatom="969"),
+            lambda d: d["bank"]["balances"].update({"provider0:stake": "1034"}),
+            lambda d: d["bank"]["supply"].update(stake="10062"),
+            lambda d: d["retrieval"].update(module_stake="1001"),
+            lambda d: d["retrieval"]["deals"]["0"].update(escrow_balance="999"),
+            lambda d: d["retrieval"]["sessions"][sid].update(payer=ADDRESSES[0]),
+            lambda d: d["retrieval"]["sessions"][sid].update(settled_slots_mask=1),
+            lambda d: d["retrieval"]["sessions"][sid].update(accepted_sample_bitmap=base64.b64encode(bytes(17)).decode()),
+            lambda d: d["retrieval"]["sessions"][sid]["obligations"][0].update(blob_count=3),
+        ]
+        for mutate in mutations:
+            candidate = copy.deepcopy(after)
+            mutate(candidate)
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                verify(candidate)
+        for field, value in (("from", "0x" + "11" * 20), ("to", "0x" + "00" * 20)):
+            candidate = copy.deepcopy(receipts)
+            candidate[0]["receipt"][field] = value
+            with self.assertRaises(ValueError):
+                verify(observed=candidate)
+
+    def test_browser_evm_receipts_join_committed_bytes_and_reject_disagreement(self):
+        raw = b"actual signed transaction"
+        txhash = "0x" + "ab" * 32
+        nodes = [dict(node_id=str(i)) for i in range(4)]
+        block = dict(block_id={"hash": "CD" * 32}, block={"header": {
+            "height": "15", "chain_id": "chain", "app_hash": "EF" * 32, "time": "now"},
+            "data": {"txs": [base64.b64encode(raw).decode()]}})
+        response = dict(height="15", txs_results=[dict(code=0, gas_wanted="100", gas_used="90",
+            events=[dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash)])])])
+        receipt = dict(transactionHash=txhash, status="0x1", blockNumber="0xf", blockHash="0x" + "cd" * 32)
+        life = SimpleNamespace(nodes=nodes, chain="chain", wait_height=Mock(),
+            query=Mock(side_effect=lambda node, route: block if route.startswith("/block?") else response))
+        result = workload.browser_v3_committed_receipts(life, [receipt])
+        self.assertEqual(result[0]["txhash"], hashlib.sha256(raw).hexdigest().upper())
+        self.assertEqual(result[0]["validators"], [str(i) for i in range(4)])
+        for candidate in ([receipt, receipt], [dict(receipt, status="0x0")],
+                          [dict(receipt, blockHash="0x" + "00" * 32)], [dict(receipt, transactionHash="0x" + "11" * 32)]):
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                workload.browser_v3_committed_receipts(life, candidate)
+        def disagree(node, route):
+            value = copy.deepcopy(block if route.startswith("/block?") else response)
+            if node["node_id"] == "3" and "txs_results" in value:
+                value["txs_results"][0]["gas_used"] = "89"
+            return value
+        life.query = disagree
+        with self.assertRaisesRegex(ValueError, "four validators disagree"):
+            workload.browser_v3_committed_receipts(life, [receipt])
 
     def test_fixed_height_query_future_height_retry_is_bounded(self):
         lifecycle = self.query_lifecycle()

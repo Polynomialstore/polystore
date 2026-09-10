@@ -1933,7 +1933,7 @@ def set_public_retrieval_policy(lifecycle, *, deal_id, command):
         "@type": "/polystorechain.polystorechain.v1.MsgUpdateDealRetrievalPolicy",
         "creator": owner,
         "deal_id": str(producer.uint(deal_id)),
-        "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC"},
+        "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC", "allowlist_root": None, "voucher_signer": ""},
     }
     template["body"]["messages"] = [intended]
     unsigned.write_text(json.dumps(template, separators=(",", ":")) + "\n")
@@ -2039,7 +2039,7 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         except ValueError:
             time.sleep(min(0.2, lifecycle.remaining()))
     before_height = lifecycle.wait_height(1) - 1
-    before = lifecycle.snapshot(before_height)
+    before = browser_v3_snapshot(lifecycle, before_height, deal)
     argv = [str(playwright), "test", "tests/native-v3-browser-live.spec.ts", "--workers=1", "--retries=0",
             "--output", str(lifecycle.home / "browser-results")]
     result = artifact.run_bounded_command(argv, lifecycle.deadline, env=browser_env, cwd=website)
@@ -2050,19 +2050,163 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     check_providers()
     observed = lifecycle.wait_height(1)
     lifecycle.wait_height(observed + 1)
-    after = lifecycle.snapshot(observed)
     outcome = json.loads(result_path.read_text())
     if not isinstance(outcome, dict) or outcome.get("success") is not True:
         raise ValueError("browser test did not retain successful qualification evidence")
+    sid = producer.b64(outcome["session"]["session_id"], 32).hex()
+    after = browser_v3_snapshot(lifecycle, observed, deal, session_id=sid)
+    issued = collect_issuance(lifecycle, before, after)
+    receipts = browser_v3_committed_receipts(lifecycle, outcome["evmReceipts"])
+    proof_transactions, proof_outcomes = [], []
+    for index, observed_proof in enumerate(outcome["providerProofOutcomes"]):
+        row = dict(observed_proof["body"], request_id=f"browser-proof-{index}")
+        slot = producer.uint(row["slot"])
+        obligations = after["retrieval"]["sessions"][sid]["obligations"]
+        matches = [o for o in obligations if producer.uint(o["slot"]) == slot]
+        if len(matches) != 1:
+            raise ValueError("browser proof targets an unrepresented obligation")
+        row["provider"] = matches[0]["assigned_provider"]
+        proof_transactions.append(committed_v3_http_tx(lifecycle, row, kind="session-proof",
+            creator=row["provider"], slot=slot, session_id=sid, proof_count=producer.uint(row["proof_count"])))
+        proof_outcomes.append(row)
+    phases = validate_v3_provider_phase_timings(proof_outcomes, proof_transactions)
+    if not phases["qualification"]:
+        raise ValueError("browser provider phases lack canonical receipts: " + "; ".join(phases["reasons"]))
+    ordinals = sorted(ordinal for tx in proof_transactions for ordinal in tx["ordinals"])
+    if ordinals != list(range(producer.uint(after["retrieval"]["sessions"][sid]["sample_count"]))):
+        raise ValueError("browser proof receipts do not cover each sampled ordinal exactly once")
+    economics = verify_browser_v3_economics(before, after, session_id=sid, receipts=receipts,
+                                           issued_stake=issued, signers=lifecycle.signers)
     evidence = dict(gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
         playwright=dict(command=argv, stdout=str(lifecycle.home / "playwright.stdout.log"),
                         stderr=str(lifecycle.home / "playwright.stderr.log"), result=str(result_path), outcome=outcome),
-        economics=dict(before=before, after=after, issued_stake=collect_issuance(lifecycle, before, after)))
+        economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
+        proof_transactions=proof_transactions, provider_phases=phases)
     lifecycle.doc["native_v3_browser"] = evidence
     lifecycle.save()
     return evidence
+
+
+def browser_v3_snapshot(lifecycle, height, deal, *, session_id=None):
+    """Reuse the economic fence and add the sponsor without making it a CLI signer."""
+    snapshot = retrieval_snapshot(lifecycle, height, {str(deal["id"]): deal}, [])
+    balances = []
+    for node in lifecycle.nodes:
+        row = {}
+        for denom in ("stake", "aatom"):
+            coin = lifecycle.query(node,
+                f"/cosmos/bank/v1beta1/balances/{V3_BROWSER_PAYER}/by_denom?denom={denom}", height)["balance"]
+            if coin["denom"] != denom:
+                raise ValueError("browser payer balance denomination mismatch")
+            row[denom] = str(producer.uint(coin["amount"], 256))
+        balances.append(row)
+    if any(row != balances[0] for row in balances[1:]):
+        raise ValueError("four validators disagree on pinned browser payer balances")
+    snapshot["payer"] = dict(address=V3_BROWSER_PAYER, **balances[0])
+    if session_id is not None:
+        snapshot["retrieval"]["sessions"][session_id] = v3_session_query(lifecycle, session_id, height)["session"]
+    return snapshot
+
+
+def browser_v3_committed_receipts(lifecycle, receipts):
+    """Join Ethereum hashes to the actual Cosmos transactions on all validators."""
+    if not isinstance(receipts, list) or not 1 <= len(receipts) <= 64:
+        raise ValueError("browser receipt count exceeds one bounded session lifecycle")
+    seen, blocks, result = set(), {}, []
+    for receipt in receipts:
+        txhash = receipt["transactionHash"].lower()
+        if not re.fullmatch(r"0x[0-9a-f]{64}", txhash) or txhash in seen or receipt["status"] != "0x1":
+            raise ValueError("browser Ethereum receipt failed, duplicated or malformed")
+        seen.add(txhash)
+        height = int(receipt["blockNumber"], 16)
+        if height not in blocks:
+            lifecycle.wait_height(height + 1)
+            rows = []
+            for node in lifecycle.nodes:
+                block = lifecycle.query(node, f"/block?height={height}")
+                response = lifecycle.query(node, f"/block_results?height={height}")
+                summary = artifact.committed_block_summary(block, response, height, lifecycle.chain)
+                rows.append(dict(summary=summary, results=response["txs_results"], txs=block["block"]["data"]["txs"]))
+            if any(row != rows[0] for row in rows[1:]):
+                raise ValueError("four validators disagree on browser transaction bytes/results")
+            blocks[height] = rows[0]
+        block = blocks[height]
+        if receipt["blockHash"].removeprefix("0x").upper() != block["summary"]["block_hash"]:
+            raise ValueError("Ethereum receipt has the wrong canonical block hash")
+        matches = []
+        for index, response in enumerate(block["results"]):
+            hashes = [a["value"].lower() for e in response["events"] for a in e["attributes"]
+                      if e["type"] == "ethereum_tx" and a["key"] == "ethereumTxHash"]
+            if txhash in hashes:
+                if hashes != [txhash] or producer.uint(response["code"]) != 0:
+                    raise ValueError("browser receipt is not one successful Ethereum transaction")
+                matches.append(dict(receipt=receipt, height=height, **block["summary"]["transactions"][index],
+                    transaction_bytes=block["txs"][index], events=response["events"],
+                    validators=[node["node_id"] for node in lifecycle.nodes]))
+        if len(matches) != 1:
+            raise ValueError("browser receipt lacks a unique all-validator committed transaction")
+        result.append(matches[0])
+    return result
+
+
+def verify_browser_v3_economics(before, after, *, session_id, receipts, issued_stake, signers):
+    """Reconcile requester funding and per-obligation rounding at pinned heights."""
+    session = after["retrieval"]["sessions"][session_id]
+    if (session["payer"] != V3_BROWSER_PAYER or session["owner"] != V3_BROWSER_PAYER or
+            session["funding"] != "RETRIEVAL_SESSION_FUNDING_REQUESTER" or session["price_denom"] != "stake"):
+        raise ValueError("browser session has the wrong frozen payer/funding authority")
+    obligations = session["obligations"]
+    slots = [producer.uint(o["slot"]) for o in obligations]
+    if not slots or len(slots) > 8 or slots != sorted(set(slots)) or max(slots) >= 8:
+        raise ValueError("browser obligations are not canonical")
+    mask = sum(1 << slot for slot in slots)
+    if (producer.uint(session["acked_slots_mask"]) != mask or producer.uint(session["settled_slots_mask"]) != mask or
+            producer.uint(session["refunded_slots_mask"]) != 0 or producer.uint(session["locked_fee"], 256) != 0):
+        raise ValueError("browser obligations are not completely acknowledged and settled")
+    if v3_bitmap_ordinals(session) != list(range(producer.uint(session["sample_count"]))):
+        raise ValueError("browser session is missing accepted challenge ordinals")
+    bps = producer.uint(session["completion_burn_bps"])
+    if bps > 10000:
+        raise ValueError("browser completion burn exceeds the protocol bound")
+    variable, payouts, burned = 0, {}, producer.uint(session["base_fee"], 256)
+    for obligation in obligations:
+        locked = producer.uint(obligation["locked_fee"], 256)
+        if locked != producer.uint(obligation["blob_count"]) * producer.uint(session["price_per_blob"], 256):
+            raise ValueError("browser obligation fee differs from its blob denominator")
+        burn = (locked * bps + 9999) // 10000
+        payee = obligation["payee"]
+        if payee != obligation["assigned_provider"] or payee not in signers.values():
+            raise ValueError("browser payout is outside the frozen provider assignment")
+        payouts[payee] = payouts.get(payee, 0) + locked - burn
+        variable += locked
+        burned += burn
+    charged = producer.uint(session["base_fee"], 256) + variable
+    if producer.uint(before["payer"]["stake"], 256) - producer.uint(after["payer"]["stake"], 256) != charged:
+        raise ValueError("browser payer stake debit differs from its one session charge")
+    gas = 0
+    for transaction in receipts:
+        receipt = transaction["receipt"]
+        if not before["bank"]["height"] < transaction["height"] <= after["bank"]["height"]:
+            raise ValueError("browser receipt falls outside the economic fence")
+        if receipt["from"].lower() != "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255" or receipt["to"].lower() != "0x0000000000000000000000000000000000000900":
+            raise ValueError("browser receipt targets the wrong payer/precompile")
+        gas += int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16)
+    if producer.uint(before["payer"]["aatom"], 256) - producer.uint(after["payer"]["aatom"], 256) != gas:
+        raise ValueError("browser payer gas debit differs from committed EVM receipts")
+    for name, address in signers.items():
+        key = name + ":stake"
+        if int(after["bank"]["balances"][key]) - int(before["bank"]["balances"][key]) != payouts.get(address, 0):
+            raise ValueError("browser provider/control stake delta differs from frozen payouts")
+    if any(after["retrieval"]["deals"][key]["escrow_balance"] != deal["escrow_balance"]
+           for key, deal in before["retrieval"]["deals"].items()):
+        raise ValueError("sponsored browser retrieval changed deal escrow")
+    if (before["retrieval"]["module_stake"] != after["retrieval"]["module_stake"] or
+            int(after["bank"]["supply"]["stake"]) - int(before["bank"]["supply"]["stake"]) != issued_stake - burned):
+        raise ValueError("browser module/supply conservation mismatch")
+    return dict(charged_stake=charged, provider_payouts=payouts, burned_stake=burned,
+                issued_stake=issued_stake, payer_gas_aatom=gas, completed_sessions=1)
 
 
 def mode2_layout(k, deputy_count=8):
