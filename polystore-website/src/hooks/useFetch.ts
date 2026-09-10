@@ -258,9 +258,6 @@ export function useFetch() {
         const chunks = planV3Chunks(session)
         while (!chunks.next().done) chunkCount++
         setProgress((progress) => ({ ...progress, chunkCount, bytesTotal: Number(length), receiptsTotal }))
-        const connectedProofBase = readLocalGatewayConnectedBase()
-        const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: connectedProofBase || '',
-          localGatewayConnected: Boolean(connectedProofBase) }) ? connectedProofBase : undefined
         let route: string | undefined
         const result: RetrievalV3Execution = await executeRetrievalV3(session, checkpointV3, {
           fetch: async (chunk, chunkSignal) => {
@@ -282,6 +279,9 @@ export function useFetch() {
           },
           requestProof: async (current, slot) => {
             const payee = current.obligations.find((obligation) => obligation.slot === slot)!.payee
+            const connectedProofBase = readLocalGatewayConnectedBase()
+            const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: connectedProofBase || '',
+              localGatewayConnected: Boolean(connectedProofBase) }) ? connectedProofBase : undefined
             return proofBase ? requestRetrievalProofV3(proofBase, { dealId: current.authority.dealId, sessionId: current.sessionId, provider: payee }, signal) :
               { state: 'unknown', sessionId: current.sessionId, responseUnknown: true,
                 message: 'No authenticated provider or user-gateway proof route is available.' }

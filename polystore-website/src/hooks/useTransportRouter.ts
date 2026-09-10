@@ -648,11 +648,11 @@ export function useTransportRouter() {
     }
   }, [recordTrace, resolveDirectBase, resolvePreference])
 
-  const v3GatewayBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
   const allowsV3Direct = useCallback((requested?: RoutePreference) => allowNonGatewayBackends(resolvePreference(requested)), [resolvePreference])
 
   const fetchV3Metadata = useCallback(async (req: V3TransportRequest) => {
     const effectivePreference = resolvePreference(req.preference), pin = generationAsPinnedV2Shape(req.authority)
+    const v3GatewayBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
     const candidates = v3RetrievalCandidates(effectivePreference, v3GatewayBase, req.directBases, async (base, gateway, attemptSignal) => {
       const signal = req.signal ? AbortSignal.any([req.signal, attemptSignal]) : attemptSignal
       const bytes = await wrapExecute(() => gateway ? gatewayFetchRetrievalMetadata(base, pin, 0n, signal) : providerFetchRetrievalMetadata(base, pin, 0n, signal))
@@ -664,10 +664,11 @@ export function useTransportRouter() {
       recordTrace(result.trace)
       return result
     } catch (error) { if (error instanceof TransportTraceError) recordTrace(error.trace); throw error }
-  }, [recordTrace, resolvePreference, v3GatewayBase, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const fetchV3Chunk = useCallback(async (req: V3TransportRequest & { chunk: RetrievalV3ChunkAuthority; owner: string }): Promise<TransportOutcome<RetrievalV3Envelope>> => {
     const effectivePreference = resolvePreference(req.preference)
+    const v3GatewayBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
     const candidates = v3RetrievalCandidates(effectivePreference, v3GatewayBase, req.directBases, (base, gateway, attemptSignal) => {
       const signal = req.signal ? AbortSignal.any([req.signal, attemptSignal]) : attemptSignal
       return wrapExecute(() => fetchRetrievalChunkV3(base, gateway ? '/gateway/mdu' : '/sp/retrieval/mdu', req.chunk,
@@ -679,7 +680,7 @@ export function useTransportRouter() {
       recordTrace(result.trace)
       return result
     } catch (error) { if (error instanceof TransportTraceError) recordTrace(error.trace); throw error }
-  }, [recordTrace, resolvePreference, v3GatewayBase, wrapExecute])
+  }, [recordTrace, resolvePreference, wrapExecute])
 
   const fetchWindow = useCallback(async (req: { session: FrozenSession; directBase?: string; p2pTarget?: P2pTarget; preference?: RoutePreference; signal?: AbortSignal }): Promise<TransportOutcome<Uint8Array>> => {
     const effectivePreference = resolvePreference(req.preference)

@@ -148,11 +148,13 @@ for (const row of [
 ] as const) {
   test(`useFetch submits v3 proof through probed ${row.probed} instead of configured ${row.configured}`, async () => {
     const root = `0x${'34'.repeat(32)}`, sessionId = `0x${'12'.repeat(32)}`
+    const nextProbed = 'http://localhost:8080'
+    let connectedProofBase: string = row.configured
     const file = { path: 'file.bin', start_offset: 0n, size_bytes: 4n, flags: 0 }
     const authority = { chainId: 'chain', dealId: 1n, generation: 2n, owner: 'owner', polyfsRoot: root,
       providers: ['provider'], metadataMdus: 2n, userMdus: 1n, totalMdus: 3n, witnessMdus: 1n }
     const session = { sessionId, authority, owner: 'owner', lockedFee: 1n,
-      obligations: [{ slot: 0, payee: 'provider' }] }
+      obligations: [{ slot: 0, payee: 'provider' }, { slot: 1, payee: 'provider' }] }
     const proofBases: string[] = []
     let refIndex = 0
     const active = { current: null as AbortController | null }
@@ -178,7 +180,7 @@ for (const row of [
       '../domain/polyfsLayout': {}, '../lib/providerDiscovery': {},
       '../lib/retrieval': { account: (value: string) => value, u64: (value: string) => BigInt(value) },
       '../lib/retrievalFlow': { validateRetrievalAllocation: () => {} }, '../lib/retrievalRecovery': {},
-      '../lib/retrievalMode': { readLocalGatewayConnectedBase: () => row.probed, readLocalGatewayConnectedHint: () => true },
+      '../lib/retrievalMode': { readLocalGatewayConnectedBase: () => connectedProofBase, readLocalGatewayConnectedHint: () => true },
       '../lib/retrievalSettlement': {}, '../lib/transport/mode': await import('./transport/mode'),
       '../lib/walletErrors': { classifyWalletError: (error: unknown) => ({ message: error instanceof Error ? error.message : String(error) }) },
       '../lib/worker-client': { workerClient: { initRetrievalWasm: async () => {}, verifyRetrievalDataV3: async () => {} } },
@@ -197,8 +199,10 @@ for (const row of [
       },
       '../lib/retrievalV3Flow': { executeRetrievalV3: async (_session: unknown, _checkpoint: unknown,
         options: { requestProof: (current: typeof session, slot: number) => Promise<unknown> }) => {
-        const outcome = await options.requestProof(session, 0)
-        return { session: { ...session, lockedFee: 0n }, outcomes: [outcome] }
+        const first = await options.requestProof(session, 0)
+        connectedProofBase = nextProbed
+        const second = await options.requestProof(session, 1)
+        return { session: { ...session, lockedFee: 0n }, outcomes: [first, second] }
       } },
       '../lib/retrievalV3Recovery': {},
       '../lib/retrievalV3Settlement': { requestRetrievalProofV3: async (base: string) => {
@@ -217,9 +221,11 @@ for (const row of [
       if (!(name in modules)) throw new Error('unexpected hook dependency: ' + name)
       return modules[name]
     }, exports, localUrl)
-    const result = await exports.useFetch!().fetchFile({ dealId: '1', generation: '2', manifestRoot: root, owner: 'owner', filePath: file.path })
+    const hook = exports.useFetch!()
+    connectedProofBase = row.probed
+    const result = await hook.fetchFile({ dealId: '1', generation: '2', manifestRoot: root, owner: 'owner', filePath: file.path })
     assert.equal(result.url, 'blob:1')
-    assert.deepEqual(proofBases, [row.probed])
+    assert.deepEqual(proofBases, [row.probed, nextProbed])
   })
 }
 

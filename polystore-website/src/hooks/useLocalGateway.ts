@@ -265,11 +265,12 @@ export function useLocalGateway(pollInterval: number = DEFAULT_POLL_INTERVAL_MS)
       } finally {
         inFlight = false;
         probeController = null;
-        if (disposed) return;
-        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-          schedule(HIDDEN_POLL_INTERVAL_MS);
-        } else {
-          schedule(pollInterval);
+        if (!disposed) {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            schedule(HIDDEN_POLL_INTERVAL_MS);
+          } else {
+            schedule(pollInterval);
+          }
         }
       }
     };
