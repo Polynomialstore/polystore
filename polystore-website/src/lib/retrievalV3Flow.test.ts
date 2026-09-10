@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
 import { executeRetrievalV3, retrievalV3SlotEnd } from './retrievalV3Flow'
 import { RETRIEVAL_V3_SETUP, type FrozenSessionV3 } from './retrievalV3'
+import type { RetrievalDiagnostic } from './retrievalDiagnostics'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 
@@ -85,4 +86,34 @@ test('fully settled durable output reopens without fetch, ACK, or provider proof
   })
   assert.equal(calls, 0)
   assert.equal(result.session.lockedFee, 0n)
+})
+
+test('chunk progress follows verification, successful writes, flush and checkpoint; failures never claim later progress', async (t) => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window') })
+  for (const failure of ['none', 'verify', 'write', 'flush', 'cursor']) {
+    const events: RetrievalDiagnostic[] = []
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { __polystoreRetrievalDiagnostic: (event: RetrievalDiagnostic) => events.push(event) } })
+    const initial = session()
+    initial.last = 0n; initial.rangeLength = 1024n
+    const step = (phase: string) => { if (failure === phase) throw new Error(phase) }
+    const run = executeRetrievalV3(initial, { cursors: {}, output: { async write() { step('write') }, async flush() { step('flush') } },
+      advance() { step('cursor') }, refresh() {} }, {
+      async fetch() { return {} as never }, async verify() { step('verify'); return new Uint8Array(131_072) },
+      async acknowledge(value) { return { ...value, ackedMask: 1, settledMask: 1, lockedFee: 0n } },
+      async requestProof() { throw new Error('already settled') }, async observe(value) { return value },
+    })
+    if (failure === 'none') await run
+    else await assert.rejects(run, new RegExp(failure))
+    const progress = events.filter((e) => ['verified_write', 'flushed', 'verified_chunk', 'acked_obligation'].includes(e.phase))
+    assert.deepEqual(progress.map((e) => e.phase), failure === 'none' ? ['verified_write', 'flushed', 'verified_chunk', 'acked_obligation'] :
+      failure === 'cursor' ? ['verified_write', 'flushed'] : failure === 'flush' ? ['verified_write'] : [])
+    assert.ok(progress.every((e) => e.sessionId === initial.sessionId && e.slot === 0))
+    assert.ok(progress.filter((e) => e.phase !== 'acked_obligation').every((e) => e.chunkId === '0:0:0'))
+    if (failure === 'none') {
+      assert.equal(progress[0].bytes, 1024)
+      assert.equal(progress[0].offset, 0)
+      assert.ok(events.findIndex((e) => e.phase === 'browser_verify' && e.edge === 'end') < events.indexOf(progress[0]))
+    }
+  }
 })

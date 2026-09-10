@@ -48,9 +48,13 @@ export function useRetrievalSessions() {
     frozenContextHash: session.contextHash, deadline: session.deadline, funding: session.funding,
     range: workerClient.retrievalV3Range, contextHash: workerClient.retrievalV3ContextHash,
     seed: workerClient.retrievalV3Seed, challenges: workerClient.retrievalV3Challenges })
-  const observedV3 = async (session: FrozenSessionV3, signal?: AbortSignal) => preserveV3BrowserTransactionKey(session,
-    await fetchSessionV3(appConfig.lcdBase, session.authority, expectedV3(session), signal))
-  const readyV3 = async (initial: FrozenSessionV3, signal?: AbortSignal) => {
+  const observedV3 = async (session: FrozenSessionV3, signal?: AbortSignal) => {
+    const fresh = preserveV3BrowserTransactionKey(session, await timeRetrieval('session_observation',
+      () => fetchSessionV3(appConfig.lcdBase, session.authority, expectedV3(session), signal), session.sessionId))
+    retrievalDiagnostic({ phase: 'session_height', sessionId: fresh.sessionId, height: String(fresh.height) })
+    return fresh
+  }
+  const readyV3 = (initial: FrozenSessionV3, signal?: AbortSignal) => timeRetrieval('challenge_ready', async () => {
     let session = initial
     while (!session.anchorSeed || session.height < session.firstResponse) {
       signal?.throwIfAborted()
@@ -64,7 +68,7 @@ export function useRetrievalSessions() {
       session = await observedV3(session, signal)
     }
     return session
-  }
+  }, initial.sessionId)
   return {
     requireWallet, scope, observeV3: observedV3, readyV3,
     unavailableReason: activation.error ? 'Cannot verify network retrieval availability. Check the chain connection.' : activation.data === undefined ? 'Checking network retrieval availability…' : activation.data,
@@ -155,7 +159,7 @@ export function useRetrievalSessions() {
       return withRetrievalLock(ownerDeal, async () => {
         const store = browserRetrievalStore()
         let gas = 0n
-        const transaction = await settleBrowserTransaction({
+        const transaction = await timeRetrieval('open_transaction', () => settleBrowserTransaction({
           key: ownerDeal, store, signal: deadline,
           prepare: async () => {
             const proofBase = readLocalGatewayConnectedBase()
@@ -193,10 +197,10 @@ export function useRetrievalSessions() {
             gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data }))
             return { data, intent: { authority, recordIndex, file, rangeStart, rangeLength, nonce, expiry, binding } }
           },
-          send: (data) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas }),
-          receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
+          send: (data) => timeRetrieval('open_send', () => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data, gas })),
+          receipt: (hash) => timeRetrieval('open_inclusion', () => client.waitForTransactionReceipt({ hash, timeout: 120_000 })),
           reconcile: async (tx) => (await fetchSessionIDByNonceV3(appConfig.lcdBase, owner, tx.intent.authority.dealId, tx.intent.nonce, AbortSignal.timeout(15_000))) === tx.intent.binding.sessionId,
-        })
+        }))
         const expected = { sessionId: transaction.intent.binding.sessionId, owner, recordIndex: transaction.intent.recordIndex,
           file: transaction.intent.file, rangeStart: transaction.intent.rangeStart, rangeLength: transaction.intent.rangeLength,
           nonce: transaction.intent.nonce, planHash: transaction.intent.binding.planHash, deadline: transaction.intent.expiry,
@@ -206,6 +210,7 @@ export function useRetrievalSessions() {
           throw new Error('another frozen v3 retrieval for this owner and deal must be resumed before opening a different request')
         }
         const session = await fetchSessionV3(appConfig.lcdBase, transaction.intent.authority, expected, deadline)
+        retrievalDiagnostic({ phase: 'opened_session', sessionId: session.sessionId, height: String(session.height) })
         return { ...session, browserTransactionKey: ownerDeal }
       })
     },
@@ -225,8 +230,8 @@ export function useRetrievalSessions() {
       let gas = 0n
       await withRetrievalLock(key, () => settleBrowserTransaction({ key, store: browserRetrievalStore(), signal,
         prepare: async () => { gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data })); return { data, intent: { session, slot } } },
-        send: (call) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }),
-        receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
+        send: (call) => timeRetrieval('ack_send', () => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }), session.sessionId, { slot }),
+        receipt: (hash) => timeRetrieval('ack_inclusion', () => client.waitForTransactionReceipt({ hash, timeout: 120_000 }), session.sessionId, { slot }),
         reconcile: async () => Boolean((await observedV3(session, AbortSignal.timeout(15_000))).ackedMask & (1 << slot)),
       }))
       return observedV3(session, signal)
@@ -237,8 +242,8 @@ export function useRetrievalSessions() {
       let gas = 0n
       await withRetrievalLock(key, () => settleBrowserTransaction({ key, store: browserRetrievalStore(), signal,
         prepare: async () => { gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data })); return { data, intent: session } },
-        send: (call) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }),
-        receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
+        send: (call) => timeRetrieval('refund_send', () => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }), session.sessionId),
+        receipt: (hash) => timeRetrieval('refund_inclusion', () => client.waitForTransactionReceipt({ hash, timeout: 120_000 }), session.sessionId),
         reconcile: async () => (await observedV3(session, AbortSignal.timeout(15_000))).refundedMask !== session.refundedMask,
       }))
       return observedV3(session, signal)

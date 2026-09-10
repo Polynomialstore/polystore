@@ -3,6 +3,7 @@ import { decodeRetrievalSlice } from './retrievalFlow'
 import { planV3Chunks, type FrozenSessionV3 } from './retrievalV3'
 import type { RetrievalV3ChunkAuthority, RetrievalV3Envelope } from './retrievalWire'
 import type { RetrievalProofV3Outcome } from './retrievalV3Settlement'
+import { retrievalDiagnostic, timeRetrieval } from './retrievalDiagnostics'
 
 const RAW_BLOB_BYTES = 126_976n
 
@@ -50,7 +51,7 @@ export async function executeRetrievalV3(initial: FrozenSessionV3, checkpoint: R
       const controller = new AbortController()
       const chunkSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
       const source = planV3Chunks(session, obligation.slot)
-      type Pending = { ok: true; chunk: RetrievalV3ChunkAuthority; encoded: Uint8Array } | { ok: false; error: unknown }
+      type Pending = { ok: true; chunk: RetrievalV3ChunkAuthority; encoded: Uint8Array; chunkId: string } | { ok: false; error: unknown }
       const pending: Promise<Pending>[] = []
       const enqueue = () => {
         while (pending.length < 2) {
@@ -58,8 +59,11 @@ export async function executeRetrievalV3(initial: FrozenSessionV3, checkpoint: R
           if (next.done) break
           const chunk = next.value, last = chunk.entries[chunk.entries.length - 1].t
           if (last <= (checkpoint.cursors[obligation.slot] ?? -1n)) continue
-          pending.push(flow.fetch(chunk, chunkSignal).then((envelope) => flow.verify(chunk, envelope))
-            .then((encoded): Pending => ({ ok: true, chunk, encoded }), (error): Pending => ({ ok: false, error })))
+          const chunkId = `${chunk.slot}:${chunk.entries[0].t}:${last}`
+          const context = { chunkId, slot: chunk.slot }
+          pending.push(timeRetrieval('chunk_transport', () => flow.fetch(chunk, chunkSignal), session.sessionId, context)
+            .then((envelope) => timeRetrieval('browser_verify', () => flow.verify(chunk, envelope), session.sessionId, context))
+            .then((encoded): Pending => ({ ok: true, chunk, encoded, chunkId }), (error): Pending => ({ ok: false, error })))
         }
       }
       try {
@@ -69,25 +73,31 @@ export async function executeRetrievalV3(initial: FrozenSessionV3, checkpoint: R
           const verified = await pending.shift()!
           if (!verified.ok) throw verified.error
           enqueue()
-          const { chunk, encoded } = verified
+          const { chunk, encoded, chunkId } = verified
+          const context = { chunkId, slot: chunk.slot }
           const last = chunk.entries[chunk.entries.length - 1].t
           const wantedStart = session.file.start_offset + session.rangeStart
           const wantedEnd = wantedStart + session.rangeLength
-          for (let i = 0; i < chunk.entries.length; i++) {
-            const blobStart = chunk.entries[i].t * RAW_BLOB_BYTES
-            const blobEnd = blobStart + RAW_BLOB_BYTES
-            const from = blobStart > wantedStart ? blobStart : wantedStart
-            const to = blobEnd < wantedEnd ? blobEnd : wantedEnd
-            if (from >= to) throw new Error('v3 chunk lies outside the frozen requested range')
-            const valid = session.file.start_offset + session.file.size_bytes - blobStart
-            const validLength = Number(valid < RAW_BLOB_BYTES ? valid : RAW_BLOB_BYTES)
-            const bytes = decodeRetrievalSlice(encoded.subarray(i * BLOB_SIZE_BYTES, (i + 1) * BLOB_SIZE_BYTES), validLength,
-              Number(from - blobStart), Number(to - from))
-            await checkpoint.output.write(from - wantedStart, bytes)
-            logicalBytes += BigInt(bytes.length)
-          }
-          await checkpoint.output.flush()
+          await timeRetrieval('decode_write', async () => {
+            for (let i = 0; i < chunk.entries.length; i++) {
+              const blobStart = chunk.entries[i].t * RAW_BLOB_BYTES
+              const blobEnd = blobStart + RAW_BLOB_BYTES
+              const from = blobStart > wantedStart ? blobStart : wantedStart
+              const to = blobEnd < wantedEnd ? blobEnd : wantedEnd
+              if (from >= to) throw new Error('v3 chunk lies outside the frozen requested range')
+              const valid = session.file.start_offset + session.file.size_bytes - blobStart
+              const validLength = Number(valid < RAW_BLOB_BYTES ? valid : RAW_BLOB_BYTES)
+              const bytes = decodeRetrievalSlice(encoded.subarray(i * BLOB_SIZE_BYTES, (i + 1) * BLOB_SIZE_BYTES), validLength,
+                Number(from - blobStart), Number(to - from))
+              await checkpoint.output.write(from - wantedStart, bytes)
+              retrievalDiagnostic({ ...context, phase: 'verified_write', sessionId: session.sessionId, offset: Number(from - wantedStart), bytes: bytes.length })
+              logicalBytes += BigInt(bytes.length)
+            }
+          }, session.sessionId, context)
+          await timeRetrieval('flush', () => checkpoint.output.flush(), session.sessionId, context)
+          retrievalDiagnostic({ ...context, phase: 'flushed', sessionId: session.sessionId })
           checkpoint.advance(obligation.slot, last)
+          retrievalDiagnostic({ ...context, phase: 'verified_chunk', sessionId: session.sessionId })
           chunks++
           flow.progress?.(chunks, logicalBytes)
         }
@@ -97,10 +107,11 @@ export async function executeRetrievalV3(initial: FrozenSessionV3, checkpoint: R
       }
       session = await flow.acknowledge(session, obligation.slot)
       checkpoint.refresh(session)
+      retrievalDiagnostic({ phase: 'acked_obligation', sessionId: session.sessionId, slot: obligation.slot })
     }
     if (!(session.settledMask & bit) && !(session.refundedMask & bit)) {
       for (let attempt = 0; attempt < 3 && !(session.settledMask & bit); attempt++) {
-        const outcome = await flow.requestProof(session, obligation.slot)
+        const outcome = await timeRetrieval('provider_settlement', () => flow.requestProof(session, obligation.slot), session.sessionId, { slot: obligation.slot })
         if (outcome.slot !== undefined && outcome.slot !== obligation.slot) throw new Error('provider proof outcome has the wrong v3 slot')
         outcomes.push(outcome)
         session = await flow.observe(session)

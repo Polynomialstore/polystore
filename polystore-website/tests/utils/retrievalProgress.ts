@@ -11,6 +11,8 @@ export class RetrievalProgress {
   private phaseUnits = 0
   private ranges: Array<[number, number]> = []
   private verified = new Set<string>()
+  private chunks = new Set<string>()
+  private obligations = new Set<string>()
   private terminal = new Set<string>()
   writtenBytes = 0
   flushedBytes = 0
@@ -40,6 +42,8 @@ export class RetrievalProgress {
     this.events.push(event)
     if (event.height) this.lastHeight = event.height
     if (event.phase === 'verified_window' && event.sessionId) this.verified.add(event.sessionId)
+    if (event.phase === 'verified_chunk' && event.sessionId && event.chunkId) this.chunks.add(`${event.sessionId}:${event.chunkId}`)
+    if (event.phase === 'acked_obligation' && event.sessionId && event.slot !== undefined) this.obligations.add(`${event.sessionId}:${event.slot}`)
     if (event.phase === 'acked') for (const id of event.sessionIds ?? []) this.acked.add(id)
     if (event.phase === 'flushed') this.flushedBytes = this.writtenBytes
     if (event.phase !== 'verified_write') return
@@ -69,6 +73,7 @@ export class RetrievalProgress {
       lastProgressAgoMs: this.now() - this.lastProgress, phaseUnits: this.phaseUnits,
       verifiedLogicalBytesWritten: this.writtenBytes, flushedLogicalBytes: this.flushedBytes,
       verifiedWindows: this.verified.size, ackedSessions: this.acked.size, firstVerifiedByteMs: this.firstVerifiedByteMs,
+      verifiedChunks: this.chunks.size, ackedObligations: this.obligations.size,
       chainConfirmedCompletedSessions: this.completedSessions, lastSuccessfulHeight: this.lastHeight }
   }
 }
