@@ -1,13 +1,14 @@
 # Retrieval v3 native large-session contract
 
-Status: **contract reviewed; implementation partial and disabled by default**.
+Status: **implemented; end-to-end qualification pending; disabled by default**.
 This document fixes the wire-independent protocol choices for issue #291. The
 shared primitives, native generation admission, owner/sponsored session opening,
 sampled proof submission, provider data delivery, per-provider ACK/settlement
 and expiry refunds are implemented. The EVM precompile exposes the same eight
 native v3 actions. Browser WASM exposes the shared context, challenge, FAT v3
-and full-byte integrity primitives. Session orchestration and end-to-end
-activation qualification remain incomplete.
+and full-byte integrity primitives. The browser implements one-session
+orchestration, durable recovery and authenticated cache reuse. End-to-end
+qualification remains required before target-network activation.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -843,3 +844,73 @@ limits, so EVM revert and out-of-gas roll back generation, session, voucher,
 funding, retention and event effects together. This ABI parity does not enable
 v3 on a deployed network; activation and target-network qualification remain
 separate operational decisions.
+
+
+## Isolated production-browser qualification
+
+Use `scripts/retrieval_four_validator_workload.py --mode native-v3-browser`.
+It creates an isolated four-validator chain, admits a production FAT v3
+fixture through all twelve provider-daemons, completes normal storage audits,
+and drives the real `DealDetail`, wallet, worker, OPFS and user-gateway path.
+It never activates a deployed chain. Use a fresh output directory per run.
+
+On the Linux fixture host, set the four binary/library variables below to
+artifacts built from the checked-out revision, install the website's locked
+Node dependencies and Playwright Chromium, and use a functioning systemd user
+session with cgroup v2 `memory.peak`:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-browser --audit-profile normal --timeout 1800 \
+  --browser-bytes 1024 \
+  --binary "$CHAIN_BINARY" --library "$CORE_LIBRARY" \
+  --gateway-binary "$GATEWAY_BINARY" --cli-binary "$CLI_BINARY" \
+  --product-source "$PWD" --home "$RUN_DIR"
+```
+
+Run these cases in order, changing `--browser-bytes` and choosing a new
+`RUN_DIR` each time. Use `--timeout 3600` for the 1 GiB case to include setup
+and audits around its 30-minute retrieval allowance:
+
+| Logical bytes | Required observation |
+| --- | --- |
+| `1024` | One paid session, verified download and cache; estimate rejection and wallet cancellation before payment; separate short-deal expiry/refund |
+| `16777217` | One multi-MDU session; corrupt an unsampled blob, swap multipart sections and truncate a response; unknown-open reconciliation, reload at a durable cursor, settlement and cache |
+| `1073741824` | One large session, 8,457 authorized blobs and 132 sampled challenges; 1,064 bounded transport chunks |
+
+Only start the large measurement after the small correctness cases pass.
+For a separate Mac browser over the LAN, add `--browser-executor-handoff`
+and use `--timeout 3600` on the Linux coordinator. Once it publishes
+`browser-executor-request.json`, run this from an exact matching, clean Mac
+checkout with the locked website dependencies and Chrome installed. Set
+`BENCH_SSH` to the fixture host and `REMOTE_RUN_DIR` to its run directory:
+
+```sh
+python3 scripts/retrieval_bench_artifact.py browser-executor \
+  --ssh "$BENCH_SSH" \
+  --remote-request "$REMOTE_RUN_DIR/browser-executor-request.json" \
+  --source "$PWD" \
+  --chrome "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+```
+
+The executor owns four loopback SSH forwards and a fresh persistent browser
+profile. It retains the host/browser identity and returns results to the
+coordinator for the same four-validator transaction and balance checks.
+This topology measures a LAN client with cohosted validators and providers;
+it does not establish WAN performance or distributed validator capacity.
+
+Retain `evidence.json`, browser result/memory files and logs with the source
+and binary identities. Failed profiles contain private wallet and payload
+state; keep them private for diagnosis. A successful result requires the
+complete sampled ordinal set, canonical committed transactions on all four
+validators, exact payer/provider/burn/refund accounting and a cache download
+with no additional MDU requests or payment. Transfer, browser verification,
+write/flush, transaction inclusion and provider proof/settlement timings are
+separate; concurrent phase durations must not be added together.
+
+Linux reports aggregate cgroup charged memory, including file cache. macOS
+reports sampled process-tree RSS, which can double-count shared pages and
+miss peaks between samples. Neither is JavaScript heap usage. Keep the
+60-second progress heartbeat, ten-minute no-progress watchdog and absolute
+execution deadline. Execution limits cap test cost; choose the practical
+retrieval target only from the retained deployment measurement.
