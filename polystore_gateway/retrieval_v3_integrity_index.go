@@ -10,8 +10,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 
-	"golang.org/x/sync/singleflight"
 	"golang.org/x/sys/unix"
 	"polystorechain/pkg/retrievalchallenge"
 )
@@ -23,7 +23,41 @@ const (
 )
 
 var integrityIndexV3Magic = [8]byte{'N', 'I', 'L', 'I', 'V', '3', 'I', '1'}
-var integrityIndexV3Builds singleflight.Group
+var integrityIndexV3Builds = struct {
+	sync.Mutex
+	active map[string]chan struct{}
+}{active: make(map[string]chan struct{})}
+
+// claimIntegrityIndexV3Build lets a canceled waiter leave without delaying the
+// current owner. An active waiter rechecks the published artifact after wake;
+// if the owner was canceled, one waiter becomes the next synchronous owner.
+func claimIntegrityIndexV3Build(ctx context.Context, key string) (release func(), claimed bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	integrityIndexV3Builds.Lock()
+	if done := integrityIndexV3Builds.active[key]; done != nil {
+		integrityIndexV3Builds.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		case <-done:
+			if err := ctx.Err(); err != nil {
+				return nil, false, err
+			}
+			return nil, false, nil
+		}
+	}
+	done := make(chan struct{})
+	integrityIndexV3Builds.active[key] = done
+	integrityIndexV3Builds.Unlock()
+	return func() {
+		integrityIndexV3Builds.Lock()
+		delete(integrityIndexV3Builds.active, key)
+		close(done)
+		integrityIndexV3Builds.Unlock()
+	}, true, nil
+}
 
 func integrityIndexV3NodeCount(leaves uint64) (uint64, error) {
 	if leaves == 0 || leaves > retrievalchallenge.MaxIntegrityLeaves {
@@ -194,43 +228,67 @@ func buildIntegrityIndexV3(ctx context.Context, dir string, key retrievalGenerat
 }
 
 func ensureIntegrityIndexV3(ctx context.Context, dir string, key retrievalGenerationKey) (string, error) {
+	return ensureIntegrityIndexV3WithBuilder(ctx, dir, key, buildIntegrityIndexV3)
+}
+
+func ensureIntegrityIndexV3WithBuilder(ctx context.Context, dir string, key retrievalGenerationKey, build func(context.Context, string, retrievalGenerationKey) (string, error)) (string, error) {
 	path := filepath.Join(dir, integrityIndexV3File)
 	leaves, err := integrityLeafCountV3(key.Users)
 	if err != nil {
 		return "", err
 	}
-	if err := validateIntegrityIndexV3(path, leaves); err == nil {
-		return path, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
-	}
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-	value, err, _ := integrityIndexV3Builds.Do(fmt.Sprintf("%s:%#v", abs, key), func() (interface{}, error) {
+	var buildKey string
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if err := validateIntegrityIndexV3(path, leaves); err == nil {
 			return path, nil
 		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
+			return "", err
 		}
-		tmp, err := buildIntegrityIndexV3(ctx, dir, key)
+		if buildKey == "" {
+			abs, err := filepath.Abs(dir)
+			if err != nil {
+				return "", err
+			}
+			buildKey = fmt.Sprintf("%s:%#v", abs, key)
+		}
+		release, claimed, err := claimIntegrityIndexV3Build(ctx, buildKey)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		defer os.Remove(tmp)
-		if err := publishImmutableArtifact(tmp, path); err != nil {
-			return nil, err
+		if !claimed {
+			continue
 		}
-		return path, validateIntegrityIndexV3(path, leaves)
-	})
-	if err != nil {
-		return "", err
+		value, err := func() (string, error) {
+			defer release()
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			if err := validateIntegrityIndexV3(path, leaves); err == nil {
+				return path, nil
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return "", err
+			}
+			tmp, err := build(ctx, dir, key)
+			if err != nil {
+				return "", err
+			}
+			defer os.Remove(tmp)
+			if err := publishImmutableArtifact(tmp, path); err != nil {
+				return "", err
+			}
+			return path, validateIntegrityIndexV3(path, leaves)
+		}()
+		if err != nil {
+			return "", err
+		}
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return value, nil
 	}
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	return value.(string), nil
 }
 
 func readIntegrityPathV3(indexPath, leavesPath string, position, leafCount uint64) ([][32]byte, error) {
