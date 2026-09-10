@@ -37,6 +37,35 @@ type MduRequestCounts = {
   gatewayMetadata: number; gatewayData: number; directMetadata: number; directData: number
 }
 
+type BrowserFailureDiagnostics = {
+  total: number
+  retained: Array<{
+    kind: 'pageerror' | 'requestfailed'
+    message: string
+    method?: string
+    resourceType?: string
+    route?: string
+  }>
+}
+
+function safeFailureMessage(message: string): string {
+  return message
+    .replace(/https?:\/\/\S+/gi, '<url>')
+    .replace(/0x[0-9a-f]{40,}/gi, '<hex>')
+    .replace(/nil1[0-9a-z]+/gi, '<address>')
+    .slice(0, 512)
+}
+
+function failureRoute(url: string): string {
+  const path = new URL(url).pathname
+  if (/^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)) return 'gateway_mdu'
+  if (/^\/sp\/retrieval\/mdu\/[^/]+\/[^/]+$/.test(path)) return 'provider_mdu'
+  if (path === '/gateway/session-proof') return 'provider_proof'
+  if (url.startsWith(evm)) return 'evm_rpc'
+  if (path.startsWith('/cosmos/') || path.startsWith('/polystorechain/')) return 'chain_rest'
+  return 'other'
+}
+
 function proofOutcomeSlots(outcomes: unknown[]): number[] {
   const slots = outcomes.flatMap((observed) => {
     if (!observed || typeof observed !== 'object') return []
@@ -187,7 +216,12 @@ async function ensureDealIndex(page: Page): Promise<void> {
   const sync = page.getByTestId('deal-index-sync-button')
   await expect(fileMenu.or(sync)).toBeVisible({ timeout: 120_000 })
   if (await sync.isVisible()) await sync.click()
-  await expect(fileMenu).toBeVisible({ timeout: 120_000 })
+  const failed = page.locator('[data-testid="deal-index-sync-panel"][data-sync-status="sync_failed"]')
+  await expect(fileMenu.or(failed)).toBeVisible({ timeout: 120_000 })
+  if (await failed.isVisible()) {
+    const reason = (await page.getByTestId('deal-index-sync-reason').textContent())?.replace(/^Reason:\s*/, '').trim()
+    throw new Error(`deal index sync failed${reason ? `: ${reason}` : ''}`)
+  }
 }
 
 async function rejectNextWalletTransactionBeforeLoad(page: Page): Promise<void> {
@@ -285,6 +319,29 @@ async function unfinishedLocalState(page: Page): Promise<{ checkpoints: number; 
   }, { dealId, payer })
 }
 
+test('deal index synchronization reports the rendered failure without waiting for timeout', async ({ page }) => {
+  test.setTimeout(15_000)
+  await page.setContent('<button data-testid="deal-detail-actions-menu" data-file-path="payload.bin">Download</button>')
+  await page.getByTestId('deal-detail-actions-menu').evaluate((menu, path) => menu.setAttribute('data-file-path', path), filePath)
+  await ensureDealIndex(page)
+
+  await page.setContent(`
+    <div data-testid="deal-index-sync-panel" data-sync-status="needs_sync_missing">
+      <div data-testid="deal-index-sync-reason"></div>
+      <button data-testid="deal-index-sync-button">Sync Deal From Providers</button>
+    </div>
+  `)
+  await page.getByTestId('deal-index-sync-button').evaluate((button) => {
+    button.addEventListener('click', () => {
+      const panel = document.querySelector<HTMLElement>('[data-testid="deal-index-sync-panel"]')!
+      const reason = document.querySelector<HTMLElement>('[data-testid="deal-index-sync-reason"]')!
+      panel.dataset.syncStatus = 'sync_failed'
+      reason.textContent = 'Reason: fixture provider unavailable'
+    })
+  })
+  await expect(ensureDealIndex(page)).rejects.toThrow('deal index sync failed: fixture provider unavailable')
+})
+
 test.describe('native V3 browser qualification', () => {
   test.skip(!enabled, 'requires the owned four-validator browser stack')
   test.use({ acceptDownloads: true })
@@ -307,12 +364,18 @@ test.describe('native V3 browser qualification', () => {
     const mduNetworkRequests: MduRequestCounts = {
       gatewayMetadata: 0, gatewayData: 0, directMetadata: 0, directData: 0,
     }
+    const browserFailureDiagnostics: BrowserFailureDiagnostics = { total: 0, retained: [] }
+    const retainBrowserFailure = (entry: BrowserFailureDiagnostics['retained'][number]) => {
+      browserFailureDiagnostics.total++
+      browserFailureDiagnostics.retained.push(entry)
+      if (browserFailureDiagnostics.retained.length > 32) browserFailureDiagnostics.retained.shift()
+    }
     const snapshotMduRequests = (): MduRequestCounts => ({ ...mduNetworkRequests })
     let rawTransactions = 0
     let failure: Error | undefined
     const summary: Record<string, unknown> = {
       dealId, payer, filePath, expectedBytes, expectedHash, diagnostics, providerProofOutcomes,
-      evmResponseHashes, evmTransactions, evmReceipts,
+      evmResponseHashes, evmTransactions, evmReceipts, browserFailureDiagnostics,
     }
     let saved: Promise<void> = Promise.resolve()
     const persist = () => {
@@ -335,6 +398,9 @@ test.describe('native V3 browser qualification', () => {
         const scope = window as unknown as { __polystoreRetrievalDiagnostic: (event: unknown) => void; __nativeV3Diagnostic: (event: unknown) => Promise<void> }
         scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3Diagnostic(event) }
       })
+      page.on('pageerror', (error) => {
+        retainBrowserFailure({ kind: 'pageerror', message: safeFailureMessage(error.message) })
+      })
       page.on('request', (request) => {
         const path = new URL(request.url()).pathname
         const gatewayMdu = /^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)
@@ -353,6 +419,13 @@ test.describe('native V3 browser qualification', () => {
         try { if (JSON.parse(request.postData() || '{}').method === 'eth_sendRawTransaction') rawTransactions++ } catch { /* evidence remains countable */ }
       })
       page.on('requestfailed', (request) => {
+        retainBrowserFailure({
+          kind: 'requestfailed',
+          message: safeFailureMessage(request.failure()?.errorText || 'request failed'),
+          method: request.method(),
+          resourceType: request.resourceType(),
+          route: failureRoute(request.url()),
+        })
         const path = new URL(request.url()).pathname
         if (!/^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)) return
         gatewayMduCanceled.push({
