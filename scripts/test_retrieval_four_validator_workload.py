@@ -119,7 +119,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
     def test_browser_http_preflight_rejects_missing_cors_or_wrong_chain(self):
         life = SimpleNamespace(nodes=[dict(api=1317, evm_rpc=8545)], remaining=lambda: 30)
         def responses():
-            rows = [self.query_response(dict(params={})), self.query_response({}),
+            rows = [self.query_response(dict(params={})), self.query_response(dict(params={
+                        "active_static_precompiles": ["0x0000000000000000000000000000000000000900"]})),
+                    self.query_response({}),
                     self.query_response(dict(result="0x40000"))]
             for row in rows:
                 row.headers.update({"Access-Control-Allow-Origin": "*",
@@ -127,17 +129,20 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             return rows
         with patch.object(workload.urllib.request, "urlopen", side_effect=responses()) as get:
             evidence = workload.browser_http_preflight(life, "http://127.0.0.1:4173")
-            self.assertEqual([row["method"] for row in evidence["checks"]], ["GET", "OPTIONS", "POST"])
+            self.assertEqual([row["method"] for row in evidence["checks"]], ["GET", "GET", "OPTIONS", "POST"])
             self.assertTrue(all(call.args[0].get_header("Origin") == evidence["origin"] for call in get.call_args_list))
-        for change in ("cors", "content-type", "chain"):
+        for change in ("cors", "precompile", "content-type", "chain"):
             rows = responses()
             if change == "cors":
                 rows[0].headers.pop("Access-Control-Allow-Origin")
             elif change == "content-type":
-                rows[1].headers["Access-Control-Allow-Headers"] = "unrelated"
+                rows[2].headers["Access-Control-Allow-Headers"] = "unrelated"
+            elif change == "precompile":
+                rows[1] = self.query_response(dict(params={"active_static_precompiles": []}))
+                rows[1].headers["Access-Control-Allow-Origin"] = "*"
             else:
-                rows[2] = self.query_response(dict(result="0x1"))
-                rows[2].headers["Access-Control-Allow-Origin"] = "*"
+                rows[3] = self.query_response(dict(result="0x1"))
+                rows[3].headers["Access-Control-Allow-Origin"] = "*"
             with self.subTest(change=change), patch.object(workload.urllib.request, "urlopen", side_effect=rows):
                 with self.assertRaises(ValueError):
                     workload.browser_http_preflight(life, "http://127.0.0.1:4173")

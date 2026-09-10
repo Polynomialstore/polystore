@@ -1973,10 +1973,12 @@ def browser_http_preflight(lifecycle, origin):
     """Check the browser's actual REST and JSON-RPC CORS contract before ingest."""
     node = lifecycle.nodes[0]
     lcd = f'http://127.0.0.1:{node["api"]}{API}/params'
+    evm_params = f'http://127.0.0.1:{node["api"]}/cosmos/evm/vm/v1/params'
     evm = f'http://127.0.0.1:{node["evm_rpc"]}'
     checks = []
     for url, method, headers, data in (
         (lcd, "GET", {}, None),
+        (evm_params, "GET", {}, None),
         (evm, "OPTIONS", {"Access-Control-Request-Method": "POST",
                           "Access-Control-Request-Headers": "content-type"}, None),
         (evm, "POST", {"Content-Type": "application/json"},
@@ -1998,6 +2000,9 @@ def browser_http_preflight(lifecycle, origin):
                 if not isinstance(value, dict) or (method == "GET" and not isinstance(value.get("params"), dict)) or \
                         (method == "POST" and value.get("result") != "0x40000"):
                     raise ValueError("browser endpoint returned the wrong chain or REST schema")
+                if url == evm_params and "0x0000000000000000000000000000000000000900" not in \
+                        value["params"].get("active_static_precompiles", []):
+                    raise ValueError("browser chain has not activated the PolyStore EVM precompile")
             checks.append(dict(url=url, method=method, status=response.status, allow_origin=allow_origin))
     return dict(origin=origin, checks=checks)
 
