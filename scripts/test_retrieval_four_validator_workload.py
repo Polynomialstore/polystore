@@ -481,23 +481,62 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.validate_v3_committed_message(duplicate, kind="session-proof",
                 creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
 
-    def test_committed_v3_http_transaction_normalizes_lcd_string_height(self):
+    def test_committed_v3_http_transaction_normalizes_rpc_numbers_and_reconciles_raw_block(self):
         provider = AUDIT_ADDRESSES[0]
-        txhash = "AB" * 32
+        raw = b"production-shaped-signed-transaction"
+        txhash = hashlib.sha256(raw).hexdigest().upper()
         response = {"hash": txhash, "height": "219", "tx_result": {
-            "code": 0, "gas_wanted": "2000000", "gas_used": "479121"}}
+            "code": "0", "gas_wanted": "2000000", "gas_used": "479121"}}
         message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
                    "creator": provider, "slot": "0",
                    "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
                    "proofs": [{"ordinal": "0"}]}
-        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}], query=Mock(return_value=response),
-            cli=Mock(return_value=json.dumps({"tx": {"body": {"messages": [message]}}})))
-        with patch.object(workload, "verify_transaction_nodes", return_value=[]):
+        block = {"block_id": {"hash": "CD" * 32}, "block": {
+            "header": {"height": "219", "chain_id": "chain", "time": "time", "app_hash": "EF" * 32},
+            "data": {"txs": [base64.b64encode(raw).decode()]}}}
+        block_results = {"height": "219", "txs_results": [{
+            "code": "0", "gas_wanted": "2000000", "gas_used": "479121"}]}
+        commit = {"canonical": True, "signed_header": {"header": block["block"]["header"],
+            "commit": {"height": "219", "block_id": block["block_id"]}}}
+        decoded = {"txhash": txhash, "height": "219", "tx": {"body": {"messages": [message]}}}
+        def query(node, path):
+            if path.startswith("/tx?"):
+                return response
+            if path.startswith("/block_results"):
+                return block_results
+            if path.startswith("/block?"):
+                return block
+            if path.startswith("/commit?"):
+                return commit
+            raise AssertionError(path)
+        with tempfile.TemporaryDirectory() as home:
+            lifecycle = SimpleNamespace(home=Path(home), chain="chain",
+                nodes=[{"home": "/home", "node_id": str(index)} for index in range(4)],
+                query=query, wait_height=Mock(return_value=220), remaining=Mock(), doc={},
+                cli=Mock(return_value=json.dumps(decoded)))
             transaction = workload.committed_v3_http_tx(lifecycle,
                 {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
                 session_id=self.SESSION, proof_count=1)
-        self.assertEqual(transaction["height"], 219)
-        self.assertIsInstance(transaction["height"], int)
+            self.assertEqual({key: transaction[key] for key in ("height", "code", "gas_wanted", "gas_used")},
+                             {"height": 219, "code": 0, "gas_wanted": 2000000, "gas_used": 479121})
+            self.assertTrue(all(isinstance(transaction[key], int)
+                                for key in ("height", "code", "gas_wanted", "gas_used")))
+            self.assertEqual(transaction["outcome"], "committed_success")
+            transaction["operation_id"] = "measured-1-0"
+            output = Path(home) / "blocks.jsonl"
+            workload.reconcile_transaction_blocks(lifecycle, [transaction], 219, 219, output)
+            retained = json.loads(output.read_text())
+            self.assertEqual(retained["transactions"][0]["operation_id"], "measured-1-0")
+            self.assertEqual(lifecycle.doc["committed_block_reconciliation"]["committed_workload_transactions"], 1)
+            for field, value in (("txhash", "AB" * 32), ("height", "220")):
+                changed = copy.deepcopy(decoded)
+                changed[field] = value
+                lifecycle.cli.return_value = json.dumps(changed)
+                with self.subTest(decoded_identity=field), self.assertRaisesRegex(
+                        ValueError, "decoded HTTP transaction identity"):
+                    workload.committed_v3_http_tx(lifecycle,
+                        {"tx_hash": txhash}, kind="session-proof", creator=provider, slot=0,
+                        session_id=self.SESSION, proof_count=1)
 
     def test_refund_receipt_binds_decoded_owner_and_session(self):
         owner = AUDIT_ADDRESSES[8]

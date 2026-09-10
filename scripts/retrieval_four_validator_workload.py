@@ -580,15 +580,19 @@ def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
     """Bind an HTTP result to exact committed bytes and all four validators."""
     txhash = row["tx_hash"].upper()
     response = lifecycle.query(lifecycle.nodes[0], "/tx?hash=0x" + txhash)
+    code = producer.uint(response["tx_result"].get("code", 0))
     result = dict(txhash=response["hash"], height=producer.uint(response["height"]),
-                  code=response["tx_result"].get("code", 0),
-                  gas_wanted=response["tx_result"]["gas_wanted"],
-                  gas_used=response["tx_result"]["gas_used"],
+                  code=code,
+                  gas_wanted=producer.uint(response["tx_result"]["gas_wanted"]),
+                  gas_used=producer.uint(response["tx_result"]["gas_used"]),
                   raw_log=response["tx_result"].get("log", ""),
-                  outcome="committed_success" if not response["tx_result"].get("code", 0) else "committed_failure")
+                  outcome="committed_success" if code == 0 else "committed_failure")
     artifact.committed_tx(result, txhash)
     result["validators"] = verify_transaction_nodes(lifecycle, result)
     decoded = json.loads(lifecycle.cli(lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
+    if (decoded.get("txhash", "").upper() != txhash or
+            producer.uint(decoded.get("height", "")) != result["height"]):
+        raise ValueError("decoded HTTP transaction identity differs from committed RPC result")
     messages = decoded.get("tx", {}).get("body", {}).get("messages", [])
     if len(messages) != 1:
         raise ValueError("committed HTTP transaction must contain exactly one message")
