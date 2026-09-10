@@ -21,7 +21,7 @@ function fixture(staleUnbound = false) {
   const saved = { current: null as { url: string; cleanup: () => Promise<void> } | null }
   const settledSession = { lockedFee: 0n }
   const savedV3 = {
-    authority: { chainId: 'chain', dealId: 1n, owner: 'owner', polyfsRoot: root }, file: { path: 'file.bin' },
+    authority: { chainId: 'chain', dealId: 1n, generation: 2n, owner: 'owner', polyfsRoot: root }, file: { path: 'file.bin' },
     rangeStart: 0n, rangeLength: 4n, length: 4n, ...staleUnbound ? {} : { session: settledSession },
   }
   const lockedV3 = { ...savedV3, session: settledSession }
@@ -78,10 +78,15 @@ function fixture(staleUnbound = false) {
     return modules[name]
   }, exports, localUrl)
   const hook = exports.useFetch!()
-  const fetch = () => hook.fetchFile({ dealId: '1', manifestRoot: root, owner: 'owner', filePath: 'file.bin' })
+  const fetch = (generation = '2') => hook.fetchFile({ dealId: '1', generation, manifestRoot: root, owner: 'owner', filePath: 'file.bin' })
   return { fetch, handoffStarted: handoffStarted.promise,
     finishFirstHandoff: () => firstHandoff.resolve(async () => { cleaned[0]++ }), retained, cleaned, revoked, published }
 }
+
+test('normal file click cannot reuse a same-root checkpoint from an older generation', async () => {
+  const f = fixture()
+  await assert.rejects(f.fetch('3'), /prior frozen generation/)
+})
 
 test('saved v3 recovery refreshes state after acquiring its checkpoint lock', async () => {
   const f = fixture(true)

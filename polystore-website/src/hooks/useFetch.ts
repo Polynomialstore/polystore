@@ -29,6 +29,7 @@ export interface FetchInput {
   dealId: string
   manifestRoot: string
   owner: string
+  generation?: string
   filePath: string
   /**
    * Optional provider HTTP base for metadata and direct retries.
@@ -145,7 +146,8 @@ export function useFetch() {
       }
       if (savedV3 && deputy !== undefined) throw new Error('alternate v3 proof providers are not supported by the frozen session plan')
       if (savedV3) await assertRetrievalV3CheckpointScope(v3Key, savedV3, payment.scope(), requester, appConfig.cosmosChainId)
-      if (savedV3 && (input.manifestRoot.toLowerCase() !== savedV3.authority.polyfsRoot || input.owner !== savedV3.authority.owner)) {
+      if (savedV3 && !input.checkpointKey && (input.manifestRoot.toLowerCase() !== savedV3.authority.polyfsRoot ||
+        input.owner !== savedV3.authority.owner || input.generation !== savedV3.authority.generation.toString())) {
         throw new Error('a saved v3 retrieval belongs to a prior frozen generation; use its paid recovery entry')
       }
       if (savedV3 && input.checkpointKey && (savedV3.authority.dealId.toString() !== input.dealId || savedV3.file.path !== input.filePath ||

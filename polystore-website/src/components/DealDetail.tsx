@@ -35,9 +35,10 @@ import {
 } from '../lib/polyfsLocal'
 import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
+import { fetchOptionalActiveGenerationV3, generationAsPinnedV2Shape } from '../lib/retrievalV3'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { restoreSponsoredRetrievalAuth, withSponsoredRetrievalFeeCap } from '../lib/retrievalSponsoredAuth'
-import { hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache } from '../lib/retrievalV3Checkpoint'
+import { hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, retrievalV3CheckpointMatchesCurrent } from '../lib/retrievalV3Checkpoint'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
@@ -297,6 +298,7 @@ function FileRow({
         },
         preferCache && !retainedV3 ? retrievalUnavailableReason : undefined,
         () => fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
+          generation: deal.current_gen,
           rangeStart: downloadRangeStart, rangeLen: downloadRangeLen,
           checkpointKey,
           sponsoredAuth: withSponsoredRetrievalFeeCap(sponsoredAuth, sponsoredFeeCap) }),
@@ -326,9 +328,16 @@ function FileRow({
     setFileActionError(null)
     const dealId = String(deal.id)
     try {
-      await deleteCachedFile(dealId, file.path)
-      if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path) &&
-        !await purgeSettledRetrievalV3Cache(BigInt(dealId), file.path)) throw new Error('cached download is in use; retry after it finishes')
+      if (checkpointKey) {
+        if (!/^(0|[1-9][0-9]*)$/.test(dealId) ||
+          !await purgeSettledRetrievalV3CacheForKey(BigInt(dealId), file.path, checkpointKey)) {
+          throw new Error('cached download is in use or no longer retained')
+        }
+      } else {
+        await deleteCachedFile(dealId, file.path)
+        if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path) &&
+          !await purgeSettledRetrievalV3Cache(BigInt(dealId), file.path)) throw new Error('cached download is in use; retry after it finishes')
+      }
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: false }))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -380,6 +389,15 @@ function FileRow({
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        </button> : browserCached ? <button
+          onClick={() => void handlePurgeCache()}
+          disabled={isAnyDownloading || isBusy}
+          data-testid="deal-detail-clear-frozen-v3-cache"
+          data-file-path={file.path}
+          className="p-1 text-destructive hover:bg-destructive/10 border border-transparent transition-colors rounded-none disabled:opacity-50"
+          aria-label={`Clear retained recovery for ${file.path}`}
+        >
+          <Trash2 className="w-4 h-4" />
         </button> : null}
         {frozenGeneration === undefined && isOpen && menuViewportPosition && typeof document !== 'undefined'
           ? createPortal(
@@ -560,11 +578,10 @@ export function DealDetail({
   const v3Recoveries = useMemo(() => {
     if (typeof window === 'undefined' || !/^(0|[1-9][0-9]*)$/.test(String(deal.id)) || !polystoreAddress) return []
     return listRetrievalV3Checkpoints(BigInt(String(deal.id)), polystoreAddress, appConfig.cosmosChainId).filter(({ state }) =>
-      normalizeManifestRoot(state.authority.polyfsRoot) !== normalizeManifestRoot(committedManifestRoot) ||
-      !files?.some((file) => file.path === state.file.path && BigInt(file.start_offset) === state.file.start_offset && BigInt(file.size_bytes) === state.file.size_bytes))
+      !retrievalV3CheckpointMatchesCurrent(state, deal.current_gen, normalizeManifestRoot(committedManifestRoot), files))
   // Retrieval completion updates localStorage before clearing busyFilePath.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busyFilePath, committedManifestRoot, deal.id, files, polystoreAddress])
+  }, [busyFilePath, committedManifestRoot, deal.current_gen, deal.id, files, polystoreAddress])
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -688,6 +705,7 @@ export function DealDetail({
     slab: fetchSlabLayout,
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
+    fetchV3Metadata,
     lastTrace,
     preference: transportPreference,
   } = useTransportRouter()
@@ -1347,9 +1365,12 @@ export function DealDetail({
 
   const syncDealIndexFromProviders = useCallback(async () => {
     const dealId = String(deal.id)
-    const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, AbortSignal.timeout(60_000))
-    const manifestRoot = pin.root
-    const totalMdus = Number(pin.totalMdus), witnessMdus = Number(pin.metadataMdus - 1n), userMdus = Number(pin.userMdus)
+    const signal = AbortSignal.timeout(60_000)
+    const generationV3 = await fetchOptionalActiveGenerationV3(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    const pinV2 = generationV3 ? generationAsPinnedV2Shape(generationV3) :
+      await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    const manifestRoot = generationV3?.polyfsRoot ?? pinV2.root
+    const totalMdus = Number(pinV2.totalMdus), witnessMdus = Number(pinV2.metadataMdus - 1n), userMdus = Number(pinV2.userMdus)
 
     setDealIndexRequirement((prev) => ({
       ...prev,
@@ -1362,18 +1383,26 @@ export function DealDetail({
 
     try {
       await workerClient.initRetrievalWasm()
-      let mdu0Bytes: Uint8Array | undefined, lastError: unknown
-      for (const assignment of pin.assignments) {
-        try {
-          const bytes = await providerFetchRetrievalMetadata(resolveProviderHttpBaseFor(assignment.provider), pin, 0n, AbortSignal.timeout(60_000))
-          await workerClient.verifyRetrievalMetadata(bytes, pin)
-          mdu0Bytes = bytes
-          break
-        } catch (error) { lastError = error }
+      let parsedFiles: PolyfsFileEntry[], rootTable: Uint8Array[] = []
+      if (generationV3) {
+        const result = await fetchV3Metadata({ authority: generationV3,
+          directBases: generationV3.providers.map(resolveProviderHttpBaseFor), preference: transportPreference, signal })
+        parsedFiles = result.data.map((file) => ({ path: file.path, size_bytes: Number(file.size_bytes),
+          start_offset: Number(file.start_offset), flags: file.flags }))
+      } else {
+        let mdu0Bytes: Uint8Array | undefined, lastError: unknown
+        for (const assignment of pinV2.assignments) {
+          try {
+            const bytes = await providerFetchRetrievalMetadata(resolveProviderHttpBaseFor(assignment.provider), pinV2, 0n, signal)
+            await workerClient.verifyRetrievalMetadata(bytes, pinV2)
+            mdu0Bytes = bytes
+            break
+          } catch (error) { lastError = error }
+        }
+        if (!mdu0Bytes) throw lastError ?? new Error('authenticated metadata unavailable')
+        parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
+        rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
       }
-      if (!mdu0Bytes) throw lastError ?? new Error('authenticated metadata unavailable')
-      const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
-      const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
       const mdu0RootHex = manifestRoot
       const rootRecords = [
         { mdu_index: 0, kind: 'mdu0' as const, root_hex: mdu0RootHex },
@@ -1432,7 +1461,7 @@ export function DealDetail({
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.id, resolveProviderHttpBaseFor])
+  }, [deal.id, fetchV3Metadata, resolveProviderHttpBaseFor, transportPreference])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -1620,6 +1649,47 @@ export function DealDetail({
     dealIndexRequirement.status === 'needs_sync_stale' ||
     dealIndexRequirement.status === 'syncing' ||
     dealIndexRequirement.status === 'sync_failed'
+
+  const recoveryFileRows = v3Recoveries.map(({ key, state }) => {
+    const recoveryFile = { path: state.file.path, size_bytes: Number(state.file.size_bytes),
+      start_offset: Number(state.file.start_offset), flags: state.file.flags }
+    return <FileRow
+      key={key}
+      file={recoveryFile}
+      deal={deal}
+      cacheAuthority={null}
+      manifestRoot={state.authority.polyfsRoot}
+      owner={state.authority.owner}
+      browserCached={hasSettledRetrievalV3Cache(state.authority.dealId, state.file.path, key)}
+      browserMduAvailable={false}
+      gatewayCached={false}
+      isBusy={busyFilePath === key}
+      isAnyDownloading={downloading}
+      retrievalUnavailable={false}
+      viewerOwners={[polystoreAddress, address || '']}
+      isOpen={false}
+      onToggleMenu={() => {}}
+      onCloseMenu={() => {}}
+      onFileActivity={onFileActivity}
+      downloadBlobAsFile={downloadBlobAsFile}
+      markDownloadPath={markDownloadPath}
+      fetchFile={fetchFile}
+      resolveProviderHttpBase={resolveProviderHttpBase}
+      sponsoredAuth={sponsoredAuth}
+      sponsoredFeeCap={sponsoredFeeCap}
+      setBrowserCachedByPath={setBrowserCachedByPath}
+      setFileActionError={setFileActionError}
+      setBusyFilePath={setBusyFilePath}
+      downloadRangeStart={Number(state.rangeStart)}
+      downloadRangeLen={Number(state.rangeLength)}
+      transportPreference={transportPreference}
+      gatewayModePreferred={gatewayModePreferred}
+      setSelectedMdu={setSelectedMdu}
+      setActiveTab={setActiveTab}
+      checkpointKey={key}
+      frozenGeneration={state.authority.generation}
+    />
+  })
 
   return (
     <div
@@ -1938,6 +2008,13 @@ export function DealDetail({
                     </div>
                   )}
 
+                  {requiresDealIndexSync && recoveryFileRows.length > 0 ? (
+                    <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-v3-recovery-list">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Paid frozen-generation recovery</div>
+                      {recoveryFileRows}
+                    </div>
+                  ) : null}
+
                       {loadingFiles && (!files || files.length === 0) ? (
                         <div className="nil-tab-panel text-xs text-muted-foreground">Loading file table…</div>
                       ) : requiresDealIndexSync ? (
@@ -2057,46 +2134,7 @@ export function DealDetail({
                               setActiveTab={setActiveTab}
                             />
                           ))}
-                          {v3Recoveries.map(({ key, state }) => {
-                            const recoveryFile = { path: state.file.path, size_bytes: Number(state.file.size_bytes),
-                              start_offset: Number(state.file.start_offset), flags: state.file.flags }
-                            return <FileRow
-                              key={key}
-                              file={recoveryFile}
-                              deal={deal}
-                              cacheAuthority={null}
-                              manifestRoot={state.authority.polyfsRoot}
-                              owner={state.authority.owner}
-                              browserCached={hasSettledRetrievalV3Cache(state.authority.dealId, state.file.path, key)}
-                              browserMduAvailable={false}
-                              gatewayCached={false}
-                              isBusy={busyFilePath === key}
-                              isAnyDownloading={downloading}
-                              retrievalUnavailable={false}
-                              viewerOwners={[polystoreAddress, address || '']}
-                              isOpen={false}
-                              onToggleMenu={() => {}}
-                              onCloseMenu={() => {}}
-                              onFileActivity={onFileActivity}
-                              downloadBlobAsFile={downloadBlobAsFile}
-                              markDownloadPath={markDownloadPath}
-                              fetchFile={fetchFile}
-                              resolveProviderHttpBase={resolveProviderHttpBase}
-                              sponsoredAuth={sponsoredAuth}
-                              sponsoredFeeCap={sponsoredFeeCap}
-                              setBrowserCachedByPath={setBrowserCachedByPath}
-                              setFileActionError={setFileActionError}
-                              setBusyFilePath={setBusyFilePath}
-                              downloadRangeStart={Number(state.rangeStart)}
-                              downloadRangeLen={Number(state.rangeLength)}
-                              transportPreference={transportPreference}
-                              gatewayModePreferred={gatewayModePreferred}
-                              setSelectedMdu={setSelectedMdu}
-                              setActiveTab={setActiveTab}
-                              checkpointKey={key}
-                              frozenGeneration={state.authority.generation}
-                            />
-                          })}
+                          {recoveryFileRows}
                         </div>
                       ) : (
                         <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed PolyFS generation.</div>

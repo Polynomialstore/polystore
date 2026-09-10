@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { fetchActiveGenerationV3, fetchLatestNonceV3, fetchSessionIDByNonceV3, parseFrozenSessionV3, planV3Chunks, preserveV3BrowserTransactionKey, RETRIEVAL_V3_SETUP, sameFrozenRetrievalRequestV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
+import { fetchActiveGenerationV3, fetchLatestNonceV3, fetchOptionalActiveGenerationV3, fetchSessionIDByNonceV3, parseFrozenSessionV3, planV3Chunks, preserveV3BrowserTransactionKey, RETRIEVAL_V3_SETUP, sameFrozenRetrievalRequestV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 const b64 = (n: number, length = 32) => Buffer.alloc(length, n).toString('base64')
@@ -34,6 +34,13 @@ test('active v3 generation accepts production decimal int64 JSON and exact admit
   assert.equal(result?.height, height)
   assert.equal(result?.integrityRoot, a.integrityRoot)
   assert.equal(result?.retrievalPolicyMode, 5)
+})
+
+test('optional v3 generation falls back only when native admission is absent', async () => {
+  const missing = async () => new Response('', { status: 404 })
+  assert.equal(await fetchOptionalActiveGenerationV3('https://lcd.example', 'test-1', '7', undefined, missing), null)
+  const failed = async () => new Response('', { status: 500 })
+  await assert.rejects(fetchOptionalActiveGenerationV3('https://lcd.example', 'test-1', '7', undefined, failed), /500/)
 })
 
 test('v3 nonce lookups preserve uint64 values and distinguish absence', async () => {

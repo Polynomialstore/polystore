@@ -88,6 +88,15 @@ export async function fetchActiveGenerationV3(lcd: string, chainId: string, deal
   return parseGeneration(generation.payload, chainId, generation.height, dealId, deal.payload)
 }
 
+export async function fetchOptionalActiveGenerationV3(lcd: string, chainId: string, dealIdRaw: string,
+  signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<FrozenGenerationV3 | null> {
+  try { return await fetchActiveGenerationV3(lcd, chainId, dealIdRaw, signal, fetchFn) }
+  catch (error) {
+    if (error instanceof Error && error.message === 'chain query failed (404)') return null
+    throw error
+  }
+}
+
 export function generationAsPinnedV2Shape(g: FrozenGenerationV3): PinnedGeneration {
   return { chainId: g.chainId, height: g.height, dealId: g.dealId, generation: g.generation, root: g.polyfsRoot, owner: g.owner,
     endHeight: g.dealEnd, layout: 2, k: 8, m: 4, rows: 8, leafCount: 96, metadataMdus: g.metadataMdus,

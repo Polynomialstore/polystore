@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { assertRetrievalV3CheckpointScope, hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
+import { assertRetrievalV3CheckpointScope, hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3CheckpointMatchesCurrent, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
 import { RETRIEVAL_V3_SETUP, type FrozenSessionV3 } from './retrievalV3'
 import type { RetrievalStore } from './retrievalTransactions'
 
@@ -53,6 +53,13 @@ test('checkpoint listing exposes only the wallet paid recovery for the requested
     ['output-v3:' + 'c'.repeat(64)]: otherDeal, ['output-v3:' + 'd'.repeat(64)]: malformed })
   assert.deepEqual(listRetrievalV3Checkpoints(7n, own.requester, own.authority.chainId, saved).map(({ key }) => key), [ownKey])
   assert.deepEqual(listRetrievalV3Checkpoints(7n, own.requester, 'other-1', saved), [])
+})
+
+test('same-root slot repair still classifies the older generation as explicit recovery', () => {
+  const saved = state()
+  const files = [{ path: saved.file.path, start_offset: saved.file.start_offset, size_bytes: saved.file.size_bytes }]
+  assert.equal(retrievalV3CheckpointMatchesCurrent(saved, '2', saved.authority.polyfsRoot, files), true)
+  assert.equal(retrievalV3CheckpointMatchesCurrent(saved, '3', saved.authority.polyfsRoot, files), false)
 })
 
 test('v3 download recovery key is stable when sponsored fee authorization changes', async () => {
@@ -114,7 +121,10 @@ test('settled output cache is one-entry bounded and never evicts active or unres
     assert.equal(await purgeSettledRetrievalV3Cache(secondEntry.dealId, secondEntry.filePath, saved, async (id) => { removed.push(id) }), false)
     assert.equal(saved.get<{ key: string }>(cacheKey)?.key, secondKey)
     blocked = ''
-    assert.equal(await purgeSettledRetrievalV3Cache(secondEntry.dealId, secondEntry.filePath, saved, async (id) => { removed.push(id) }), true)
+    assert.equal(await purgeSettledRetrievalV3CacheForKey(secondEntry.dealId, secondEntry.filePath, firstKey, saved,
+      async (id) => { removed.push(id) }), false)
+    assert.equal(await purgeSettledRetrievalV3CacheForKey(secondEntry.dealId, secondEntry.filePath, secondKey, saved,
+      async (id) => { removed.push(id) }), true)
     assert.deepEqual(removed, [first.id, second.id])
     assert.equal(saved.get(cacheKey), undefined)
     assert.equal(saved.get(secondKey), undefined)

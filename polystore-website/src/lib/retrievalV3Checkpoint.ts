@@ -102,6 +102,24 @@ export async function purgeSettledRetrievalV3Cache(dealId: bigint, filePath: str
   })
 }
 
+export async function purgeSettledRetrievalV3CacheForKey(dealId: bigint, filePath: string, key: string,
+  store: RetrievalStore = browserRetrievalStore(), removeOutput = removeRetrievalOutput): Promise<boolean> {
+  return withRetrievalLock(SETTLED_CACHE_KEY, async () => {
+    const entry = readSettledCache(store)
+    if (!entry || entry.dealId !== dealId || entry.filePath !== filePath || entry.key !== key) return false
+    if (!await removeSettledCacheEntry(entry, store, removeOutput)) return false
+    store.remove(SETTLED_CACHE_KEY)
+    return true
+  })
+}
+
+export function retrievalV3CheckpointMatchesCurrent(state: RetrievalV3CheckpointState, generation: string | undefined,
+  manifestRoot: string, files: readonly { path: string; start_offset: number | bigint; size_bytes: number | bigint }[] | null): boolean {
+  return state.authority.generation.toString() === String(generation || '') && state.authority.polyfsRoot === manifestRoot.toLowerCase() &&
+    Boolean(files?.some((file) => file.path === state.file.path && BigInt(file.start_offset) === state.file.start_offset &&
+      BigInt(file.size_bytes) === state.file.size_bytes))
+}
+
 function sameFile(a: RetrievalFile, b: RetrievalFile): boolean {
   return a.path === b.path && a.start_offset === b.start_offset && a.size_bytes === b.size_bytes && a.flags === b.flags
 }
