@@ -215,8 +215,7 @@ export function useRetrievalSessions() {
         prepare: async () => { gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data })); return { data, intent: { session, slot } } },
         send: (call) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }),
         receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
-        reconcile: async () => Boolean((await fetchSessionV3(appConfig.lcdBase, session.authority, { ...session, recordIndex: session.fileRecordIndex,
-          range: workerClient.retrievalV3Range, contextHash: workerClient.retrievalV3ContextHash, seed: workerClient.retrievalV3Seed, challenges: workerClient.retrievalV3Challenges }, AbortSignal.timeout(15_000))).ackedMask & (1 << slot)),
+        reconcile: async () => Boolean((await observedV3(session, AbortSignal.timeout(15_000))).ackedMask & (1 << slot)),
       }))
       return observedV3(session, signal)
     },
@@ -228,8 +227,7 @@ export function useRetrievalSessions() {
         prepare: async () => { gas = retrievalGasLimit(await client.estimateGas({ account: address, to: appConfig.polystorePrecompile as Hex, data })); return { data, intent: session } },
         send: (call) => wallet.sendTransaction({ chain: client.chain, account: address, to: appConfig.polystorePrecompile as Hex, data: call, gas }),
         receipt: (hash) => client.waitForTransactionReceipt({ hash, timeout: 120_000 }),
-        reconcile: async () => (await fetchSessionV3(appConfig.lcdBase, session.authority, { ...session, recordIndex: session.fileRecordIndex,
-          range: workerClient.retrievalV3Range, contextHash: workerClient.retrievalV3ContextHash, seed: workerClient.retrievalV3Seed, challenges: workerClient.retrievalV3Challenges }, AbortSignal.timeout(15_000))).refundedMask !== session.refundedMask,
+        reconcile: async () => (await observedV3(session, AbortSignal.timeout(15_000))).refundedMask !== session.refundedMask,
       }))
       return observedV3(session, signal)
     },

@@ -7,17 +7,19 @@ import * as diagnostics from './retrievalDiagnostics'
 import type { FrozenSession, PinnedGeneration, RetrievalWindow } from './retrieval'
 
 // Execute both actual hook paths; replace only transport/storage boundaries.
-function fixture(mode: 'open' | 'ack') {
+function fixture(mode: 'open' | 'ack' | 'ackV3' | 'refundV3') {
   const records = new Map<string, unknown>()
   const store: transactions.RetrievalStore = { get: <T>(key: string) => records.get(key) as T | undefined,
     put: (key, value) => { records.set(key, value) }, remove: (key) => { records.delete(key) } }
   const hash = `0x${'12'.repeat(32)}` as const, address = '0x1111111111111111111111111111111111111111'
   const precompile = '0x2222222222222222222222222222222222222222'
-  let estimates = 0, sends = 0, failEstimate = false, loseHash = false, reverted = false
+  let estimates = 0, sends = 0, failEstimate = false, loseHash = false, loseReceipt = false, reverted = false, changedContext = false
   const pin = { dealId: 1n, owner: 'owner', root: hash, generation: 1n, layout: 'mode2', k: 2, m: 1,
     metadataMdus: 2n, userMdus: 1n, endHeight: 1000n, height: 10n, assignments: [{ active: true, provider: 'provider' }] }
   const window = { slot: 0, provider: 'provider', mduIndex: 2n, startBlobIndex: 0, blobCount: 1 }
   const session = { sessionId: hash, pin, window, owner: 'owner', payee: 'provider', funding: 1, status: 2 }
+  const sessionV3 = { sessionId: hash, authority: { chainId: 'chain', integrityRoot: hash }, contextHash: new Uint8Array(32), planHash: new Uint8Array(32),
+    owner: 'owner', fileRecordIndex: 0, obligations: [{ slot: 0, assigned: 'provider', payee: 'provider', blobCount: 1n }], ackedMask: 0, refundedMask: 0 }
   const client = { chain: { id: 1 }, call: async () => ({ data: '0xab' }),
     estimateGas: async (request: unknown) => {
       estimates++
@@ -25,7 +27,10 @@ function fixture(mode: 'open' | 'ack') {
       if (failEstimate) throw new Error('estimator unavailable')
       return 226673n
     },
-    waitForTransactionReceipt: async () => ({ transactionHash: hash, status: reverted ? 'reverted' : 'success', blockNumber: 128n }),
+    waitForTransactionReceipt: async () => {
+      if (loseReceipt) throw new Error('lost receipt')
+      return { transactionHash: hash, status: reverted ? 'reverted' : 'success', blockNumber: 128n }
+    },
   }
   const wallet = { chain: client.chain, sendTransaction: async (request: unknown) => {
     sends++
@@ -40,12 +45,17 @@ function fixture(mode: 'open' | 'ack') {
     '../config': { appConfig: { chainId: 1, cosmosChainId: 'chain', polystorePrecompile: precompile } },
     '../lib/address': { ethToPolystoreAddress: () => 'owner' },
     '../lib/polystorePrecompile': { encodeRetrievalV2Data: () => '0x1234', encodeConfirmRetrievalSessionsData: () => '0x1234',
+      encodeAcknowledgeRetrievalObligationV3Data: () => '0x1234', encodeRefundRetrievalSessionV3Data: () => '0x1234',
       decodeComputeRetrievalSessionIdsResult: () => ({ providers: ['provider'], sessionIds: [hash] }) },
     '../lib/retrieval': { fetchActiveRetrievalGeneration: async () => pin, fetchFrozenSession: async () => { if (loseHash) throw new Error('session not observed'); return session },
-      unhex: () => new Uint8Array(32) },
+      unhex: () => new Uint8Array(32), accountBytes: () => new Uint8Array(20) },
     '../lib/retrievalFlow': { waitForRetrievalChallenge: async () => session },
-    '../lib/retrievalV3': {},
-    '../lib/worker-client': { workerClient: {} },
+    '../lib/retrievalV3': { preserveV3BrowserTransactionKey: (previous: { browserTransactionKey?: string }, current: object) => ({ ...current, browserTransactionKey: previous.browserTransactionKey }),
+      fetchSessionV3: async (_lcd: string, _authority: object, expected: { frozenContextHash?: Uint8Array }) => {
+        if (changedContext && expected.frozenContextHash) throw new Error('session context changed')
+        return { ...sessionV3, ackedMask: 1, refundedMask: 1 }
+      } },
+    '../lib/worker-client': { workerClient: { retrievalV3AckHash: async () => new Uint8Array(32) } },
     '../domain/polyfsLayout': { BLOB_SIZE_BYTES: 131_072 },
     '../lib/retrievalTransactions': { ...transactions, browserRetrievalStore: () => store,
       retrievalIntentKey: async () => 'test', withRetrievalLock: (_key: string, work: () => unknown) => work() },
@@ -60,9 +70,11 @@ function fixture(mode: 'open' | 'ack') {
   const hook = exports.useRetrievalSessions!()
   return { store, hook, get estimates() { return estimates }, get sends() { return sends },
     set failEstimate(value: boolean) { failEstimate = value }, set loseHash(value: boolean) { loseHash = value },
+    set loseReceipt(value: boolean) { loseReceipt = value }, set changedContext(value: boolean) { changedContext = value },
     set reverted(value: boolean) { reverted = value },
-    run: () => mode === 'open' ? hook.open(pin as unknown as PinnedGeneration, [window as RetrievalWindow]) : hook.confirm([session as unknown as FrozenSession]),
-    key: mode === 'open' ? 'open:test' : 'ack:test' }
+    run: () => mode === 'open' ? hook.open(pin as unknown as PinnedGeneration, [window as RetrievalWindow]) : mode === 'ack' ? hook.confirm([session as unknown as FrozenSession]) :
+      mode === 'ackV3' ? hook.acknowledgeV3(sessionV3 as never, 0) : hook.refundV3(sessionV3 as never),
+    key: mode === 'open' ? 'open:test' : mode === 'ack' ? 'ack:test' : mode === 'ackV3' ? 'ack-v3:test' : 'refund-v3:test' }
 }
 
 test('v3 cached cleanup preserves a newer unresolved retrieval for the same owner and deal', async () => {
@@ -106,5 +118,20 @@ for (const mode of ['open', 'ack'] as const) {
     await assert.rejects(lost.run(), /wallet returned no hash/)
     await assert.rejects(lost.run(), /outcome is unresolved/)
     assert.equal(lost.estimates, 1); assert.equal(lost.sends, 1)
+  })
+}
+
+for (const mode of ['ackV3', 'refundV3'] as const) {
+  test(`${mode}: lost receipt reconciles only against the frozen session context`, async () => {
+    const f = fixture(mode)
+    f.loseReceipt = true
+    f.changedContext = true
+    await assert.rejects(f.run(), /outcome is unresolved/)
+    assert.equal(f.sends, 1)
+    assert.equal(f.store.get<transactions.BrowserTransaction>(f.key)?.state, 'broadcasting')
+    f.changedContext = false
+    await f.run()
+    assert.equal(f.sends, 1)
+    assert.equal(f.store.get<transactions.BrowserTransaction>(f.key)?.state, 'committed')
   })
 }
