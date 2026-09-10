@@ -36,6 +36,8 @@ import {
 import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
+import { restoreSponsoredRetrievalAuth, withSponsoredRetrievalFeeCap } from '../lib/retrievalSponsoredAuth'
+import { hasSettledRetrievalV3Cache, purgeSettledRetrievalV3Cache } from '../lib/retrievalV3Checkpoint'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
@@ -167,11 +169,12 @@ interface FileRowProps {
   onToggleMenu: () => void
   onCloseMenu: () => void
   onFileActivity?: (activity: FileActivity) => void
-  downloadBlobAsFile: (blob: Blob, filePath: string) => void
+  downloadBlobAsFile: (blob: Blob, filePath: string, url?: string, cleanup?: () => Promise<void>) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
   fetchFile: (params: FetchInput) => Promise<FetchResult>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
+  sponsoredFeeCap: string
   setBrowserCachedByPath: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setFileActionError: (error: string | null) => void
   setBusyFilePath: (path: string | null) => void
@@ -220,6 +223,7 @@ function FileRow({
   fetchFile,
   resolveProviderHttpBase,
   sponsoredAuth,
+  sponsoredFeeCap,
   setBrowserCachedByPath,
   setFileActionError,
   setBusyFilePath,
@@ -279,6 +283,7 @@ function FileRow({
     const dealId = String(deal.id)
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const retainedV3 = /^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path)
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
       const outcome = await preferVerifiedCache(
         async () => {
@@ -286,15 +291,19 @@ function FileRow({
           await ensureWasmReady()
           return readVerifiedCachedDownload({ dealId, manifestRoot, owner: requestOwner, viewerOwners, file, authority: cacheAuthority, rangeStart: downloadRangeStart, rangeLen: downloadRangeLen })
         },
-        preferCache ? retrievalUnavailableReason : undefined,
+        preferCache && !retainedV3 ? retrievalUnavailableReason : undefined,
         () => fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
-          rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth }),
+          rangeStart: downloadRangeStart, rangeLen: downloadRangeLen,
+          sponsoredAuth: withSponsoredRetrievalFeeCap(sponsoredAuth, sponsoredFeeCap) }),
       )
       if (outcome.source === 'cache') {
         downloadBlobAsFile(new Blob([outcome.bytes as BlobPart]), file.path)
         markDownloadPath('Browser cache', 'opfs_generation', 'verified_file', 'pinned_generation')
       } else {
-        downloadBlobAsFile(outcome.result.blob, file.path)
+        downloadBlobAsFile(outcome.result.blob, file.path, outcome.result.url, outcome.result.cleanup)
+        if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path)) {
+          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+        }
         markDownloadPath('Verified retrieval', outcome.result.route || 'network_fetch', 'verified_file', 'pinned_generation')
       }
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'success' })
@@ -313,6 +322,8 @@ function FileRow({
     const dealId = String(deal.id)
     try {
       await deleteCachedFile(dealId, file.path)
+      if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path) &&
+        !await purgeSettledRetrievalV3Cache(BigInt(dealId), file.path)) throw new Error('cached download is in use; retry after it finishes')
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: false }))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -508,6 +519,7 @@ export function DealDetail({
   const [, setPolicyError] = useState<string | null>(null)
   const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
+  const [sponsoredFeeCap, setSponsoredFeeCap] = useState('')
   const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs' | 'authenticated'>('none')
@@ -552,17 +564,16 @@ export function DealDetail({
     const raw = window.localStorage.getItem(authStorageKey)
     if (!raw) {
       setSponsoredAuth({ type: 'none' })
+      setSponsoredFeeCap('')
       return
     }
     try {
-      const parsed = JSON.parse(raw) as SponsoredRetrievalAuth
-      if (parsed?.type === 'allowlist' || parsed?.type === 'voucher') {
-        setSponsoredAuth(parsed)
-        return
-      }
-      setSponsoredAuth({ type: 'none' })
+      const restored = restoreSponsoredRetrievalAuth(raw)
+      setSponsoredAuth(restored.auth)
+      setSponsoredFeeCap(restored.feeCap)
     } catch {
       setSponsoredAuth({ type: 'none' })
+      setSponsoredFeeCap('')
     }
   }, [authStorageKey])
   const [mduKzg, setMduKzg] = useState<MduKzgData | null>(null)
@@ -939,7 +950,12 @@ export function DealDetail({
       })))
 
       if (canceled) return
-      setBrowserCachedByPath({})
+      const settled: Record<string, boolean> = {}
+      if (/^(0|[1-9][0-9]*)$/.test(dealId)) {
+        const numericDealId = BigInt(dealId)
+        for (const file of files) settled[file.path] = hasSettledRetrievalV3Cache(numericDealId, file.path)
+      }
+      setBrowserCachedByPath(settled)
       setBrowserMduAvailableByPath(verified)
     }
     void refreshBrowserCache()
@@ -958,10 +974,13 @@ export function DealDetail({
     a.remove()
   }
 
-  function downloadBlobAsFile(blob: Blob, filePath: string) {
-    const url = window.URL.createObjectURL(blob)
+  function downloadBlobAsFile(blob: Blob, filePath: string, retainedUrl?: string, cleanup?: () => Promise<void>) {
+    const url = retainedUrl ?? window.URL.createObjectURL(blob)
     triggerBrowserDownload(url, filePath)
-    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url)
+      void cleanup?.().catch(() => {})
+    }, 1000)
   }
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
@@ -1960,6 +1979,26 @@ export function DealDetail({
                         </div>
                       ) : files && files.length > 0 ? (
                         <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-file-list">
+                          <label className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-2 pb-2 text-[10px] text-muted-foreground">
+                            <span>Maximum retrieval fee <span className="normal-case">(stake base units; required when paying for another owner)</span></span>
+                            <input
+                              value={sponsoredFeeCap}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="Required for sponsored retrieval"
+                              aria-label="Maximum retrieval fee"
+                              data-testid="retrieval-max-total-fee"
+                              onChange={(event) => {
+                                if (/^[0-9]*$/.test(event.target.value)) setSponsoredFeeCap(event.target.value)
+                              }}
+                              onBlur={() => {
+                                if (typeof window === 'undefined') return
+                                const value = sponsoredFeeCap.trim()
+                                window.localStorage.setItem(authStorageKey, JSON.stringify({ ...sponsoredAuth, maxTotalFee: value || undefined }))
+                              }}
+                              className="w-56 border border-border bg-background px-2 py-1 text-xs text-foreground"
+                            />
+                          </label>
                           <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                             <span>Path</span>
                             <span>Size</span>
@@ -1990,6 +2029,7 @@ export function DealDetail({
                               fetchFile={fetchFile}
                               resolveProviderHttpBase={resolveProviderHttpBase}
                               sponsoredAuth={sponsoredAuth}
+                              sponsoredFeeCap={sponsoredFeeCap}
                               setBrowserCachedByPath={setBrowserCachedByPath}
                               setFileActionError={setFileActionError}
                               setBusyFilePath={setBusyFilePath}

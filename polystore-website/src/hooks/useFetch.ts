@@ -1,6 +1,5 @@
 import { retrievalDiagnostic, timeRetrieval } from '../lib/retrievalDiagnostics'
 import { useEffect, useRef, useState } from 'react'
-import type { Hex } from 'viem'
 import { fetchRetrievalChunkV3, gatewayFetchRetrievalMetadata, providerFetchRetrievalMetadata } from '../api/providerClient'
 import { appConfig } from '../config'
 import { BLOB_SIZE_BYTES, RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
@@ -16,9 +15,10 @@ import { classifyWalletError } from '../lib/walletErrors'
 import { workerClient } from '../lib/worker-client'
 import { openRetrievalCheckpoint } from '../lib/retrievalCheckpoint'
 import { fetchActiveGenerationV3, generationAsPinnedV2Shape, planV3Chunks, sameFrozenGenerationV3, type FrozenSessionV3 } from '../lib/retrievalV3'
-import { openRetrievalV3Checkpoint, readRetrievalV3Checkpoint, retrievalV3CheckpointKey } from '../lib/retrievalV3Checkpoint'
+import { hasSettledRetrievalV3Cache, openRetrievalV3Checkpoint, readRetrievalV3Checkpoint, retrievalV3DownloadCheckpointKey } from '../lib/retrievalV3Checkpoint'
 import { executeRetrievalV3, retrievalV3OutputComplete, type RetrievalV3Execution } from '../lib/retrievalV3Flow'
 import { requestRetrievalProofV3 } from '../lib/retrievalV3Settlement'
+import type { SponsoredRetrievalAuth } from '../lib/retrievalSponsoredAuth'
 import { useRetrievalSessions } from './useRetrievalSessions'
 import { useTransportRouter } from './useTransportRouter'
 
@@ -73,6 +73,7 @@ export interface FetchProgress {
 export interface FetchResult {
   url: string
   blob: Blob
+  cleanup?: () => Promise<void>
   route?: string
   cacheSource?: string
   cacheFreshness?: string
@@ -100,18 +101,7 @@ export interface RetrievalPlanSummary {
   }>
 }
 
-export interface VoucherAuthInput {
-  provider?: string
-  expiresAt?: number
-  nonce: number
-  redeemer?: string
-  signature: Hex
-}
-
-export type SponsoredRetrievalAuth =
-  | { type: 'none'; maxTotalFee?: bigint }
-  | { type: 'allowlist'; leafIndex: number; merklePath: Hex[]; maxTotalFee?: bigint }
-  | { type: 'voucher'; voucher: VoucherAuthInput; maxTotalFee?: bigint }
+export type { SponsoredRetrievalAuth, VoucherAuthInput } from '../lib/retrievalSponsoredAuth'
 
 export function useFetch() {
   const payment = useRetrievalSessions(), transport = useTransportRouter()
@@ -123,7 +113,7 @@ export function useFetch() {
   const [progress, setProgress] = useState<FetchProgress>({ phase: 'idle', filePath: '', chunksFetched: 0, chunkCount: 0, bytesFetched: 0, bytesTotal: 0, receiptsSubmitted: 0, receiptsTotal: 0 })
   const active = useRef<AbortController | null>(null)
   const saved = useRef<{ url: string; cleanup: () => Promise<void> } | null>(null)
-  useEffect(() => () => { active.current?.abort(); if (saved.current) { URL.revokeObjectURL(saved.current.url); void saved.current.cleanup() } }, [])
+  useEffect(() => () => { active.current?.abort(); if (saved.current) { URL.revokeObjectURL(saved.current.url); void saved.current.cleanup().catch(() => {}) } }, [])
 
   async function fetchFile(input: FetchInput): Promise<FetchResult> {
     active.current?.abort()
@@ -134,12 +124,43 @@ export function useFetch() {
     let checkpoint: Awaited<ReturnType<typeof openRetrievalCheckpoint>> | null = null
     let checkpointV3: Awaited<ReturnType<typeof openRetrievalV3Checkpoint>> | null = null
     try {
+      if (saved.current) {
+        const previous = saved.current; saved.current = null
+        URL.revokeObjectURL(previous.url)
+        await previous.cleanup().catch(() => {})
+        signal.throwIfAborted()
+      }
       const deputy = input.authorizedProofProvider === undefined ? undefined : account(input.authorizedProofProvider)
       payment.requireWallet()
-      await workerClient.initRetrievalWasm()
-      const v3Key = await retrievalV3CheckpointKey([payment.scope(), 'download-v3', input.dealId, input.filePath,
-        input.rangeStart ?? null, input.rangeLen ?? null, deputy, input.sponsoredAuth ?? { type: 'none' }])
+      const v3Key = await retrievalV3DownloadCheckpointKey(payment.scope(), input.dealId, input.filePath,
+        input.rangeStart, input.rangeLen, deputy)
       const savedV3 = readRetrievalV3Checkpoint(v3Key)
+      if (savedV3?.session && hasSettledRetrievalV3Cache(savedV3.authority.dealId, savedV3.file.path, v3Key)) {
+        if (input.manifestRoot.toLowerCase() !== savedV3.authority.polyfsRoot || input.owner !== savedV3.authority.owner) {
+          throw new Error('cached v3 retrieval belongs to another frozen generation')
+        }
+        checkpointV3 = await openRetrievalV3Checkpoint(v3Key)
+        if (checkpointV3.state.session?.lockedFee !== 0n || !retrievalV3OutputComplete(checkpointV3.state.session, checkpointV3.cursors)) {
+          throw new Error('settled v3 retrieval cache is incomplete')
+        }
+        const blob = await checkpointV3.output.file()
+        const url = URL.createObjectURL(blob)
+        let cleanup: (() => Promise<void>) | undefined
+        try { cleanup = await checkpointV3.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
+        let released = false
+        const releaseDownload = async () => {
+          if (released) return
+          released = true
+          URL.revokeObjectURL(url)
+          await cleanup?.()
+          if (saved.current?.url === url) saved.current = null
+        }
+        saved.current = { url, cleanup: releaseDownload }; checkpointV3 = null
+        setDownloadUrl(url); setReceiptStatus('submitted')
+        setProgress((progress) => ({ ...progress, phase: 'done', bytesFetched: Number(savedV3.length), bytesTotal: Number(savedV3.length), route: 'browser_v3_cache' }))
+        return { url, blob, cleanup: releaseDownload, route: 'browser_v3_cache', cacheSource: 'verified_file', cacheFreshness: 'frozen_v3_generation' }
+      }
+      await workerClient.initRetrievalWasm()
       let restoredSession: FrozenSessionV3 | undefined
       let activeV3: Awaited<ReturnType<typeof fetchActiveGenerationV3>>
       if (savedV3?.session) {
@@ -254,14 +275,21 @@ export function useFetch() {
         let cleanup: (() => Promise<void>) | undefined
         if (result.session.lockedFee === 0n) await payment.forgetV3(result.session)
         try { cleanup = await checkpointV3.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
-        if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
-        saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpointV3 = null
+        let released = false
+        const releaseDownload = async () => {
+          if (released) return
+          released = true
+          URL.revokeObjectURL(url)
+          await cleanup?.()
+          if (saved.current?.url === url) saved.current = null
+        }
+        saved.current = { url, cleanup: releaseDownload }; checkpointV3 = null
         const unsettled = result.session.lockedFee !== 0n
         const issue = result.outcomes.find((outcome) => outcome.state !== 'accepted')
         const message = unsettled ? `Download verified and acknowledged. Provider payment remains unsettled. ${issue?.message ?? ''} Retry this same file to reconcile the saved session without another payment or download.` : undefined
         setDownloadUrl(url); setReceiptStatus(unsettled ? 'failed' : 'submitted'); setReceiptError(message ?? null)
         setProgress((progress) => ({ ...progress, phase: 'done', route, message }))
-        return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'frozen_v3_generation' }
+        return { url, blob, cleanup: releaseDownload, route, cacheSource: 'verified_file', cacheFreshness: 'frozen_v3_generation' }
       }
       const pin = await fetchActiveRetrievalGeneration(appConfig.lcdBase, appConfig.cosmosChainId, input.dealId, AbortSignal.any([signal, AbortSignal.timeout(60_000)]))
       if (input.manifestRoot.toLowerCase() !== pin.root || input.owner !== pin.owner) throw new Error('displayed file generation changed; refresh before retrieval')
@@ -410,14 +438,21 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       let cleanup: (() => Promise<void>) | undefined
       try { cleanup = await job.handoff() } catch (error) { URL.revokeObjectURL(url); throw error }
-      if (saved.current) { URL.revokeObjectURL(saved.current.url); await saved.current.cleanup().catch(() => {}) }
       // The same output is needed to retry settlement without another download.
       // A retained checkpoint owns its bytes across URL replacement and unmount.
-      saved.current = { url, cleanup: cleanup ?? (async () => {}) }; checkpoint = null
+      let released = false
+      const releaseDownload = async () => {
+        if (released) return
+        released = true
+        URL.revokeObjectURL(url)
+        await cleanup?.()
+        if (saved.current?.url === url) saved.current = null
+      }
+      saved.current = { url, cleanup: releaseDownload }; checkpoint = null
       const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file when the trusted local gateway is available to settle the saved sessions without another payment or download.` : undefined
       setDownloadUrl(url); setReceiptStatus(firstSettlementIssue ? 'failed' : 'submitted'); setReceiptError(settlementMessage ?? null)
       setProgress((p) => ({ ...p, phase: 'done', route, message: settlementMessage }))
-      return { url, blob, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
+      return { url, blob, cleanup: releaseDownload, route, cacheSource: 'verified_file', cacheFreshness: 'pinned_generation' }
     } catch (error) {
       const message = classifyWalletError(error, 'Fetch failed').message + (checkpoint ? ' Saved retrieval progress is retained in this browser. Retry the same file to resume and reconcile its existing sessions.' : '')
       if (active.current === controller) { setProgress((p) => ({ ...p, phase: 'error', message })); setReceiptStatus('failed'); setReceiptError(message) }

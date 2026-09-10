@@ -1,13 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { readRetrievalV3Checkpoint, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
+import { hasSettledRetrievalV3Cache, purgeSettledRetrievalV3Cache, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
 import { RETRIEVAL_V3_SETUP, type FrozenSessionV3 } from './retrievalV3'
 import type { RetrievalStore } from './retrievalTransactions'
 
 const address = (n: number) => bech32.encode('nil', bech32.toWords(new Uint8Array(20).fill(n)))
 function store(value: RetrievalV3CheckpointState): RetrievalStore {
   return { get: <T>() => structuredClone(value) as T, put() {}, remove() {} }
+}
+
+function mapStore(values: Record<string, unknown>): RetrievalStore {
+  const entries = new Map(Object.entries(values))
+  return { get: <T>(key: string) => structuredClone(entries.get(key)) as T, put(key, value) { entries.set(key, structuredClone(value)) }, remove(key) { entries.delete(key) } }
 }
 function state(): RetrievalV3CheckpointState {
   const providers = Array.from({ length: 12 }, (_, i) => address(i + 2)), length = 65n * 126_976n
@@ -33,4 +38,64 @@ test('v3 checkpoint accepts only exact frozen session and durable chunk boundari
     { ...valid, fileRecordIndex: 4 },
     { ...valid, authority: { ...valid.authority, integrityRoot: `0x${'23'.repeat(32)}` as const } },
   ]) assert.throws(() => readRetrievalV3Checkpoint('key', store(mutation as RetrievalV3CheckpointState)), /invalid saved/)
+})
+
+test('v3 download recovery key is stable when sponsored fee authorization changes', async () => {
+  const key = await retrievalV3DownloadCheckpointKey('wallet:1', '7', 'file.bin', 0, 1024, undefined)
+  assert.equal(key, await retrievalV3CheckpointKey(['wallet:1', 'download-v3', '7', 'file.bin', 0, 1024, undefined]))
+  assert.notEqual(key, await retrievalV3CheckpointKey(['wallet:1', 'download-v3', '7', 'file.bin', 0, 1024, undefined,
+    { type: 'none', maxTotalFee: 5n }]))
+})
+
+test('settled output cache is one-entry bounded and never evicts active or unresolved recovery', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  let blocked = ''
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (key: string, options: object, run: (lock: object | null) => unknown) =>
+    run(key === blocked ? null : {}) } } })
+  try {
+    const first = state(), second = state()
+    first.id = '00000000-0000-0000-0000-000000000000'
+    first.session = { ...first.session!, lockedFee: 0n, ackedMask: 1, settledMask: 1 }
+    second.id = '11111111-1111-1111-1111-111111111111'
+    second.session = { ...second.session!, sessionId: `0x${'44'.repeat(32)}`, lockedFee: 0n, ackedMask: 1, settledMask: 1 }
+    const firstKey = 'output-v3:' + 'a'.repeat(64), secondKey = 'output-v3:' + 'b'.repeat(64)
+    const cacheKey = 'output-v3:settled-cache'
+    const firstEntry = { version: 1 as const, key: firstKey, id: first.id, length: first.length, dealId: first.authority.dealId, filePath: first.file.path }
+    const secondEntry = { version: 1 as const, key: secondKey, id: second.id, length: second.length, dealId: second.authority.dealId, filePath: second.file.path }
+    const removed: string[] = []
+    const saved = mapStore({ [firstKey]: first, [secondKey]: second, [cacheKey]: firstEntry })
+    assert.equal(hasSettledRetrievalV3Cache(firstEntry.dealId, firstEntry.filePath, firstKey, saved), true)
+    assert.equal(hasSettledRetrievalV3Cache(firstEntry.dealId, firstEntry.filePath, secondKey, saved), false)
+
+    blocked = firstKey
+    assert.equal(await retainSettledRetrievalV3Cache(secondEntry, saved, async (id) => { removed.push(id) }), false)
+    assert.equal(saved.get<{ key: string }>(cacheKey)?.key, firstKey)
+    blocked = ''
+    assert.equal(await retainSettledRetrievalV3Cache(secondEntry, saved, async (id) => { removed.push(id) }), true)
+    assert.deepEqual(removed, [first.id])
+    assert.equal(saved.get(firstKey), undefined)
+    assert.equal(saved.get<{ key: string }>(cacheKey)?.key, secondKey)
+
+    assert.equal(await retainSettledRetrievalV3Cache({ ...secondEntry, id: first.id }, saved, async (id) => { removed.push(id) }), false)
+    assert.equal(saved.get<{ id: string }>(cacheKey)?.id, second.id)
+
+    second.session = { ...second.session!, lockedFee: 1n, settledMask: 0 }
+    saved.put(secondKey, second)
+    await assert.rejects(retainSettledRetrievalV3Cache(firstEntry, saved, async (id) => { removed.push(id) }), /completed output/)
+    assert.deepEqual(removed, [first.id], 'unresolved output is never removed')
+
+    second.session = { ...second.session!, lockedFee: 0n, settledMask: 1 }
+    saved.put(secondKey, second)
+    blocked = secondKey
+    assert.equal(await purgeSettledRetrievalV3Cache(secondEntry.dealId, secondEntry.filePath, saved, async (id) => { removed.push(id) }), false)
+    assert.equal(saved.get<{ key: string }>(cacheKey)?.key, secondKey)
+    blocked = ''
+    assert.equal(await purgeSettledRetrievalV3Cache(secondEntry.dealId, secondEntry.filePath, saved, async (id) => { removed.push(id) }), true)
+    assert.deepEqual(removed, [first.id, second.id])
+    assert.equal(saved.get(cacheKey), undefined)
+    assert.equal(saved.get(secondKey), undefined)
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original)
+    else Reflect.deleteProperty(globalThis, 'navigator')
+  }
 })

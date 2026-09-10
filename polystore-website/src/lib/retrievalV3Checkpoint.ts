@@ -1,7 +1,18 @@
-import { createRetrievalOutput } from './retrievalFlow'
+import { createRetrievalOutput, removeRetrievalOutput } from './retrievalFlow'
 import { planV3Chunks, sameFrozenGenerationV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
+import { retrievalV3OutputComplete } from './retrievalV3Flow'
 import type { RetrievalFile } from './retrieval'
-import { browserRetrievalStore, retrievalIntentKey, type RetrievalStore } from './retrievalTransactions'
+import { browserRetrievalStore, retrievalIntentKey, withRetrievalLock, type RetrievalStore } from './retrievalTransactions'
+
+const SETTLED_CACHE_KEY = 'output-v3:settled-cache'
+export interface SettledRetrievalV3Cache {
+  version: 1
+  key: string
+  id: string
+  length: bigint
+  dealId: bigint
+  filePath: string
+}
 
 export interface RetrievalV3CheckpointState {
   version: 3
@@ -18,6 +29,74 @@ export interface RetrievalV3CheckpointState {
 
 export async function retrievalV3CheckpointKey(intent: unknown): Promise<string> {
   return 'output-v3:' + await retrievalIntentKey(intent)
+}
+
+export async function retrievalV3DownloadCheckpointKey(scope: unknown, dealId: string, filePath: string,
+  rangeStart: number | undefined, rangeLen: number | undefined, deputy: string | undefined): Promise<string> {
+  return retrievalV3CheckpointKey([scope, 'download-v3', dealId, filePath, rangeStart ?? null, rangeLen ?? null, deputy])
+}
+
+function validateSettledCache(entry: SettledRetrievalV3Cache): SettledRetrievalV3Cache {
+  if (entry.version !== 1 || !/^output-v3:[0-9a-f]{64}$/.test(entry.key) || !/^[0-9a-f-]{36}$/.test(entry.id) ||
+    typeof entry.length !== 'bigint' || entry.length < 0n || entry.length > 1n << 30n || typeof entry.dealId !== 'bigint' ||
+    entry.dealId < 0n || typeof entry.filePath !== 'string' || !entry.filePath) throw new Error('invalid settled v3 retrieval cache')
+  return entry
+}
+
+function readSettledCache(store: RetrievalStore): SettledRetrievalV3Cache | undefined {
+  const entry = store.get<SettledRetrievalV3Cache>(SETTLED_CACHE_KEY)
+  if (!entry) return undefined
+  return validateSettledCache(entry)
+}
+
+export function hasSettledRetrievalV3Cache(dealId: bigint, filePath: string,
+  key?: string, store: RetrievalStore = browserRetrievalStore()): boolean {
+  try {
+    const entry = readSettledCache(store)
+    return entry?.dealId === dealId && entry.filePath === filePath && (key === undefined || entry.key === key)
+  } catch { return false }
+}
+
+async function withAvailableCheckpointLock<T>(key: string, run: () => Promise<T>): Promise<T | undefined> {
+  return navigator.locks.request(key, { ifAvailable: true }, (lock) => lock ? run() : undefined)
+}
+
+async function removeSettledCacheEntry(entry: SettledRetrievalV3Cache, store: RetrievalStore,
+  removeOutput: (id: string) => Promise<void>): Promise<boolean> {
+  return (await withAvailableCheckpointLock(entry.key, async () => {
+    const checkpoint = readRetrievalV3Checkpoint(entry.key, store)
+    if (!checkpoint || checkpoint.id !== entry.id || checkpoint.length !== entry.length || !checkpoint.session ||
+      checkpoint.session.lockedFee !== 0n || !retrievalV3OutputComplete(checkpoint.session, checkpoint.cursors)) {
+      throw new Error('settled v3 retrieval cache does not reference a completed output')
+    }
+    await removeOutput(entry.id)
+    store.remove(entry.key)
+    return true
+  })) ?? false
+}
+
+export async function retainSettledRetrievalV3Cache(entry: SettledRetrievalV3Cache,
+  store: RetrievalStore = browserRetrievalStore(), removeOutput = removeRetrievalOutput): Promise<boolean> {
+  validateSettledCache(entry)
+  return withRetrievalLock(SETTLED_CACHE_KEY, async () => {
+    const previous = readSettledCache(store)
+    if (previous?.key === entry.key && (previous.id !== entry.id || previous.length !== entry.length ||
+      previous.dealId !== entry.dealId || previous.filePath !== entry.filePath)) return false
+    if (previous && previous.key !== entry.key && !await removeSettledCacheEntry(previous, store, removeOutput)) return false
+    store.put(SETTLED_CACHE_KEY, entry)
+    return true
+  })
+}
+
+export async function purgeSettledRetrievalV3Cache(dealId: bigint, filePath: string,
+  store: RetrievalStore = browserRetrievalStore(), removeOutput = removeRetrievalOutput): Promise<boolean> {
+  return withRetrievalLock(SETTLED_CACHE_KEY, async () => {
+    const entry = readSettledCache(store)
+    if (!entry || entry.dealId !== dealId || entry.filePath !== filePath) return false
+    if (!await removeSettledCacheEntry(entry, store, removeOutput)) return false
+    store.remove(SETTLED_CACHE_KEY)
+    return true
+  })
 }
 
 function sameFile(a: RetrievalFile, b: RetrievalFile): boolean {
@@ -89,10 +168,19 @@ export async function openRetrievalV3Checkpoint(key: string, initial?: Omit<Retr
       },
       async retain() { try { await output.release() } finally { release() } },
       async handoff() {
-        // Keep verified bytes under the frozen request key so settlement can
-        // resume and repeated downloads cannot open another session.
-        try { await output.release() } finally { release() }
-        return undefined
+        // Unresolved payment recovery is never part of the evictable cache.
+        if (!state.session || state.session.lockedFee !== 0n || !retrievalV3OutputComplete(state.session, state.cursors)) {
+          try { await output.release() } finally { release() }
+          return undefined
+        }
+        const retained = await retainSettledRetrievalV3Cache({ version: 1, key, id: state.id, length: state.length,
+          dealId: state.authority.dealId, filePath: state.file.path }, store).catch(() => false)
+        if (retained) {
+          await output.release()
+          return async () => { release() }
+        }
+        store.remove(key)
+        return async () => { try { await output.cleanup() } finally { release() } }
       },
       async discard() { try { store.remove(key); await output.cleanup() } finally { release() } },
     }

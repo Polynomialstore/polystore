@@ -228,7 +228,18 @@ test('worker output writes in place, flushes before ACK and rejects partial pers
     },
     async getFile() { return new File([persisted], 'output') },
   }
-  const dir = { async getFileHandle() { return handle }, async removeEntry() { events.push('remove') } }
+  const files = new Set<string>()
+  const dir = {
+    async getFileHandle(id: string, options?: { create?: boolean }) {
+      if (options?.create) files.add(id)
+      else if (!files.has(id)) throw new DOMException('missing', 'NotFoundError')
+      return handle
+    },
+    async removeEntry(id: string) {
+      if (!files.delete(id)) throw new DOMException('missing', 'NotFoundError')
+      events.push('remove')
+    },
+  }
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { storage: { async getDirectory() { return { async getDirectoryHandle() { return dir } } } } } })
   const ids: string[] = []
   try {
