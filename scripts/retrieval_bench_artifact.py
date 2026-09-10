@@ -1270,6 +1270,7 @@ BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
 def configure_four_validator_app(text, api_address, *, browser_evm=False):
     text = set_toml_value(text, "api", "address", f'"{api_address}"')
     if browser_evm:
+        text = set_toml_value(text, "api", "enabled-unsafe-cors", "true")
         text = set_toml_value(text, "mempool", "max-txs", str(BROWSER_EVM_MEMPOOL_MAX_TXS))
     return text
 
