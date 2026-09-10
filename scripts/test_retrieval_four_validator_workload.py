@@ -89,7 +89,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
     def query_lifecycle(self):
         lifecycle = object.__new__(artifact.FourValidatorLifecycle)
         lifecycle.deadline = 100 * 10**9
-        lifecycle.remaining = Mock(return_value=1)
+        lifecycle.remaining = Mock(return_value=30)
         return lifecycle
 
     def test_fixed_height_query_retries_only_future_height_error(self):
@@ -99,6 +99,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 patch.object(artifact, "monotonic_ns", return_value=0), patch.object(artifact.time, "sleep") as sleep:
             self.assertEqual(lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7), {"session": {"id": "ready"}})
         self.assertEqual(opened.call_count, 2)
+        self.assertEqual(opened.call_args_list[1].kwargs["timeout"], 5)
         sleep.assert_called_once()
 
         for body in (b'{"code":2,"message":"other","details":[]}', b"not-json"):

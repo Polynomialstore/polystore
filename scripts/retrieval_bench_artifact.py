@@ -1488,9 +1488,11 @@ class FourValidatorLifecycle:
         retry_until = None
         future_detail = None
 
-        def read(response):
+        def read(response, deadline=None):
             body = bytearray()
             while len(body) <= MAX_COMMAND_OUTPUT_BYTES:
+                if deadline is not None and monotonic_ns() >= deadline:
+                    raise TimeoutError("node query future-height retry deadline exceeded")
                 self.remaining()
                 reader = getattr(response, "read1", response.read)
                 chunk = reader(min(65536, MAX_COMMAND_OUTPUT_BYTES - len(body) + 1))
@@ -1501,18 +1503,22 @@ class FourValidatorLifecycle:
             return bytes(body)
 
         while True:
-            if retry_until is not None and monotonic_ns() >= retry_until:
-                raise ValueError("node query HTTP 500: " + future_detail)
+            timeout = self.remaining()
+            if retry_until is not None:
+                retry_remaining = (retry_until - monotonic_ns()) / 1e9
+                if retry_remaining <= 0:
+                    raise ValueError("node query HTTP 500: " + future_detail)
+                timeout = min(timeout, retry_remaining)
             try:
-                with urllib.request.urlopen(request, timeout=self.remaining()) as response:
-                    body = read(response)
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    body = read(response, retry_until)
                     if response.status != 200 or len(body) > MAX_COMMAND_OUTPUT_BYTES:
                         raise ValueError("invalid or oversized node response")
                     if height is not None and response.headers.get("x-cosmos-block-height") != str(height):
                         raise ValueError("economic response does not attest the requested height")
             except urllib.error.HTTPError as error:
                 try:
-                    body = read(error)
+                    body = read(error, retry_until)
                 finally:
                     error.close()
                 try:
