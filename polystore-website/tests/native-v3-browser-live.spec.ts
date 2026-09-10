@@ -190,28 +190,55 @@ async function ensureDealIndex(page: Page): Promise<void> {
   await expect(fileMenu).toBeVisible({ timeout: 120_000 })
 }
 
-async function mountDealDetail(page: Page, prepareRetrieval = true, rejectNextWalletTransaction = false): Promise<string> {
-  await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
-  const mounted = await page.evaluate(async ({ dealId, payer, rejectNextWalletTransaction }) => {
-    if (rejectNextWalletTransaction) {
-      const provider = (window as unknown as {
-        ethereum: { request: (args: { method: string; params?: unknown }) => Promise<unknown> }
-      }).ethereum
-      const original = provider.request.bind(provider)
-      let reject = true
-      provider.request = async (args) => {
-        if (reject && args.method === 'eth_sendTransaction') {
-          reject = false
-          throw Object.assign(new Error('qualification wallet rejection'), { code: 4001 })
-        }
-        return original(args)
-      }
+async function rejectNextWalletTransactionBeforeLoad(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type Provider = {
+      isPolyStoreE2E?: boolean
+      request: (args: { method: string; params?: unknown }) => Promise<unknown>
     }
+    const scope = window as unknown as {
+      ethereum?: Provider
+      __nativeV3WalletRejection?: { installed: boolean; rejected: number }
+    }
+    const evidence = { installed: false, rejected: 0 }
+    scope.__nativeV3WalletRejection = evidence
+    let installed: Provider | undefined
+    Object.defineProperty(scope, 'ethereum', {
+      configurable: true,
+      enumerable: true,
+      get: () => installed,
+      set: (provider: Provider) => {
+        installed = provider
+        if (provider?.isPolyStoreE2E !== true || typeof provider.request !== 'function') {
+          throw new Error('qualification expected the installed PolyStore E2E wallet')
+        }
+        const request = provider.request.bind(provider)
+        let reject = true
+        provider.request = async (args) => {
+          if (reject && args.method === 'eth_sendTransaction') {
+            reject = false
+            evidence.rejected++
+            throw Object.assign(new Error('qualification wallet rejection'), { code: 4001 })
+          }
+          return request(args)
+        }
+        evidence.installed = true
+        Object.defineProperty(scope, 'ethereum', {
+          configurable: true, enumerable: true, writable: true, value: provider,
+        })
+      },
+    })
+  })
+}
+
+async function mountDealDetail(page: Page, prepareRetrieval = true): Promise<string> {
+  await page.goto('/#/dashboard', { waitUntil: 'networkidle' })
+  const mounted = await page.evaluate(async ({ dealId, payer }) => {
     const modulePath = '/tests/utils/nativeV3DealDetail.tsx'
     const driver = await import(/* @vite-ignore */ modulePath) as typeof import('./utils/nativeV3DealDetail')
     await driver.mountNativeV3DealDetail(dealId, payer)
     return true
-  }, { dealId, payer, rejectNextWalletTransaction })
+  }, { dealId, payer })
   expect(mounted).toBe(true)
   const driver = page.getByTestId('native-v3-live-driver')
   await expect(driver).toHaveAttribute('data-ready', 'true', { timeout: 120_000 })
@@ -499,16 +526,28 @@ test.describe('native V3 browser qualification', () => {
             }),
           })
         })
+      } else {
+        await rejectNextWalletTransactionBeforeLoad(page)
       }
       const before = {
         stake: await balance(page, payer, 'stake'),
         aatom: await balance(page, payer, 'aatom'),
         nonce: await latestNonce(page),
       }
-      await mountDealDetail(page, true, fault === 'wallet 4001')
+      await mountDealDetail(page)
+      if (fault === 'wallet 4001') {
+        expect(await page.evaluate(() => (window as unknown as {
+          __nativeV3WalletRejection?: { installed: boolean; rejected: number }
+        }).__nativeV3WalletRejection)).toEqual({ installed: true, rejected: 0 })
+      }
       const button = await openDownload(page)
       await button.click()
       await expect(page.locator('div').filter({ hasText: /^Download failed:/ }).first()).toBeVisible({ timeout: 120_000 })
+      if (fault === 'wallet 4001') {
+        expect(await page.evaluate(() => (window as unknown as {
+          __nativeV3WalletRejection?: { installed: boolean; rejected: number }
+        }).__nativeV3WalletRejection)).toEqual({ installed: true, rejected: 1 })
+      }
       expect(estimates).toBeGreaterThan(0)
       expect(rawTransactions).toBe(0)
       const after = {
