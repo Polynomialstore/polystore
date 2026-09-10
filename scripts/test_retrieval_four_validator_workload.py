@@ -410,7 +410,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_provider_wave_and_committed_message_are_exact(self):
         providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
-        rows = [dict(status="success", http_status=200, session_id="0x" + self.SESSION, cleanup_status="complete",
+        rows = [dict(status="success", http_status=200, curl_returncode=0,
+                     session_id="0x" + self.SESSION, cleanup_status="complete",
                      slot=i, provider=providers[i], proof_count=17 if i < 7 else 13,
                      tx_hash=f"{i + 1:064x}") for i in range(8)]
         self.assertEqual(workload.validate_v3_provider_outcomes(rows, providers, session_id=self.SESSION)["proof_count"], 132)
@@ -479,6 +480,104 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             retained = lifecycle.doc["v3_http_phases"]["proofs"]
             self.assertEqual({row["provider"] for row in retained}, {"provider-a", "provider-b"})
             self.assertEqual({row["status"] for row in retained}, {"success", "driver_error"})
+
+    def test_session_proof_phase_retries_only_exact_pre_admission_busy(self):
+        providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+        requests = [dict(provider=providers[slot], url=f"http://provider/{slot}", body={})
+                    for slot in range(8)]
+
+        def run_case(tmp, phase, response):
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = {}
+            def run(argv, deadline, env):
+                slot = int(argv[-1].rsplit("/", 1)[-1])
+                calls[slot] = calls.get(slot, 0) + 1
+                body, status, returncode = response(slot, calls[slot])
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=returncode)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                outcomes = workload.run_v3_http_phase(lifecycle, "/curl", requests, phase,
+                    max_in_flight=8, retry_pre_admission_busy=True)
+            return lifecycle, calls, outcomes
+
+        def success(slot):
+            return dict(status="success", session_id="0x" + self.SESSION,
+                        cleanup_status="complete", slot=slot, proof_count=17 if slot < 7 else 13,
+                        tx_hash=f"{slot + 1:064x}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def one_busy(slot, attempt):
+                if slot == 5 and attempt == 1:
+                    return ({"error": "retrieval submission busy",
+                             "hint": "retrieval submission capacity or signer busy"}, 429, 0)
+                return success(slot), 200, 0
+            lifecycle, calls, outcomes = run_case(tmp, "busy-then-success", one_busy)
+            self.assertEqual(calls, {slot: 2 if slot == 5 else 1 for slot in range(8)})
+            self.assertEqual(len(lifecycle.doc["v3_http_phases"]["busy-then-success"]), 9)
+            self.assertEqual(len(outcomes), 8)
+            self.assertEqual(workload.validate_v3_provider_outcomes(
+                outcomes, providers, session_id=self.SESSION)["proof_count"], 132)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def unknown(slot, attempt):
+                if slot == 5:
+                    return ({"error": "retrieval submission busy",
+                             "hint": "retrieval submission capacity or signer busy",
+                             "tx_hash": "A" * 64}, 429, 0)
+                return success(slot), 200, 0
+            _, calls, outcomes = run_case(tmp, "unknown-429", unknown)
+            self.assertEqual(calls, {slot: 1 for slot in range(8)})
+            with self.assertRaisesRegex(ValueError,
+                    "provider .*http_status=429.*status=None.*retrieval submission busy"):
+                workload.validate_v3_provider_outcomes(outcomes, providers, session_id=self.SESSION)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            def nonzero_curl(slot, attempt):
+                return success(slot), 200, 7 if slot == 5 else 0
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = {}
+            def run(argv, deadline, env):
+                slot = int(argv[-1].rsplit("/", 1)[-1])
+                calls[slot] = calls.get(slot, 0) + 1
+                body, status, returncode = nonzero_curl(slot, calls[slot])
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="curl failed", returncode=returncode)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES):
+                with self.assertRaisesRegex(ValueError, "provider .*exited 7"):
+                    workload.run_v3_http_phase(lifecycle, "/curl", requests, "nonzero-curl",
+                        max_in_flight=8, retry_pre_admission_busy=True)
+            retained = lifecycle.doc["v3_http_phases"]["nonzero-curl"]
+            self.assertEqual(len(retained), 8)
+            self.assertEqual(next(row for row in retained if row["provider"] == providers[5])["curl_returncode"], 7)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            calls = 0
+            def run(argv, deadline, env):
+                nonlocal calls
+                calls += 1
+                path = Path(argv[argv.index("--output") + 1])
+                if calls == 1:
+                    path.write_text(json.dumps({"error": "retrieval submission busy",
+                        "hint": "retrieval submission capacity or signer busy"}))
+                    return SimpleNamespace(stdout="429", stderr="", returncode=0)
+                path.write_text("{")
+                return SimpleNamespace(stdout="200", stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                with self.assertRaises(ValueError):
+                    workload.run_v3_http_phase(lifecycle, "/curl", [requests[5]], "retry-parser-error",
+                        max_in_flight=1, retry_pre_admission_busy=True)
+            retained = lifecycle.doc["v3_http_phases"]["retry-parser-error"]
+            self.assertEqual((calls, len(retained), retained[0]["http_status"], retained[1]["status"]),
+                             (2, 2, 429, "driver_error"))
 
     def test_native_v3_provider_routes_use_gateway_auth_contract(self):
         with tempfile.TemporaryDirectory() as tmp:

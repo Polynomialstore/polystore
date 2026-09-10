@@ -45,6 +45,8 @@ V3_MAX_SAMPLES = 132
 V3_BITMAP_BYTES = (V3_MAX_SAMPLES + 7) // 8
 V3_SYSTEMATIC_PROVIDERS = 8
 V3_PROVIDER_AUTH_TOKEN = "healthy-diagnostic-owned-local-stack"
+V3_BUSY_MAX_ATTEMPTS = 4
+V3_BUSY_RETRY_SECONDS = 2
 V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
 V3_ABORT_FREE_BYTES = 768 * 1024**2
 
@@ -155,12 +157,16 @@ def validate_v3_provider_outcomes(rows, providers, *, session_id):
         count = producer.uint(row.get("proof_count", 0))
         txhash = row.get("tx_hash", "")
         if (row.get("status") != "success" or row.get("http_status") != 200 or
+                row.get("curl_returncode") != 0 or
                 row.get("session_id") != "0x" + session_id or
                 row.get("cleanup_status") != "complete" or slot >= V3_SYSTEMATIC_PROVIDERS or
                 providers.get(slot) != row.get("provider") or not 1 <= count <= 64 or
                 not isinstance(txhash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash) or
                 slot in slots or txhash.upper() in hashes):
-            raise ValueError("v3 provider response is not a unique committed proof claim")
+            error = str(row.get("error", ""))[-512:]
+            raise ValueError(
+                f"v3 provider {row.get('provider')!r} response rejected: "
+                f"http_status={row.get('http_status')!r} status={row.get('status')!r} error={error!r}")
         slots.add(slot)
         hashes.add(txhash.upper())
         proofs += count
@@ -204,7 +210,8 @@ def opened_v3_session(result, *, logical_bytes=V3_PILOT_BYTES):
     return raw[sid_offset:sid_offset + 32].hex()
 
 
-def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
+def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight,
+                      retry_pre_admission_busy=False):
     """Run one bounded disjoint-signer HTTP phase and retain every outcome."""
     if (not requests or not 1 <= max_in_flight <= 12 or
             len({row["provider"] for row in requests}) != len(requests)):
@@ -213,40 +220,64 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
     directory = lifecycle.home / "v3-http"
     directory.mkdir(mode=0o700, exist_ok=True)
     started = artifact.monotonic_ns()
+    phase_deadline = min(lifecycle.deadline,
+                         started + max(row.get("timeout_seconds", 180) for row in requests) * 10**9)
     last_heartbeat = started
     last_progress = started
     completed = []
     retained = lifecycle.doc.setdefault("v3_http_phases", {}).setdefault(phase, [])
 
     def execute(index, request):
-        path = directory / f"{phase}-{index}.json"
-        deadline = min(lifecycle.deadline, artifact.monotonic_ns() + request.get("timeout_seconds", 180) * 10**9)
-        began = artifact.monotonic_ns()
-        result = artifact.run_bounded_command([
-            curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
-            "--request", "POST", "--header", "Content-Type: application/json",
-            "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
-            "--data", json.dumps(request["body"], separators=(",", ":")),
-            "--max-filesize", str(1024 * 1024), "--output", str(path),
-            "--write-out", "%{http_code}", request["url"],
-        ], deadline, env=lifecycle.env)
-        try:
-            with path.open("rb") as source:
-                raw = source.read(1024 * 1024 + 1)
-            if len(raw) > 1024 * 1024:
-                raise ValueError("v3 HTTP response exceeds 1 MiB")
-            body = json.loads(raw)
-            if not isinstance(body, dict):
-                raise ValueError("v3 HTTP response must be a JSON object")
-        finally:
-            path.unlink(missing_ok=True)
-        try:
-            code = producer.uint(result.stdout.strip())
-        except ValueError as error:
-            raise ValueError("v3 HTTP request did not return a status code") from error
-        return dict(body, http_status=code, provider=request["provider"],
-                    request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
-                    stderr=result.stderr[-8192:], curl_returncode=result.returncode)
+        attempts = []
+        limit = V3_BUSY_MAX_ATTEMPTS if retry_pre_admission_busy else 1
+        request_deadline = min(phase_deadline,
+                               started + request.get("timeout_seconds", 180) * 10**9)
+        for attempt in range(1, limit + 1):
+            if attempt > 1:
+                if artifact.monotonic_ns() + V3_BUSY_RETRY_SECONDS * 10**9 >= request_deadline:
+                    break
+                time.sleep(V3_BUSY_RETRY_SECONDS)
+            path = directory / f"{phase}-{index}-{attempt}.json"
+            began = artifact.monotonic_ns()
+            try:
+                result = artifact.run_bounded_command([
+                    curl, "--silent", "--show-error", "--max-time", str(request.get("timeout_seconds", 180)),
+                    "--request", "POST", "--header", "Content-Type: application/json",
+                    "--header", "X-PolyStore-Gateway-Auth: " + V3_PROVIDER_AUTH_TOKEN,
+                    "--data", json.dumps(request["body"], separators=(",", ":")),
+                    "--max-filesize", str(1024 * 1024), "--output", str(path),
+                    "--write-out", "%{http_code}", request["url"],
+                ], request_deadline, env=lifecycle.env)
+                with path.open("rb") as source:
+                    raw = source.read(1024 * 1024 + 1)
+                if len(raw) > 1024 * 1024:
+                    raise ValueError("v3 HTTP response exceeds 1 MiB")
+                body = json.loads(raw)
+                if not isinstance(body, dict):
+                    raise ValueError("v3 HTTP response must be a JSON object")
+                try:
+                    code = producer.uint(result.stdout.strip())
+                except ValueError as error:
+                    raise ValueError("v3 HTTP request did not return a status code") from error
+                row = dict(body, http_status=code, provider=request["provider"], attempt=attempt,
+                           request_started_ns=began, request_finished_ns=artifact.monotonic_ns(),
+                           stderr=result.stderr[-8192:], curl_returncode=result.returncode)
+                attempts.append(row)
+                if result.returncode != 0:
+                    return attempts, ValueError(
+                        f"v3 HTTP request for provider {request['provider']!r} exited {result.returncode}")
+                busy = (code == 429 and set(body) == {"error", "hint"} and
+                        body.get("error") == "retrieval submission busy" and
+                        body.get("hint") == "retrieval submission capacity or signer busy")
+                if not retry_pre_admission_busy or not busy:
+                    return attempts, None
+            except BaseException as error:
+                attempts.append(dict(status="driver_error", provider=request["provider"], attempt=attempt,
+                                     error=str(error)[-8192:], request_finished_ns=artifact.monotonic_ns()))
+                return attempts, error
+            finally:
+                path.unlink(missing_ok=True)
+        return attempts, None
 
     errors = []
     with ThreadPoolExecutor(max_workers=max_in_flight) as executor:
@@ -257,17 +288,21 @@ def run_v3_http_phase(lifecycle, curl, requests, phase, *, max_in_flight):
             now = artifact.monotonic_ns()
             for future in done:
                 request = pending.pop(future)
+                future_error = None
                 try:
-                    row = future.result()
+                    attempts, future_error = future.result()
                 except BaseException as error:
-                    row = dict(status="driver_error", provider=request["provider"],
+                    attempts = [dict(status="driver_error", provider=request["provider"],
                                error=str(error)[-8192:], request_finished_ns=now)
-                    retained.append(row)
-                    errors.append(error)
+                    ]
+                    future_error = error
+                retained.extend(attempts)
+                if future_error is not None:
+                    errors.append(future_error)
                     lifecycle.save()
                     continue
+                row = attempts[-1]
                 completed.append(row)
-                retained.append(row)
                 lifecycle.save()
                 last_progress = now
             if not errors and now - last_progress >= 600 * 10**9:
@@ -451,7 +486,8 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
                          body=dict(session_id=row["session_id"]))
                     for slot in range(V3_SYSTEMATIC_PROVIDERS)]
         outcomes = run_v3_http_phase(lifecycle, curl, requests,
-                                     f"session-{row['nonce']}-proofs", max_in_flight=8)
+                                     f"session-{row['nonce']}-proofs", max_in_flight=8,
+                                     retry_pre_admission_busy=True)
         summary = validate_v3_provider_outcomes(outcomes, providers, session_id=row["session_id"])
         transactions = []
         for outcome in outcomes:
@@ -538,7 +574,8 @@ def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send,
         slot = producer.uint(outcome.get("slot", 99))
         txhash = outcome.get("tx_hash", "")
         if (outcome.get("status") != "success" or outcome.get("cleanup_status") != "complete" or
-                outcome.get("http_status") != 200 or slot >= 12 or providers.get(slot) != outcome["provider"] or
+                outcome.get("http_status") != 200 or outcome.get("curl_returncode") != 0 or
+                slot >= 12 or providers.get(slot) != outcome["provider"] or
                 slot in seen or not re.fullmatch(r"[0-9a-fA-F]{64}", txhash)):
             raise ValueError("provider generation acceptance was not a unique committed success")
         seen.add(slot)
