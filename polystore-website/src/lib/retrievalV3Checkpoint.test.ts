@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { hasSettledRetrievalV3Cache, purgeSettledRetrievalV3Cache, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
+import { assertRetrievalV3CheckpointScope, hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, readRetrievalV3Checkpoint, retainSettledRetrievalV3Cache, retrievalV3CheckpointKey, retrievalV3DownloadCheckpointKey, type RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
 import { RETRIEVAL_V3_SETUP, type FrozenSessionV3 } from './retrievalV3'
 import type { RetrievalStore } from './retrievalTransactions'
 
@@ -12,7 +12,8 @@ function store(value: RetrievalV3CheckpointState): RetrievalStore {
 
 function mapStore(values: Record<string, unknown>): RetrievalStore {
   const entries = new Map(Object.entries(values))
-  return { get: <T>(key: string) => structuredClone(entries.get(key)) as T, put(key, value) { entries.set(key, structuredClone(value)) }, remove(key) { entries.delete(key) } }
+  return { get: <T>(key: string) => structuredClone(entries.get(key)) as T, put(key, value) { entries.set(key, structuredClone(value)) }, remove(key) { entries.delete(key) },
+    keys(prefix) { return [...entries.keys()].filter((key) => key.startsWith(prefix)) } }
 }
 function state(): RetrievalV3CheckpointState {
   const providers = Array.from({ length: 12 }, (_, i) => address(i + 2)), length = 65n * 126_976n
@@ -26,12 +27,14 @@ function state(): RetrievalV3CheckpointState {
     snapshot: 10n, anchor: 11n, firstResponse: 12n, deadline: 90n, dealEnd: 100n,
     obligations: [{ slot: 0, assigned: providers[0], payee: providers[0], blobCount: 9n, sampleCount: 9n, lockedFee: 9n }],
     acceptedBitmap: new Uint8Array(17), ackedMask: 0, settledMask: 0, refundedMask: 0, lockedFee: 9n, expired: false, context: new Uint8Array() } as FrozenSessionV3
-  return { version: 3, id: 'output', length, authority, fileRecordIndex: 3, file, rangeStart: 0n, rangeLength: length, session, cursors: { 0: 64n } }
+  return { version: 3, id: 'output', length, authority, fileRecordIndex: 3, file, rangeStart: 0n, rangeLength: length,
+    requestRangeStart: null, requestRangeLength: null, requester: authority.owner, session, cursors: { 0: 64n } }
 }
 
 test('v3 checkpoint accepts only exact frozen session and durable chunk boundaries', () => {
   const valid = state()
   assert.equal(readRetrievalV3Checkpoint('key', store(valid))?.cursors[0], 64n)
+  assert.equal(readRetrievalV3Checkpoint('key', store({ ...valid, requestRangeLength: 0 }))?.requestRangeLength, 0)
   for (const mutation of [
     { ...valid, cursors: { 0: 63n } },
     { ...valid, session: undefined, cursors: { 0: 64n } },
@@ -40,11 +43,32 @@ test('v3 checkpoint accepts only exact frozen session and durable chunk boundari
   ]) assert.throws(() => readRetrievalV3Checkpoint('key', store(mutation as RetrievalV3CheckpointState)), /invalid saved/)
 })
 
+test('checkpoint listing exposes only the wallet paid recovery for the requested deal', () => {
+  const own = state(), otherWallet = state(), otherDeal = state(), malformed = state()
+  otherWallet.requester = address(20); otherWallet.session = undefined; otherWallet.cursors = {}
+  otherDeal.authority = { ...otherDeal.authority, dealId: 8n }; otherDeal.session = undefined; otherDeal.cursors = {}
+  malformed.requester = 'bad'
+  const ownKey = 'output-v3:' + 'a'.repeat(64)
+  const saved = mapStore({ [ownKey]: own, ['output-v3:' + 'b'.repeat(64)]: otherWallet,
+    ['output-v3:' + 'c'.repeat(64)]: otherDeal, ['output-v3:' + 'd'.repeat(64)]: malformed })
+  assert.deepEqual(listRetrievalV3Checkpoints(7n, own.requester, own.authority.chainId, saved).map(({ key }) => key), [ownKey])
+  assert.deepEqual(listRetrievalV3Checkpoints(7n, own.requester, 'other-1', saved), [])
+})
+
 test('v3 download recovery key is stable when sponsored fee authorization changes', async () => {
   const key = await retrievalV3DownloadCheckpointKey('wallet:1', '7', 'file.bin', 0, 1024, undefined)
   assert.equal(key, await retrievalV3CheckpointKey(['wallet:1', 'download-v3', '7', 'file.bin', 0, 1024, undefined]))
   assert.notEqual(key, await retrievalV3CheckpointKey(['wallet:1', 'download-v3', '7', 'file.bin', 0, 1024, undefined,
     { type: 'none', maxTotalFee: 5n }]))
+})
+
+test('explicit recovery remains bound to its original wallet and network scope', async () => {
+  const saved = state(), scope = ['test-1', 31337, '0x1234', '0xabcd']
+  const key = await retrievalV3DownloadCheckpointKey(scope, '7', saved.file.path, undefined, undefined, undefined)
+  await assertRetrievalV3CheckpointScope(key, saved, scope, saved.requester, saved.authority.chainId)
+  await assert.rejects(assertRetrievalV3CheckpointScope(key, saved, ['other-1', 31337, '0x1234', '0xabcd'], saved.requester,
+    saved.authority.chainId), /another wallet or network/)
+  await assert.rejects(assertRetrievalV3CheckpointScope(key, saved, scope, saved.requester, 'other-1'), /another wallet or network/)
 })
 
 test('settled output cache is one-entry bounded and never evicts active or unresolved recovery', async () => {

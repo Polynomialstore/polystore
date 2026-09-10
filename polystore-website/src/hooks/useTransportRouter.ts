@@ -9,12 +9,14 @@ import {
   gatewayPlanRetrievalSession,
   gatewayUpload,
 } from '../api/gatewayClient'
-import { gatewayFetchRetrievalWindow, providerFetchRetrievalWindow, providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
+import { fetchRetrievalChunkV3, gatewayFetchRetrievalMetadata, gatewayFetchRetrievalWindow, providerFetchRetrievalMetadata, providerFetchRetrievalWindow, providerPlanRetrievalSession, providerUpload } from '../api/providerClient'
 import { appConfig } from '../config'
 import { useTransportContext } from '../context/TransportContext'
 import type { ManifestInfoData, MduKzgData, PolyfsFileEntry, SlabLayoutData } from '../domain/polyfs'
 import type { P2pTarget } from '../lib/multiaddr'
 import type { FrozenSession } from '../lib/retrieval'
+import { generationAsPinnedV2Shape, type FrozenGenerationV3 } from '../lib/retrievalV3'
+import type { RetrievalV3ChunkAuthority, RetrievalV3Envelope } from '../lib/retrievalWire'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange, libp2pFetchRetrievalWindow } from '../lib/transport/libp2pClient'
 import {
@@ -25,6 +27,7 @@ import {
 } from '../lib/transport/mode'
 import { executeWithFallback, TransportTraceError } from '../lib/transport/router'
 import type { DecisionTrace, RoutePreference, TransportCandidate, TransportOutcome } from '../lib/transport/types'
+import { v3RetrievalCandidates } from '../lib/transport/v3Candidates'
 import { workerClient } from '../lib/worker-client'
 
 const LOCAL_GATEWAY_CONNECTED_KEY = 'polystore_local_gateway_connected'
@@ -119,6 +122,13 @@ type FetchRangeOutcome = {
   cacheFreshness?: string
   cacheFreshnessReason?: string
   deputy?: boolean
+}
+
+type V3TransportRequest = {
+  authority: FrozenGenerationV3
+  directBases: readonly string[]
+  preference?: RoutePreference
+  signal?: AbortSignal
 }
 
 export function useTransportRouter() {
@@ -637,6 +647,40 @@ export function useTransportRouter() {
     }
   }, [recordTrace, resolveDirectBase, resolvePreference])
 
+  const v3GatewayBase = !appConfig.gatewayDisabled && isTrustedLocalGatewayBase(appConfig.gatewayBase) && readLocalGatewayConnectedHint()
+    ? appConfig.gatewayBase : undefined
+  const allowsV3Direct = useCallback((requested?: RoutePreference) => allowNonGatewayBackends(resolvePreference(requested)), [resolvePreference])
+
+  const fetchV3Metadata = useCallback(async (req: V3TransportRequest) => {
+    const effectivePreference = resolvePreference(req.preference), pin = generationAsPinnedV2Shape(req.authority)
+    const candidates = v3RetrievalCandidates(effectivePreference, v3GatewayBase, req.directBases, async (base, gateway, attemptSignal) => {
+      const signal = req.signal ? AbortSignal.any([req.signal, attemptSignal]) : attemptSignal
+      const bytes = await wrapExecute(() => gateway ? gatewayFetchRetrievalMetadata(base, pin, 0n, signal) : providerFetchRetrievalMetadata(base, pin, 0n, signal))
+      return workerClient.verifyRetrievalMetadataV3(bytes, req.authority)
+    })
+    if (!candidates.length) throw new Error('No authenticated v3 metadata transport available')
+    try {
+      const result = await executeWithFallback('fetch', candidates, { preference: effectivePreference, timeoutMs: 60_000, maxAttemptsPerBackend: 1 })
+      recordTrace(result.trace)
+      return result
+    } catch (error) { if (error instanceof TransportTraceError) recordTrace(error.trace); throw error }
+  }, [recordTrace, resolvePreference, v3GatewayBase, wrapExecute])
+
+  const fetchV3Chunk = useCallback(async (req: V3TransportRequest & { chunk: RetrievalV3ChunkAuthority; owner: string }): Promise<TransportOutcome<RetrievalV3Envelope>> => {
+    const effectivePreference = resolvePreference(req.preference)
+    const candidates = v3RetrievalCandidates(effectivePreference, v3GatewayBase, req.directBases, (base, gateway, attemptSignal) => {
+      const signal = req.signal ? AbortSignal.any([req.signal, attemptSignal]) : attemptSignal
+      return wrapExecute(() => fetchRetrievalChunkV3(base, gateway ? '/gateway/mdu' : '/sp/retrieval/mdu', req.chunk,
+        req.authority.dealId, req.owner, signal))
+    })
+    if (!candidates.length) throw new Error('No authenticated v3 data transport available')
+    try {
+      const result = await executeWithFallback('fetch', candidates, { preference: effectivePreference, timeoutMs: 345_000, maxAttemptsPerBackend: 1 })
+      recordTrace(result.trace)
+      return result
+    } catch (error) { if (error instanceof TransportTraceError) recordTrace(error.trace); throw error }
+  }, [recordTrace, resolvePreference, v3GatewayBase, wrapExecute])
+
   const fetchWindow = useCallback(async (req: { session: FrozenSession; directBase?: string; p2pTarget?: P2pTarget; preference?: RoutePreference; signal?: AbortSignal }): Promise<TransportOutcome<Uint8Array>> => {
     const effectivePreference = resolvePreference(req.preference)
     const candidates: TransportCandidate<Uint8Array>[] = []
@@ -673,5 +717,8 @@ export function useTransportRouter() {
     mduKzg,
     fetchRange,
     fetchWindow,
-  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg, fetchRange, fetchWindow])
+    fetchV3Metadata,
+    fetchV3Chunk,
+    allowsV3Direct,
+  }), [preference, lastTrace, setPreference, listFiles, slab, plan, uploadFile, manifestInfo, mduKzg, fetchRange, fetchWindow, fetchV3Metadata, fetchV3Chunk, allowsV3Direct])
 }

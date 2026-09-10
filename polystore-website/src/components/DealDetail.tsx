@@ -37,7 +37,7 @@ import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
 import { restoreSponsoredRetrievalAuth, withSponsoredRetrievalFeeCap } from '../lib/retrievalSponsoredAuth'
-import { hasSettledRetrievalV3Cache, purgeSettledRetrievalV3Cache } from '../lib/retrievalV3Checkpoint'
+import { hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache } from '../lib/retrievalV3Checkpoint'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
@@ -182,6 +182,8 @@ interface FileRowProps {
   downloadRangeLen: number
   transportPreference?: RoutePreference
   gatewayModePreferred: boolean
+  checkpointKey?: string
+  frozenGeneration?: bigint
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'activity') => void
 }
@@ -231,6 +233,8 @@ function FileRow({
   downloadRangeLen,
   transportPreference,
   gatewayModePreferred,
+  checkpointKey,
+  frozenGeneration,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
   const browserAvailable = browserCached || browserMduAvailable
@@ -279,11 +283,11 @@ function FileRow({
   }, [isOpen])
 
   const downloadVerified = async (preference?: RoutePreference, preferCache = false) => {
-    setFileActionError(null); setBusyFilePath(file.path)
+    setFileActionError(null); setBusyFilePath(checkpointKey ?? file.path)
     const dealId = String(deal.id)
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
-      const retainedV3 = /^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path)
+      const retainedV3 = /^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path, checkpointKey)
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
       const outcome = await preferVerifiedCache(
         async () => {
@@ -294,6 +298,7 @@ function FileRow({
         preferCache && !retainedV3 ? retrievalUnavailableReason : undefined,
         () => fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
           rangeStart: downloadRangeStart, rangeLen: downloadRangeLen,
+          checkpointKey,
           sponsoredAuth: withSponsoredRetrievalFeeCap(sponsoredAuth, sponsoredFeeCap) }),
       )
       if (outcome.source === 'cache') {
@@ -348,6 +353,9 @@ function FileRow({
         <div className="mt-1 text-[10px] font-mono-data uppercase tracking-[0.16em] text-muted-foreground">
           start {String(file.start_offset || 0)}
         </div>
+        {frozenGeneration !== undefined ? <div className="mt-1 text-[10px] text-muted-foreground" data-testid="v3-frozen-recovery">
+          Paid recovery from frozen generation {String(frozenGeneration)}
+        </div> : null}
       </div>
 
       <div className="text-[11px] font-mono-data text-foreground/80">
@@ -364,7 +372,7 @@ function FileRow({
         >
           {isBusy ? 'BUSY' : 'Download'}
         </button>
-        <button
+        {frozenGeneration === undefined ? <button
           onClick={onToggleMenu}
           ref={menuButtonRef}
           data-testid="deal-detail-actions-menu"
@@ -372,8 +380,8 @@ function FileRow({
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
-        </button>
-        {isOpen && menuViewportPosition && typeof document !== 'undefined'
+        </button> : null}
+        {frozenGeneration === undefined && isOpen && menuViewportPosition && typeof document !== 'undefined'
           ? createPortal(
               <>
                 <div className="fixed inset-0 z-[900]" onClick={onToggleMenu} />
@@ -549,6 +557,14 @@ export function DealDetail({
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
   const lastContentHydrationKeyRef = useRef<string>('')
   const displayManifestRoot = normalizeManifestRoot(committedManifestRoot || manifestInfo?.manifest_root || slab?.manifest_root)
+  const v3Recoveries = useMemo(() => {
+    if (typeof window === 'undefined' || !/^(0|[1-9][0-9]*)$/.test(String(deal.id)) || !polystoreAddress) return []
+    return listRetrievalV3Checkpoints(BigInt(String(deal.id)), polystoreAddress, appConfig.cosmosChainId).filter(({ state }) =>
+      normalizeManifestRoot(state.authority.polyfsRoot) !== normalizeManifestRoot(committedManifestRoot) ||
+      !files?.some((file) => file.path === state.file.path && BigInt(file.start_offset) === state.file.start_offset && BigInt(file.size_bytes) === state.file.size_bytes))
+  // Retrieval completion updates localStorage before clearing busyFilePath.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busyFilePath, committedManifestRoot, deal.id, files, polystoreAddress])
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -1977,7 +1993,7 @@ export function DealDetail({
                             </div>
                           </div>
                         </div>
-                      ) : files && files.length > 0 ? (
+                      ) : (files && files.length > 0) || v3Recoveries.length > 0 ? (
                         <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-file-list">
                           <label className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-2 pb-2 text-[10px] text-muted-foreground">
                             <span>Maximum retrieval fee <span className="normal-case">(stake base units; required when paying for another owner)</span></span>
@@ -2004,7 +2020,7 @@ export function DealDetail({
                             <span>Size</span>
                             <span>Actions</span>
                           </div>
-                          {files.map((f) => (
+                          {files?.map((f) => (
                             <FileRow
                               key={`${f.path}:${f.start_offset}`}
                               file={f}
@@ -2041,6 +2057,46 @@ export function DealDetail({
                               setActiveTab={setActiveTab}
                             />
                           ))}
+                          {v3Recoveries.map(({ key, state }) => {
+                            const recoveryFile = { path: state.file.path, size_bytes: Number(state.file.size_bytes),
+                              start_offset: Number(state.file.start_offset), flags: state.file.flags }
+                            return <FileRow
+                              key={key}
+                              file={recoveryFile}
+                              deal={deal}
+                              cacheAuthority={null}
+                              manifestRoot={state.authority.polyfsRoot}
+                              owner={state.authority.owner}
+                              browserCached={hasSettledRetrievalV3Cache(state.authority.dealId, state.file.path, key)}
+                              browserMduAvailable={false}
+                              gatewayCached={false}
+                              isBusy={busyFilePath === key}
+                              isAnyDownloading={downloading}
+                              retrievalUnavailable={false}
+                              viewerOwners={[polystoreAddress, address || '']}
+                              isOpen={false}
+                              onToggleMenu={() => {}}
+                              onCloseMenu={() => {}}
+                              onFileActivity={onFileActivity}
+                              downloadBlobAsFile={downloadBlobAsFile}
+                              markDownloadPath={markDownloadPath}
+                              fetchFile={fetchFile}
+                              resolveProviderHttpBase={resolveProviderHttpBase}
+                              sponsoredAuth={sponsoredAuth}
+                              sponsoredFeeCap={sponsoredFeeCap}
+                              setBrowserCachedByPath={setBrowserCachedByPath}
+                              setFileActionError={setFileActionError}
+                              setBusyFilePath={setBusyFilePath}
+                              downloadRangeStart={Number(state.rangeStart)}
+                              downloadRangeLen={Number(state.rangeLength)}
+                              transportPreference={transportPreference}
+                              gatewayModePreferred={gatewayModePreferred}
+                              setSelectedMdu={setSelectedMdu}
+                              setActiveTab={setActiveTab}
+                              checkpointKey={key}
+                              frozenGeneration={state.authority.generation}
+                            />
+                          })}
                         </div>
                       ) : (
                         <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed PolyFS generation.</div>

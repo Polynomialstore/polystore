@@ -1,7 +1,7 @@
 import { createRetrievalOutput, removeRetrievalOutput } from './retrievalFlow'
-import { planV3Chunks, sameFrozenGenerationV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
+import { planV3Chunks, RETRIEVAL_V3_SETUP, sameFrozenGenerationV3, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
 import { retrievalV3OutputComplete } from './retrievalV3Flow'
-import type { RetrievalFile } from './retrieval'
+import { account, type RetrievalFile } from './retrieval'
 import { browserRetrievalStore, retrievalIntentKey, withRetrievalLock, type RetrievalStore } from './retrievalTransactions'
 
 const SETTLED_CACHE_KEY = 'output-v3:settled-cache'
@@ -23,6 +23,9 @@ export interface RetrievalV3CheckpointState {
   file: RetrievalFile
   rangeStart: bigint
   rangeLength: bigint
+  requestRangeStart: number | null
+  requestRangeLength: number | null
+  requester: string
   session?: FrozenSessionV3
   cursors: Partial<Record<number, bigint>>
 }
@@ -119,6 +122,10 @@ export function readRetrievalV3Checkpoint(key: string, store: RetrievalStore = b
   if (!saved) return undefined
   if (saved.version !== 3 || typeof saved.id !== 'string' || !saved.id || typeof saved.length !== 'bigint' || saved.length < 0n || saved.length > 1n << 30n ||
     typeof saved.rangeStart !== 'bigint' || typeof saved.rangeLength !== 'bigint' || saved.rangeLength !== saved.length || !saved.authority || !saved.file ||
+    (saved.requestRangeStart !== null && (!Number.isSafeInteger(saved.requestRangeStart) || saved.requestRangeStart < 0 || BigInt(saved.requestRangeStart) !== saved.rangeStart)) ||
+    (saved.requestRangeLength !== null && (!Number.isSafeInteger(saved.requestRangeLength) || saved.requestRangeLength < 0 ||
+      (saved.requestRangeLength !== 0 && BigInt(saved.requestRangeLength) !== saved.rangeLength))) ||
+    typeof saved.requester !== 'string' || account(saved.requester) !== saved.requester || (saved.session !== undefined && saved.session.owner !== saved.requester) ||
     !Number.isSafeInteger(saved.fileRecordIndex) || saved.fileRecordIndex < 0 || typeof saved.cursors !== 'object' || saved.cursors === null ||
     (saved.session !== undefined && !sessionMatchesState(saved, saved.session)) ||
     Object.entries(saved.cursors).some(([rawSlot, through]) => {
@@ -126,6 +133,29 @@ export function readRetrievalV3Checkpoint(key: string, store: RetrievalStore = b
       return !cursorIsChunkBoundary(saved.session, Number(rawSlot), through)
     })) throw new Error('invalid saved v3 retrieval checkpoint')
   return saved
+}
+
+export async function assertRetrievalV3CheckpointScope(key: string, state: RetrievalV3CheckpointState,
+  scope: unknown, requester: string, chainId: string): Promise<void> {
+  const expected = await retrievalV3DownloadCheckpointKey(scope, state.authority.dealId.toString(), state.file.path,
+    state.requestRangeStart ?? undefined, state.requestRangeLength ?? undefined, undefined)
+  if (key !== expected || state.requester !== requester || state.authority.chainId !== chainId ||
+    state.authority.setupDigest !== RETRIEVAL_V3_SETUP) throw new Error('saved v3 recovery entry belongs to another wallet or network')
+}
+
+export function listRetrievalV3Checkpoints(dealId: bigint, requester: string, chainId: string,
+  store: RetrievalStore = browserRetrievalStore()): Array<{ key: string; state: RetrievalV3CheckpointState }> {
+  const keys = store.keys?.('output-v3:') ?? []
+  const result: Array<{ key: string; state: RetrievalV3CheckpointState }> = []
+  for (const key of keys) {
+    if (key === SETTLED_CACHE_KEY) continue
+    try {
+      const state = readRetrievalV3Checkpoint(key, store)
+      if (state?.authority.dealId === dealId && state.requester === requester && state.authority.chainId === chainId &&
+        state.authority.setupDigest === RETRIEVAL_V3_SETUP) result.push({ key, state })
+    } catch { /* malformed recovery state stays fail-closed */ }
+  }
+  return result
 }
 
 export async function openRetrievalV3Checkpoint(key: string, initial?: Omit<RetrievalV3CheckpointState, 'version' | 'id' | 'cursors'>) {
