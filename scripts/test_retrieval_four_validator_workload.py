@@ -499,6 +499,33 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(transaction["height"], 219)
         self.assertIsInstance(transaction["height"], int)
 
+    def test_refund_receipt_binds_decoded_owner_and_session(self):
+        owner = AUDIT_ADDRESSES[8]
+        txhash = "CD" * 32
+        message = {"@type": "/polystorechain.polystorechain.v1.MsgRefundRetrievalSessionV3",
+                   "creator": owner,
+                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode()}
+        decoded = {"txhash": txhash, "height": "301",
+                   "tx": {"body": {"messages": [message]}}}
+        lifecycle = SimpleNamespace(nodes=[{"home": "/home"}],
+            cli=Mock(return_value=json.dumps(decoded)))
+        result = dict(txhash=txhash, height=301, code=0, gas_wanted=500000, gas_used=400000)
+        validators = [{"node_id": str(index)} for index in range(4)]
+        with patch.object(workload, "verify_transaction_nodes", return_value=validators):
+            verified = workload.verify_v3_refund_transaction(
+                lifecycle, result, owner=owner, session_id=self.SESSION)
+        self.assertEqual((verified["message"], verified["validators"]), (message, validators))
+        for field, value in (("creator", AUDIT_ADDRESSES[7]),
+                             ("session_id", base64.b64encode(bytes(32)).decode())):
+            changed = copy.deepcopy(decoded)
+            changed["tx"]["body"]["messages"][0][field] = value
+            lifecycle.cli.return_value = json.dumps(changed)
+            with self.subTest(field=field), patch.object(
+                    workload, "verify_transaction_nodes", return_value=validators), \
+                    self.assertRaisesRegex(ValueError, "intended owner/session"):
+                workload.verify_v3_refund_transaction(
+                    lifecycle, copy.deepcopy(result), owner=owner, session_id=self.SESSION)
+
 
     def test_provider_endpoint_uses_address_not_assignment_slot(self):
         lifecycle = SimpleNamespace(doc={"providers": [

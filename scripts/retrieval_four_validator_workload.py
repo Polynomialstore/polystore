@@ -597,6 +597,24 @@ def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
     return result
 
 
+def verify_v3_refund_transaction(lifecycle, result, *, owner, session_id):
+    """Bind a refund receipt to its exact owner/session message on all validators."""
+    result["validators"] = verify_transaction_nodes(lifecycle, result)
+    txhash = result["txhash"].upper()
+    decoded = json.loads(lifecycle.cli(
+        lifecycle.nodes[0]["home"], "query", "tx", txhash, "--output", "json"))
+    messages = decoded.get("tx", {}).get("body", {}).get("messages", [])
+    if (decoded.get("txhash", "").upper() != txhash or
+            producer.uint(decoded.get("height", "")) != producer.uint(result["height"]) or
+            len(messages) != 1 or
+            messages[0].get("@type") != "/polystorechain.polystorechain.v1.MsgRefundRetrievalSessionV3" or
+            messages[0].get("creator") != owner or
+            producer.b64(messages[0].get("session_id", ""), 32).hex() != session_id):
+        raise ValueError("committed v3 refund differs from the intended owner/session")
+    result["message"] = messages[0]
+    return result
+
+
 def validate_v3_candidate(value, *, deal_id):
     candidate = value.get("generation_candidate")
     if not isinstance(candidate, dict):
@@ -716,7 +734,7 @@ def run_native_v3_sessions(lifecycle, *, deal, providers, send, wait, curl):
             raise ValueError("expired v3 session retained its anchor")
         row["expired_before_refund"] = expired
         refunded = send("owner0", ["retrieval-session-v3", "refund", str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
-        refunded["validators"] = verify_transaction_nodes(lifecycle, refunded)
+        verify_v3_refund_transaction(lifecycle, refunded, owner=owner, session_id=row["session_id"])
         wait(refunded["height"] + 1)
         after = v3_session_query(lifecycle, row["session_id"], refunded["height"])
         validate_v3_session(after, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
@@ -1024,7 +1042,7 @@ def run_native_v3_cross_audit(lifecycle, *, deal, providers, send, wait, curl, a
             chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True)
         refund = send("owner0", ["retrieval-session-v3", "refund",
                                   str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
-        refund["validators"] = verify_transaction_nodes(lifecycle, refund)
+        verify_v3_refund_transaction(lifecycle, refund, owner=owner, session_id=row["session_id"])
         row.update(expired_before_refund=expired, refund_transaction=refund)
         lifecycle.save()
     wait(max(row["refund_transaction"]["height"] for row in sessions) + 1)
@@ -1403,7 +1421,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, expor
             providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
             chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True)
         refund = send("owner0", ["retrieval-session-v3", "refund", str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
-        refund["validators"] = verify_transaction_nodes(lifecycle, refund)
+        verify_v3_refund_transaction(lifecycle, refund, owner=owner, session_id=row["session_id"])
         row.update(expired_before_refund=expired, refund_transaction=refund)
     wait(max(row["refund_transaction"]["height"] for row in sessions) + 1)
     for row in sessions:
