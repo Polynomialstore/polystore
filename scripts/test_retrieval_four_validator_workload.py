@@ -536,7 +536,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             "height": "15", "chain_id": "chain", "app_hash": "EF" * 32, "time": "now"},
             "data": {"txs": [base64.b64encode(raw).decode()]}})
         response = dict(height="15", txs_results=[dict(code=0, gas_wanted="100", gas_used="90",
-            events=[dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash)])])])
+            events=[dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash)]),
+                    dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash.upper())])])])
         receipt = dict(transactionHash=txhash, status="0x1", blockNumber="0xf", blockHash="0x" + "cd" * 32)
         life = SimpleNamespace(nodes=nodes, chain="chain", wait_height=Mock(),
             query=Mock(side_effect=lambda node, route: block if route.startswith("/block?") else response))
@@ -547,6 +548,24 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                           [dict(receipt, blockHash="0x" + "00" * 32)], [dict(receipt, transactionHash="0x" + "11" * 32)]):
             with self.subTest(candidate=candidate), self.assertRaises(ValueError):
                 workload.browser_v3_committed_receipts(life, candidate)
+        distinct = copy.deepcopy(response)
+        distinct["txs_results"][0]["events"].append(dict(type="ethereum_tx",
+            attributes=[dict(key="ethereumTxHash", value="0x" + "11" * 32)]))
+        life.query = lambda node, route: block if route.startswith("/block?") else distinct
+        with self.assertRaisesRegex(ValueError, "one successful Ethereum transaction"):
+            workload.browser_v3_committed_receipts(life, [receipt])
+        failed = copy.deepcopy(response)
+        failed["txs_results"][0]["code"] = 1
+        life.query = lambda node, route: block if route.startswith("/block?") else failed
+        with self.assertRaisesRegex(ValueError, "one successful Ethereum transaction"):
+            workload.browser_v3_committed_receipts(life, [receipt])
+        duplicate_block = copy.deepcopy(block)
+        duplicate_block["block"]["data"]["txs"].append(base64.b64encode(b"second transaction").decode())
+        duplicate_response = copy.deepcopy(response)
+        duplicate_response["txs_results"].append(copy.deepcopy(response["txs_results"][0]))
+        life.query = lambda node, route: duplicate_block if route.startswith("/block?") else duplicate_response
+        with self.assertRaisesRegex(ValueError, "lacks a unique"):
+            workload.browser_v3_committed_receipts(life, [receipt])
         def disagree(node, route):
             value = copy.deepcopy(block if route.startswith("/block?") else response)
             if node["node_id"] == "3" and "txs_results" in value:

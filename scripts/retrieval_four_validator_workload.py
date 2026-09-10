@@ -2474,10 +2474,10 @@ def browser_v3_committed_receipts(lifecycle, receipts):
             raise ValueError("Ethereum receipt has the wrong canonical block hash")
         matches = []
         for index, response in enumerate(block["results"]):
-            hashes = [a["value"].lower() for e in response["events"] for a in e["attributes"]
-                      if e["type"] == "ethereum_tx" and a["key"] == "ethereumTxHash"]
+            hashes = {a["value"].lower() for e in response["events"] for a in e["attributes"]
+                      if e["type"] == "ethereum_tx" and a["key"] == "ethereumTxHash"}
             if txhash in hashes:
-                if hashes != [txhash] or producer.uint(response["code"]) != 0:
+                if hashes != {txhash} or producer.uint(response["code"]) != 0:
                     raise ValueError("browser receipt is not one successful Ethereum transaction")
                 matches.append(dict(receipt=receipt, height=height, **block["summary"]["transactions"][index],
                     transaction_bytes=block["txs"][index], events=response["events"],
