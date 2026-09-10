@@ -425,6 +425,140 @@ func TestFrozenProofStorageAndOperationIsolation(t *testing.T) {
 	next()
 }
 
+func waitForPrioritySigner(t *testing.T, signer string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		retrievalOperations.Lock()
+		waiting := retrievalOperations.priority[signer] != nil
+		retrievalOperations.Unlock()
+		if waiting {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("priority signer %q did not start waiting", signer)
+}
+
+func TestPriorityRetrievalSignerPreventsForegroundStarvationAndCancels(t *testing.T) {
+	signer := "audit-signer"
+	foreground, err := claimRetrievalOperations([]string{"first"}, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(foreground)
+
+	type result struct {
+		release func()
+		waited  bool
+		err     error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		release, waited, err := claimPriorityRetrievalSigner(context.Background(), signer)
+		resultCh <- result{release, waited, err}
+	}()
+	waitForPrioritySigner(t, signer)
+	if release, _, err := claimPriorityRetrievalSigner(context.Background(), signer); err == nil {
+		release()
+		t.Fatal("duplicate audit waiter admitted")
+	}
+	for i := 0; i < 20; i++ {
+		if release, err := claimRetrievalOperations([]string{fmt.Sprintf("foreground-%d", i)}, signer); err == nil {
+			release()
+			t.Fatal("foreground request stole reserved signer")
+		}
+	}
+	foreground()
+	got := <-resultCh
+	if got.err != nil || !got.waited || got.release == nil {
+		t.Fatal(got.waited, got.err)
+	}
+	if release, err := claimRetrievalOperations([]string{"overlap"}, signer); err == nil {
+		release()
+		t.Fatal("foreground overlapped admitted audit")
+	}
+	got.release()
+	got.release()
+
+	foreground, err = claimRetrievalOperations([]string{"second"}, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	resultCh = make(chan result, 1)
+	go func() {
+		release, waited, err := claimPriorityRetrievalSigner(cancelCtx, signer)
+		resultCh <- result{release, waited, err}
+	}()
+	waitForPrioritySigner(t, signer)
+	cancel()
+	got = <-resultCh
+	if !errors.Is(got.err, context.Canceled) || !got.waited || got.release != nil {
+		t.Fatalf("canceled reservation result: waited=%v release_present=%v err=%v", got.waited, got.release != nil, got.err)
+	}
+	foreground()
+	next, err := claimRetrievalOperations([]string{"after-cancel"}, signer)
+	if err != nil {
+		t.Fatal("canceled reservation retained signer", err)
+	}
+	next()
+	canceledCtx, cancelAlready := context.WithCancel(context.Background())
+	cancelAlready()
+	if release, _, err := claimPriorityRetrievalSigner(canceledCtx, signer); !errors.Is(err, context.Canceled) {
+		if release != nil {
+			release()
+		}
+		t.Fatal("already canceled audit admission", err)
+	}
+	next, err = claimRetrievalOperations([]string{"after-pre-cancel"}, signer)
+	if err != nil {
+		t.Fatal("pre-canceled admission leaked signer", err)
+	}
+	next()
+}
+
+func TestPriorityRetrievalSignerWaitersAreBounded(t *testing.T) {
+	type result struct {
+		release func()
+		err     error
+	}
+	active := make([]func(), 4)
+	cancels := make([]context.CancelFunc, 4)
+	results := make([]chan result, 4)
+	for i := range active {
+		signer := fmt.Sprintf("bounded-signer-%d", i)
+		var err error
+		active[i], err = claimRetrievalOperations(nil, signer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(active[i])
+		ctx, cancel := context.WithCancel(context.Background())
+		cancels[i] = cancel
+		results[i] = make(chan result, 1)
+		go func() {
+			release, _, err := claimPriorityRetrievalSigner(ctx, signer)
+			results[i] <- result{release, err}
+		}()
+		waitForPrioritySigner(t, signer)
+	}
+	if release, _, err := claimPriorityRetrievalSigner(context.Background(), "fifth-signer"); err == nil {
+		release()
+		t.Fatal("fifth audit waiter admitted")
+	}
+	for _, cancel := range cancels {
+		cancel()
+	}
+	for i, resultCh := range results {
+		got := <-resultCh
+		if !errors.Is(got.err, context.Canceled) || got.release != nil {
+			t.Fatalf("waiter %d cancellation: release_present=%v err=%v", i, got.release != nil, got.err)
+		}
+		active[i]()
+	}
+}
+
 func TestDelayedCommittedSubmissionThroughBothGatewayModes(t *testing.T) {
 	for _, mode := range []string{"ordinary", "router"} {
 		t.Run(mode, func(t *testing.T) {
