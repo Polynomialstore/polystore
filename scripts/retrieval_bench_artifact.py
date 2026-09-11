@@ -1795,7 +1795,7 @@ class FourValidatorLifecycle:
                 reservation.listen(1)
 
     def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False,
-                browser_payer=None):
+                browser_payer=None, max_block_gas=64_000_000):
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
         provider_count = integer(provider_count, "provider signer count", 12, 44)
@@ -1830,6 +1830,7 @@ class FourValidatorLifecycle:
         consensus = json.loads((self.root / "scripts/retrieval_consensus_profile.json").read_text())
         if consensus["block"] != {"max_bytes": "2097152", "max_gas": "64000000"}:
             raise ValueError("four-validator frozen consensus profile changed")
+        consensus["block"]["max_gas"] = str(integer(max_block_gas, "max block gas", 1, 2_000_000_000))
         genesis["consensus"]["params"]["block"].update(consensus["block"])
         params = genesis["app_state"]["nilchain"]["params"]
         if "retrieval_v2_activation_height" not in params:

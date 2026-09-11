@@ -1545,6 +1545,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             ("eight-blobs", 8 * 126_976, 8, 8, 8, 160, 1280),
             ("sample-cap", 16 * 1024 * 1024, 133, 132, 8, 10, 80),
         ])
+        selected = workload.native_v3_chain_capacity_profiles("1kib", 6400)
+        self.assertEqual([(row["name"], row["sessions"], row["measured_transactions"])
+                          for row in selected], [("1kib", 6400, 6400)])
+        with self.assertRaisesRegex(ValueError, "transaction count"):
+            workload.native_v3_chain_capacity_profiles("1kib")
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
@@ -2346,6 +2351,15 @@ class HealthyAuditViewsTest(unittest.TestCase):
                                                 timeout=3600, sustained=True)
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
                                         native_chain=dict(exporter="/exporter"), audit_profile="normal")
+        sweep = required + ["--chain-max-gas", "512000000", "--chain-capacity-profile", "1kib",
+                            "--chain-capacity-transactions", "6400"]
+        with patch.object(workload.sys, "argv", common + sweep), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+            run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                native_chain=dict(exporter="/exporter", max_block_gas=512_000_000,
+                                  profile="1kib", measured_transactions=6400), audit_profile="normal")
 
     def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
