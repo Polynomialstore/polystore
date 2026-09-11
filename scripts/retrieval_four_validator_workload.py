@@ -1446,7 +1446,8 @@ def wait_for_crossed_audit_signal(lifecycle, providers, deal_id, expected_counts
 
 def open_cross_audit_measurement(lifecycle, target_height):
     """Capture the expensive metric boundary before the exact schedule-start fence."""
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True,
+                             finalize_block=True)
     lifecycle.wait_height(target_height)
     before_cpu = validator_cpu_snapshot(lifecycle)
     scheduled_start_height = lifecycle.wait_height(1)
@@ -1518,7 +1519,8 @@ def close_cross_audit_measurement(lifecycle, audits, providers, deal_id, expecte
                 raise ValueError("crossed audit state is incomplete after its event signal")
         signal["audits"] = views
         audit_views[epoch] = views
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True,
+                             finalize_block=True)
     lifecycle.doc["native_v3_cross_audit"]["measured_window"] = dict(
         monotonic_start_ns=before_cpu["monotonic_ns"],
         monotonic_end_ns=after_cpu["monotonic_ns"],
