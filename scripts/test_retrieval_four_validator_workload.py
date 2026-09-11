@@ -3006,7 +3006,7 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
         argv = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
             "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
             "--cli-binary", "/native-cli", "--product-source", "/source",
-            "--proof-exporter", "/exporter", "--chain-max-gas", "128000000",
+            "--proof-exporter", "/exporter", "--chain-max-gas", "192000000",
             "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "4608",
             "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
             "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500"]
@@ -3015,7 +3015,7 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
         run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
-            native_chain=dict(exporter="/exporter", max_block_gas=128_000_000, profile="1kib",
+            native_chain=dict(exporter="/exporter", max_block_gas=192_000_000, profile="1kib",
                 measured_transactions=None, measured_sessions=4608,
                 submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
         self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
