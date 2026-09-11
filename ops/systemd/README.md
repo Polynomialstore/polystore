@@ -116,7 +116,8 @@ Install these as user units so the checks continue without root systemd access:
 ```bash
 mkdir -p ~/.config/systemd/user ~/.config/polystore
 install -d /opt/polystore/scripts
-install -m 755 scripts/{devnet_healthcheck.sh,run_public_devnet_healthcheck.sh,renew_provider_certificates.sh,chain_cli_helpers.sh} /opt/polystore/scripts/
+install -m 755 scripts/{devnet_healthcheck.sh,run_public_devnet_healthcheck.sh,renew_provider_certificates.sh,chain_cli_helpers.sh,retrieval_consensus_profile.py} /opt/polystore/scripts/
+install -m 644 scripts/retrieval_consensus_profile.json /opt/polystore/scripts/
 cp ops/systemd/polystore-public-healthcheck.{service,timer} ~/.config/systemd/user/
 cp ops/systemd/polystore-provider-cert-renewal.{service,timer} ~/.config/systemd/user/
 cp ops/systemd/env/polystore-public-healthcheck.env ~/.config/polystore/

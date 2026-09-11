@@ -23,9 +23,10 @@ const (
 	// MaxTransactionBytes is shared by consensus admission and client builders.
 	// Changes require a coordinated binary upgrade.
 	MaxTransactionBytes    = 1 << 20
+	// MaxRetrievalV2BlockGas bounds one retrieval transaction's estimated gas.
 	MaxRetrievalV2BlockGas = int64(64000000)
 	// MaxRetrievalActivationBlockGas permits bounded first-activation throughput
-	// qualification without changing the checked-in 64M consensus profile.
+	// qualification above the checked-in canonical 128M consensus profile.
 	MaxRetrievalActivationBlockGas        = int64(448000000)
 	MaxRetrievalV2BlockBytes              = int64(2 * 1024 * 1024)
 	MaxRetrievalSessionOpensPerBlock      = uint64(128)

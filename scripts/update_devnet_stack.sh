@@ -1007,6 +1007,8 @@ preflight_install_plan() {
     "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
     "$SOURCE_ROOT/scripts/devnet_healthcheck.sh"
     "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/retrieval_consensus_profile.py"
+    "$SOURCE_ROOT/scripts/retrieval_consensus_profile.json"
     "$SOURCE_ROOT/scripts/chain_cli_helpers.sh"
     "$SOURCE_ROOT/scripts/renew_provider_certificates.sh"
   )

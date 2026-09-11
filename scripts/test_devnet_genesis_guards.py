@@ -24,6 +24,18 @@ def metadata_program():
 
 
 class DevnetGenesisGuardTest(unittest.TestCase):
+    def test_public_bootstrap_defaults_to_active_canonical_profile(self):
+        source = (ROOT / "scripts/run_devnet_alpha_multi_sp.sh").read_text()
+        self.assertIn(
+            'POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT="${POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT:-1}"',
+            source,
+        )
+        docs = (ROOT / "docs/TRUSTED_DEVNET_SOFT_LAUNCH.md").read_text()
+        self.assertIn(
+            "POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \\\nPOLYSTORE_HOME=/var/lib/polystore/polystorechaind",
+            docs,
+        )
+
     def run_program(self, module_key="nilchain", activation="1", profile=None):
         genesis = {
             "app_state": {

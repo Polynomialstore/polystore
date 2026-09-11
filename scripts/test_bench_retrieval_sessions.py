@@ -40,7 +40,8 @@ class BenchmarkHomeTest(unittest.TestCase):
         root = Path(checkout.name)
         for directory in ("scripts", "polystore_core", "polystorechain/vendor"):
             (root / directory).mkdir(parents=True)
-        for name in (SCRIPT.name, "chain_go.sh", "retrieval_bench_artifact.py", "retrieval_fresh_proof.py", "retrieval_consensus_profile.json"):
+        for name in (SCRIPT.name, "chain_go.sh", "retrieval_bench_artifact.py", "retrieval_fresh_proof.py",
+                     "retrieval_consensus_profile.py", "retrieval_consensus_profile.json"):
             shutil.copy2(SCRIPT.with_name(name), root / "scripts" / name)
         for name in ("go.mod", "go.sum", "vendor/correction.go"):
             (root / "polystorechain" / name).write_text("mock dependency\n")
