@@ -436,8 +436,15 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 // verification ceiling beneath retrieval-v3 admission. It excludes keeper
 // reads/writes, transaction handling, and gas accounting.
 func BenchmarkVerifyChainedProofParallel(b *testing.B) {
+	b.Setenv("POLYSTORE_BENCH_FIXTURE_NONCONSTANT", "1")
 	env := setupBenchRetrievalEnv(b)
 	proof := env.benchBuildChainedProof(b, 0, 100)
+	infinity := make([]byte, 48)
+	infinity[0] = 0xc0
+	require.NotEqual(b, infinity, proof.RootTableDuCommitment)
+	require.NotEqual(b, infinity, proof.ManifestOpening)
+	require.NotEqual(b, infinity, proof.BlobCommitment)
+	require.NotEqual(b, infinity, proof.KzgOpeningProof)
 	rootPath := benchFlattenPath(proof.RootTableDuMerklePath)
 	blobPath := benchFlattenPath(proof.MerklePath)
 	b.ReportMetric(1, "sessions/op")
