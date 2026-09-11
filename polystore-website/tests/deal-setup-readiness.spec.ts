@@ -23,6 +23,7 @@ test('upload stays blocked until a newly selected deal resolves through detail l
   const gatewayStatusPayload = {
     persona: 'user-gateway',
     allowed_route_families: ['gateway'],
+    capabilities: { retrieval_session_proof_continue: true },
     git_sha: 'test',
     version: 'test',
   }

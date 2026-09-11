@@ -45,6 +45,7 @@ async function setupGatewayProbeRoutes(page: Page) {
       body: JSON.stringify({
         persona: 'user-gateway',
         allowed_route_families: ['gateway'],
+        capabilities: { retrieval_session_proof_continue: true },
       }),
     })
   }

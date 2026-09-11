@@ -6,7 +6,8 @@ import * as retrievalMode from './retrievalMode'
 import * as transportMode from './transport/mode'
 import * as v3Candidates from './transport/v3Candidates'
 
-const qualifiedStatus = JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['gateway'] })
+const qualifiedStatus = JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['gateway'],
+  capabilities: { retrieval_session_proof_continue: true } })
 
 async function eventually(predicate: () => boolean) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -137,6 +138,7 @@ for (const row of [
   { name: 'wrong persona', body: JSON.stringify({ persona: 'provider-daemon', allowed_route_families: ['gateway'] }) },
   { name: 'missing route families', body: JSON.stringify({ persona: 'user-gateway' }) },
   { name: 'near-match route family', body: JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['user-gateway', 'gateway/retrieval'] }) },
+  { name: 'missing retrieval continuation capability', body: JSON.stringify({ persona: 'user-gateway', allowed_route_families: ['gateway'] }) },
 ] as const) {
   test(`useLocalGateway does not publish ${row.name} status and still discovers a qualified fallback`, async () => {
     const configured = 'http://localhost:18080'
