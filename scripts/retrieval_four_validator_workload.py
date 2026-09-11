@@ -509,6 +509,8 @@ def opened_v3_sessions(result, count, *, logical_bytes=V3_PILOT_BYTES, shapes=No
         raise ValueError("v3 open response shapes differ from the batch")
     frames = []
     for expected in shapes:
+        if producer.uint(expected.get("file_start_offset", 0)) != 0:
+            raise ValueError("v3 open response decoder only supports zero file start offset")
         shape = native_v3_range_shape(
             producer.uint(expected.get("range_length", "")),
             range_start=producer.uint(expected.get("range_start", "")),

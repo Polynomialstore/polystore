@@ -966,6 +966,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "repeats"):
             workload.opened_v3_sessions(
                 dict(outcome="committed_success", data=(raw + raw).hex()), 2)
+        with self.assertRaisesRegex(ValueError, "zero file start offset"):
+            workload.opened_v3_sessions(
+                dict(outcome="committed_success", data=small.hex()), 1, shapes=[
+                    dict(file_start_offset="1", range_start="0", range_length="1024",
+                         file_length=str(workload.V3_PILOT_BYTES)),
+                ])
 
     def test_native_v3_open_batch_binds_order_gas_bytes_and_response(self):
         with tempfile.TemporaryDirectory() as tmp:
