@@ -1726,11 +1726,18 @@ def configure_four_validator_app(text, api_address, *, browser_evm=False):
     return text
 
 
+def consensus_timeout_commit(milliseconds):
+    milliseconds = integer(milliseconds, "consensus timeout commit milliseconds", 250, 1000)
+    if milliseconds not in (250, 500, 1000):
+        raise ValueError("consensus timeout commit must be 250, 500, or 1000 milliseconds")
+    return "1s" if milliseconds == 1000 else f"{milliseconds}ms"
+
+
 class FourValidatorLifecycle:
     """Owned local startup/persistence evidence, not a transaction load driver."""
 
     def __init__(self, binary, library, home, timeout=180, gomaxprocs=2, *, sustained=False,
-                 browser_evm=False):
+                 browser_evm=False, consensus_timeout_commit_ms=1000):
         self.root = Path(__file__).resolve().parent.parent
         self.binary, self.library = Path(binary).resolve(strict=True), Path(library).resolve(strict=True)
         if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
@@ -1750,6 +1757,7 @@ class FourValidatorLifecycle:
         for variable in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
             self.env[variable] = str(self.library.parent) + (":" + self.env[variable] if self.env.get(variable) else "")
         self.chain = "polystore_260-1"
+        self.timeout_commit = consensus_timeout_commit(consensus_timeout_commit_ms)
         self.nodes = [{"home": str(self.home / "nodes" / f"validator{i}"), "rpc": 26657 - 3*i,
                        "p2p": 26656 - 3*i, "grpc": 9090 - 2*i, "api": 1317 - i,
                        "metrics": 26660 + i} for i in range(4)]
@@ -1871,7 +1879,7 @@ class FourValidatorLifecycle:
             self.cli(home, "genesis", "validate")
             path = home / "config/config.toml"
             config = path.read_text()
-            for section, key, value in (("consensus", "timeout_commit", '"1s"'),
+            for section, key, value in (("consensus", "timeout_commit", f'"{self.timeout_commit}"'),
                                         ("p2p", "addr_book_strict", "false"),
                                         ("mempool", "size", str(COMET_MEMPOOL_SIZE)),
                                         ("mempool", "max_txs_bytes", str(COMET_MEMPOOL_MAX_TXS_BYTES)),
@@ -1896,7 +1904,7 @@ class FourValidatorLifecycle:
         if len({node["node_id"] for node in self.nodes}) != 4 or len({json.dumps(node["validator_key"], sort_keys=True) for node in self.nodes}) != 4:
             raise ValueError("expected four independent node and voting keys")
         self.doc.update(genesis_sha256=sha256(first / "config/genesis.json"), frozen_module_params=params,
-                        profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
+                        profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": self.timeout_commit, "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"],
                                  "app_mempool_max_txs": APP_MEMPOOL_MAX_TXS,

@@ -989,7 +989,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             life = SimpleNamespace(binary=Path("/chain"), chain="chain", env={},
                 deadline=artifact.monotonic_ns() + 10**9, signers={"owner0": owner},
                 nodes=[{"home": str(home), "rpc": 26657}], doc={}, save=Mock())
-            paths, generated = [], []
+            paths, generated, completion_order = [], {}, []
+            release_first = threading.Event()
             for nonce in range(1, 32):
                 path = home / f"open-{nonce}.json"
                 path.write_text(json.dumps(dict(creator=owner, deal_id="7", generation="1",
@@ -1002,15 +1003,22 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 if "--generate-only" in args:
                     path = Path(args[args.index("open") + 1])
                     source = json.loads(path.read_text())
+                    nonce = int(source["nonce"])
+                    if nonce == 1:
+                        self.assertTrue(release_first.wait(timeout=1))
+                    elif nonce == 2:
+                        release_first.set()
                     source["range"] = {key: str(value) for key, value in source["range"].items()}
                     message = {"@type": "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3", **source}
                     gas = args[args.index("--gas") + 1]
                     tx = {"body": {"messages": [message]},
                           "auth_info": {"fee": {"gas_limit": gas}}}
-                    generated.append(tx)
+                    generated[nonce] = tx
+                    completion_order.append(nonce)
                     return json.dumps(tx)
-                messages = [row["body"]["messages"][0] for row in generated]
-                gas = sum(int(row["auth_info"]["fee"]["gas_limit"]) for row in generated)
+                txs = [json.loads(line) for line in Path(args[3]).read_text().splitlines()]
+                messages = [row["body"]["messages"][0] for row in txs]
+                gas = sum(int(row["auth_info"]["fee"]["gas_limit"]) for row in txs)
                 Path(args[args.index("--output-document") + 1]).write_text(json.dumps({
                     "body": {"messages": messages}, "auth_info": {"fee": {"gas_limit": str(gas)}},
                     "signatures": ["signed"]}))
@@ -1033,8 +1041,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                         {"node_id": str(i), "bytes": 4096} for i in range(4)]):
                 ids, height = workload.open_v3_session_batch(life, paths, home / "batch", command)
             self.assertEqual((ids, height), ([value.hex() for value in session_ids], 12))
-            self.assertEqual([int(row["auth_info"]["fee"]["gas_limit"]) for row in generated],
+            self.assertNotEqual(completion_order, list(range(1, 32)))
+            self.assertEqual([int(generated[index]["auth_info"]["fee"]["gas_limit"]) for index in range(1, 32)],
                              [2_100_000] + [2_000_000] * 30)
+            signed_messages = json.loads((home / "batch/signed.json").read_text())["body"]["messages"]
+            self.assertEqual([int(message["nonce"]) for message in signed_messages], list(range(1, 32)))
             self.assertEqual(life.doc["native_v3_open_batches"][0]["signed_gas"], 62_100_000)
             self.assertEqual(life.doc["native_v3_open_batches"][0]["committed_bytes"], 4096)
             submit.assert_called_once()
@@ -2337,7 +2348,17 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
             self.assertEqual(run.call_args.args[0][-1], "--generate-only")
             self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--from") + 1], "provider0")
+            self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--gas-adjustment") + 1], "1.6")
             self.assertEqual(job["submit"][job["submit"].index("--from") + 1], AUDIT_ADDRESSES[0])
+            adjusted_path = Path(tmp) / "adjusted.json"
+            adjusted_path.write_text(json.dumps(message))
+            with patch.object(artifact, "run_bounded_command", return_value=result) as adjusted_run:
+                workload.v3_generate_only_gas(life, adjusted_path, AUDIT_ADDRESSES[0], gas_adjustment="1.1")
+            adjusted_argv = adjusted_run.call_args.args[0]
+            self.assertEqual(adjusted_argv[adjusted_argv.index("--gas-adjustment") + 1], "1.1")
+            with self.assertRaisesRegex(ValueError, "outside the benchmark matrix"):
+                workload.v3_generate_only_gas(life, Path(tmp) / "missing.json", AUDIT_ADDRESSES[0],
+                                              gas_adjustment="1.05")
             changed = copy.deepcopy(unsigned)
             changed["body"]["messages"][0]["slot"] = 1
             changed_path = Path(tmp) / "changed.json"
@@ -2727,7 +2748,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             "--cli-binary", "/native-cli", "--product-source", "/source",
             "--proof-exporter", "/exporter", "--chain-max-gas", "128000000",
             "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "4608",
-            "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64"]
+            "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
+            "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500"]
         with patch.object(workload.sys, "argv", argv), \
              patch.object(artifact, "FourValidatorLifecycle") as constructor, \
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
@@ -2735,7 +2757,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
         run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
             native_chain=dict(exporter="/exporter", max_block_gas=128_000_000, profile="1kib",
                 measured_transactions=None, measured_sessions=4608,
-                submission_mode="batch-message", batch_size=64), audit_profile="normal")
+                submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
+        self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
 
     def test_transaction_members_reject_duplicate_session_slot(self):
         members = [dict(session_index=1, slot=2, ordinals=[0]),

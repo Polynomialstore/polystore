@@ -68,6 +68,7 @@ V3_CHAIN_CAPACITY_RANGES = (1024, 8 * V3_DATA_BLOB_PAYLOAD_BYTES, V3_PILOT_BYTES
 V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
 V3_CHAIN_SUBMISSION_MODES = ("separate", "serial-messages", "batch-message")
 V3_CHAIN_BATCH_SIZES = (8, 32, 64)
+V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
 V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
@@ -1769,7 +1770,9 @@ def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
 
 
 def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
-                         message_type=V3_SINGLE_PROOF_TYPE):
+                         message_type=V3_SINGLE_PROOF_TYPE, gas_adjustment="1.6"):
+    if gas_adjustment not in V3_CHAIN_GAS_ADJUSTMENTS:
+        raise ValueError("native v3 gas adjustment is outside the benchmark matrix")
     message_path = Path(message_path)
     source_raw = message_path.read_bytes()
     if len(source_raw) > 8 * 1024 * 1024:
@@ -1782,6 +1785,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
         ["retrieval-session-v3", action, str(message_path)], kind="submit-proof", gas="auto")
     argv = [*job["submit"], "--generate-only"]
     argv[argv.index("--from") + 1] = aliases[0]
+    argv[argv.index("--gas-adjustment") + 1] = gas_adjustment
     deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
     attempts = []
     for attempt in range(3):
@@ -2386,12 +2390,15 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
 
 def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length,
                         profile_name=None, measured_transactions=None, measured_sessions=None,
-                        submission_mode="separate", batch_size=1):
+                        submission_mode="separate", batch_size=1, gas_adjustment="1.6"):
     """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
     if epoch_length != V3_CHAIN_AUDIT_EPOCH_BLOCKS:
         raise ValueError("native chain capacity requires the fixed 100-block audit epoch")
+    if gas_adjustment not in V3_CHAIN_GAS_ADJUSTMENTS:
+        raise ValueError("native v3 gas adjustment is outside the benchmark matrix")
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
-        scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")
+        scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded",
+        gas_adjustment=gas_adjustment)
     owner = lifecycle.signers["owner0"]
     profiles = native_v3_chain_capacity_profiles(profile_name, measured_transactions,
         measured_sessions=measured_sessions, submission_mode=submission_mode, batch_size=batch_size)
@@ -2451,15 +2458,17 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     by_slot = {slot: [] for slot in range(V3_SYSTEMATIC_PROVIDERS)}
     for row in inventory["messages"]:
         by_slot[row["slot"]].append(row)
-    def simulate_slot(slot):
-        return [(row, *v3_generate_only_gas(lifecycle, row["message_path"], row["provider"]))
-                for row in by_slot[slot]]
     simulated = []
-    with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
-        for values in pool.map(simulate_slot, range(V3_SYSTEMATIC_PROVIDERS)):
-            simulated.extend(values)
     expected_messages = sum(row["proof_messages"] for row in profiles)
-    if len(simulated) != expected_messages:
+    if any(profile["submission_mode"] != "batch-message" for profile in profiles):
+        def simulate_slot(slot):
+            return [(row, *v3_generate_only_gas(lifecycle, row["message_path"], row["provider"],
+                                                gas_adjustment=gas_adjustment))
+                    for row in by_slot[slot]]
+        with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
+            for values in pool.map(simulate_slot, range(V3_SYSTEMATIC_PROVIDERS)):
+                simulated.extend(values)
+    if simulated and len(simulated) != expected_messages:
         raise ValueError("native v3 gas preflight omitted a prepared message")
     doc["profiles"] = profiles
     doc["sessions"] = sessions
@@ -2477,7 +2486,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         if profile["submission_mode"] == "batch-message":
             def simulate_batch(intent):
                 _, simulation = v3_generate_only_gas(lifecycle, intent["message_path"], intent["provider"],
-                    action="prove-batch", message_type=V3_BATCH_PROOF_TYPE)
+                    action="prove-batch", message_type=V3_BATCH_PROOF_TYPE, gas_adjustment=gas_adjustment)
                 return intent["id"], simulation
             with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
                 simulations.update(pool.map(simulate_batch, intents))
@@ -4299,31 +4308,35 @@ def open_v3_session_batch(lifecycle, paths, directory, command):
         raise ValueError("native v3 open batch requires the frozen owner")
     directory.mkdir(mode=0o700)
     unsigned, signed = directory / "unsigned.jsonl", directory / "signed.json"
-    generated, generated_gas = [], 0
+    def generate(index_path):
+        index, path = index_path
+        expected_gas = V3_CROSS_AUDIT_OPEN_GAS + (OPEN_SESSION_BATCH_BASE_GAS if index == 0 else 0)
+        args = transaction_job(lifecycle, "owner0", ["retrieval-session-v3", "open", str(path)],
+                               gas=str(expected_gas))["submit"] + ["--generate-only"]
+        tx = json.loads(command(args))
+        messages = tx.get("body", {}).get("messages", [])
+        gas = producer.uint(tx.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
+        if len(messages) != 1 or gas != expected_gas:
+            raise ValueError("generated native v3 open differs from ordered intent or gas")
+        message, wanted = messages[0], expected[index]
+        if (set(message) != {"@type", "creator", "deal_id", "generation", "range", "nonce", "deadline_height"} or
+                message.get("@type") != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3" or
+                message.get("creator") != wanted["creator"] or
+                any(producer.uint(message.get(key, "")) != producer.uint(wanted[key])
+                    for key in ("deal_id", "generation", "nonce", "deadline_height")) or
+                not isinstance(message.get("range"), dict) or
+                set(message["range"]) != {"file_record_index", "file_start_offset", "file_length",
+                                          "range_start", "range_length"} or
+                any(producer.uint(message["range"].get(key, "")) != producer.uint(wanted["range"][key])
+                    for key in message["range"])):
+            raise ValueError("generated native v3 open differs from ordered intent or gas")
+        return tx, gas
+
+    with ThreadPoolExecutor(max_workers=min(8, len(paths))) as pool:
+        generated = list(pool.map(generate, enumerate(paths)))
+    generated_gas = sum(gas for _, gas in generated)
     with unsigned.open("x") as output:
-        for index, path in enumerate(paths):
-            expected_gas = V3_CROSS_AUDIT_OPEN_GAS + (OPEN_SESSION_BATCH_BASE_GAS if index == 0 else 0)
-            args = transaction_job(lifecycle, "owner0", ["retrieval-session-v3", "open", str(path)],
-                                   gas=str(expected_gas))["submit"] + ["--generate-only"]
-            tx = json.loads(command(args))
-            messages = tx.get("body", {}).get("messages", [])
-            gas = producer.uint(tx.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
-            if len(messages) != 1 or gas != expected_gas:
-                raise ValueError("generated native v3 open differs from ordered intent or gas")
-            message, wanted = messages[0], expected[index]
-            if (set(message) != {"@type", "creator", "deal_id", "generation", "range", "nonce", "deadline_height"} or
-                    message.get("@type") != "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3" or
-                    message.get("creator") != wanted["creator"] or
-                    any(producer.uint(message.get(key, "")) != producer.uint(wanted[key])
-                        for key in ("deal_id", "generation", "nonce", "deadline_height")) or
-                    not isinstance(message.get("range"), dict) or
-                    set(message["range"]) != {"file_record_index", "file_start_offset", "file_length",
-                                              "range_start", "range_length"} or
-                    any(producer.uint(message["range"].get(key, "")) != producer.uint(wanted["range"][key])
-                        for key in message["range"])):
-                raise ValueError("generated native v3 open differs from ordered intent or gas")
-            generated.append(tx)
-            generated_gas += gas
+        for tx, _ in generated:
             output.write(json.dumps(tx, separators=(",", ":")) + "\n")
     node = lifecycle.nodes[0]
     common = ["--home", node["home"], "--node", f'http://127.0.0.1:{node["rpc"]}',
@@ -4331,7 +4344,7 @@ def open_v3_session_batch(lifecycle, paths, directory, command):
     command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append", "--from", owner,
              *common, "--output-document", str(signed)])
     value = json.loads(signed.read_text())
-    messages = [tx["body"]["messages"][0] for tx in generated]
+    messages = [tx["body"]["messages"][0] for tx, _ in generated]
     signed_gas = producer.uint(value.get("auth_info", {}).get("fee", {}).get("gas_limit", 0))
     expected_gas = OPEN_SESSION_BATCH_BASE_GAS + V3_CROSS_AUDIT_OPEN_GAS * len(paths)
     signed_bytes = signed.stat().st_size
@@ -5102,7 +5115,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                     measured_transactions=native_chain.get("measured_transactions"),
                                     measured_sessions=native_chain.get("measured_sessions"),
                                     submission_mode=native_chain.get("submission_mode", "separate"),
-                                    batch_size=native_chain.get("batch_size", 1))
+                                    batch_size=native_chain.get("batch_size", 1),
+                                    gas_adjustment=native_chain.get("gas_adjustment", "1.6"))
                 doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
@@ -5185,6 +5199,10 @@ def main():
                         help="Separate transactions, serial messages in one transaction, or the V3 batch message")
     parser.add_argument("--chain-proof-batch-size", type=int, choices=(1, *V3_CHAIN_BATCH_SIZES), default=1,
                         help="Provider-local proof messages per transaction; 1 for separate, otherwise 8/32/64")
+    parser.add_argument("--chain-proof-gas-adjustment", choices=V3_CHAIN_GAS_ADJUSTMENTS, default="1.6",
+                        help="Benchmark-only proof simulation gas multiplier; defaults to the historical 1.6")
+    parser.add_argument("--chain-timeout-commit-ms", type=int, choices=(250, 500, 1000), default=1000,
+                        help="Benchmark-only CometBFT timeout_commit; defaults to the historical 1000ms")
     parser.add_argument("--browser-bytes", type=int, choices=V3_BROWSER_SIZES,
                         help="Retained browser fixture size; only used by native-v3-browser")
     parser.add_argument("--browser-executor-handoff", action="store_true",
@@ -5210,11 +5228,15 @@ def main():
     chain_capacity_sessions = options.pop("chain_capacity_sessions")
     chain_submission_mode = options.pop("chain_proof_submission_mode")
     chain_batch_size = options.pop("chain_proof_batch_size")
+    chain_gas_adjustment = options.pop("chain_proof_gas_adjustment")
+    chain_timeout_commit_ms = options.pop("chain_timeout_commit_ms")
     if mode != "native-v3-chain" and any(value is not None for value in
             (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)):
         parser.error("chain capacity controls require native-v3-chain")
     if mode != "native-v3-chain" and (chain_submission_mode != "separate" or chain_batch_size != 1):
         parser.error("chain proof submission controls require native-v3-chain")
+    if mode != "native-v3-chain" and (chain_gas_adjustment != "1.6" or chain_timeout_commit_ms != 1000):
+        parser.error("chain timing and gas controls require native-v3-chain")
     if browser_executor_handoff and (mode != "native-v3-browser" or
             (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
         parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
@@ -5227,7 +5249,8 @@ def main():
     elif mode == "native-v3-chain":
         selected_chain_profile = any(value is not None for value in
             (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)) or \
-            chain_submission_mode != "separate" or chain_batch_size != 1
+            chain_submission_mode != "separate" or chain_batch_size != 1 or \
+            chain_gas_adjustment != "1.6" or chain_timeout_commit_ms != 1000
         if (not gateway or not cli or not source or not exporter or k8 or k2 or proof_only or
                 proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
                 sustained_rate_scale != 1 or sustained_deputies != 8 or
@@ -5236,6 +5259,8 @@ def main():
                  (chain_capacity_transactions is None) == (chain_capacity_sessions is None)))):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
         native_chain = dict(exporter=exporter)
+        if chain_timeout_commit_ms != 1000:
+            options["consensus_timeout_commit_ms"] = chain_timeout_commit_ms
         if selected_chain_profile:
             try:
                 profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions,
@@ -5249,6 +5274,8 @@ def main():
             if chain_capacity_sessions is not None:
                 native_chain.update(measured_sessions=chain_capacity_sessions,
                                     submission_mode=chain_submission_mode, batch_size=chain_batch_size)
+            if chain_gas_adjustment != "1.6":
+                native_chain["gas_adjustment"] = chain_gas_adjustment
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
                           native_chain=native_chain, audit_profile="normal"))
     elif mode == "native-v3-browser":
