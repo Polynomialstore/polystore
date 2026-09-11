@@ -120,7 +120,7 @@ def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=N
         if len(selected) != 1 or measured_transactions is None:
             raise ValueError("selected native v3 capacity profile requires a transaction count")
         profile = selected[0]
-        transactions = artifact.integer(measured_transactions, "measured transactions", 1, 9999)
+        transactions = artifact.integer(measured_transactions, "measured transactions", 1, 4999)
         if transactions % profile["proof_transactions"]:
             raise ValueError("native v3 capacity inventory must contain complete proof sets")
         profile.update(measured_transactions=transactions,
@@ -2226,10 +2226,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
             if len(frozen) != profile["measured_transactions"]:
                 raise ValueError("frozen profile transaction count differs from the fixed inventory")
-            app_limit = lifecycle.doc["profile"]["app_mempool_max_txs"]
-            if ((app_limit >= 0 and len(frozen) >= app_limit) or
-                    sum(row["bytes"] for row in frozen) >= 1024**3):
-                raise ValueError("frozen profile reaches the configured mempool transaction/byte cap")
+            if len(frozen) >= 5000 or sum(row["bytes"] for row in frozen) >= 1024**3:
+                raise ValueError("frozen profile reaches the default Comet mempool transaction/byte cap")
             post_freeze = require_provider_quiescence(lifecycle, providers)
             ready_height = post_freeze["second_height"]
             ready_epoch = (ready_height - 1) // epoch_length + 1
@@ -4854,7 +4852,8 @@ def main():
     parser.add_argument("--sustained-deputies", type=int, choices=SUSTAINED_DEPUTY_COUNTS, default=8,
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
-    parser.add_argument("--chain-max-gas", type=int, choices=(64_000_000, 128_000_000, 256_000_000, 512_000_000),
+    parser.add_argument("--chain-max-gas", type=int,
+                        choices=(64_000_000, 128_000_000, 256_000_000, 448_000_000, 512_000_000),
                         help="Experimental native-v3-chain maximum block gas")
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
                         help="Run one native-v3-chain range shape")
@@ -4903,7 +4902,7 @@ def main():
                 options["timeout"] > 3600 or audit_profile != "normal" or
                 (selected_chain_profile and None in
                  (chain_max_gas, chain_capacity_profile, chain_capacity_transactions)) or
-                (chain_capacity_transactions is not None and not 1 <= chain_capacity_transactions <= 9999)):
+                (chain_capacity_transactions is not None and not 1 <= chain_capacity_transactions <= 4999)):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
         native_chain = dict(exporter=exporter)
         if selected_chain_profile:
