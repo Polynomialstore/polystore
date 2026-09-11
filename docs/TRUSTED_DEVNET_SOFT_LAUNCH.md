@@ -196,6 +196,7 @@ Bootstrap the absent chain home with the checked-in profile; no
 ```bash
 set -euo pipefail
 POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
+CHAIN_ID=20260211 EVM_CHAIN_ID=20260211 \
 POLYSTORE_HOME=/var/lib/polystore/polystorechaind \
 PROVIDER_COUNT=0 START_WEB=0 \
 ./scripts/run_devnet_alpha_multi_sp.sh start

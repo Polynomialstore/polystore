@@ -32,7 +32,7 @@ class DevnetGenesisGuardTest(unittest.TestCase):
         )
         docs = (ROOT / "docs/TRUSTED_DEVNET_SOFT_LAUNCH.md").read_text()
         self.assertIn(
-            "POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \\\nPOLYSTORE_HOME=/var/lib/polystore/polystorechaind",
+            "POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \\\nCHAIN_ID=20260211 EVM_CHAIN_ID=20260211 \\\nPOLYSTORE_HOME=/var/lib/polystore/polystorechaind",
             docs,
         )
 
