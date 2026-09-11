@@ -508,6 +508,7 @@ fi
 # Speed up the repair loop for E2E.
 export PROVIDER_COUNT
 export START_WEB="${START_WEB:-0}"
+export POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1
 # Keep repair fast, but leave enough first-epoch runway for stack startup,
 # deal creation, upload, session planning, and the scripted provider ghost.
 export POLYSTORE_EPOCH_LEN_BLOCKS="${POLYSTORE_EPOCH_LEN_BLOCKS:-40}"
