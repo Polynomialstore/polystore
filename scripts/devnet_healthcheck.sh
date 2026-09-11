@@ -453,6 +453,8 @@ check_public_provider() {
   status_endpoint="$(json_field "$status" '.provider.public_base' || true)"
   if [[ "$status_address" != "$address" || "$persona" != "provider-daemon" || "$chain_id" != "$EXPECTED_COSMOS_CHAIN_ID" ]]; then
     fail "Provider $address public identity mismatch: address=${status_address:-missing} persona=${persona:-missing} chain_id=${chain_id:-missing}"
+  elif ! jq -e '.deps.lcd_reachable == true' <<<"$status" >/dev/null 2>&1; then
+    fail "Provider $address cannot reach its configured LCD"
   elif ! python3 - "$public_base" "$status_endpoint" "$endpoint" <<'PY'
 import ipaddress
 import re

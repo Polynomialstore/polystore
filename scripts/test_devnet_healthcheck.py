@@ -25,6 +25,7 @@ class Handler(BaseHTTPRequestHandler):
     stalled = False
     wrong_id = False
     wrong_provider = False
+    lcd_reachable = True
     evm_530 = False
     inactive_precompile = False
     inactive_provider = False
@@ -124,6 +125,7 @@ class Handler(BaseHTTPRequestHandler):
                     "chain_id": chain_id,
                     "public_base": self.public_base,
                 },
+                "deps": {"lcd_reachable": self.lcd_reachable},
             })
         elif self.path == "/cosmos/base/tendermint/v1beta1/node_info":
             self.send_json({"default_node_info": {"network": chain_id}})
@@ -264,6 +266,7 @@ exit 1
         Handler.stalled = False
         Handler.wrong_id = False
         Handler.wrong_provider = False
+        Handler.lcd_reachable = True
         Handler.evm_530 = False
         Handler.inactive_precompile = False
         Handler.inactive_provider = False
@@ -356,6 +359,14 @@ exit 1
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("public identity mismatch", result.stdout)
+
+    def test_public_check_requires_provider_lcd_reachability(self):
+        for reachable in (False, None, "true"):
+            with self.subTest(reachable=reachable):
+                Handler.lcd_reachable = reachable
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("cannot reach its configured LCD", result.stdout)
 
     def test_public_check_rejects_inactive_provider(self):
         Handler.inactive_provider = True
