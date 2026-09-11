@@ -72,16 +72,19 @@ V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
 V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
-V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND = 407.57170408990055
-V3_SHARED_HOST_VERIFIER_CEILING_PROVENANCE = {
+V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND = 407.57170408990055
+V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_PROVENANCE = {
     "artifact_path": "bench/retrieval_session_capacity/parallel-ceiling-328/results.json",
     "artifact_commit": "db9fe2b691935a198e35d3676f2ad71c9aff5f42",
     "benchmark_source_commit": "ad80bfadbe378b09d2ed237fec0e33a7aa0d8d7b",
     "raw_benchmark_sha256": "56ec69a33cc3a95b8a4727ac5fa336034cda65a178d944290e50a0c9f1c1d1b5",
     "source_statistic": "comparison.shared_host_verifier_only_sessions_per_second",
     "source_statistic_semantics": (
-        "complete sampled chained proofs per second on one shared eight-core host, "
-        "normalized across four validator processes"),
+        "standalone KZG component throughput expressed as sampled chained-proof equivalents "
+        "on one shared eight-core host, normalized across four validator processes"),
+    "limitation": (
+        "provisional comparison only: this source does not execute the active "
+        "VerifyPolyFSSessionProofBatch verifier path"),
 }
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
@@ -2476,8 +2479,9 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     proof_sets_per_day = proof_sets_per_second * 86400
     sampled_chained_proofs_per_second = sampled_chained_proofs / commit_seconds
     sampled_chained_proofs_per_day = sampled_chained_proofs_per_second * 86400
-    verifier_limited_sessions_per_second = (
-        V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND / sample_count)
+    provisional_verifier_sessions_per_second = (
+        V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND /
+        sample_count)
     resource_metrics = validator_backlog_resources(
         mempool_samples, backlog, mempool_samples[0]["clock_ticks_per_second"])
     max_mempool_transactions = max(row["transactions"] for sample in mempool_samples
@@ -2495,19 +2499,19 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         committed_sampled_chained_proofs_per_day=sampled_chained_proofs_per_day,
         committed_kzg_opening_verifications_per_second=2 * sampled_chained_proofs_per_second,
         committed_kzg_opening_verifications_per_day=2 * sampled_chained_proofs_per_day,
-        shared_host_verifier_ceiling_sampled_chained_proofs_per_second=(
-            V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND),
-        shared_host_verifier_ceiling_kzg_opening_verifications_per_second=(
-            2 * V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND),
-        shared_host_verifier_limited_logical_sessions_per_second=(
-            verifier_limited_sessions_per_second),
-        shared_host_verifier_limited_logical_sessions_per_day=(
-            verifier_limited_sessions_per_second * 86400),
-        percent_of_shared_host_sampled_chained_proof_ceiling=(
+        provisional_shared_host_standalone_kzg_sampled_proof_proxy_per_second=(
+            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND),
+        provisional_shared_host_standalone_kzg_openings_per_second=(
+            2 * V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND),
+        provisional_shared_host_standalone_kzg_session_proxy_per_second=(
+            provisional_verifier_sessions_per_second),
+        provisional_shared_host_standalone_kzg_session_proxy_per_day=(
+            provisional_verifier_sessions_per_second * 86400),
+        provisional_percent_of_shared_host_standalone_kzg_sampled_proof_proxy=(
             sampled_chained_proofs_per_second /
-            V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND * 100),
-        shared_host_verifier_ceiling_provenance=dict(
-            V3_SHARED_HOST_VERIFIER_CEILING_PROVENANCE),
+            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND * 100),
+        provisional_shared_host_standalone_kzg_provenance=dict(
+            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_PROVENANCE),
         complete_proof_sets_per_second=proof_sets_per_second,
         complete_proof_sets_per_day=proof_sets_per_day,
         complete_proof_sets_in_saturated_interval=complete_proof_sets,
@@ -2751,8 +2755,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         start_commit_streams(lifecycle, V3_CHAIN_DRAIN_SECONDS + 60, commit_processes,
                              stream_key=stream_key, filename_prefix=stream_key)
         try:
-            capture_workload_metrics(lifecycle, before_phase, fenced=True,
-                                     finalize_block=issue_326_candidate)
+            capture_workload_metrics(lifecycle, before_phase, fenced=True, finalize_block=True)
             before_cpu = validator_cpu_snapshot(lifecycle)
             predecessor_height = lifecycle.wait_height(1)
             lanes = [[row for row in frozen if row["slot"] == slot]
@@ -2785,8 +2788,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                     stop_event.set()
                 mempool_samples = monitor.result()
             after_cpu = validator_cpu_snapshot(lifecycle)
-            capture_workload_metrics(lifecycle, after_phase, fenced=True,
-                                     finalize_block=issue_326_candidate)
+            capture_workload_metrics(lifecycle, after_phase, fenced=True, finalize_block=True)
         finally:
             artifact.stop_owned_process_groups(commit_processes)
         summarize_commit_streams(lifecycle, commit_processes, stream_key=stream_key,
@@ -2833,20 +2835,20 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         cpu_delta = validator_cpu_delta(before_cpu, after_cpu)
         cpu_delta["measurement_scope"] = "direct broadcast through all-validator mempool drain"
         finalize_blocks = []
+        phases = lifecycle.doc["commit_step_metrics"]["phases"]
+        before_by_node = {row["node_id"]: row["sample"] for row in phases[before_phase]["nodes"]}
+        after_by_node = {row["node_id"]: row["sample"] for row in phases[after_phase]["nodes"]}
+        if set(before_by_node) != set(after_by_node) or len(before_by_node) != 4:
+            raise ValueError("FinalizeBlock capture boundaries do not cover four validators")
+        for node_id in sorted(before_by_node):
+            before_histogram = before_by_node[node_id].get("finalize_block_histogram")
+            after_histogram = after_by_node[node_id].get("finalize_block_histogram")
+            expected_blocks = (after_by_node[node_id]["committed_height"] -
+                               before_by_node[node_id]["committed_height"])
+            finalize_blocks.append(dict(node_id=node_id, summary=
+                commit_metrics.summarize_finalize_block_histogram(
+                    before_histogram, after_histogram, expected_blocks)))
         if issue_326_candidate:
-            phases = lifecycle.doc["commit_step_metrics"]["phases"]
-            before_by_node = {row["node_id"]: row["sample"] for row in phases[before_phase]["nodes"]}
-            after_by_node = {row["node_id"]: row["sample"] for row in phases[after_phase]["nodes"]}
-            if set(before_by_node) != set(after_by_node) or len(before_by_node) != 4:
-                raise ValueError("FinalizeBlock capture boundaries do not cover four validators")
-            for node_id in sorted(before_by_node):
-                before_histogram = before_by_node[node_id].get("finalize_block_histogram")
-                after_histogram = after_by_node[node_id].get("finalize_block_histogram")
-                expected_blocks = (after_by_node[node_id]["committed_height"] -
-                                   before_by_node[node_id]["committed_height"])
-                finalize_blocks.append(dict(node_id=node_id, summary=
-                    commit_metrics.summarize_finalize_block_histogram(
-                        before_histogram, after_histogram, expected_blocks)))
             qualification = native_v3_128m_qualification(metrics, finalize_blocks, consensus,
                 len(offered), len(committed), lifecycle.doc["profile"]["comet_mempool"]["size"])
         else:

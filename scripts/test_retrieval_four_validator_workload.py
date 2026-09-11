@@ -1720,15 +1720,17 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["committed_sampled_chained_proofs_per_second"], .4)
         self.assertAlmostEqual(metrics["committed_kzg_opening_verifications_per_second"], .8)
         self.assertAlmostEqual(
-            metrics["shared_host_verifier_limited_logical_sessions_per_second"],
-            workload.V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND / 2)
+            metrics["provisional_shared_host_standalone_kzg_session_proxy_per_second"],
+            workload.V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND / 2)
         self.assertAlmostEqual(
-            metrics["percent_of_shared_host_sampled_chained_proof_ceiling"],
-            .4 / workload.V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND * 100)
-        self.assertEqual(metrics["shared_host_verifier_ceiling_provenance"]["artifact_path"],
+            metrics["provisional_percent_of_shared_host_standalone_kzg_sampled_proof_proxy"],
+            .4 / workload.V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND * 100)
+        self.assertEqual(metrics["provisional_shared_host_standalone_kzg_provenance"]["artifact_path"],
             "bench/retrieval_session_capacity/parallel-ceiling-328/results.json")
-        self.assertEqual(metrics["shared_host_verifier_ceiling_provenance"]["artifact_commit"],
+        self.assertEqual(metrics["provisional_shared_host_standalone_kzg_provenance"]["artifact_commit"],
             "db9fe2b691935a198e35d3676f2ad71c9aff5f42")
+        self.assertIn("does not execute the active VerifyPolyFSSessionProofBatch",
+            metrics["provisional_shared_host_standalone_kzg_provenance"]["limitation"])
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
