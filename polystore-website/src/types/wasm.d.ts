@@ -13,6 +13,15 @@ declare module '/wasm/polystore_core.js' {
 
   export class PolyStoreWasm {
     constructor(trusted_setup_bytes: Uint8Array)
+    static checked_retrieval_v3_range(file_start: bigint, file_length: bigint, range_start: bigint, range_length: bigint, user_mdus: bigint): Uint8Array
+    static retrieval_v3_plan(first: bigint, last: bigint, population: bigint, providers_flat: Uint8Array): Uint8Array
+    static retrieval_v3_session_id(chain: string, owner: Uint8Array, deal: bigint, generation: bigint, record: number, range_start: bigint, range_length: bigint, plan_hash: Uint8Array, nonce: bigint): Uint8Array
+    static retrieval_v3_obligation_ack_hash(chain: string, session: Uint8Array, context: Uint8Array, plan: Uint8Array, slot: number, assigned: Uint8Array, payee: Uint8Array, blob_count: bigint, billed_encoded_bytes: bigint, integrity: Uint8Array): Uint8Array
+    static retrieval_v3_context_hash(bytes: Uint8Array): Uint8Array
+    static retrieval_v3_seed(bytes: Uint8Array, anchor: Uint8Array): Uint8Array
+    static derive_retrieval_v3_challenges(bytes: Uint8Array, seed: Uint8Array): Uint8Array
+    verify_fat_v3_header(bytes: Uint8Array, integrity_root: Uint8Array, integrity_leaf_count: bigint): number
+    verify_integrity_v3_blob(mdu_index: bigint, leaf_index: number, position: bigint, leaf_count: bigint, blob: Uint8Array, path_flat: Uint8Array, expected_root: Uint8Array): boolean
     expand_file(data: Uint8Array): unknown
     expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown
     expand_payload_rs_flat(data: Uint8Array, k: number, m: number): unknown
@@ -66,6 +75,15 @@ declare module '../../public/wasm/polystore_core.js' {
 
   export class PolyStoreWasm {
     constructor(trusted_setup_bytes: Uint8Array)
+    static checked_retrieval_v3_range(file_start: bigint, file_length: bigint, range_start: bigint, range_length: bigint, user_mdus: bigint): Uint8Array
+    static retrieval_v3_plan(first: bigint, last: bigint, population: bigint, providers_flat: Uint8Array): Uint8Array
+    static retrieval_v3_session_id(chain: string, owner: Uint8Array, deal: bigint, generation: bigint, record: number, range_start: bigint, range_length: bigint, plan_hash: Uint8Array, nonce: bigint): Uint8Array
+    static retrieval_v3_obligation_ack_hash(chain: string, session: Uint8Array, context: Uint8Array, plan: Uint8Array, slot: number, assigned: Uint8Array, payee: Uint8Array, blob_count: bigint, billed_encoded_bytes: bigint, integrity: Uint8Array): Uint8Array
+    static retrieval_v3_context_hash(bytes: Uint8Array): Uint8Array
+    static retrieval_v3_seed(bytes: Uint8Array, anchor: Uint8Array): Uint8Array
+    static derive_retrieval_v3_challenges(bytes: Uint8Array, seed: Uint8Array): Uint8Array
+    verify_fat_v3_header(bytes: Uint8Array, integrity_root: Uint8Array, integrity_leaf_count: bigint): number
+    verify_integrity_v3_blob(mdu_index: bigint, leaf_index: number, position: bigint, leaf_count: bigint, blob: Uint8Array, path_flat: Uint8Array, expected_root: Uint8Array): boolean
     expand_file(data: Uint8Array): unknown
     expand_mdu_rs(data: Uint8Array, k: number, m: number): unknown
     expand_payload_rs_flat(data: Uint8Array, k: number, m: number): unknown

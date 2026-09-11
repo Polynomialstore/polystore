@@ -125,6 +125,11 @@ export async function createRetrievalOutput(length: bigint, savedId?: string) {
   }
 }
 
+export async function removeRetrievalOutput(id: string): Promise<void> {
+  const { workerClient } = await import('./worker-client')
+  await workerClient.retrievalOutput({ action: 'remove', id })
+}
+
 // Complete encoded MDU admission for append: preserve the physical allocation
 // encoded by each FAT extent, including tombstones and the partial final scalar.
 export function validateRetrievalMduPacking(pin: PinnedGeneration, records: readonly RetrievalFile[], ordinal: bigint, bytes: Uint8Array): void {

@@ -42,24 +42,29 @@ function validateRootCells(mdu0: Uint8Array): void {
   }
 }
 
-function validatedRecordCount(mdu0: Uint8Array): number {
+function validateAuthenticatedMdu0Structure(mdu0: Uint8Array, count: number): void {
   requireMdu0(mdu0)
   validateRootCells(mdu0)
   for (let off = FILE_TABLE_START; off < mdu0.length; off += 32) {
     if (mdu0[off] !== 0) throw new Error('nonzero FAT scalar reserved byte')
   }
-  const header = readPolyfsFatRange(mdu0, 0, FILE_TABLE_HEADER_SIZE)
-  const view = new DataView(header.buffer)
-  if (decoder.decode(header.subarray(0, 4)) !== 'NILF' || header[4] !== 2 || header[5] !== 0 || view.getUint16(6, true) !== FILE_RECORD_SIZE || header.subarray(12).some((v) => v !== 0)) {
-    throw new Error('invalid or unsupported FAT v2 header; legacy recovery must be explicit')
-  }
-  const count = view.getUint32(8, true)
+  asNonNegativeInteger(count, 'FAT record count')
   if (count > POLYFS_FILE_RECORD_CAPACITY) throw new Error('FAT record count exceeds capacity')
   const end = FILE_TABLE_HEADER_SIZE + count * FILE_RECORD_SIZE
   const physicalEnd = FILE_TABLE_START + Math.floor(end / 31) * 32 + 1 + end % 31
   for (let i = physicalEnd; i < mdu0.length; i++) {
     if (mdu0[i] !== 0) throw new Error('nonzero FAT padding')
   }
+}
+
+function validatedRecordCount(mdu0: Uint8Array): number {
+  requireMdu0(mdu0)
+  const header = readPolyfsFatRange(mdu0, 0, FILE_TABLE_HEADER_SIZE)
+  const view = new DataView(header.buffer)
+  if (decoder.decode(header.subarray(0, 4)) !== 'NILF' || header[4] !== 2 || header[5] !== 0 || view.getUint16(6, true) !== FILE_RECORD_SIZE || header.subarray(12).some((v) => v !== 0)) {
+    throw new Error('invalid or unsupported FAT v2 header; legacy recovery must be explicit')
+  }
+  const count = view.getUint32(8, true)
   return count
 }
 
@@ -82,8 +87,8 @@ export function decodePolyfsFileRecord(bytes: Uint8Array): {
   return { path, start_offset: start, size_bytes: size, timestamp: view.getBigUint64(16, true), flags: Number(packed >> 56n) }
 }
 
-export function parsePolyfsRecordsFromMdu0(mdu0: Uint8Array): ReturnType<typeof decodePolyfsFileRecord>[] {
-  const count = validatedRecordCount(mdu0)
+export function parsePolyfsRecordsFromAuthenticatedMdu0(mdu0: Uint8Array, count: number): ReturnType<typeof decodePolyfsFileRecord>[] {
+  validateAuthenticatedMdu0Structure(mdu0, count)
   const records: ReturnType<typeof decodePolyfsFileRecord>[] = []
   const paths = new Set<string>()
   for (let i = 0; i < count; i++) {
@@ -95,6 +100,10 @@ export function parsePolyfsRecordsFromMdu0(mdu0: Uint8Array): ReturnType<typeof 
     records.push(record)
   }
   return records
+}
+
+export function parsePolyfsRecordsFromMdu0(mdu0: Uint8Array): ReturnType<typeof decodePolyfsFileRecord>[] {
+  return parsePolyfsRecordsFromAuthenticatedMdu0(mdu0, validatedRecordCount(mdu0))
 }
 
 export function parsePolyfsFilesFromMdu0(mdu0: Uint8Array): PolyfsFileEntry[] {

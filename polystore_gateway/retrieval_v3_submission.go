@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cosmos/gogoproto/jsonpb"
 	"polystorechain/pkg/retrievalchallenge"
@@ -84,8 +85,20 @@ func writeRetrievalV3RecoveryOutcome(w http.ResponseWriter, status, recordedSess
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-func writeRetrievalV3Outcome(w http.ResponseWriter, status, sessionID, hash string, slot uint32, proofs, remaining int, cleanup string, err error) {
+type retrievalV3ProviderTiming struct {
+	Schema              string                    `json:"schema"`
+	AuthorityNS         uint64                    `json:"authority_ns"`
+	ProofPreparationNS  uint64                    `json:"proof_preparation_ns"`
+	SubmissionAttempts  []submissionAttemptTiming `json:"submission_attempts"`
+	CommitObservationNS uint64                    `json:"commit_observation_ns"`
+	ProviderTotalNS     uint64                    `json:"provider_total_ns"`
+}
+
+func writeRetrievalV3Outcome(w http.ResponseWriter, status, sessionID, hash string, slot uint32, proofs, remaining int, cleanup string, timing *retrievalV3ProviderTiming, err error) {
 	result := map[string]any{"status": status, "session_id": sessionID, "tx_hash": hash, "slot": slot, "proof_count": proofs, "remaining": remaining, "cleanup_status": cleanup}
+	if timing != nil && status == "success" && err == nil {
+		result["timing"] = timing
+	}
 	if err != nil {
 		result["error"] = err.Error()
 	}
@@ -101,6 +114,9 @@ func writeRetrievalV3Outcome(w http.ResponseWriter, status, sessionID, hash stri
 // submitRetrievalSessionProofV3 runs under the existing per-session and signer
 // in-memory locks held by SpSubmitRetrievalSessionProof.
 func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, keyName, signer, sessionID string) {
+	// SpSubmitRetrievalSessionProof has already selected V3 and acquired the
+	// session/signer admission locks. ProviderTotalNS begins at this V3 dispatch.
+	providerStarted := time.Now()
 	pending, err := loadPendingSigner(signer)
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "v3 proof reconciliation state unavailable", err.Error())
@@ -164,13 +180,16 @@ func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, k
 		writeJSONError(w, http.StatusConflict, "invalid frozen v3 session", err.Error())
 		return
 	}
+	authorityNS := uint64(time.Since(providerStarted))
+	proofStarted := time.Now()
 	slot, proofs, remaining, err := buildProviderProofBatchV3(ctx, frozen, signer)
+	proofPreparationNS := uint64(time.Since(proofStarted))
 	if err != nil {
 		writeJSONError(w, http.StatusConflict, "v3 session proof unavailable", err.Error())
 		return
 	}
 	if len(proofs) == 0 {
-		writeRetrievalV3Outcome(w, "reconciled", sessionID, "", slot, 0, remaining, "complete", nil)
+		writeRetrievalV3Outcome(w, "reconciled", sessionID, "", slot, 0, remaining, "complete", nil, nil)
 		return
 	}
 	msg := &types.MsgSubmitRetrievalSessionProofV3{Creator: signer, SessionId: frozen.Session.SessionId, Slot: slot, Proofs: proofs}
@@ -192,7 +211,7 @@ func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, k
 		writeJSONError(w, http.StatusConflict, "cannot persist v3 proof intent", err.Error())
 		return
 	}
-	hash, err := submitTxAndRecord(ctx, func(hash string) error {
+	hash, submissionTiming, err := submitTxAndRecordTiming(ctx, func(hash string) error {
 		op.TxHash = hash
 		return updatePendingSignerV3(signer, op, false)
 	}, "tx", "polystorechain", "retrieval-session-v3", "prove", file.Name(), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
@@ -215,5 +234,32 @@ func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, k
 			status = "failed"
 		}
 	}
-	writeRetrievalV3Outcome(w, status, sessionID, hash, slot, len(proofs), remaining, cleanup, err)
+	var timing *retrievalV3ProviderTiming
+	if err == nil && validV3SubmissionTiming(submissionTiming) {
+		timing = &retrievalV3ProviderTiming{Schema: "polystore-v3-provider-timing-v1",
+			AuthorityNS: authorityNS, ProofPreparationNS: proofPreparationNS,
+			SubmissionAttempts:  submissionTiming.Attempts,
+			CommitObservationNS: submissionTiming.CommitObservationNS,
+			ProviderTotalNS:     uint64(time.Since(providerStarted))}
+	}
+	writeRetrievalV3Outcome(w, status, sessionID, hash, slot, len(proofs), remaining, cleanup, timing, err)
+}
+
+func validV3SubmissionTiming(value txSubmissionTiming) bool {
+	if !value.Complete || len(value.Attempts) == 0 || len(value.Attempts) > 5 || value.CommitObservationNS == 0 {
+		return false
+	}
+	const maxPhaseNS = uint64(90 * time.Second)
+	if value.CommitObservationNS > maxPhaseNS {
+		return false
+	}
+	for index, attempt := range value.Attempts {
+		if attempt.Attempt != index+1 || attempt.PreBroadcastNS > maxPhaseNS ||
+			attempt.BroadcastTxSyncNS > maxPhaseNS ||
+			(index+1 < len(value.Attempts) && attempt.CheckTxCode != 32) ||
+			(index+1 == len(value.Attempts) && attempt.CheckTxCode != 0) {
+			return false
+		}
+	}
+	return true
 }

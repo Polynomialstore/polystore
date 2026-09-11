@@ -2,6 +2,15 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_polystorewasm_free: (a: number, b: number) => void;
+export const polystorewasm_checked_retrieval_v3_range: (a: any, b: any, c: any, d: any, e: any) => [number, number, number];
+export const polystorewasm_retrieval_v3_plan: (a: any, b: any, c: any, d: number, e: number) => [number, number, number];
+export const polystorewasm_retrieval_v3_session_id: (a: any, b: number, c: number, d: any, e: any, f: number, g: any, h: any, i: number, j: number, k: any) => [number, number, number];
+export const polystorewasm_retrieval_v3_obligation_ack_hash: (a: any, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: any, n: any, o: number, p: number) => [number, number, number];
+export const polystorewasm_retrieval_v3_context_hash: (a: number, b: number) => [number, number, number];
+export const polystorewasm_retrieval_v3_seed: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const polystorewasm_derive_retrieval_v3_challenges: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const polystorewasm_verify_fat_v3_header: (a: number, b: number, c: number, d: number, e: number, f: any) => [number, number, number];
+export const polystorewasm_verify_integrity_v3_blob: (a: number, b: any, c: number, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number, number];
 export const polystorewasm_verify_polyfs_session_batch: (a: number, b: number, c: number) => [number, number, number];
 export const polystorewasm_challenge_context_hash: (a: number, b: number) => [number, number, number];
 export const polystorewasm_derive_challenges: (a: number, b: number, c: number, d: number) => [number, number, number];

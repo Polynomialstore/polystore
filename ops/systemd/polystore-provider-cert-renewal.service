@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew PolyStore provider TLS certificate and reload Caddy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/polystore/polystore-provider-cert-renewal.env
+WorkingDirectory=/opt/polystore
+ExecStart=/opt/polystore/scripts/renew_provider_certificates.sh
+TimeoutStartSec=5min

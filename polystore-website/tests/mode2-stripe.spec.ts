@@ -746,13 +746,15 @@ test.describe('mode2 streamed retrieval', () => {
 
       const windows: Array<{ id: string; gateway: boolean; startMs: number; endMs?: number }> = []
       const pendingWindows = new Map<import('@playwright/test').Request, typeof windows[number]>()
-      const proofRequests: Array<{ id: string; startMs: number; endMs?: number }> = []
+      const proofRequests: Array<{ id: string; gateway: boolean; startMs: number; endMs?: number }> = []
       const pendingProofs = new Map<import('@playwright/test').Request, typeof proofRequests[number]>()
       const onRequest = (request: import('@playwright/test').Request) => {
         const url = new URL(request.url()), id = request.headers()['x-polystore-session-id']
         if (id && /\/(?:gateway|sp\/retrieval)\/mdu\//.test(url.pathname)) { const entry = { id, gateway: isGatewayOrigin(url.origin), startMs: performance.now() }; windows.push(entry); pendingWindows.set(request, entry) }
-        if (url.pathname === '/sp/retrieval/session-proof/continue' && request.method() === 'POST') {
-          const entry = { id: request.postDataJSON().session_id as string, startMs: performance.now() }
+        const isProofContinuation = url.pathname === '/gateway/session-proof'
+          || /\/(?:gateway\/retrieval|sp\/retrieval)\/session-proof\/continue$/.test(url.pathname)
+        if (isProofContinuation && request.method() === 'POST') {
+          const entry = { id: request.postDataJSON().session_id as string, gateway: isGatewayOrigin(url.origin), startMs: performance.now() }
           proofRequests.push(entry); pendingProofs.set(request, entry)
         }
       }
@@ -968,7 +970,22 @@ test.describe('mode2 streamed retrieval', () => {
       }
       await route.continue()
     })
-    await page.route('**/sp/retrieval/session-proof/continue', async (route) => {
+    await page.route('**/gateway/session-proof?*', async (route) => {
+      const request = route.request()
+      if (request.method() !== 'POST') return route.continue()
+      const input = request.postDataJSON()
+      const { body: { session }, height: ackHeight } = await query(sessionPath(input.session_id))
+      expect(session.status).toBe('RETRIEVAL_SESSION_STATUS_USER_CONFIRMED')
+      expect(session.authorized_proof_provider).toBe(input.provider)
+      const response = await route.fetch({ timeout: 100_000 })
+      const result = await response.json()
+      expect(response.status()).toBe(200)
+      expect(result.session_id).toBe(input.session_id)
+      expect(result.tx_hash).toMatch(/^[0-9a-fA-F]{64}$/)
+      proofOutcomes.set(input.session_id, { tx_hash: result.tx_hash, provider: input.provider, ackHeight })
+      await route.fulfill({ response })
+    })
+    await page.route(/\/(?:gateway\/retrieval|sp\/retrieval)\/session-proof\/continue$/, async (route) => {
       const request = route.request()
       if (request.method() !== 'POST') return route.continue()
       const input = request.postDataJSON()
@@ -1035,6 +1052,8 @@ test.describe('mode2 streamed retrieval', () => {
     expect(windows.length).toBeGreaterThan(0)
     expect(windows.every((window) => window.gateway)).toBe(true)
     const primarySessions = await assertSettled()
+    expect(proofRequests.length).toBe(primarySessions.length)
+    expect(proofRequests.every((request) => request.gateway)).toBe(true)
     if (fixtureKiB === 1) expect(windows).toHaveLength(1)
     expect(primarySessions.reduce((total, session) => total + session.blobs, 0)).toBe(expectedBlobs)
     await expect(routeEl).toContainText(/gateway/i)

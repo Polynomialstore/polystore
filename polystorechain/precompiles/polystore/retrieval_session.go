@@ -60,12 +60,7 @@ func (p *Precompile) runSubmitRetrievalSessionProof(ctx sdk.Context, contract *v
 	}
 	proofs := make([]types.ChainedProof, len(input.Proofs))
 	for i, wire := range input.Proofs {
-		proofs[i] = types.ChainedProof{
-			MduIndex: wire.MduIndex, MduRootFr: wire.MduRootFr, ManifestOpening: wire.ManifestOpening,
-			RootTableDuCommitment: wire.RootTableDuCommitment, RootTableDuMerklePath: wire.RootTableDuMerklePath,
-			BlobCommitment: wire.BlobCommitment, MerklePath: wire.MerklePath, BlobIndex: wire.BlobIndex,
-			ZValue: wire.ZValue, YValue: wire.YValue, KzgOpeningProof: wire.KzgOpeningProof,
-		}
+		proofs[i] = nativeProof(wire)
 	}
 	server := nilkeeper.NewMsgServerImpl(*p.keeper)
 	response, err := server.SubmitRetrievalSessionProof(ctx, &types.MsgSubmitRetrievalSessionProof{

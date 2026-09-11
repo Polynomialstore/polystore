@@ -121,18 +121,20 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
   let nextGroup = 0
   const worker = async () => {
     while (nextGroup < groups.length) {
-      for (const index of groups[nextGroup++]) {
+      const indexes = groups[nextGroup++]
+      let base: string | undefined
+      const throughGateway = Boolean(options.gatewayBase)
+      try {
+        base = options.gatewayBase || (options.resolveProviderBase
+          ? await withSignal(() => options.resolveProviderBase!(sessions[indexes[0]].payee, proofSignal), proofSignal)
+          : undefined)
+      } catch { /* unavailable below */ }
+      for (const index of indexes) {
         const session = sessions[index]
-        let base: string | undefined
-        const throughGateway = Boolean(options.gatewayBase)
-        try {
-          base = options.gatewayBase || (options.resolveProviderBase
-            ? await withSignal(() => options.resolveProviderBase!(session.payee, proofSignal), proofSignal)
-            : undefined)
-        } catch { /* unavailable below */ }
-        if (!base || !/^https?:\/\//.test(base)) {
+        if (proofSignal.aborted || !base || !/^https?:\/\//.test(base)) {
+          const reason = proofSignal.aborted ? 'the proof request deadline expired before dispatch' : 'the provider endpoint could not be resolved'
           outcomes[index] = { state: 'unavailable', sessionId: session.sessionId,
-            message: `Provider settlement unavailable for session ${session.sessionId}: the provider endpoint could not be resolved. Verified output and owner confirmation are preserved; provider proof submission is still required. Use the file menu's provider download action to retry settlement using the saved bytes.` }
+            message: `Provider settlement unavailable for session ${session.sessionId}: ${reason}. Verified output and owner confirmation are preserved; provider proof submission is still required. Use the file menu's provider download action to retry settlement using the saved bytes.` }
           continue
         }
         outcomes[index] = await requestProof(session, base, throughGateway, { ...options, signal: proofSignal })

@@ -1,10 +1,11 @@
 import { RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
-import { BLOB_SIZE_BYTES, parsePolyfsRecordsFromMdu0 } from './polyfsLocal'
+import { BLOB_SIZE_BYTES, MDU_SIZE_BYTES, parsePolyfsRecordsFromAuthenticatedMdu0, parsePolyfsRecordsFromMdu0, readPolyfsFatRange } from './polyfsLocal'
 import { base64, equal, hex, readBoundedResponse, record, u64, uint, unhex, type FrozenSession, type PinnedGeneration } from './retrieval'
 
 export const RETRIEVAL_METADATA_LIMIT = 128 * 1024
 export const RETRIEVAL_FRAMING_LIMIT = 16 * 1024
 export const RETRIEVAL_ACCEPT = 'multipart/form-data; version=2'
+export const RETRIEVAL_V3_ACCEPT = 'multipart/form-data; version=3'
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
 export interface RetrievalCrypto {
@@ -22,6 +23,34 @@ export interface WindowProof {
   rootPath: Uint8Array[]; blobPath: Uint8Array[]
 }
 export interface RetrievalEnvelope { bytes: Uint8Array; proofs: WindowProof[] }
+export interface RetrievalV3Crypto extends RetrievalCrypto {
+  verify_fat_v3_header(bytes: Uint8Array, integrityRoot: Uint8Array, leafCount: bigint): number
+  verify_integrity_v3_blob(mduIndex: bigint, leafIndex: number, position: bigint, leafCount: bigint,
+    blob: Uint8Array, path: Uint8Array, integrityRoot: Uint8Array): boolean
+}
+export interface RetrievalV3GenerationAuthority {
+  polyfsRoot: `0x${string}`; integrityRoot: `0x${string}`; integrityLeafCount: bigint; metadataMdus: bigint; userMdus: bigint
+}
+export interface RetrievalV3EntryAuthority {
+  t: bigint; mduIndex: bigint; leafIndex: number; integrityPosition: bigint
+}
+export interface RetrievalV3ChunkAuthority extends RetrievalV3GenerationAuthority {
+  sessionId: `0x${string}`; contextHash: Uint8Array; slot: number; mduIndex: bigint; startBlobIndex: number
+  entries: readonly RetrievalV3EntryAuthority[]
+}
+export interface RetrievalV3Envelope {
+  bytes: Uint8Array
+  entries: (RetrievalV3EntryAuthority & { integrityPath: Uint8Array[] })[]
+}
+
+function validateV3ChunkAuthority(authority: RetrievalV3ChunkAuthority): void {
+  validateV3GenerationAuthority(authority)
+  unhex(authority.sessionId, 32)
+  if (!authority.entries.length || authority.entries.length > 8 || uint(authority.slot, 7) !== authority.slot || uint(authority.startBlobIndex, 95) !== authority.startBlobIndex ||
+    !(authority.contextHash instanceof Uint8Array) || authority.contextHash.length !== 32 || authority.entries.some((entry, i) => entry.mduIndex !== authority.mduIndex || entry.leafIndex !== authority.startBlobIndex + i)) {
+    throw new Error('invalid frozen v3 authority')
+  }
+}
 
 function exactKeys(object: Record<string, unknown>, keys: string[]) {
   if (Object.keys(object).some((key) => !keys.includes(key))) throw new Error('unknown response field')
@@ -47,8 +76,7 @@ export function parseWindowProof(value: unknown, leafCount: number): WindowProof
 
 // Bound bytes before using the platform multipart parser. Exactly two ordered
 // parts are allowed; preambles, epilogues and additional delimiters are rejected.
-export async function parseRetrievalEnvelope(response: Response, session: FrozenSession, signal?: AbortSignal): Promise<RetrievalEnvelope> {
-  const expectedBytes = session.window.blobCount * BLOB_SIZE_BYTES
+async function parseMultipartRetrieval(response: Response, version: 2 | 3, expectedBytes: number, signal?: AbortSignal): Promise<{ metadata: unknown; bytes: Uint8Array }> {
   if (!response.ok || !Number.isSafeInteger(expectedBytes) || expectedBytes < BLOB_SIZE_BYTES || expectedBytes > 8 * 1024 * 1024) {
     await response.body?.cancel(); throw new Error('invalid retrieval response')
   }
@@ -56,7 +84,7 @@ export async function parseRetrievalEnvelope(response: Response, session: Frozen
   const fields = contentType.split(';').map((v) => v.trim())
   const boundaryField = fields.find((v) => v.startsWith('boundary='))
   const boundary = boundaryField?.slice(9).replace(/^"([^"\\]+)"$/, '$1')
-  if (fields.length !== 3 || fields[0].toLowerCase() !== 'multipart/form-data' || !fields.includes('version=2') || !boundary || !/^[A-Za-z0-9'()+_,\-./:=?]{1,70}$/.test(boundary)) {
+  if (fields.length !== 3 || fields[0].toLowerCase() !== 'multipart/form-data' || !fields.includes(`version=${version}`) || !boundary || !/^[A-Za-z0-9'()+_,\-./:=?]{1,70}$/.test(boundary)) {
     await response.body?.cancel(); throw new Error('unsupported secured retrieval content type')
   }
   const body = await readBoundedResponse(response, expectedBytes + RETRIEVAL_METADATA_LIMIT + RETRIEVAL_FRAMING_LIMIT, signal)
@@ -81,15 +109,49 @@ export async function parseRetrievalEnvelope(response: Response, session: Frozen
   // Parse original bytes with fatal UTF-8: FormData's string decoding is lossy.
   const metadataHeader = decoder.decode(body.subarray(first.length, h1)).toLowerCase().split('\r\n')
   if (metadataHeader.filter((v) => v === 'content-type: application/json').length !== 1) throw new Error('invalid metadata content type')
-  const raw: unknown = JSON.parse(decoder.decode(body.subarray(h1 + 4, split)))
+  const metadata: unknown = JSON.parse(decoder.decode(body.subarray(h1 + 4, split)))
+  signal?.throwIfAborted()
+  return { metadata, bytes: body.slice(h2 + 4, close) }
+}
+
+export async function parseRetrievalEnvelope(response: Response, session: FrozenSession, signal?: AbortSignal): Promise<RetrievalEnvelope> {
+  const expectedBytes = session.window.blobCount * BLOB_SIZE_BYTES
+  const parsed = await parseMultipartRetrieval(response, 2, expectedBytes, signal)
+  const raw = parsed.metadata
   const m = record(raw)
   exactKeys(m, ['version', 'session_id', 'context_hash', 'manifest_root', 'start_mdu_index', 'start_blob_index', 'blob_count', 'total_bytes', 'proofs'])
   if (uint(m.version) !== 2 || m.session_id !== session.sessionId || m.context_hash !== hex(session.contextHash) || m.manifest_root !== session.pin.root ||
     u64(m.start_mdu_index) !== session.window.mduIndex || uint(m.start_blob_index) !== session.window.startBlobIndex ||
     u64(m.blob_count) !== BigInt(session.window.blobCount) || u64(m.total_bytes) !== BigInt(expectedBytes) ||
     !Array.isArray(m.proofs) || m.proofs.length !== session.window.blobCount) throw new Error('response does not match frozen session')
-  signal?.throwIfAborted()
-  return { bytes: body.slice(h2 + 4, close), proofs: m.proofs.map((p) => parseWindowProof(p, session.pin.leafCount)) }
+  return { bytes: parsed.bytes, proofs: m.proofs.map((p) => parseWindowProof(p, session.pin.leafCount)) }
+}
+
+function parseIntegrityPath(value: unknown): Uint8Array[] {
+  if (!Array.isArray(value) || value.length > 23) throw new Error('invalid v3 integrity path')
+  return value.map((sibling) => unhex(sibling, 32))
+}
+
+export async function parseRetrievalEnvelopeV3(response: Response, authority: RetrievalV3ChunkAuthority, signal?: AbortSignal): Promise<RetrievalV3Envelope> {
+  validateV3ChunkAuthority(authority)
+  const expectedBytes = authority.entries.length * BLOB_SIZE_BYTES
+  const parsed = await parseMultipartRetrieval(response, 3, expectedBytes, signal)
+  const m = record(parsed.metadata)
+  exactKeys(m, ['version', 'session_id', 'context_hash', 'polyfs_root', 'integrity_root', 'slot', 'mdu_index', 'start_blob_index', 'blob_count', 'total_bytes', 'entries'])
+  if (uint(m.version) !== 3 || m.session_id !== authority.sessionId || !equal(unhex(m.context_hash, 32), authority.contextHash) ||
+    m.polyfs_root !== authority.polyfsRoot || m.integrity_root !== authority.integrityRoot || uint(m.slot, 7) !== authority.slot ||
+    u64(m.mdu_index) !== authority.mduIndex || uint(m.start_blob_index, 95) !== authority.startBlobIndex ||
+    u64(m.blob_count) !== BigInt(authority.entries.length) || u64(m.total_bytes) !== BigInt(expectedBytes) || !Array.isArray(m.entries) || m.entries.length !== authority.entries.length) {
+    throw new Error('response does not match frozen v3 authority')
+  }
+  const entries = m.entries.map((raw, i) => {
+    const entry = record(raw), expected = authority.entries[i]
+    exactKeys(entry, ['t', 'mdu_index', 'leaf_index', 'integrity_position', 'integrity_path'])
+    if (u64(entry.t) !== expected.t || u64(entry.mdu_index) !== expected.mduIndex || uint(entry.leaf_index, 95) !== expected.leafIndex ||
+      u64(entry.integrity_position) !== expected.integrityPosition) throw new Error('v3 entry does not match frozen authority')
+    return { ...expected, integrityPath: parseIntegrityPath(entry.integrity_path) }
+  })
+  return { bytes: parsed.bytes, entries }
 }
 
 export function encodeSessionBatch(proofs: WindowProof[], root: Uint8Array, contextHash: Uint8Array, seed: Uint8Array, leafCount: number): Uint8Array {
@@ -141,4 +203,59 @@ export function verifyRetrievalMetadata(bytes: Uint8Array, pin: RetrievalMetadat
   const capacity = pin.userMdus * BigInt(RAW_MDU_CAPACITY_BYTES)
   if (records.some((r) => r.start_offset + r.size_bytes > capacity)) throw new Error('file extent exceeds pinned generation')
   return records
+}
+
+function validateV3GenerationAuthority(authority: RetrievalV3GenerationAuthority): { polyfsRoot: Uint8Array; integrityRoot: Uint8Array } {
+  const polyfsRoot = unhex(authority.polyfsRoot, 32), integrityRoot = unhex(authority.integrityRoot, 32)
+  if (authority.metadataMdus < 2n || authority.metadataMdus > 65536n || authority.userMdus < 1n ||
+    authority.userMdus > 65537n - authority.metadataMdus || authority.integrityLeafCount !== authority.userMdus * 96n) {
+    throw new Error('invalid frozen v3 generation authority')
+  }
+  return { polyfsRoot, integrityRoot }
+}
+
+export function verifyRetrievalMetadataV3(bytes: Uint8Array, authority: RetrievalV3GenerationAuthority, crypto: RetrievalV3Crypto) {
+  const roots = validateV3GenerationAuthority(authority)
+  if (bytes.byteLength !== MDU_SIZE_BYTES) throw new Error('invalid MDU0 size')
+  const commitments = new Uint8Array(64 * 48)
+  for (let i = 0; i < 64; i++) commitments.set(crypto.commit_received_blob(bytes.subarray(i * BLOB_SIZE_BYTES, (i + 1) * BLOB_SIZE_BYTES)), i * 48)
+  const result = crypto.compute_mdu_root(commitments)
+  const root = result instanceof Uint8Array ? result : new Uint8Array(result as ArrayLike<number>)
+  if (!equal(root, roots.polyfsRoot)) throw new Error('metadata does not match frozen v3 generation')
+  // Only bytes authenticated by the frozen PolyFS root reach the FAT parser.
+  const count = crypto.verify_fat_v3_header(readPolyfsFatRange(bytes, 0, 128), roots.integrityRoot, authority.integrityLeafCount)
+  const records = parsePolyfsRecordsFromAuthenticatedMdu0(bytes, count)
+  const capacity = authority.userMdus * BigInt(RAW_MDU_CAPACITY_BYTES)
+  if (records.some((record) => record.start_offset + record.size_bytes > capacity)) throw new Error('file extent exceeds frozen v3 generation')
+  return records
+}
+
+export function verifyRetrievalDataV3(authority: RetrievalV3ChunkAuthority, envelope: RetrievalV3Envelope, crypto: RetrievalV3Crypto): Uint8Array {
+  validateV3ChunkAuthority(authority)
+  const integrityRoot = unhex(authority.integrityRoot, 32)
+  if (envelope.entries.length !== authority.entries.length || envelope.bytes.byteLength !== authority.entries.length * BLOB_SIZE_BYTES) throw new Error('incomplete v3 retrieval bytes')
+  envelope.entries.forEach((entry, i) => {
+    if (entry.integrityPath.length > 23) throw new Error('retrieval v3 integrity path exceeds protocol depth')
+    const expected = authority.entries[i]
+    const tOffset = expected.t % 64n
+    const mdu = authority.metadataMdus + expected.t / 64n
+    const slot = Number(tOffset % 8n)
+    const leaf = slot * 8 + Number(tOffset / 8n)
+    const position = (mdu - authority.metadataMdus) * 96n + BigInt(leaf)
+    if (expected.mduIndex !== authority.mduIndex || expected.mduIndex !== mdu || expected.leafIndex !== leaf || slot !== authority.slot ||
+      expected.leafIndex !== authority.startBlobIndex + i || expected.integrityPosition !== position || position >= authority.integrityLeafCount ||
+      entry.t !== expected.t || entry.mduIndex !== expected.mduIndex || entry.leafIndex !== expected.leafIndex || entry.integrityPosition !== expected.integrityPosition) {
+      throw new Error('noncanonical frozen v3 coordinate')
+    }
+    const path = new Uint8Array(entry.integrityPath.length * 32)
+    entry.integrityPath.forEach((sibling, j) => {
+      if (sibling.byteLength !== 32) throw new Error('invalid v3 integrity path')
+      path.set(sibling, j * 32)
+    })
+    const blob = envelope.bytes.subarray(i * BLOB_SIZE_BYTES, (i + 1) * BLOB_SIZE_BYTES)
+    if (!crypto.verify_integrity_v3_blob(mdu, leaf, position, authority.integrityLeafCount, blob, path, integrityRoot)) {
+      throw new Error('v3 retrieval bytes failed integrity verification')
+    }
+  })
+  return envelope.bytes
 }

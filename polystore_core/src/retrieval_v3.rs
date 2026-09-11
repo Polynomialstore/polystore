@@ -2,7 +2,7 @@
 //! Authorization, state mutation and proof verification remain keeper concerns.
 use crate::kzg::KzgError;
 use crate::retrieval_challenge::{
-    Reader, append_lp, derive_z_with_domain, invalid, sample_with_domain,
+    append_lp, derive_z_with_domain, invalid, sample_with_domain, Reader,
 };
 use num_bigint::BigUint;
 use sha2::{Digest, Sha256};
@@ -417,5 +417,21 @@ impl Context {
                 })
             })
             .collect()
+    }
+
+    /// Fixed-width BE records: ordinal8, position8, t8, MDU8, leaf4, slot4, z32.
+    pub fn challenges_flat(&self, seed: &[u8; 32]) -> Result<Vec<u8>, KzgError> {
+        let challenges = self.challenges(seed)?;
+        let mut out = Vec::with_capacity(challenges.len() * 72);
+        for c in challenges {
+            out.extend(c.ordinal.to_be_bytes());
+            out.extend(c.position.to_be_bytes());
+            out.extend(c.t.to_be_bytes());
+            out.extend(c.mdu_index.to_be_bytes());
+            out.extend(c.leaf_index.to_be_bytes());
+            out.extend(c.slot.to_be_bytes());
+            out.extend(c.z);
+        }
+        Ok(out)
     }
 }

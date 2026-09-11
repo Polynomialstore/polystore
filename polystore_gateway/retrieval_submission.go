@@ -24,18 +24,63 @@ const (
 	publicContinuationBodyTimeout = 5 * time.Second
 )
 const maxSessionProofOutcomeBytes = 64 * 1024
+const maxConcurrentRetrievalSigners = 4
+const maxPriorityRetrievalSignerWaiters = 4
 
 // Proof submission includes CLI simulation/signing plus bounded commit polling.
 var sessionProofHTTPClient = &http.Client{Timeout: 2 * time.Minute}
 
-// No queue: requests sharing a session or actual signer retry explicitly. The
-// same guard covers serving before its chain query through its final write, so
-// a late store cannot recreate a record after committed cleanup.
+// Foreground requests are never queued: requests sharing a session or actual
+// signer retry explicitly. The same guard covers serving before its chain query
+// through its final write, so a late store cannot recreate a record after
+// committed cleanup. Internal audits may reserve one of four bounded waiters.
 var retrievalOperations = struct {
 	sync.Mutex
-	sessions map[string]bool
-	signers  map[string]bool
-}{sessions: make(map[string]bool), signers: make(map[string]bool)}
+	sessions        map[string]bool
+	signers         map[string]bool
+	priority        map[string]*retrievalSignerWaiter
+	priorityWaiters []*retrievalSignerWaiter
+}{
+	sessions: make(map[string]bool),
+	signers:  make(map[string]bool),
+	priority: make(map[string]*retrievalSignerWaiter),
+}
+
+type retrievalSignerWaiter struct {
+	signer   string
+	ready    chan struct{}
+	admitted bool
+}
+
+func admitPriorityRetrievalSignerLocked() {
+	for i := 0; i < len(retrievalOperations.priorityWaiters) && len(retrievalOperations.signers) < maxConcurrentRetrievalSigners; {
+		waiter := retrievalOperations.priorityWaiters[i]
+		if retrievalOperations.signers[waiter.signer] {
+			i++
+			continue
+		}
+		retrievalOperations.priorityWaiters = append(retrievalOperations.priorityWaiters[:i], retrievalOperations.priorityWaiters[i+1:]...)
+		delete(retrievalOperations.priority, waiter.signer)
+		retrievalOperations.signers[waiter.signer] = true
+		waiter.admitted = true
+		close(waiter.ready)
+	}
+}
+
+func releaseRetrievalOperations(ids []string, signer string) func() {
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			retrievalOperations.Lock()
+			defer retrievalOperations.Unlock()
+			for _, id := range ids {
+				delete(retrievalOperations.sessions, id)
+			}
+			delete(retrievalOperations.signers, signer)
+			admitPriorityRetrievalSignerLocked()
+		})
+	}
+}
 
 // Public continuations reach key lookup before the actual signer is known.
 // Bound that work independently so arbitrary valid-shaped IDs cannot spawn an
@@ -54,7 +99,7 @@ func claimPublicRetrievalContinuation() (func(), error) {
 func claimRetrievalOperations(ids []string, signer string) (func(), error) {
 	retrievalOperations.Lock()
 	defer retrievalOperations.Unlock()
-	if len(retrievalOperations.sessions)+len(ids) > 256 || (signer != "" && (retrievalOperations.signers[signer] || len(retrievalOperations.signers) >= 4)) {
+	if len(retrievalOperations.sessions)+len(ids) > 256 || (signer != "" && (retrievalOperations.signers[signer] || retrievalOperations.priority[signer] != nil || len(retrievalOperations.signers) >= maxConcurrentRetrievalSigners)) {
 		return nil, fmt.Errorf("retrieval submission capacity or signer busy")
 	}
 	for _, id := range ids {
@@ -68,17 +113,65 @@ func claimRetrievalOperations(ids []string, signer string) (func(), error) {
 	if signer != "" {
 		retrievalOperations.signers[signer] = true
 	}
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			retrievalOperations.Lock()
-			defer retrievalOperations.Unlock()
-			for _, id := range ids {
-				delete(retrievalOperations.sessions, id)
-			}
+	return releaseRetrievalOperations(ids, signer), nil
+}
+
+// claimPriorityRetrievalSigner reserves the next admission for an internal
+// audit without turning foreground proof submissions into a queue. There is at
+// most one bounded waiter for an actual signer. Releases transfer a free slot
+// while holding the same mutex, so foreground requests cannot steal it.
+func claimPriorityRetrievalSigner(ctx context.Context, signer string) (func(), bool, error) {
+	if signer == "" {
+		return nil, false, fmt.Errorf("retrieval signer unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	retrievalOperations.Lock()
+	if retrievalOperations.priority[signer] != nil {
+		retrievalOperations.Unlock()
+		return nil, false, fmt.Errorf("retrieval audit already waiting")
+	}
+	if !retrievalOperations.signers[signer] && len(retrievalOperations.signers) < maxConcurrentRetrievalSigners {
+		retrievalOperations.signers[signer] = true
+		retrievalOperations.Unlock()
+		return releaseRetrievalOperations(nil, signer), false, nil
+	}
+	if len(retrievalOperations.priority) >= maxPriorityRetrievalSignerWaiters {
+		retrievalOperations.Unlock()
+		return nil, false, fmt.Errorf("retrieval audit wait capacity reached")
+	}
+	waiter := &retrievalSignerWaiter{signer: signer, ready: make(chan struct{})}
+	retrievalOperations.priority[signer] = waiter
+	retrievalOperations.priorityWaiters = append(retrievalOperations.priorityWaiters, waiter)
+	retrievalOperations.Unlock()
+
+	select {
+	case <-waiter.ready:
+		release := releaseRetrievalOperations(nil, signer)
+		if err := ctx.Err(); err != nil {
+			release()
+			return nil, true, err
+		}
+		return release, true, nil
+	case <-ctx.Done():
+		retrievalOperations.Lock()
+		if waiter.admitted {
 			delete(retrievalOperations.signers, signer)
-		})
-	}, nil
+			admitPriorityRetrievalSignerLocked()
+		} else if retrievalOperations.priority[signer] == waiter {
+			delete(retrievalOperations.priority, signer)
+			for i, queued := range retrievalOperations.priorityWaiters {
+				if queued == waiter {
+					retrievalOperations.priorityWaiters = append(retrievalOperations.priorityWaiters[:i], retrievalOperations.priorityWaiters[i+1:]...)
+					break
+				}
+			}
+			admitPriorityRetrievalSignerLocked()
+		}
+		retrievalOperations.Unlock()
+		return nil, true, ctx.Err()
+	}
 }
 
 type sessionProofRequest struct {

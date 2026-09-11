@@ -163,6 +163,7 @@ LCD_BASE="${POLYSTORE_LCD_BASE:-http://127.0.0.1:1317}"
 EVM_BASE="${POLYSTORE_EVM_BASE:-http://127.0.0.1:8545}"
 ROUTER_BASE="${POLYSTORE_ROUTER_BASE:-http://127.0.0.1:8080}"
 FAUCET_BASE="${POLYSTORE_FAUCET_BASE:-http://127.0.0.1:8081}"
+PUBLIC_HEALTHCHECK_CONFIG="${POLYSTORE_PUBLIC_HEALTHCHECK_CONFIG:-}"
 PROVIDER_BASES_FROM_ENV=0
 if [[ -n "${POLYSTORE_PROVIDER_BASES+x}" ]]; then
   PROVIDER_BASES_FROM_ENV=1
@@ -959,6 +960,10 @@ preflight_artifacts() {
     "$SOURCE_ROOT/polystore_faucet/polystore_faucet"
     "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli"
     "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
+    "$SOURCE_ROOT/scripts/devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/chain_cli_helpers.sh"
+    "$SOURCE_ROOT/scripts/renew_provider_certificates.sh"
   )
 
   echo "==> Preflighting install artifacts before stopping services"
@@ -998,6 +1003,10 @@ preflight_install_plan() {
     "$SOURCE_ROOT/polystore_faucet/polystore_faucet"
     "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli"
     "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
+    "$SOURCE_ROOT/scripts/devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/chain_cli_helpers.sh"
+    "$SOURCE_ROOT/scripts/renew_provider_certificates.sh"
   )
   local destinations=(
     "$TARGET_ROOT/polystore_core/target/release/libpolystore_core.so"
@@ -1006,6 +1015,10 @@ preflight_install_plan() {
     "$TARGET_ROOT/polystore_faucet/polystore_faucet"
     "$TARGET_ROOT/polystore_cli/target/release/polystore_cli"
     "$TARGET_ROOT/polystorechain/trusted_setup.txt"
+    "$TARGET_ROOT/scripts/devnet_healthcheck.sh"
+    "$TARGET_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$TARGET_ROOT/scripts/chain_cli_helpers.sh"
+    "$TARGET_ROOT/scripts/renew_provider_certificates.sh"
   )
   local i
 
@@ -1153,6 +1166,10 @@ run_healthchecks() {
   for provider_base in "${PROVIDER_BASES[@]}"; do
     run_in_dir "$SOURCE_ROOT" scripts/devnet_healthcheck.sh provider --provider "$provider_base" --hub-lcd "$LCD_BASE"
   done
+  if [[ -n "$PUBLIC_HEALTHCHECK_CONFIG" ]]; then
+    echo "==> Running configured public deployment qualification"
+    run_in_dir "$SOURCE_ROOT" scripts/run_public_devnet_healthcheck.sh "$PUBLIC_HEALTHCHECK_CONFIG"
+  fi
 }
 
 print_source_evidence
@@ -1183,6 +1200,10 @@ install_with_backup "$SOURCE_ROOT/polystore_gateway/polystore_gateway" "$TARGET_
 install_with_backup "$SOURCE_ROOT/polystore_faucet/polystore_faucet" "$TARGET_ROOT/polystore_faucet/polystore_faucet" 755
 install_with_backup "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli" "$TARGET_ROOT/polystore_cli/target/release/polystore_cli" 755
 install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROOT/polystorechain/trusted_setup.txt" 644
+install_with_backup "$SOURCE_ROOT/scripts/devnet_healthcheck.sh" "$TARGET_ROOT/scripts/devnet_healthcheck.sh" 755
+install_with_backup "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh" "$TARGET_ROOT/scripts/run_public_devnet_healthcheck.sh" 755
+install_with_backup "$SOURCE_ROOT/scripts/chain_cli_helpers.sh" "$TARGET_ROOT/scripts/chain_cli_helpers.sh" 755
+install_with_backup "$SOURCE_ROOT/scripts/renew_provider_certificates.sh" "$TARGET_ROOT/scripts/renew_provider_certificates.sh" 755
 
 echo "==> Start order: chain -> faucet/user-gateway -> provider-daemons"
 hub_systemctl_each start polystorechaind.service

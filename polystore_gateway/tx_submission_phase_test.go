@@ -103,6 +103,52 @@ func TestSubmissionPhaseRetryNeverReusesPriorMarker(t *testing.T) {
 	}
 }
 
+func TestSubmissionTimingRetainsExplicitSequenceAttempts(t *testing.T) {
+	hash := strings.Repeat("A", 64)
+	calls := 0
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		calls++
+		writeSubmissionPhase(t, args, fmt.Sprintf(`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":%d,"broadcast_tx_sync_ns":%d}`+"\n", calls, calls+10))
+		code := 32
+		if calls == 2 {
+			code = 0
+		}
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":%d,"codespace":"sdk"}`, hash, code)), nil
+	})
+	out, timings, complete, err := runTxWithRetryTiming(context.Background(), "tx", "polystorechain", "retrieval-session-v3", "fixture")
+	if err != nil || !complete || calls != 2 || len(timings) != 2 || !strings.Contains(string(out), `"code":0`) {
+		t.Fatal(err, complete, calls, timings, string(out))
+	}
+	if timings[0].Attempt != 1 || timings[0].CheckTxCode != 32 || timings[1].Attempt != 2 || timings[1].CheckTxCode != 0 {
+		t.Fatal("sequence retry timing lost", timings)
+	}
+}
+
+func TestSubmissionTimingIsObservationalOnly(t *testing.T) {
+	for _, phase := range []string{
+		`{"schema":"wrong","pre_broadcast_ns":1,"broadcast_tx_sync_ns":2}`,
+		`{"schema":"polystore-submission-timing-v1"}`,
+		`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":null,"broadcast_tx_sync_ns":2}`,
+		`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":"1","broadcast_tx_sync_ns":2}`,
+		`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":1.0,"broadcast_tx_sync_ns":2}`,
+		`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":1,"broadcast_tx_sync_ns":2,"extra":3}`,
+		`{"schema":"polystore-submission-timing-v1","pre_broadcast_ns":90000000001,"broadcast_tx_sync_ns":2}`,
+		`{`,
+		``,
+	} {
+		t.Run(phase, func(t *testing.T) {
+			setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				writeSubmissionPhase(t, args, phase)
+				return []byte(`{"txhash":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","code":0}`), nil
+			})
+			_, timings, complete, err := runTxWithRetryTiming(context.Background(), "tx", "polystorechain", "retrieval-session-v3", "fixture")
+			if err != nil || complete || len(timings) != 0 {
+				t.Fatal("malformed timing changed transaction semantics", err, complete, timings)
+			}
+		})
+	}
+}
+
 func TestSubmissionPhaseCancellationAfterCheckTxRejection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

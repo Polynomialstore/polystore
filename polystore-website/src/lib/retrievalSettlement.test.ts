@@ -50,8 +50,11 @@ test('sessions sharing a frozen deputy remain serial while distinct payees make 
   const sessions = [session(1), { ...session(2), payee: session(1).payee }, session(3)]
   let releaseFirst!: () => void
   const first = new Promise<void>((resolve) => { releaseFirst = resolve })
-  const started: string[] = [], active = new Set<string>()
-  const work = confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase, confirm,
+  const started: string[] = [], active = new Set<string>(), resolutions = new Map<string, number>()
+  const work = confirmAndRequestRetrievalProofs(sessions, { resolveProviderBase: async (payee) => {
+    resolutions.set(payee, (resolutions.get(payee) ?? 0) + 1)
+    return providerBase
+  }, confirm,
     fetchFn: async (_, init) => {
       const s = sessions.find((s) => s.sessionId === JSON.parse(String(init?.body)).session_id)!
       assert.equal(active.has(s.payee), false)
@@ -69,6 +72,7 @@ test('sessions sharing a frozen deputy remain serial while distinct payees make 
     await work
   }
   assert.deepEqual(started, [sessions[0].sessionId, sessions[2].sessionId, sessions[1].sessionId])
+  assert.deepEqual([...resolutions.entries()].sort(), [[sessions[0].payee, 1], [sessions[2].payee, 1]].sort())
   assert.deepEqual((await work).map((outcome) => outcome.sessionId), sessions.map((s) => s.sessionId))
 })
 
@@ -280,7 +284,32 @@ test('one post-ACK deadline bounds the whole wave and prevents dispatch after ex
   })
   assert.equal(posts, 1)
   assert.equal(outcomes.length, 3)
-  assert.ok(outcomes.every((o) => o.responseUnknown && o.state === 'pending'))
+  assert.equal(outcomes[0].responseUnknown, true)
+  assert.equal(outcomes[0].state, 'pending')
+  assert.deepEqual(outcomes.slice(1).map((o) => o.state), ['unavailable', 'unavailable'])
+})
+
+test('a shared-payee session is not dispatched after the wave deadline expires', async (t) => {
+  const deadline = new AbortController()
+  t.mock.method(AbortSignal, 'timeout', (milliseconds: number) => {
+    assert.equal(milliseconds, 95_000)
+    return deadline.signal
+  })
+  const first = session(1)
+  const sessions = [first, { ...session(2), payee: first.payee }]
+  let posts = 0
+  const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
+    resolveProviderBase, confirm,
+    fetchFn: async () => {
+      posts++
+      deadline.abort(new Error('whole wave expired'))
+      throw new Error('response lost at deadline')
+    },
+  })
+  assert.equal(posts, 1)
+  assert.equal(outcomes[0].state, 'pending')
+  assert.equal(outcomes[0].responseUnknown, true)
+  assert.equal(outcomes[1].state, 'unavailable')
 })
 
 test('a stalled provider lookup consumes the wave deadline without starting later lookups', async (t) => {

@@ -16,13 +16,13 @@ const outputs = new Map<string, { dir: FileSystemDirectoryHandle; file: FileSyst
 let opening = 0
 
 export async function retrievalOutput(request: RetrievalOutputRequest): Promise<string | File | undefined> {
+  if ('id' in request && !/^[0-9a-f-]{36}$/.test(request.id)) throw new Error('invalid retrieval output ID')
   if (request.action === 'create' || request.action === 'resume') {
     if (!Number.isSafeInteger(request.length) || request.length < 0) throw new Error('unsupported output length')
     // ponytail: four live outputs per tab; reject before funding instead of queuing.
     if (outputs.size + opening >= 4) throw new Error('too many active retrieval outputs')
     let dir: FileSystemDirectoryHandle | undefined, access: SyncAccess | undefined
     const id = request.action === 'resume' ? request.id : crypto.randomUUID()
-    if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error('invalid retrieval output ID')
     opening++
     try {
       const root = await navigator.storage.getDirectory()
@@ -44,7 +44,13 @@ export async function retrievalOutput(request: RetrievalOutputRequest): Promise<
   }
   const output = outputs.get(request.id)
   if (!output) {
-    if (request.action === 'remove') return
+    if (request.action === 'remove') {
+      await navigator.storage.getDirectory().then((root) => root.getDirectoryHandle('retrieval-output'))
+        .then((dir) => dir.removeEntry(request.id)).catch((error) => {
+        if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error
+      })
+      return
+    }
     throw new Error('retrieval output unavailable')
   }
   if (request.action === 'release') {

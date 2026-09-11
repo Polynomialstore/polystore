@@ -1,0 +1,23 @@
+k,m,stage,proofs,pass,peak_requested_bytes,total_requested_bytes,allocation_calls,realloc_calls,retained_bytes
+generating nonconstant K8/M4 fixture outside measurement
+8,4,root_table,1,warm_first,2232,48320,967,11,0
+8,4,root_table,1,warm_repeat,2232,48320,967,11,0
+8,4,blob,1,warm_first,2456,5944,87,9,0
+8,4,blob,1,warm_repeat,2456,5944,87,9,0
+8,4,sequential_list,1,warm_first,2456,54264,1054,20,0
+8,4,sequential_list,1,warm_repeat,2456,54264,1054,20,0
+8,4,sequential_list,2,warm_first,2456,108528,2108,40,0
+8,4,sequential_list,2,warm_repeat,2456,108528,2108,40,0
+8,4,sequential_list,8,warm_first,2456,434112,8432,160,0
+8,4,sequential_list,8,warm_repeat,2456,434112,8432,160,0
+generating nonconstant K2/M1 fixture outside measurement
+2,1,root_table,1,warm_first,2232,48320,967,11,0
+2,1,root_table,1,warm_repeat,2232,48320,967,11,0
+2,1,blob,1,warm_first,2456,5944,87,9,0
+2,1,blob,1,warm_repeat,2456,5944,87,9,0
+2,1,sequential_list,1,warm_first,2456,54264,1054,20,0
+2,1,sequential_list,1,warm_repeat,2456,54264,1054,20,0
+2,1,sequential_list,8,warm_first,2456,434112,8432,160,0
+2,1,sequential_list,8,warm_repeat,2456,434112,8432,160,0
+2,1,sequential_list,32,warm_first,2456,1736448,33728,640,0
+2,1,sequential_list,32,warm_repeat,2456,1736448,33728,640,0

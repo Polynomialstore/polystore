@@ -1,0 +1,107 @@
+{
+  "claim": "single-host native-v3 provider-route operating-point diagnostic; no maximum-capacity, WAN, or delivery qualification",
+  "excluded_private_data": [
+    "raw transactions and signatures",
+    "proof messages and session state",
+    "keyrings and wallet material",
+    "raw blocks and Commit streams",
+    "host identity, absolute paths, and logs"
+  ],
+  "private_inputs": {
+    "evidence.json": {
+      "bytes": 4650004,
+      "sha256": "137e91de8adf2bfaa585c0edebb1581b91733e82602e9138b15006cf75d25aee"
+    },
+    "native-v3-cross-audit-blocks.jsonl": {
+      "bytes": 137169,
+      "sha256": "167e61508be41801cbbadb17bd4d74fa078525691e57751304ccb0e0aa4d7193"
+    },
+    "native-v3-cross-audit-commit-5e57792918a70784da2c24b35265e028e94e11a5.jsonl": {
+      "bytes": 269310,
+      "sha256": "0286ad0fb6fbd1e841650cf1101f97a1da9de76638ee1119e7c172bdf7486d38"
+    },
+    "native-v3-cross-audit-commit-6cdc2c478fba8a33b1466627ab6e175e38028c34.jsonl": {
+      "bytes": 269158,
+      "sha256": "db0ddbc6b00abe687fec4f26ca1335cabd13c0368ad5f8dde4c1e1745a9b6cfc"
+    },
+    "native-v3-cross-audit-commit-930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8.jsonl": {
+      "bytes": 270068,
+      "sha256": "4efe809e514319e58b1b384f7a2bedd2843e39f688181523a6f33263da899baa"
+    },
+    "native-v3-cross-audit-commit-cfc0bf9e9fc62e965989d1392b0900496c823357.jsonl": {
+      "bytes": 269263,
+      "sha256": "8ccaf4d2ea37cc77855861b1d931caa2ecb44cccb90a33e2efe5e860933fdf8b"
+    },
+    "native-v3-cross-audit-retained-003.guard.json": {
+      "bytes": 5242,
+      "sha256": "80339e0ca0a143d0cebe28e165b62092a6658029570c97e37491a90e6f5fb427"
+    },
+    "native-v3-cross-audit-retained-003.plan.json": {
+      "bytes": 5146,
+      "sha256": "41c60198dd35243c954fc7c95fba1a275f4d8d8952eee280a6f11de76a04b0ab"
+    },
+    "provenance.json": {
+      "bytes": 3457,
+      "sha256": "963d777eb4fbde8b681e05afc7e4b1a8583d06024f33c77721762626353b5f69"
+    },
+    "transaction-recovery-private/transactions.json": {
+      "bytes": 19532445,
+      "sha256": "d68ffa70200e002d0a71202f7536e7d2c094943fe14073f3bde365ebad5bcb27"
+    },
+    "transaction-recovery-private/validator0.json": {
+      "bytes": 6419569,
+      "sha256": "ab19f5ac7eb46971b96d536029fed02292420c3e18d1f9385c6e0d47d2fc7493"
+    },
+    "transaction-recovery-private/validator1.json": {
+      "bytes": 6419569,
+      "sha256": "ab19f5ac7eb46971b96d536029fed02292420c3e18d1f9385c6e0d47d2fc7493"
+    },
+    "transaction-recovery-private/validator2.json": {
+      "bytes": 6419569,
+      "sha256": "ab19f5ac7eb46971b96d536029fed02292420c3e18d1f9385c6e0d47d2fc7493"
+    },
+    "transaction-recovery-private/validator3.json": {
+      "bytes": 6419569,
+      "sha256": "ab19f5ac7eb46971b96d536029fed02292420c3e18d1f9385c6e0d47d2fc7493"
+    }
+  },
+  "published_files": {
+    "../native-v3-cross-audit-001/check.py": {
+      "bytes": 7433,
+      "sha256": "2bff05c929b0603ee481af4bfbc90c0cda4add9136add012d7d65f45c1c97d0b"
+    },
+    "../native-v3-cross-audit-001/summarize.py": {
+      "bytes": 41786,
+      "sha256": "6a2076be66cdc8bfc2f6413cf9880e10a2a5859f15661e5f7dce8778165f70ab"
+    },
+    "README.md": {
+      "bytes": 10417,
+      "sha256": "92e9d942a4d41f1c026ef19f81eecf4ef1df96b2ba54898dd8038b176272180f"
+    },
+    "pins.json": {
+      "bytes": 1461,
+      "sha256": "cc4fb93d82e7122c799ff45a734ceba933891dde7a91bd824a8dd5b5b9778c21"
+    },
+    "plan.json": {
+      "bytes": 1625,
+      "sha256": "46d8db45dbae5fa150e149ec3acdee574d8f87bf8f674f3832f61914cace7661"
+    },
+    "runtime-provenance.json": {
+      "bytes": 3423,
+      "sha256": "45dc613d004e70843c035430c47b496560262d6386e53e9f3bb1968fd2bc8284"
+    },
+    "summary.json": {
+      "bytes": 16565,
+      "sha256": "5eef7dc2e6ed3c4428803a2aa14c00cbceff1dc82d418ecd26fc4f305c1dff0c"
+    }
+  },
+  "qualification": false,
+  "schema": "polystore.retained-publication.v1",
+  "status": "passed",
+  "transformations": [
+    "summary.json is reconstructed with the shared summarize.py and pins.json from exact private evidence, stopped-blockstore transactions, reconciled blocks and four raw Commit streams",
+    "provider timing is joined to exact all-validator receipts; warmup remains separate; header timestamps retain nanoseconds and the preceding interval",
+    "plan.json is the completed run guard with hostname removed, runtime manifest replaced by runtime-provenance.json, and benchmark-root paths replaced by $BENCH_ROOT",
+    "runtime-provenance.json is the frozen build manifest with benchmark-root paths replaced by $BENCH_ROOT"
+  ]
+}

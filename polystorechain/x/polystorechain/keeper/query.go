@@ -141,6 +141,47 @@ func (q queryServer) GetRetrievalSessionV3(goCtx context.Context, req *types.Que
 	return response, nil
 }
 
+func (q queryServer) GetRetrievalSessionV3Nonce(goCtx context.Context, req *types.QueryGetRetrievalSessionV3NonceRequest) (*types.QueryGetRetrievalSessionV3NonceResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	owner, err := canonicalAddress(req.Owner, "owner")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	nonce, err := q.k.RetrievalSessionV3Nonces.Get(ctx, collections.Join(owner, req.DealId))
+	if errors.Is(err, collections.ErrNotFound) {
+		return &types.QueryGetRetrievalSessionV3NonceResponse{}, nil
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &types.QueryGetRetrievalSessionV3NonceResponse{Nonce: nonce, Found: true}, nil
+}
+
+func (q queryServer) GetRetrievalSessionV3ByNonce(goCtx context.Context, req *types.QueryGetRetrievalSessionV3ByNonceRequest) (*types.QueryGetRetrievalSessionV3ByNonceResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	owner, err := canonicalAddress(req.Owner, "owner")
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	id, err := q.k.RetrievalSessionV3NonceIDs.Get(ctx, collections.Join(collections.Join(owner, req.DealId), req.Nonce))
+	if errors.Is(err, collections.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "v3 retrieval session nonce not found")
+	}
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if len(id) != 32 {
+		return nil, status.Error(codes.Internal, "invalid stored v3 retrieval session ID")
+	}
+	return &types.QueryGetRetrievalSessionV3ByNonceResponse{SessionId: append([]byte(nil), id...)}, nil
+}
+
 func (q queryServer) ListRetrievalSessionsByOwner(goCtx context.Context, req *types.QueryListRetrievalSessionsByOwnerRequest) (*types.QueryListRetrievalSessionsByOwnerResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")

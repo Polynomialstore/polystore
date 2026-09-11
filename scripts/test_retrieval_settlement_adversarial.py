@@ -33,21 +33,30 @@ class AdversarialSettlementTest(unittest.TestCase):
                 workload.assert_unchanged_retrieval(before, changed)
 
     def test_four_node_result_identity_and_gas_are_mandatory(self):
-        encoded = base64.b64encode(b'signed transaction').decode()
-        txhash = hashlib.sha256(b'signed transaction').hexdigest().upper()
+        raw = b'signed transaction'
+        encoded = base64.b64encode(raw).decode()
+        txhash = hashlib.sha256(raw).hexdigest().upper()
         result = dict(txhash=txhash, height=12, code=4, gas_wanted=20000000, gas_used=123,
                       outcome='committed_failure')
         for fault in (None, 'gas', 'hash', 'height', 'body'):
             def query(node, route):
-                response = dict(hash=txhash, height='12', tx=encoded,
-                    tx_result=dict(code=4, gas_wanted='20000000', gas_used='123'))
-                if node['node_id'] == '3':
-                    if fault == 'gas': response['tx_result']['gas_used'] = '124'
-                    if fault == 'hash': response['hash'] = '00' * 32
-                    if fault == 'height': response['height'] = '13'
-                    if fault == 'body': response['tx'] = base64.b64encode(b'other').decode()
-                return response
-            life = SimpleNamespace(nodes=[dict(node_id=str(i)) for i in range(4)], query=query)
+                bad = node['node_id'] == '3'
+                if route == '/block?height=12':
+                    block_tx = (base64.b64encode(b'other').decode() if bad and fault == 'hash' else
+                                'not-base64!' if bad and fault == 'body' else encoded)
+                    return {'block_id': {'hash': '11' * 32}, 'block': {
+                        'header': {'height': '13' if bad and fault == 'height' else '12',
+                                   'chain_id': 'polystore_291-1', 'app_hash': '22' * 32,
+                                   'time': '2026-01-01T00:00:00Z'},
+                        'data': {'txs': [block_tx]}}}
+                if route == '/block_results?height=12':
+                    return {'height': '12', 'txs_results': [dict(
+                        code=4, gas_wanted='20000000',
+                        gas_used='124' if bad and fault == 'gas' else '123')]}
+                self.fail('unexpected query ' + route)
+            life = SimpleNamespace(chain='polystore_291-1',
+                nodes=[dict(node_id=str(i)) for i in range(4)], query=query,
+                wait_height=Mock(return_value=13))
             if fault:
                 with self.assertRaises(ValueError): workload.verify_transaction_nodes(life, result)
             else:

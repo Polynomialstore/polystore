@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily PolyStore provider TLS certificate renewal
+
+[Timer]
+OnBootSec=10min
+OnCalendar=daily
+RandomizedDelaySec=6h
+Persistent=true
+Unit=polystore-provider-cert-renewal.service
+
+[Install]
+WantedBy=timers.target

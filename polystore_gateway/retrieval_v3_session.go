@@ -254,6 +254,17 @@ func buildProviderProofBatchV3(ctx context.Context, f *frozenRetrievalSessionV3,
 		return 0, nil, 0, err
 	}
 	defer release()
+	return buildProviderProofBatchV3FromDirectory(ctx, f, signer, dir)
+}
+
+// buildProviderProofBatchV3FromDirectory is the offline diagnostic seam for a
+// caller that already owns an immutable generation directory. It deliberately
+// retains the production authority, metadata, native proof, and signer checks.
+func buildProviderProofBatchV3FromDirectory(ctx context.Context, f *frozenRetrievalSessionV3, signer, dir string) (uint32, []types.RetrievalSampleProofV3, int, error) {
+	slot, challenges, remaining, err := providerChallengesV3(f, signer, 64)
+	if err != nil || len(challenges) == 0 {
+		return slot, nil, remaining, err
+	}
 	key := retrievalGenerationKey{Chain: f.Context.ChainID, Setup: f.Context.SetupDigest, Root: f.Context.PolyFSRoot, Integrity: f.Context.IntegrityRoot, Deal: f.Context.DealID, Generation: f.Context.Generation, Metadata: f.Context.MetadataMDUs, Users: f.Context.UserMDUs, Layout: retrievalchallenge.StripeK8M4, K: 8, M: 4, Version: 3}
 	metadata, err := authenticatedRetrievalMetadataFor(ctx, dir, key)
 	if err != nil {
