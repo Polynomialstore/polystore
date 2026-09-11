@@ -1,0 +1,4 @@
+GO: go test ./pkg/retrievalchallenge -run ^$ -bench ^BenchmarkV3 -benchmem -benchtime=1s -count=10 -cpu=1
+RUST BUILD: cargo build --release --locked --offline -j 2 --example verifier_allocations
+RUST DEFAULT: target/release/examples/verifier_allocations
+RUST GENERATION: target/release/examples/verifier_allocations --generation

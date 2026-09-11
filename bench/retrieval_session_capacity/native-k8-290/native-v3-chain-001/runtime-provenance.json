@@ -1,0 +1,257 @@
+{
+  "current_build": {
+    "artifacts": {
+      "$BENCH_ROOT/native-chain-build-b9873366/bin/polystore_cli": "5653edad1db94b50d450db49191037e9acef47d07ffdd77c9325ddbdac6678ba",
+      "$BENCH_ROOT/native-chain-build-b9873366/bin/polystore_gateway": "6f270b376550f97698f772ff926a72521bde069d558d4a12db72c6e11f03288a",
+      "$BENCH_ROOT/native-chain-build-b9873366/bin/polystorechaind": "cf28f26eb90fa4ed35b2e9ae3fa52925e3c6f1ebc011736672e8a3e0c78322da",
+      "$BENCH_ROOT/native-chain-build-b9873366/bin/retrieval-inventory-exporter": "25af1337a5ceeb5ab8358d0cdca6525a7fb839084601a71684f427f9ef278c52",
+      "$BENCH_ROOT/worktrees/native-chain-runtime-b9873366/polystore_core/target/release/libpolystore_core.so": "4735f0777793acb24da0ce4971696aadc5565285a15fa3e9740dbe4ba1155b6d"
+    },
+    "component_trees": {
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystore_core": "bdf6a947e927d3690b0ce7943d82a381879364be",
+      "polystore_gateway": "e4c914371f609ccd2f560c1d6e5c327db662a9e7",
+      "polystorechain": "ab41a7b4eab98e679a46afb6d2d09c3f0bfd4a4c"
+    },
+    "reused_components": {
+      "components": [
+        "polystore_core",
+        "polystore_cli",
+        "polystorechain"
+      ],
+      "source_commit": "b7ea3a1058bcf2247307eec186b425c4a7c2c4d0",
+      "source_manifest": "$BENCH_ROOT/native-pilot-build-b7ea3a10/provenance.json",
+      "verification": "identical tracked component trees and prebuilt artifact SHA256; hardlinked unchanged binaries, symlinked unchanged core target"
+    },
+    "source": "$BENCH_ROOT/worktrees/native-chain-runtime-b9873366",
+    "source_commit": "b98733667e70c35830ed9b588515bcf1a42e10e0",
+    "status": "passed",
+    "steps": [
+      {
+        "command": [
+          "go",
+          "build",
+          "-mod=readonly",
+          "-p=2",
+          "-ldflags=-buildid=native-pilot-b9873366",
+          "-o",
+          "$BENCH_ROOT/native-chain-build-b9873366/bin/polystore_gateway",
+          "."
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-chain-runtime-b9873366/polystore_gateway",
+        "elapsed_seconds": 5.324,
+        "exit_code": 0,
+        "name": "gateway"
+      },
+      {
+        "command": [
+          "go",
+          "test",
+          "-mod=readonly",
+          "-p=2",
+          "-c",
+          "-o",
+          "$BENCH_ROOT/native-chain-build-b9873366/bin/retrieval-inventory-exporter",
+          "."
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-chain-runtime-b9873366/polystore_gateway",
+        "elapsed_seconds": 4.37,
+        "exit_code": 0,
+        "name": "exporter"
+      }
+    ],
+    "toolchains": {
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "go": "go version go1.25.5 linux/amd64",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+    }
+  },
+  "reused_parent_a2dec4e6": {
+    "artifacts": {
+      "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystore_cli": "5653edad1db94b50d450db49191037e9acef47d07ffdd77c9325ddbdac6678ba",
+      "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystore_gateway": "9d1c6df4d950e36407235b358be838467015517fd0c50de379fb6e3e0503a6d9",
+      "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystorechaind": "cf28f26eb90fa4ed35b2e9ae3fa52925e3c6f1ebc011736672e8a3e0c78322da",
+      "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/polystore_core/target/release/libpolystore_core.so": "4735f0777793acb24da0ce4971696aadc5565285a15fa3e9740dbe4ba1155b6d"
+    },
+    "component_trees": {
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystore_core": "bdf6a947e927d3690b0ce7943d82a381879364be",
+      "polystore_gateway": "740cf40322176559d2069e1b0c26770055c491ac",
+      "polystorechain": "ab41a7b4eab98e679a46afb6d2d09c3f0bfd4a4c"
+    },
+    "elapsed_seconds": 79.766,
+    "previous_attempt": {
+      "component_trees": {
+        "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+        "polystore_core": "bdf6a947e927d3690b0ce7943d82a381879364be",
+        "polystore_gateway": "740cf40322176559d2069e1b0c26770055c491ac",
+        "polystorechain": "ab41a7b4eab98e679a46afb6d2d09c3f0bfd4a4c"
+      },
+      "elapsed_seconds": 45.687,
+      "error": "chain failed (2); inspect $BENCH_ROOT/native-pilot-build-a2dec4e6/logs/chain.log",
+      "source": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+      "source_commit": "a2dec4e616baa080321eef7f308f200e7b467acb",
+      "status": "failed",
+      "steps": [
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--release",
+            "-j2"
+          ],
+          "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/polystore_core",
+          "elapsed_seconds": 13.984,
+          "exit_code": 0,
+          "name": "core"
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--release",
+            "-j2"
+          ],
+          "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/polystore_cli",
+          "elapsed_seconds": 30.059,
+          "exit_code": 0,
+          "name": "cli"
+        },
+        {
+          "command": [
+            "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/scripts/chain_go.sh",
+            "build",
+            "-p2",
+            "-ldflags=-buildid=native-pilot-a2dec4e6",
+            "-o",
+            "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystorechaind",
+            "./cmd/polystorechaind"
+          ],
+          "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+          "elapsed_seconds": 1.565,
+          "exit_code": 2,
+          "name": "chain"
+        }
+      ],
+      "toolchains": {
+        "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+        "go": "go version go1.25.5 linux/amd64",
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+      }
+    },
+    "source": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+    "source_commit": "a2dec4e616baa080321eef7f308f200e7b467acb",
+    "status": "passed",
+    "steps": [
+      {
+        "command": [
+          "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/scripts/chain_go.sh",
+          "build",
+          "-p=2",
+          "-ldflags=-buildid=native-pilot-a2dec4e6",
+          "-o",
+          "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystorechaind",
+          "./cmd/polystorechaind"
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+        "elapsed_seconds": 74.123,
+        "exit_code": 0,
+        "name": "chain"
+      },
+      {
+        "command": [
+          "go",
+          "build",
+          "-mod=readonly",
+          "-p=2",
+          "-ldflags=-buildid=native-pilot-a2dec4e6",
+          "-o",
+          "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystore_gateway",
+          "."
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6/polystore_gateway",
+        "elapsed_seconds": 5.373,
+        "exit_code": 0,
+        "name": "gateway"
+      },
+      {
+        "command": [
+          "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystorechaind",
+          "version",
+          "--long"
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+        "elapsed_seconds": 0.114,
+        "exit_code": 0,
+        "name": "chain-smoke"
+      },
+      {
+        "command": [
+          "$BENCH_ROOT/native-pilot-build-a2dec4e6/bin/polystore_cli",
+          "--help"
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-a2dec4e6",
+        "elapsed_seconds": 0.008,
+        "exit_code": 0,
+        "name": "cli-smoke"
+      }
+    ],
+    "toolchains": {
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "go": "go version go1.25.5 linux/amd64",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+    }
+  },
+  "reused_parent_b7ea3a10": {
+    "artifacts": {
+      "$BENCH_ROOT/native-pilot-build-b7ea3a10/bin/polystore_cli": "5653edad1db94b50d450db49191037e9acef47d07ffdd77c9325ddbdac6678ba",
+      "$BENCH_ROOT/native-pilot-build-b7ea3a10/bin/polystore_gateway": "a7e5ae99f9506aa88992d10d67e2b27d7ceb7c96bc1b3f446aa9f68e59e506d7",
+      "$BENCH_ROOT/native-pilot-build-b7ea3a10/bin/polystorechaind": "cf28f26eb90fa4ed35b2e9ae3fa52925e3c6f1ebc011736672e8a3e0c78322da",
+      "$BENCH_ROOT/worktrees/native-pilot-runtime-b7ea3a10/polystore_core/target/release/libpolystore_core.so": "4735f0777793acb24da0ce4971696aadc5565285a15fa3e9740dbe4ba1155b6d"
+    },
+    "component_trees": {
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystore_core": "bdf6a947e927d3690b0ce7943d82a381879364be",
+      "polystore_gateway": "71da801079959da7169312e088112d28a53da4d0",
+      "polystorechain": "ab41a7b4eab98e679a46afb6d2d09c3f0bfd4a4c"
+    },
+    "reused_components": {
+      "components": [
+        "polystore_core",
+        "polystore_cli",
+        "polystorechain"
+      ],
+      "source_commit": "a2dec4e616baa080321eef7f308f200e7b467acb",
+      "source_manifest": "$BENCH_ROOT/native-pilot-build-a2dec4e6/provenance.json",
+      "verification": "identical tracked component trees and prebuilt artifact SHA256; hardlinked unchanged binaries, symlinked unchanged core target"
+    },
+    "source": "$BENCH_ROOT/worktrees/native-pilot-runtime-b7ea3a10",
+    "source_commit": "b7ea3a1058bcf2247307eec186b425c4a7c2c4d0",
+    "status": "passed",
+    "steps": [
+      {
+        "command": [
+          "go",
+          "build",
+          "-mod=readonly",
+          "-p=2",
+          "-ldflags=-buildid=native-pilot-b7ea3a10",
+          "-o",
+          "$BENCH_ROOT/native-pilot-build-b7ea3a10/bin/polystore_gateway",
+          "."
+        ],
+        "cwd": "$BENCH_ROOT/worktrees/native-pilot-runtime-b7ea3a10/polystore_gateway",
+        "elapsed_seconds": 5.389,
+        "exit_code": 0,
+        "name": "gateway"
+      }
+    ],
+    "toolchains": {
+      "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+      "go": "go version go1.25.5 linux/amd64",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+    }
+  }
+}

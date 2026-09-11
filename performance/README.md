@@ -293,3 +293,10 @@ proof-submission transactions (6,736 openings) with normal audits. At the final
 16/s offered step, 88 offers hit the bounded queue; its consensus-header-time
 window recorded 8.8 bundles/s. This is a single-host, 30-second-per-step result,
 not a production-capacity or byte-delivery qualification.
+
+The [retained native-v3 cross-audit diagnostic](../bench/retrieval_session_capacity/native-k8-290/native-v3-cross-audit-001/README.md)
+accepts one single-host production provider-route operating point: 360 measured
+transactions and 5,940 authenticated openings committed from a fixed 180-second,
+2 transactions/s offer while 24 normal audits crossed two anchors. It remains
+`qualification=false`; maximum capacity, realistic deployment, WAN behavior,
+and delivered-byte performance are unmeasured.

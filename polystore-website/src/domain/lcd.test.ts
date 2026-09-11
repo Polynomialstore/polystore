@@ -17,6 +17,8 @@ test('normalizeLcdDealsResponse maps manifest_root bytes to Deal.cid hex', () =>
         size: '123',
         escrow_balance: '9',
         end_block: '100',
+        redundancy_mode: 2,
+        mode2_profile: { k: 8, m: 4 },
         providers: ['nil1p1', 'nil1p2'],
       },
     ],
@@ -31,6 +33,16 @@ test('normalizeLcdDealsResponse maps manifest_root bytes to Deal.cid hex', () =>
   assert.equal(deals[0].escrow, '9')
   assert.equal(deals[0].end_block, '100')
   assert.deepEqual(deals[0].providers, ['nil1p1', 'nil1p2'])
+  assert.equal(deals[0].redundancy_mode, 2)
+  assert.deepEqual(deals[0].mode2_profile, { k: 8, m: 4 })
+})
+
+test('normalizeLcdDealsResponse does not coerce malformed Mode 2 geometry', () => {
+  const [deal] = normalizeLcdDealsResponse({ deals: [{
+    id: '9', redundancy_mode: '2', mode2_profile: { k: '8', m: null },
+  }] })
+  assert.equal(deal.redundancy_mode, undefined)
+  assert.equal(deal.mode2_profile, undefined)
 })
 
 test('normalizeLcdDealsResponse accepts PolyFS 32-byte manifest_root bytes', () => {

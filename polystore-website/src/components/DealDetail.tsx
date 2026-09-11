@@ -20,20 +20,29 @@ import { useProofs } from '../hooks/useProofs'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { useUpdateDealRetrievalPolicy, type RetrievalPolicyMode } from '../hooks/useUpdateDealRetrievalPolicy'
 import { evaluateCacheFreshness, normalizeManifestRoot } from '../lib/cacheFreshness'
+import {
+  cachedDownloadAuthority,
+  preferVerifiedCache,
+  readVerifiedCachedDownload,
+  verifiedCachedDownloadAvailability,
+  type CachedDownloadAuthority,
+} from '../lib/cachedDownload'
 import { buildBlake2sMerkleLayers } from '../lib/merkle'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import {
   parsePolyfsFilesFromMdu0,
   parsePolyfsRootTableFromMdu0
 } from '../lib/polyfsLocal'
-import { inferWitnessCountFromOpfs, RAW_MDU_CAPACITY } from '../lib/polyfsOpfsFetch'
+import { inferWitnessCountFromOpfs } from '../lib/polyfsOpfsFetch'
 import { fetchPinnedGeneration } from '../lib/retrieval'
+import { fetchActiveGenerationV3, generationAsPinnedV2Shape } from '../lib/retrievalV3'
 import { formatCacheSourceLabel, isGatewayModePreferred, primaryCacheIndicatorLabel } from '../lib/retrievalMode'
+import { restoreSponsoredRetrievalAuth, withSponsoredRetrievalFeeCap } from '../lib/retrievalSponsoredAuth'
+import { hasSettledRetrievalV3Cache, listRetrievalV3Checkpoints, purgeSettledRetrievalV3Cache, purgeSettledRetrievalV3CacheForKey, retrievalV3CheckpointMatchesCurrent } from '../lib/retrievalV3Checkpoint'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
   deleteCachedFile,
   deleteDealDirectory,
-  hasCachedFile,
   readManifestRoot,
   readMdu,
   readSlabMetadata,
@@ -146,6 +155,7 @@ interface DealIndexRequirement {
 interface FileRowProps {
   file: PolyfsFileEntry
   deal: LcdDeal
+  cacheAuthority: CachedDownloadAuthority | null
   manifestRoot: string
   owner: string
   browserCached: boolean
@@ -154,15 +164,18 @@ interface FileRowProps {
   isBusy: boolean
   isAnyDownloading: boolean
   retrievalUnavailable: boolean
+  retrievalUnavailableReason?: string
+  viewerOwners: readonly string[]
   isOpen: boolean
   onToggleMenu: () => void
   onCloseMenu: () => void
   onFileActivity?: (activity: FileActivity) => void
-  downloadBlobAsFile: (blob: Blob, filePath: string) => void
+  downloadBlobAsFile: (blob: Blob, filePath: string, url?: string, cleanup?: () => Promise<void>) => void
   markDownloadPath: (route: string, mode: string, cacheSource: string, freshness: string) => void
   fetchFile: (params: FetchInput) => Promise<FetchResult>
   resolveProviderHttpBase: () => string
   sponsoredAuth: SponsoredRetrievalAuth
+  sponsoredFeeCap: string
   setBrowserCachedByPath: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setFileActionError: (error: string | null) => void
   setBusyFilePath: (path: string | null) => void
@@ -170,6 +183,10 @@ interface FileRowProps {
   downloadRangeLen: number
   transportPreference?: RoutePreference
   gatewayModePreferred: boolean
+  checkpointKey?: string
+  frozenGeneration?: bigint
+  unboundRecovery?: boolean
+  discardUnboundV3?: (key: string) => Promise<void>
   setSelectedMdu: React.Dispatch<React.SetStateAction<number>>
   setActiveTab: (tab: 'files' | 'info' | 'manifest' | 'activity') => void
 }
@@ -191,6 +208,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 function FileRow({
   file,
   deal,
+  cacheAuthority,
   manifestRoot,
   owner,
   browserCached,
@@ -199,6 +217,8 @@ function FileRow({
   isBusy,
   isAnyDownloading,
   retrievalUnavailable,
+  retrievalUnavailableReason,
+  viewerOwners,
   isOpen,
   onToggleMenu,
   onCloseMenu,
@@ -208,6 +228,7 @@ function FileRow({
   fetchFile,
   resolveProviderHttpBase,
   sponsoredAuth,
+  sponsoredFeeCap,
   setBrowserCachedByPath,
   setFileActionError,
   setBusyFilePath,
@@ -215,6 +236,10 @@ function FileRow({
   downloadRangeLen,
   transportPreference,
   gatewayModePreferred,
+  checkpointKey,
+  frozenGeneration,
+  unboundRecovery,
+  discardUnboundV3,
 }: FileRowProps) {
   const requestOwner = String(owner || deal.owner || '').trim()
   const browserAvailable = browserCached || browserMduAvailable
@@ -262,16 +287,36 @@ function FileRow({
     }
   }, [isOpen])
 
-  const downloadVerified = async (preference?: RoutePreference) => {
-    setFileActionError(null); setBusyFilePath(file.path)
+  const downloadVerified = async (preference?: RoutePreference, preferCache = false) => {
+    setFileActionError(null); setBusyFilePath(checkpointKey ?? file.path)
     const dealId = String(deal.id)
     try {
       if (!manifestRoot) throw new Error('commit required (no on-chain manifest root)')
+      const retainedV3 = /^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path, checkpointKey)
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'pending' })
-      const result = await fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
-        rangeStart: downloadRangeStart, rangeLen: downloadRangeLen, sponsoredAuth })
-      downloadBlobAsFile(result.blob, file.path)
-      markDownloadPath('Verified retrieval', result.route || 'network_fetch', 'verified_file', 'pinned_generation')
+      const outcome = await preferVerifiedCache(
+        async () => {
+          if (!preferCache || !cacheAuthority) return null
+          await ensureWasmReady()
+          return readVerifiedCachedDownload({ dealId, manifestRoot, owner: requestOwner, viewerOwners, file, authority: cacheAuthority, rangeStart: downloadRangeStart, rangeLen: downloadRangeLen })
+        },
+        preferCache && !retainedV3 ? retrievalUnavailableReason : undefined,
+        () => fetchFile({ dealId, manifestRoot, owner: requestOwner, filePath: file.path, serviceBase: resolveProviderHttpBase(), routePreference: preference,
+          generation: deal.current_gen,
+          rangeStart: downloadRangeStart, rangeLen: downloadRangeLen,
+          checkpointKey,
+          sponsoredAuth: withSponsoredRetrievalFeeCap(sponsoredAuth, sponsoredFeeCap) }),
+      )
+      if (outcome.source === 'cache') {
+        downloadBlobAsFile(new Blob([outcome.bytes as BlobPart]), file.path)
+        markDownloadPath('Browser cache', 'opfs_generation', 'verified_file', 'pinned_generation')
+      } else {
+        downloadBlobAsFile(outcome.result.blob, file.path, outcome.result.url, outcome.result.cleanup)
+        if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path)) {
+          setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: true }))
+        }
+        markDownloadPath('Verified retrieval', outcome.result.route || 'network_fetch', 'verified_file', 'pinned_generation')
+      }
       onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'success' })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -279,7 +324,7 @@ function FileRow({
       if (manifestRoot) onFileActivity?.({ dealId, filePath: file.path, sizeBytes: file.size_bytes, manifestRoot, action: 'download', status: 'failed', error: message })
     } finally { setBusyFilePath(null); onCloseMenu() }
   }
-  const handleAutoDownload = () => downloadVerified(transportPreference)
+  const handleAutoDownload = () => downloadVerified(transportPreference, true)
   const handleOnchainRetrieval = () => downloadVerified('prefer_direct_sp')
   const handleGatewayProviderRetrieval = () => downloadVerified('gateway_only')
 
@@ -287,7 +332,16 @@ function FileRow({
     setFileActionError(null)
     const dealId = String(deal.id)
     try {
-      await deleteCachedFile(dealId, file.path)
+      if (checkpointKey) {
+        if (!/^(0|[1-9][0-9]*)$/.test(dealId) ||
+          !await purgeSettledRetrievalV3CacheForKey(BigInt(dealId), file.path, checkpointKey)) {
+          throw new Error('cached download is in use or no longer retained')
+        }
+      } else {
+        await deleteCachedFile(dealId, file.path)
+        if (/^(0|[1-9][0-9]*)$/.test(dealId) && hasSettledRetrievalV3Cache(BigInt(dealId), file.path) &&
+          !await purgeSettledRetrievalV3Cache(BigInt(dealId), file.path)) throw new Error('cached download is in use; retry after it finishes')
+      }
       setBrowserCachedByPath((prev) => ({ ...prev, [file.path]: false }))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -295,6 +349,14 @@ function FileRow({
     } finally {
       onToggleMenu()
     }
+  }
+
+  const handleDiscardUnboundRecovery = async () => {
+    if (!checkpointKey || !discardUnboundV3) return
+    setFileActionError(null); setBusyFilePath(checkpointKey)
+    try { await discardUnboundV3(checkpointKey) }
+    catch (error) { setFileActionError(error instanceof Error ? error.message : String(error)) }
+    finally { setBusyFilePath(null) }
   }
 
   return (
@@ -312,6 +374,9 @@ function FileRow({
         <div className="mt-1 text-[10px] font-mono-data uppercase tracking-[0.16em] text-muted-foreground">
           start {String(file.start_offset || 0)}
         </div>
+        {frozenGeneration !== undefined ? <div className="mt-1 text-[10px] text-muted-foreground" data-testid="v3-frozen-recovery">
+          {unboundRecovery ? 'Unfinished request' : 'Paid recovery'} from frozen generation {String(frozenGeneration)}
+        </div> : null}
       </div>
 
       <div className="text-[11px] font-mono-data text-foreground/80">
@@ -321,14 +386,14 @@ function FileRow({
       <div className="flex items-center gap-2">
         <button
           onClick={handleAutoDownload}
-          disabled={retrievalUnavailable || isAnyDownloading || isBusy || !manifestRoot}
+          disabled={(retrievalUnavailable && !browserMduAvailable) || isAnyDownloading || isBusy || !manifestRoot}
           data-testid="deal-detail-download"
           data-file-path={file.path}
           className="bg-primary px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-primary-foreground rounded-none shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] transition-colors hover:bg-primary/90 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none disabled:opacity-50"
         >
           {isBusy ? 'BUSY' : 'Download'}
         </button>
-        <button
+        {frozenGeneration === undefined ? <button
           onClick={onToggleMenu}
           ref={menuButtonRef}
           data-testid="deal-detail-actions-menu"
@@ -336,8 +401,26 @@ function FileRow({
           className={`p-1 hover:bg-secondary border transition-colors rounded-none ${isOpen ? 'border-primary/50 bg-secondary' : 'border-transparent'}`}
         >
           <MoreVertical className="w-4 h-4 text-muted-foreground" />
-        </button>
-        {isOpen && menuViewportPosition && typeof document !== 'undefined'
+        </button> : unboundRecovery ? <button
+          onClick={() => void handleDiscardUnboundRecovery()}
+          disabled={isAnyDownloading || isBusy}
+          data-testid="deal-detail-discard-unbound-v3"
+          data-file-path={file.path}
+          className="p-1 text-destructive hover:bg-destructive/10 border border-transparent transition-colors rounded-none disabled:opacity-50"
+          aria-label={`Discard unfinished request for ${file.path}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button> : browserCached ? <button
+          onClick={() => void handlePurgeCache()}
+          disabled={isAnyDownloading || isBusy}
+          data-testid="deal-detail-clear-frozen-v3-cache"
+          data-file-path={file.path}
+          className="p-1 text-destructive hover:bg-destructive/10 border border-transparent transition-colors rounded-none disabled:opacity-50"
+          aria-label={`Clear retained recovery for ${file.path}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button> : null}
+        {frozenGeneration === undefined && isOpen && menuViewportPosition && typeof document !== 'undefined'
           ? createPortal(
               <>
                 <div className="fixed inset-0 z-[900]" onClick={onToggleMenu} />
@@ -438,9 +521,14 @@ export function DealDetail({
   const fallbackOwner = dealOwner || String(polystoreAddress || '').trim()
   const [authoritativeManifestRoot, setAuthoritativeManifestRoot] = useState<string>(fallbackManifestRoot)
   const [authoritativeOwner, setAuthoritativeOwner] = useState<string>(fallbackOwner)
+  const [authoritativeCacheDeal, setAuthoritativeCacheDeal] = useState<LcdDeal>(deal)
   const [authoritativeDealLoaded, setAuthoritativeDealLoaded] = useState(false)
   const requestOwner = authoritativeOwner || fallbackOwner
   const committedManifestRoot = authoritativeManifestRoot || fallbackManifestRoot
+  const cacheAuthority = useMemo(
+    () => cachedDownloadAuthority({ ...authoritativeCacheDeal, cid: committedManifestRoot }),
+    [authoritativeCacheDeal, committedManifestRoot],
+  )
   const isMode2 = serviceHint.mode === 'mode2' || serviceHint.mode === 'auto'
   const hasCommittedContent = Boolean(committedManifestRoot)
   const dealSizeBytes = Number.parseInt(String(deal.size ?? '0'), 10)
@@ -478,6 +566,7 @@ export function DealDetail({
   const [, setPolicyError] = useState<string | null>(null)
   const [, setPolicyStatus] = useState<string | null>(null)
   const [sponsoredAuth, setSponsoredAuth] = useState<SponsoredRetrievalAuth>({ type: 'none' })
+  const [sponsoredFeeCap, setSponsoredFeeCap] = useState('')
   const authStorageKey = useMemo(() => `polystore.retrievalAuth.${deal.id}`, [deal.id])
   const [slab, setSlab] = useState<SlabLayoutData | null>(null)
   const [slabSource, setSlabSource] = useState<'none' | 'gateway' | 'opfs' | 'authenticated'>('none')
@@ -507,6 +596,13 @@ export function DealDetail({
   const [selectedMdu, setSelectedMdu] = useState<number>(0)
   const lastContentHydrationKeyRef = useRef<string>('')
   const displayManifestRoot = normalizeManifestRoot(committedManifestRoot || manifestInfo?.manifest_root || slab?.manifest_root)
+  const v3Recoveries = useMemo(() => {
+    if (typeof window === 'undefined' || !/^(0|[1-9][0-9]*)$/.test(String(deal.id)) || !polystoreAddress) return []
+    return listRetrievalV3Checkpoints(BigInt(String(deal.id)), polystoreAddress, appConfig.cosmosChainId).filter(({ state }) =>
+      !retrievalV3CheckpointMatchesCurrent(state, deal.current_gen, normalizeManifestRoot(committedManifestRoot), files))
+  // Retrieval completion updates localStorage before clearing busyFilePath.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busyFilePath, committedManifestRoot, deal.current_gen, deal.id, files, polystoreAddress])
 
   useEffect(() => {
     const raw = Number(deal.retrieval_policy?.mode ?? 1)
@@ -522,17 +618,16 @@ export function DealDetail({
     const raw = window.localStorage.getItem(authStorageKey)
     if (!raw) {
       setSponsoredAuth({ type: 'none' })
+      setSponsoredFeeCap('')
       return
     }
     try {
-      const parsed = JSON.parse(raw) as SponsoredRetrievalAuth
-      if (parsed?.type === 'allowlist' || parsed?.type === 'voucher') {
-        setSponsoredAuth(parsed)
-        return
-      }
-      setSponsoredAuth({ type: 'none' })
+      const restored = restoreSponsoredRetrievalAuth(raw)
+      setSponsoredAuth(restored.auth)
+      setSponsoredFeeCap(restored.feeCap)
     } catch {
       setSponsoredAuth({ type: 'none' })
+      setSponsoredFeeCap('')
     }
   }, [authStorageKey])
   const [mduKzg, setMduKzg] = useState<MduKzgData | null>(null)
@@ -626,11 +721,12 @@ export function DealDetail({
     [committedManifestRoot, manifestInfo?.manifest_root, slab?.manifest_root],
   )
   const { proofs } = useProofs()
-  const { fetchFile, loading: downloading, receiptStatus, receiptError, progress, lastPlan, unavailableReason } = useFetch()
+  const { fetchFile, discardUnboundV3, loading: downloading, receiptStatus, receiptError, progress, lastPlan, unavailableReason } = useFetch()
   const {
     slab: fetchSlabLayout,
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
+    fetchV3Metadata,
     lastTrace,
     preference: transportPreference,
   } = useTransportRouter()
@@ -821,20 +917,23 @@ export function DealDetail({
       const owner = String(latest?.owner || '').trim() || fallback.owner
       setAuthoritativeManifestRoot(manifestRoot)
       setAuthoritativeOwner(owner)
+      setAuthoritativeCacheDeal(latest || deal)
       return { manifestRoot, owner }
     } catch {
       setAuthoritativeManifestRoot(fallback.manifestRoot)
       setAuthoritativeOwner(fallback.owner)
+      setAuthoritativeCacheDeal(deal)
       return fallback
     } finally {
       setAuthoritativeDealLoaded(true)
     }
-  }, [deal.id, fallbackManifestRoot, fallbackOwner])
+  }, [deal, fallbackManifestRoot, fallbackOwner])
 
   useEffect(() => {
     let cancelled = false
     setAuthoritativeManifestRoot(fallbackManifestRoot)
     setAuthoritativeOwner(fallbackOwner)
+    setAuthoritativeCacheDeal(deal)
     setAuthoritativeDealLoaded(false)
     void refreshAuthoritativeDealHead().then((head) => {
       if (cancelled) return
@@ -845,7 +944,7 @@ export function DealDetail({
     return () => {
       cancelled = true
     }
-  }, [fallbackManifestRoot, fallbackOwner, refreshAuthoritativeDealHead])
+  }, [deal, fallbackManifestRoot, fallbackOwner, refreshAuthoritativeDealHead])
 
   const fetchLocalFiles = useCallback(async (dealId: string) => {
     setLoadingFiles(true)
@@ -896,81 +995,29 @@ export function DealDetail({
         return
       }
       const dealId = String(deal.id)
-      const entries = await Promise.all(
-        files.map(async (f) => {
-          try {
-            return [f.path, await hasCachedFile(dealId, f.path)] as const
-          } catch {
-            return [f.path, false] as const
-          }
-        }),
-      )
-
-      const nextMduAvailable: Record<string, boolean> = {}
-      const chainManifestRoot = normalizeManifestRoot(committedManifestRoot)
-      if (chainManifestRoot) {
-        try {
-          const persistedManifestRoot = normalizeManifestRoot(await readManifestRoot(dealId).catch(() => null))
-          const localMeta = await readSlabMetadata(dealId).catch(() => null)
-          const metadataManifestRoot = normalizeManifestRoot(localMeta?.manifest_root)
-          const localManifestRoot = persistedManifestRoot || metadataManifestRoot
-          const freshness = evaluateCacheFreshness(localManifestRoot, chainManifestRoot)
-          if (freshness.status === 'fresh') {
-            const mdu0 = await readMdu(dealId, 0).catch(() => null)
-            if (mdu0 && mdu0.byteLength > 0) {
-              const { slabStartIdx, maxEnd } = await inferWitnessCountFromOpfs(dealId, files)
-              const mduPresence = new Map<number, boolean>()
-              const hasMdu = async (idx: number): Promise<boolean> => {
-                if (mduPresence.has(idx)) return mduPresence.get(idx) === true
-                const present = Boolean(await readMdu(dealId, idx).catch(() => null))
-                mduPresence.set(idx, present)
-                return present
-              }
-
-              for (const fileEntry of files) {
-                const start = Math.max(0, Number(fileEntry.start_offset) || 0)
-                const size = Math.max(0, Number(fileEntry.size_bytes) || 0)
-                if (size <= 0) {
-                  nextMduAvailable[fileEntry.path] = true
-                  continue
-                }
-
-                const endExclusive = start + size
-                if (endExclusive > maxEnd) {
-                  nextMduAvailable[fileEntry.path] = false
-                  continue
-                }
-
-                const firstUserMdu = Math.floor(start / RAW_MDU_CAPACITY)
-                const lastUserMdu = Math.floor((endExclusive - 1) / RAW_MDU_CAPACITY)
-                let available = true
-                for (let userMdu = firstUserMdu; userMdu <= lastUserMdu; userMdu += 1) {
-                  const slabMdu = slabStartIdx + userMdu
-                  if (!(await hasMdu(slabMdu))) {
-                    available = false
-                    break
-                  }
-                }
-                nextMduAvailable[fileEntry.path] = available
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to compute local MDU availability for cache status', { dealId, error })
-        }
-      }
+      const verified = await verifiedCachedDownloadAvailability(files.map((file) => ({
+        dealId,
+        manifestRoot: committedManifestRoot,
+        owner: requestOwner,
+        viewerOwners: [polystoreAddress, address || ''],
+        file,
+        authority: cacheAuthority,
+      })))
 
       if (canceled) return
-      const next: Record<string, boolean> = {}
-      for (const [path, ok] of entries) next[path] = ok
-      setBrowserCachedByPath(next)
-      setBrowserMduAvailableByPath(nextMduAvailable)
+      const settled: Record<string, boolean> = {}
+      if (/^(0|[1-9][0-9]*)$/.test(dealId)) {
+        const numericDealId = BigInt(dealId)
+        for (const file of files) settled[file.path] = hasSettledRetrievalV3Cache(numericDealId, file.path)
+      }
+      setBrowserCachedByPath(settled)
+      setBrowserMduAvailableByPath(verified)
     }
     void refreshBrowserCache()
     return () => {
       canceled = true
     }
-  }, [committedManifestRoot, deal.id, files])
+  }, [address, cacheAuthority, committedManifestRoot, deal.id, files, polystoreAddress, requestOwner])
 
   function triggerBrowserDownload(url: string, filePath: string) {
     const a = document.createElement('a')
@@ -982,10 +1029,13 @@ export function DealDetail({
     a.remove()
   }
 
-  function downloadBlobAsFile(blob: Blob, filePath: string) {
-    const url = window.URL.createObjectURL(blob)
+  function downloadBlobAsFile(blob: Blob, filePath: string, retainedUrl?: string, cleanup?: () => Promise<void>) {
+    const url = retainedUrl ?? window.URL.createObjectURL(blob)
     triggerBrowserDownload(url, filePath)
-    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url)
+      void cleanup?.().catch(() => {})
+    }, 1000)
   }
 
   const reconcileLocalMduCache = useCallback(async (dealId: string, chainManifestRoot: string): Promise<LocalCacheFreshnessResult> => {
@@ -1336,9 +1386,12 @@ export function DealDetail({
 
   const syncDealIndexFromProviders = useCallback(async () => {
     const dealId = String(deal.id)
-    const pin = await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, AbortSignal.timeout(60_000))
-    const manifestRoot = pin.root
-    const totalMdus = Number(pin.totalMdus), witnessMdus = Number(pin.metadataMdus - 1n), userMdus = Number(pin.userMdus)
+    const signal = AbortSignal.timeout(60_000)
+    const generationV3 = await fetchActiveGenerationV3(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    const pinV2 = generationV3 ? generationAsPinnedV2Shape(generationV3) :
+      await fetchPinnedGeneration(appConfig.lcdBase, appConfig.cosmosChainId, dealId, signal)
+    const manifestRoot = generationV3?.polyfsRoot ?? pinV2.root
+    const totalMdus = Number(pinV2.totalMdus), witnessMdus = Number(pinV2.metadataMdus - 1n), userMdus = Number(pinV2.userMdus)
 
     setDealIndexRequirement((prev) => ({
       ...prev,
@@ -1351,18 +1404,26 @@ export function DealDetail({
 
     try {
       await workerClient.initRetrievalWasm()
-      let mdu0Bytes: Uint8Array | undefined, lastError: unknown
-      for (const assignment of pin.assignments) {
-        try {
-          const bytes = await providerFetchRetrievalMetadata(resolveProviderHttpBaseFor(assignment.provider), pin, 0n, AbortSignal.timeout(60_000))
-          await workerClient.verifyRetrievalMetadata(bytes, pin)
-          mdu0Bytes = bytes
-          break
-        } catch (error) { lastError = error }
+      let parsedFiles: PolyfsFileEntry[], rootTable: Uint8Array[] = []
+      if (generationV3) {
+        const result = await fetchV3Metadata({ authority: generationV3,
+          directBases: generationV3.providers.map(resolveProviderHttpBaseFor), preference: transportPreference, signal })
+        parsedFiles = result.data.map((file) => ({ path: file.path, size_bytes: Number(file.size_bytes),
+          start_offset: Number(file.start_offset), flags: file.flags }))
+      } else {
+        let mdu0Bytes: Uint8Array | undefined, lastError: unknown
+        for (const assignment of pinV2.assignments) {
+          try {
+            const bytes = await providerFetchRetrievalMetadata(resolveProviderHttpBaseFor(assignment.provider), pinV2, 0n, signal)
+            await workerClient.verifyRetrievalMetadata(bytes, pinV2)
+            mdu0Bytes = bytes
+            break
+          } catch (error) { lastError = error }
+        }
+        if (!mdu0Bytes) throw lastError ?? new Error('authenticated metadata unavailable')
+        parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
+        rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
       }
-      if (!mdu0Bytes) throw lastError ?? new Error('authenticated metadata unavailable')
-      const parsedFiles = parsePolyfsFilesFromMdu0(mdu0Bytes)
-      const rootTable = parsePolyfsRootTableFromMdu0(mdu0Bytes, totalMdus - 1)
       const mdu0RootHex = manifestRoot
       const rootRecords = [
         { mdu_index: 0, kind: 'mdu0' as const, root_hex: mdu0RootHex },
@@ -1421,7 +1482,7 @@ export function DealDetail({
       setFileActionError(msg)
       setFiles(null)
     }
-  }, [deal.id, resolveProviderHttpBaseFor])
+  }, [deal.id, fetchV3Metadata, resolveProviderHttpBaseFor, transportPreference])
 
   async function fetchMduKzg(cid: string, mduIndex: number, dealId?: string, owner?: string) {
     setLoadingMduKzg(true)
@@ -1609,6 +1670,49 @@ export function DealDetail({
     dealIndexRequirement.status === 'needs_sync_stale' ||
     dealIndexRequirement.status === 'syncing' ||
     dealIndexRequirement.status === 'sync_failed'
+
+  const recoveryFileRows = v3Recoveries.map(({ key, state }) => {
+    const recoveryFile = { path: state.file.path, size_bytes: Number(state.file.size_bytes),
+      start_offset: Number(state.file.start_offset), flags: state.file.flags }
+    return <FileRow
+      key={key}
+      file={recoveryFile}
+      deal={deal}
+      cacheAuthority={null}
+      manifestRoot={state.authority.polyfsRoot}
+      owner={state.authority.owner}
+      browserCached={hasSettledRetrievalV3Cache(state.authority.dealId, state.file.path, key)}
+      browserMduAvailable={false}
+      gatewayCached={false}
+      isBusy={busyFilePath === key}
+      isAnyDownloading={downloading}
+      retrievalUnavailable={false}
+      viewerOwners={[polystoreAddress, address || '']}
+      isOpen={false}
+      onToggleMenu={() => {}}
+      onCloseMenu={() => {}}
+      onFileActivity={onFileActivity}
+      downloadBlobAsFile={downloadBlobAsFile}
+      markDownloadPath={markDownloadPath}
+      fetchFile={fetchFile}
+      resolveProviderHttpBase={resolveProviderHttpBase}
+      sponsoredAuth={sponsoredAuth}
+      sponsoredFeeCap={sponsoredFeeCap}
+      setBrowserCachedByPath={setBrowserCachedByPath}
+      setFileActionError={setFileActionError}
+      setBusyFilePath={setBusyFilePath}
+      downloadRangeStart={Number(state.rangeStart)}
+      downloadRangeLen={Number(state.rangeLength)}
+      transportPreference={transportPreference}
+      gatewayModePreferred={gatewayModePreferred}
+      setSelectedMdu={setSelectedMdu}
+      setActiveTab={setActiveTab}
+      checkpointKey={key}
+      frozenGeneration={state.authority.generation}
+      unboundRecovery={!state.session}
+      discardUnboundV3={discardUnboundV3}
+    />
+  })
 
   return (
     <div
@@ -1927,6 +2031,13 @@ export function DealDetail({
                     </div>
                   )}
 
+                  {requiresDealIndexSync && recoveryFileRows.length > 0 ? (
+                    <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-v3-recovery-list">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Paid frozen-generation recovery</div>
+                      {recoveryFileRows}
+                    </div>
+                  ) : null}
+
                       {loadingFiles && (!files || files.length === 0) ? (
                         <div className="nil-tab-panel text-xs text-muted-foreground">Loading file table…</div>
                       ) : requiresDealIndexSync ? (
@@ -1982,18 +2093,39 @@ export function DealDetail({
                             </div>
                           </div>
                         </div>
-                      ) : files && files.length > 0 ? (
+                      ) : (files && files.length > 0) || v3Recoveries.length > 0 ? (
                         <div className="nil-tab-panel space-y-2 overflow-visible" data-testid="deal-detail-file-list">
+                          <label className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-2 pb-2 text-[10px] text-muted-foreground">
+                            <span>Maximum retrieval fee <span className="normal-case">(stake base units; required when paying for another owner)</span></span>
+                            <input
+                              value={sponsoredFeeCap}
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              placeholder="Required for sponsored retrieval"
+                              aria-label="Maximum retrieval fee"
+                              data-testid="retrieval-max-total-fee"
+                              onChange={(event) => {
+                                if (/^[0-9]*$/.test(event.target.value)) setSponsoredFeeCap(event.target.value)
+                              }}
+                              onBlur={() => {
+                                if (typeof window === 'undefined') return
+                                const value = sponsoredFeeCap.trim()
+                                window.localStorage.setItem(authStorageKey, JSON.stringify({ ...sponsoredAuth, maxTotalFee: value || undefined }))
+                              }}
+                              className="w-56 border border-border bg-background px-2 py-1 text-xs text-foreground"
+                            />
+                          </label>
                           <div className="grid grid-cols-[minmax(0,1.7fr)_auto_auto] gap-3 border-b border-border/40 px-2 pb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                             <span>Path</span>
                             <span>Size</span>
                             <span>Actions</span>
                           </div>
-                          {files.map((f) => (
+                          {files?.map((f) => (
                             <FileRow
                               key={`${f.path}:${f.start_offset}`}
                               file={f}
                               deal={deal}
+                              cacheAuthority={cacheAuthority}
                               manifestRoot={committedManifestRoot}
                               owner={requestOwner}
                               browserCached={!!browserCachedByPath[f.path]}
@@ -2002,6 +2134,8 @@ export function DealDetail({
                               isBusy={busyFilePath === f.path}
                               isAnyDownloading={downloading}
                               retrievalUnavailable={Boolean(unavailableReason)}
+                              retrievalUnavailableReason={unavailableReason || undefined}
+                              viewerOwners={[polystoreAddress, address || '']}
                               isOpen={openMenuFilePath === f.path}
                               onToggleMenu={() => setOpenMenuFilePath(openMenuFilePath === f.path ? null : f.path)}
                               onCloseMenu={() => setOpenMenuFilePath(null)}
@@ -2011,6 +2145,7 @@ export function DealDetail({
                               fetchFile={fetchFile}
                               resolveProviderHttpBase={resolveProviderHttpBase}
                               sponsoredAuth={sponsoredAuth}
+                              sponsoredFeeCap={sponsoredFeeCap}
                               setBrowserCachedByPath={setBrowserCachedByPath}
                               setFileActionError={setFileActionError}
                               setBusyFilePath={setBusyFilePath}
@@ -2022,6 +2157,7 @@ export function DealDetail({
                               setActiveTab={setActiveTab}
                             />
                           ))}
+                          {recoveryFileRows}
                         </div>
                       ) : (
                         <div className="nil-tab-panel text-xs text-muted-foreground italic">No files found in the committed PolyFS generation.</div>

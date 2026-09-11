@@ -4,6 +4,7 @@ import { formatUnits } from 'viem'
 
 import { ethToPolystoreAddress } from '../lib/address'
 import { appConfig } from '../config'
+import { parseStakeBalancePayload, resolveFundingStatus, type FundingStatus } from '../lib/sessionFunding'
 import { useFaucet } from './useFaucet'
 import { useLocalGateway } from './useLocalGateway'
 import { useWalletNetworkGuard } from './useWalletNetworkGuard'
@@ -12,6 +13,8 @@ export type PrimarySessionState =
   | 'disconnected'
   | 'needs-reconnect'
   | 'wrong-network'
+  | 'checking-balance'
+  | 'balance-unavailable'
   | 'needs-funds'
   | 'ready-browser'
   | 'ready-gateway'
@@ -33,6 +36,7 @@ export type SessionStatus = {
   balance: ReturnType<typeof useBalance>['data']
   balanceLabel: string
   lcdStakeBalance: string | null
+  fundingStatus: FundingStatus
   hasFunds: boolean
   isWrongNetwork: boolean
   walletChainId: number | null
@@ -86,26 +90,25 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
     if (!address) return ''
     return address.startsWith('0x') ? ethToPolystoreAddress(address) : address
   }, [address])
-  const [lcdStakeBalance, setLcdStakeBalance] = useState<string | null>(null)
-  const [lcdBalanceLoaded, setLcdBalanceLoaded] = useState(false)
+  const [lcdBalanceState, setLcdBalanceState] = useState<{
+    owner: string
+    amount: string | null
+    loaded: boolean
+    unavailable: boolean
+  }>({ owner: '', amount: null, loaded: false, unavailable: false })
+  const currentLcdBalance = lcdBalanceState.owner === polystoreAddress
+    ? lcdBalanceState
+    : { owner: polystoreAddress, amount: null, loaded: false, unavailable: false }
+  const lcdStakeBalance = currentLcdBalance.amount
 
   const walletAddressShort = useMemo(() => {
     if (!address) return 'Not connected'
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }, [address])
 
-  const evmHasFunds = useMemo(() => {
-    try {
-      return Boolean(balance?.value && BigInt(balance.value) > 0n)
-    } catch {
-      return Boolean(balance?.value)
-    }
-  }, [balance?.value])
-
   useEffect(() => {
     if (!polystoreAddress) {
-      setLcdStakeBalance(null)
-      setLcdBalanceLoaded(false)
+      setLcdBalanceState({ owner: '', amount: null, loaded: false, unavailable: false })
       return
     }
 
@@ -114,19 +117,23 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
 
     const load = async () => {
       try {
-        const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${polystoreAddress}`)
-        const json = await res.json()
-        const balances = Array.isArray(json?.balances) ? json.balances : []
-        const match = balances.find(
-          (entry: { denom?: string; amount?: string }) => entry?.denom === 'stake' || entry?.denom === 'aatom',
-        )
+        const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${polystoreAddress}`, {
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) throw new Error(`balance lookup failed (HTTP ${res.status})`)
+        const amount = parseStakeBalancePayload(await res.json())
         if (cancelled) return
-        setLcdStakeBalance(match?.amount ? String(match.amount) : null)
-        setLcdBalanceLoaded(true)
+        setLcdBalanceState({
+          owner: polystoreAddress,
+          amount,
+          loaded: true,
+          unavailable: false,
+        })
       } catch {
         if (cancelled) return
-        setLcdStakeBalance(null)
-        setLcdBalanceLoaded(true)
+        setLcdBalanceState((previous) => previous.owner === polystoreAddress
+          ? { ...previous, unavailable: true }
+          : { owner: polystoreAddress, amount: null, loaded: false, unavailable: true })
       }
     }
 
@@ -151,15 +158,13 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
     }
   }, [polystoreAddress, faucetTxStatus, options?.lcdBalancePollMs])
 
-  const hasFunds = useMemo(() => {
-    if (!lcdBalanceLoaded) return evmHasFunds
-    if (!lcdStakeBalance) return false
-    try {
-      return BigInt(lcdStakeBalance) > 0n
-    } catch {
-      return Boolean(lcdStakeBalance)
-    }
-  }, [evmHasFunds, lcdBalanceLoaded, lcdStakeBalance])
+  const fundingStatus = useMemo(() => resolveFundingStatus({
+    lcdLoaded: currentLcdBalance.loaded,
+    lcdAmount: currentLcdBalance.amount,
+    lcdUnavailable: currentLcdBalance.unavailable,
+    evmAmount: balance?.value,
+  }), [balance?.value, currentLcdBalance.amount, currentLcdBalance.loaded, currentLcdBalance.unavailable])
+  const hasFunds = fundingStatus === 'funded'
 
   const balanceLabel = useMemo(() => {
     if (lcdStakeBalance) return `${lcdStakeBalance} NIL`
@@ -186,8 +191,12 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
       ? 'needs-reconnect'
       : isWrongNetwork
         ? 'wrong-network'
-        : !hasFunds
-          ? 'needs-funds'
+        : fundingStatus === 'checking'
+          ? 'checking-balance'
+          : fundingStatus === 'unavailable'
+            ? 'balance-unavailable'
+            : fundingStatus === 'unfunded'
+              ? 'needs-funds'
           : gatewayConnected
             ? 'ready-gateway'
             : 'ready-browser'
@@ -206,6 +215,7 @@ function useSessionStatusValue(options?: UseSessionStatusOptions): SessionStatus
     balance,
     balanceLabel,
     lcdStakeBalance,
+    fundingStatus,
     hasFunds,
     isWrongNetwork,
     walletChainId,

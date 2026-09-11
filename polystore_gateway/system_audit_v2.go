@@ -447,11 +447,21 @@ func runFrozenSystemLiveness(ctx context.Context, height uint64, snapshot *syste
 	if err != nil {
 		return err
 	}
-	release, err := claimRetrievalOperations(nil, signer)
+	release, waited, err := claimPriorityRetrievalSigner(ctx, signer)
 	if err != nil {
 		return err
 	}
 	defer release()
+	if waited {
+		active, currentHeight, err := systemAuditActivation(ctx)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return fmt.Errorf("frozen system audits became inactive while waiting for signer")
+		}
+		height = currentHeight
+	}
 	pending, err := loadPendingSigner(signer)
 	if err != nil {
 		return err
@@ -502,7 +512,11 @@ func runFrozenSystemLiveness(ctx context.Context, height uint64, snapshot *syste
 		if err != nil {
 			return err
 		}
-		dir, err := resolveDealDirForDeal(c.DealID, root, root.Canonical)
+		// Frozen proof generation leases the selected generation and authenticates
+		// its root table, witness commitments, and selected shard. Avoid the legacy
+		// slab-metadata fallback here: a sparse FAT v3 provider has those exact
+		// artifacts but intentionally has no gateway-authored slab sidecar.
+		dir, err := lookupDealGeneration(c.DealID, root, root.Canonical)
 		if err != nil {
 			snapshot.MissingDataSkips++
 			snapshot.LastError = err.Error()

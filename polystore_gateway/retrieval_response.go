@@ -196,11 +196,18 @@ func serveFrozenRetrievalWindow(w http.ResponseWriter, r *http.Request, root Man
 }
 
 func writeRetrievalWindow(w http.ResponseWriter, metadata, window []byte) error {
+	return writeRetrievalWindowVersion(w, metadata, window, "2")
+}
+
+func writeRetrievalWindowVersion(w http.ResponseWriter, metadata, window []byte, version string) error {
 	if len(metadata) > maxRetrievalMetadataBytes || len(window) == 0 || len(window) > types.MDU_SIZE || len(window)%types.BLOB_SIZE != 0 {
 		return fmt.Errorf("invalid retrieval response bounds")
 	}
+	if version != "2" && version != "3" {
+		return fmt.Errorf("invalid retrieval response version")
+	}
 	writer := multipart.NewWriter(w)
-	w.Header().Set("Content-Type", mime.FormatMediaType("multipart/form-data", map[string]string{"boundary": writer.Boundary(), "version": "2"}))
+	w.Header().Set("Content-Type", mime.FormatMediaType("multipart/form-data", map[string]string{"boundary": writer.Boundary(), "version": version}))
 	w.Header().Set("Cache-Control", "no-store")
 	h := make(textproto.MIMEHeader)
 	h.Set("Content-Disposition", `form-data; name="metadata"`)

@@ -1,11 +1,14 @@
 # Retrieval v3 native large-session contract
 
-Status: **contract reviewed; implementation partial and disabled by default**.
+Status: **implemented; isolated production-browser qualification passed; disabled by default**.
 This document fixes the wire-independent protocol choices for issue #291. The
 shared primitives, native generation admission, owner/sponsored session opening,
-sampled proof submission, per-provider ACK/settlement and expiry refunds are
-implemented. EVM parity, provider/client delivery integration and end-to-end
-activation qualification remain incomplete.
+sampled proof submission, provider data delivery, per-provider ACK/settlement
+and expiry refunds are implemented. The EVM precompile exposes the same eight
+native v3 actions. Browser WASM exposes the shared context, challenge, FAT v3
+and full-byte integrity primitives. The browser implements one-session
+orchestration, durable recovery and authenticated cache reuse. End-to-end
+qualification remains required before target-network activation.
 Retrieval v2 remains unchanged.
 
 The initial v3 profile supports canonical, untransformed FAT v3 content in
@@ -686,17 +689,115 @@ that the provider stores the corresponding bytes.
 
 The vector belongs to the immutable generation artifacts. Reusing a generation
 with shifted absolute MDU coordinates requires new leaf hashes, as specified
-above. This representation does not by itself provide client integrity-path
-serving or qualify full-byte delivery.
+above. This representation does not by itself qualify browser retrieval or
+full-byte delivery.
+
+## Provider-daemon and user-gateway data route
+
+The existing `GET /sp/retrieval/mdu/{polyfs_root}/{mdu_index}` provider-daemon route
+serves a native v3 systematic-slot chunk when all of these fields are present:
+
+- `Accept: multipart/form-data; version=3`;
+- exactly one `X-PolyStore-Session-Id: 0x<32-byte session id>`;
+- exactly one canonical decimal `X-PolyStore-Slot` in `0..7`; and
+- exactly one canonical decimal `deal_id` plus one `owner` query value.
+
+Optional `X-PolyStore-Start-Blob-Index` and `X-PolyStore-Blob-Count` headers are
+strict hints: when supplied they must equal the frozen chunk. The requested root,
+deal, owner, user MDU, slot, provider signer and payee must match the committed
+session. Settled, acknowledged and refunded slots cannot deliver again. The
+existing `GET /gateway/mdu/{polyfs_root}/{mdu_index}` user-gateway route resolves
+the same frozen payee and proxies the same request. A v2 lookup must return an
+explicit not-found response before either route considers v3; v2 timeouts,
+malformed responses and server errors remain failures.
+
+The response uses the existing two-part multipart framing with `version=3`.
+The JSON `metadata` part contains:
+
+| Field | Value |
+| --- | --- |
+| `version` | `3` |
+| `session_id`, `context_hash`, `polyfs_root`, `integrity_root` | lowercase `0x` hex frozen authority |
+| `slot` | systematic slot number |
+| `mdu_index`, `blob_count`, `total_bytes` | canonical decimal strings |
+| `start_blob_index` | first slot-major leaf index |
+| `entries[]` | ordered `t`, `mdu_index`, `leaf_index`, `integrity_position`, `integrity_path` |
+
+Each `entries[].integrity_path` is an array of lowercase `0x`-encoded 32-byte
+siblings in leaf-to-root order. The `bytes` part concatenates one complete
+131072-byte encoded blob for each entry. One `(slot, MDU)` response has at most
+eight blobs and 1 MiB. The client uses one logical session across all required
+chunks, recomputes each coordinate-bound leaf, verifies every path against the
+frozen integrity root, and authenticates the FAT v3 metadata against the frozen
+PolyFS root before durable write, decode or ACK.
+
+Provider daemons retain `integrity_index_v3.bin`, the complete duplicate-last internal
+Merkle levels derived from `integrity_leaves_v3.bin`. Generation acceptance
+builds it with bounded memory before publishing the immutable generation.
+Previously accepted inactive generations may build the derived index once on
+first retrieval under the existing response-capacity and generation-lease
+guards. The build is deduplicated, cancellation-aware, disk-reserved and
+atomically published. A hot chunk reads only its path. The index is never an
+authority: each returned blob is rehashed and its path is checked against the
+frozen root before response headers are written.
+
+The browser worker accepts caller-supplied frozen v3 authority and verifies the
+same multipart bytes. It checks the complete MDU0 against the frozen PolyFS root
+before parsing the FAT v3 header, then binds the header's integrity root and
+leaf count to that authority. For data chunks it derives every MDU, slot, leaf
+and integrity-tree position from the expected logical `t`, requires exact
+response coordinates, and verifies every complete encoded blob with the shared
+Rust duplicate-last Merkle primitive before returning bytes. The worker also
+exposes canonical context hash, seed and fixed-width challenge derivation from
+the shared golden transcript.
+
+The browser client supplies these primitives with authority from the committed
+generation-v3 query, obtains the authoritative owner/deal nonce, opens the
+session through the wallet and EVM adapter, and queries the frozen session before
+requesting provider chunks. It verifies MDU0 and every complete encoded blob
+before writing the output, acknowledges each completed obligation, and retains
+at most one settled verified output, capped at 1 GiB, until explicit cleanup.
+Fetching keeps at most two bounded 1 MiB chunks in flight while writes, flushes
+and durable cursors remain ordered. A missing initial generation-v3 query permits
+the legacy retrieval path; parameter, deal, timeout, malformed and server
+failures remain fatal rather than silently downgrading.
+
+Browser recovery persists the frozen request, output cursors and transaction
+journal. Checkpoint and owner/deal locks prevent another tab from opening a
+replacement payment. An unfinished checkpoint may be discarded only while its
+payment journal is absent, explicitly rejected/prepared, or proven reverted;
+broadcasting, committed and malformed records remain for reconciliation. The
+current browser client requires the exact trusted loopback user-gateway route
+from its latest successful probe before preparing a new native V3 open
+transaction, including when data is fetched directly from providers. Existing
+broadcasting or committed journals,
+settled output caches and expiry refunds remain available without that route.
+This precondition prevents locking a new retrieval fee when the client cannot
+request provider proof submission; it does not qualify public activation. The
+first cold user-gateway request stays alive for up to 5 minutes 30 seconds,
+including the provider-daemon's 5-minute index-build bound. Caller cancellation
+stops the synchronous build while its response-capacity admission and generation
+lease remain held. Warm requests use the hot path above.
+
+The bounded one-user-MDU benchmark
+`BenchmarkRetrievalDataV3Hot1MiB` (Linux amd64, 10 iterations) measured a
+565545 ns cold build and a 3088-byte index for 96 leaves. After warming, the
+authenticated 1 MiB prepare path measured 479544 ns/op, 1101288 B/op and 633
+allocs/op. This small-fixture check covers index construction and the hot
+verification/allocation boundary; it is not a retrieval-throughput result.
+
+These routes and the browser flow remain unavailable on networks where retrieval
+v3 activation is zero. Public activation still requires the complete gate above
+and operational qualification on the target network.
 
 The authenticated provider-daemon action is `POST /sp/generation-v3/accept`
 with `{"deal_id":0}` and the existing `X-PolyStore-Gateway-Auth` header. An
 optional `provider` must equal the daemon's actual signing address. The action
 queries the proposed generation and derives the provider slot; callers do not
-supply acceptance roots or digests. Owner proposal/finalization remain native
-CLI actions. Acceptance uses the same signer coordination and durable pending
-transaction state as normal audits; an uncertain broadcast requires
-reconciliation before further signing.
+supply acceptance roots or digests. Owners may propose and finalize through the
+native CLI or the EVM adapter. Acceptance uses the same signer coordination and
+durable pending transaction state as normal audits; an uncertain broadcast
+requires reconciliation before further signing.
 
 ## Provider-daemon sampled proof action
 
@@ -720,3 +821,113 @@ remains blocked unless the exact operation's accepted effects establish its
 outcome. A recovered transaction is not evidence that a different requested
 session is complete; callers must query current session state before deciding
 whether more proofs or a delivery acknowledgement are required.
+
+## EVM adapter
+
+The existing PolyStore precompile exposes `proposeDealGenerationV3`,
+`acceptDealGenerationV3`, `finalizeDealGenerationV3`,
+`openRetrievalSessionV3`, `openRetrievalSessionV3Sponsored`,
+`submitRetrievalSessionProofV3`, `acknowledgeRetrievalObligationV3` and
+`refundRetrievalSessionV3`. The EVM caller maps directly to the native message
+creator. In particular, the sponsored-open caller funds the request and each
+provider action remains subject to the native frozen-provider authority check.
+All methods are nonpayable; attached EVM value is rejected before native state
+changes.
+
+Successful owner and sponsored opens emit
+`RetrievalSessionV3Opened(uint64 indexed dealId, address indexed requester,
+bytes32 sessionId)`. The session ID is copied from the native response, including
+an exact idempotent nonce replay. Receipts do not contain the full frozen plan or
+payment state; clients must query the authoritative native session by this ID.
+The adapter uses the existing native-action journal, proof pricing and block
+limits, so EVM revert and out-of-gas roll back generation, session, voucher,
+funding, retention and event effects together. This ABI parity does not enable
+v3 on a deployed network; activation and target-network qualification remain
+separate operational decisions.
+
+
+## Isolated production-browser qualification
+
+Use `scripts/retrieval_four_validator_workload.py --mode native-v3-browser`.
+It creates an isolated four-validator chain, admits a production FAT v3
+fixture through all twelve provider-daemons, completes normal storage audits,
+and drives the real `DealDetail`, wallet, worker, OPFS and user-gateway path.
+It never activates a deployed chain. Use a fresh output directory per run.
+
+On the Linux fixture host, set the four binary/library variables below to
+artifacts built from the checked-out revision, install the website's locked
+Node dependencies and Playwright Chromium, and use a functioning systemd user
+session with cgroup v2 `memory.peak`:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-browser --audit-profile normal --timeout 1800 \
+  --browser-bytes 1024 \
+  --binary "$CHAIN_BINARY" --library "$CORE_LIBRARY" \
+  --gateway-binary "$GATEWAY_BINARY" --cli-binary "$CLI_BINARY" \
+  --product-source "$PWD" --home "$RUN_DIR"
+```
+
+Run these cases in order, changing `--browser-bytes` and choosing a new
+`RUN_DIR` each time. Use `--timeout 3600` for the 1 GiB case to include setup
+and audits around its 30-minute retrieval allowance:
+
+| Logical bytes | Required observation |
+| --- | --- |
+| `1024` | One paid session, verified download and cache; estimate rejection and wallet cancellation before payment; separate short-deal expiry/refund |
+| `16777217` | One multi-MDU session; corrupt an unsampled blob, swap multipart sections and truncate a response; unknown-open reconciliation, reload at a durable cursor, settlement and cache |
+| `1073741824` | One large session, 8,457 authorized blobs and 132 sampled challenges; 1,064 bounded transport chunks |
+
+Only start the large measurement after the small correctness cases pass.
+For the 1 GiB pilot with a separate Mac browser over the LAN, add
+`--browser-executor-handoff` and use `--timeout 3600` on the Linux coordinator.
+The smaller correctness cases run on the Linux host. Once it publishes
+`browser-executor-request.json`, run this from an exact matching, clean Mac
+checkout with the locked website dependencies and Chrome installed. Set
+`BENCH_SSH` to the fixture host and `REMOTE_RUN_DIR` to its run directory:
+
+```sh
+python3 scripts/retrieval_bench_artifact.py browser-executor \
+  --ssh "$BENCH_SSH" \
+  --remote-request "$REMOTE_RUN_DIR/browser-executor-request.json" \
+  --source "$PWD" \
+  --chrome "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+```
+
+The executor owns four loopback SSH forwards and a fresh persistent browser
+profile. It retains the host/browser identity and returns results to the
+coordinator for the same four-validator transaction and balance checks.
+This topology measures a LAN client with cohosted validators and providers;
+it does not establish WAN performance or distributed validator capacity.
+
+Retain `evidence.json`, browser result/memory files and logs with the source
+and binary identities. Failed profiles contain private wallet and payload
+state; keep them private for diagnosis. A successful result requires the
+complete sampled ordinal set, canonical committed transactions on all four
+validators, exact payer/provider/burn/refund accounting and a cache download
+with no additional MDU requests or payment. Transfer, browser verification,
+write/flush, transaction inclusion and provider proof/settlement timings are
+separate; concurrent phase durations must not be added together.
+
+Linux reports aggregate cgroup charged memory, including file cache. macOS
+reports sampled process-tree RSS, which can double-count shared pages and
+miss peaks between samples. Neither is JavaScript heap usage. Keep the
+60-second progress heartbeat, ten-minute no-progress watchdog and absolute
+execution deadline. Execution limits cap test cost. The
+[retained production-browser report](../bench/retrieval_session_capacity/native-browser-291/README.md)
+records the passing small, multi-MDU and Mac LAN 1 GiB cases. Its measured
+654.052-second paid interval establishes a provisional **14-minute target**
+for that topology, including 25% operating margin rounded up to a minute.
+This is a single-pilot regression target, not a WAN or p95 service promise.
+After a matching run, require both full qualification and the measured target:
+
+```sh
+jq -e '.qualification == true and
+  (.native_v3_browser.playwright.outcome |
+    .downloaded.bytes == 1073741824 and
+    (.progressAfterPaid.phaseMs | type == "number" and . > 0 and . <= 840000))' \
+  "$RUN_DIR/evidence.json"
+```
+
+Recalibrate from retained measurements when deployment hardware, topology
+or concurrency changes. Public activation remains a separate decision.

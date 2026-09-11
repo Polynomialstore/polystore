@@ -1,0 +1,7 @@
+{
+  "harness_head": "157e8b4421336603317a386866f6e1ed0aa3dd8e",
+  "ssh_compression": "no",
+  "observation_utc": "2026-09-10 22:54 UTC",
+  "payload_pattern": "4096 bytes, byte i=(i*37+i//97)%256; repeated to requested length",
+  "gateway_response_compression_middleware_found": false
+}

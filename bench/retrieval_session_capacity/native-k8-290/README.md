@@ -140,3 +140,117 @@ proof-submission transactions (6,736 openings) with normal audits. At the final
 16/s offered step, 88 offers hit the bounded queue; its consensus-header-time
 window recorded 8.8 bundles/s. This is a single-host, 30-second-per-step result,
 not a production-capacity or byte-delivery qualification.
+
+## Native v3 production-route pilot
+
+The fixed `native-v3-providers` mode is a finite same-path diagnostic for the
+sampled large-session protocol. It uploads exactly 16 MiB through FAT v3,
+admits the generation through all twelve provider HTTP routes, opens two native
+sessions with U=133 and Q=132, and asks the eight systematic providers to submit
+one provider-batched proof transaction for each session. It records the sixteen
+committed transaction messages and gas, 264 newly accepted bitmap ordinals,
+normal audits, and expiry/refund cleanup. It never sends an owner ACK because it
+does not download and verify the file bytes. HTTP duration combines proof
+generation, local verification, gas simulation, signing, broadcast, and commit
+observation; it is neither pure proof-generation time nor chain capacity.
+
+A bounded pre-merge correctness smoke may run from an exact independently
+reviewed head with separately frozen Linux runtime hashes and a new private
+home. It is not retained performance evidence. Retained performance collection
+requires the harness to be reviewed and landed:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-providers --audit-profile normal --timeout 600 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-16m-pilot-001"
+```
+
+The pilot keeps v3 disabled by default and enables it only in its isolated test
+genesis. A retained result can establish production-route correctness and a
+bounded offered/committed diagnostic. A longer reviewed profile is required
+before quoting stable throughput, and delivered-file performance remains a
+separate measurement.
+
+## Native v3 provider-daemon cross-audit diagnostic
+
+`native-v3-providers-cross-audit` extends the same production provider-daemon route
+without changing proof, gas, queue, or audit behavior. It opens 46 fixed
+16 MiB sessions in two ordered append-signed batches of 31 and 15. One
+batch declares 62.1M gas and the other 30.1M gas; both signed payloads and
+committed raw transactions must remain within the 2 MiB block-byte limit. One
+transaction per systematic provider warms the route outside the clock, then
+360 transactions are offered round-robin across the eight assigned signers at
+2 transactions/s for 180 seconds. Each signer has at
+most one request in flight. The HTTP clock includes proof generation, native
+verification, gas simulation, signing, broadcast, and commit observation.
+
+The run aligns its measured start 10 blocks before the next normal audit anchor
+and requires the profile to cross exactly two anchors. It retains six 30-second
+offered-cohort, terminal, and backlog bins plus the underlying attempts. A
+bounded route failure remains diagnostic evidence rather than being relabeled
+as a successful 2 transactions/s result. A successful run additionally verifies
+all 368 warmup and measured proof transactions, all 6,072 accepted ordinals,
+both crossed-audit coverage sets and their 24 unique transactions, provider
+account sequences, raw blocks/results and Commit streams on all four validators,
+Linux validator CPU ticks covering the fixed HTTP schedule, drain, and both
+audit completions, and all 46 expiry/refund paths. Scheduler HTTP duration
+remains a separate measurement. It does not send an ACK or verify delivery.
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-providers-cross-audit --audit-profile normal --timeout 900 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-provider-cross-audit-001"
+```
+
+This is a finite local operating-point diagnostic. It does not establish chain
+maximum capacity, WAN behavior, phase RSS peak, pure proof-generation latency,
+or delivered-byte capacity. A retained performance result requires this harness
+to land before collection.
+
+The [retained cross-audit diagnostic](native-v3-cross-audit-001/README.md) ran
+the landed profile for 180 seconds at 2 transactions/s. All 360 measured native
+v3 proof transactions and 5,940 authenticated openings committed, while 24
+normal audit transactions covered two anchors. This accepts that single-host
+local operating point only; the result remains `qualification=false` and makes
+no maximum-capacity, realistic-deployment, WAN, or delivery claim.
+
+## Native v3 chain-only diagnostic
+
+`native-v3-chain` keeps the same 16 MiB FAT v3 generation and normal audits,
+then opens eight sessions. Eight bounded exporter processes prepare and natively
+verify the 64 provider messages before measurement. The CLI simulates each exact
+message with `--generate-only --gas auto --gas-adjustment 1.6`; the measured
+submissions use those explicit gas limits, so proof generation and gas
+simulation are outside the clock. One warmup per systematic provider precedes
+56 transactions offered for eight seconds each at 1, 2, and 4 tx/s.
+
+The run requires complete current-epoch audit coverage, two blocks of signer
+sequence quiescence, and 60-block margins to the next audit anchor and session
+expiry. It retains exact blocks/results from all four validators, authoritative
+session bitmaps, signer sequences, gas, and Linux validator CPU ticks for the
+measured scheduler window. It sends no ACK and checks expiry/refund. The result
+is a finite local chain diagnostic; it does not qualify delivery, WAN behavior,
+steady-state capacity, or a phase RSS peak. Pre-merge runs are correctness
+smokes. Performance evidence is retained only from the reviewed landed harness.
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-chain --audit-profile normal --timeout 600 \
+  --binary "$RETRIEVAL_BIN/polystorechaind" \
+  --library "$RETRIEVAL_LIBRARY" \
+  --gateway-binary "$RETRIEVAL_BIN/polystore_gateway" \
+  --cli-binary "$RETRIEVAL_BIN/polystore_cli" \
+  --proof-exporter "$RETRIEVAL_BIN/polystore_gateway.test" \
+  --product-source "$RETRIEVAL_REPO" \
+  --home "$RETRIEVAL_RUNS/native-v3-chain-001"
+```

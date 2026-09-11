@@ -40,9 +40,9 @@ export function account(value: unknown): string {
   if (decoded.prefix !== 'nil' || bech32.fromWords(decoded.words).length !== 20 || bech32.encode(decoded.prefix, decoded.words) !== value) throw new Error('noncanonical account')
   return value
 }
-function protoU64(value: unknown): bigint { return value === undefined ? 0n : u64(value) }
-function protoUint(value: unknown, max = 0xffff_ffff): number { return value === undefined ? 0 : uint(value, max) }
-function enumeration(value: unknown, names: string[]): number {
+export function protoU64(value: unknown): bigint { return value === undefined ? 0n : u64(value) }
+export function protoUint(value: unknown, max = 0xffff_ffff): number { return value === undefined ? 0 : uint(value, max) }
+export function enumeration(value: unknown, names: string[]): number {
   if (typeof value === 'string') { const i = names.indexOf(value); if (i >= 0) return i }
   return protoUint(value, names.length - 1)
 }
@@ -110,7 +110,11 @@ export async function readBoundedResponse(response: Response, max: number, signa
     return bytes
   } finally { signal?.removeEventListener('abort', abort); await reader.cancel().catch(() => {}); reader.releaseLock() }
 }
-async function committedQuery(lcd: string, path: string, height: bigint | undefined, signal: AbortSignal | undefined, fetchFn: typeof fetch) {
+export function accountBytes(value: string): Uint8Array {
+  account(value)
+  return Uint8Array.from(bech32.fromWords(bech32.decode(value).words))
+}
+export async function committedQuery(lcd: string, path: string, height: bigint | undefined, signal: AbortSignal | undefined, fetchFn: typeof fetch) {
   const res = await fetchFn(`${lcd.replace(/\/$/, '')}${path}`, { signal, headers: height === undefined ? undefined : { 'x-cosmos-block-height': height.toString() } })
   if (!res.ok) { await res.body?.cancel(); throw new Error(`chain query failed (${res.status})`) }
   let actual: bigint
@@ -127,10 +131,12 @@ export async function fetchPinnedGeneration(lcd: string, chainId: string, dealId
 
 export async function fetchRetrievalAvailability(lcd: string, height?: bigint, signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<string | null> {
   const result = await committedQuery(lcd, '/polystorechain/polystorechain/v1/params', height, signal, fetchFn)
-  const activation = protoU64(record(record(result.payload).params).retrieval_v2_activation_height)
+  const params = record(record(result.payload).params)
+  const activations = [protoU64(params.retrieval_v2_activation_height), protoU64(params.retrieval_v3_activation_height)].filter((value) => value > 0n)
   // BeginBlock must activate at this height before it can commit; afterwards
   // SetParams prevents changing the activation height or disabling v2.
-  if (!activation) return 'Verified downloads are unavailable until this network activates secured retrieval.'
+  if (!activations.length) return 'Verified downloads are unavailable until this network activates secured retrieval.'
+  const activation = activations.reduce((earliest, value) => value < earliest ? value : earliest)
   if (activation > result.height) return `Verified downloads become available at block ${activation} (current block ${result.height}).`
   return null
 }

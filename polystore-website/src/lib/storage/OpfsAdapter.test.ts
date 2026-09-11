@@ -441,6 +441,66 @@ test('OpfsAdapter: atomic slab generation swap serves new generation and cleans 
     assert.ok(files.includes('manifest.bin'))
 })
 
+test('OpfsAdapter: verified generation is pinned and its completion marker is root-bound', async () => {
+    const dealId = 'test-deal-verified-generation'
+    const root = '0x' + 'de'.repeat(48)
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: root,
+        manifestBlob: new Uint8Array([1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([2]) },
+            { index: 1, data: new Uint8Array([3]) },
+        ],
+        metadata: makeMetadata({ dealId, manifestRoot: root, generationId: root.slice(2) }),
+    })
+
+    const dealDir = await mockRootDirectoryHandle.getDirectoryHandle(`deal-${dealId}`)
+    const pointer = await (await dealDir.getFileHandle('active_generation.txt')).getFile()
+    const generationName = (await pointer.text()).trim()
+    const generationDir = await (await dealDir.getDirectoryHandle('generations')).getDirectoryHandle(generationName)
+    const marker = await (await generationDir.getFileHandle('.generation_complete')).getFile()
+    assert.strictEqual((await marker.text()).trim(), root)
+
+    const opened = await OpfsAdapter.openCompleteSlabGeneration(dealId)
+    assert.strictEqual(opened?.manifestRoot, root)
+    assert.deepStrictEqual(await opened?.readMdu(1), new Uint8Array([3]))
+
+    await writeMockFile(generationDir, '.generation_complete', 'ok\n')
+    assert.strictEqual(await OpfsAdapter.openCompleteSlabGeneration(dealId), null)
+})
+
+test('OpfsAdapter: verified generation metadata rejects fractional layout counts', async () => {
+    const dealId = 'test-deal-strict-generation-metadata'
+    const root = '0x' + 'ef'.repeat(48)
+    await OpfsAdapter.writeSlabGenerationAtomically(dealId, {
+        manifestRoot: root,
+        manifestBlob: new Uint8Array([1]),
+        mdus: [
+            { index: 0, data: new Uint8Array([2]) },
+            { index: 1, data: new Uint8Array([3]) },
+        ],
+        metadata: makeMetadata({ dealId, manifestRoot: root, generationId: root.slice(2) }),
+    })
+    const dealDir = await mockRootDirectoryHandle.getDirectoryHandle(`deal-${dealId}`)
+    const pointer = await (await dealDir.getFileHandle('active_generation.txt')).getFile()
+    const generationName = (await pointer.text()).trim()
+    const generationDir = await (await dealDir.getDirectoryHandle('generations')).getDirectoryHandle(generationName)
+    const malformed = makeMetadata({ dealId, manifestRoot: root, generationId: root.slice(2) }) as unknown as Record<string, unknown>
+    malformed.witness_mdus = 0.5
+    malformed.total_mdus = 1.5
+    await writeMockFile(generationDir, 'slab_meta.json', JSON.stringify(malformed))
+
+    const opened = await OpfsAdapter.openCompleteSlabGeneration(dealId)
+    assert.ok(opened)
+    assert.strictEqual(await opened?.readMetadata(), null)
+    for (const invalid of [null, false, '', [], 0.5]) {
+        const bad = { ...makeMetadata({ dealId, manifestRoot: root, generationId: root.slice(2) }),
+            file_records: [{ path: 'a', start_offset: 0, size_bytes: 1, flags: invalid }] }
+        await writeMockFile(generationDir, 'slab_meta.json', JSON.stringify(bad))
+        assert.strictEqual(await opened?.readMetadata(), null, `invalid flags: ${JSON.stringify(invalid)}`)
+    }
+})
+
 test('OpfsAdapter: atomic slab generation swap survives stale cleanup failure after activation', async () => {
     const dealId = 'test-deal-atomic-swap-cleanup-failure'
     const rootA = '0x' + '12'.repeat(48)

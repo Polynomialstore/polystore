@@ -133,6 +133,35 @@ func nativeEVM(t *testing.T, a *App, ctx sdk.Context) (*vm.EVM, *statedb.StateDB
 	return evm, state
 }
 
+func TestNativePrecompileRejectsAttachedValue(t *testing.T) {
+	a, baseCtx := nativePrecompileApp(t)
+	ctx, _ := baseCtx.CacheContext()
+	caller := common.HexToAddress("0xaa11")
+	callerNative := sdk.AccAddress(caller.Bytes())
+	denom := evmtypes.GetEVMCoinDenom()
+	funds := sdk.NewCoins(sdk.NewInt64Coin(denom, 10))
+	require.NoError(t, a.BankKeeper.MintCoins(ctx, types.ModuleName, funds))
+	require.NoError(t, a.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, callerNative, funds))
+	evm, state := nativeEVM(t, a, ctx)
+	api, err := abi.JSON(strings.NewReader(`[{"name":"requestProviderLink","type":"function","stateMutability":"nonpayable","inputs":[{"name":"operator","type":"string"}],"outputs":[{"name":"ok","type":"bool"}]}]`))
+	require.NoError(t, err)
+	input, err := api.Pack("requestProviderLink", sdk.AccAddress(common.HexToAddress("0xaa12").Bytes()).String())
+	require.NoError(t, err)
+	beforeEvents := append(sdk.Events(nil), ctx.EventManager().Events()...)
+
+	beforeCaller := state.GetBalance(caller)
+	beforePrecompile := state.GetBalance(polystoreprecompile.Address)
+	_, _, err = evm.Call(caller, polystoreprecompile.Address, input, 5_000_000, uint256.NewInt(1))
+	require.ErrorIs(t, err, vm.ErrExecutionReverted)
+	require.Equal(t, beforeCaller, state.GetBalance(caller))
+	require.Equal(t, beforePrecompile, state.GetBalance(polystoreprecompile.Address))
+	present, err := a.PolyStoreChainKeeper.PendingProviderLinks.Has(ctx, callerNative.String())
+	require.NoError(t, err)
+	require.False(t, present)
+	require.NoError(t, state.Commit())
+	require.Equal(t, beforeEvents, ctx.EventManager().Events())
+}
+
 func TestNativePrecompileBankRollback(t *testing.T) {
 	a, baseCtx := nativePrecompileApp(t)
 	api, err := abi.JSON(strings.NewReader(`[{"name":"createDeal","type":"function","inputs":[{"type":"uint64"},{"type":"string"},{"type":"uint256"},{"type":"uint256"}],"outputs":[{"type":"uint64"}]}]`))

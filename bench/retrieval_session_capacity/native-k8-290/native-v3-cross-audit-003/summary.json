@@ -1,0 +1,472 @@
+{
+  "claim": "single-host native-v3 provider-route operating-point diagnostic; no maximum-capacity, WAN, or delivered-byte qualification",
+  "limitations": [
+    "Four validators and twelve provider-daemons ran on one Linux host; this is not a realistic deployment.",
+    "The 2 transactions/s schedule is an accepted local operating point, not a measured maximum.",
+    "Provider phases separate authority, proof preparation, CLI pre-broadcast, BroadcastTxSync/CheckTx round-trip and later commit observation; none is exact consensus inclusion latency.",
+    "Pre-success-start delay includes scheduler delay and, for 12 requests, retry backoff after an HTTP 429; it is not a pure signer-queue measurement.",
+    "Commit p95 values are execution upper bounds from the Commit metric; they exclude the documented post-persistence tail.",
+    "Commit streams use a wider window starting before workload alignment and ending after heavy all-validator LCD queries; that window is separate from the CPU and provider HTTP measurement window.",
+    "CPU is a fixed-window process tick delta; RSS is a whole-process-lifetime peak, not a phase peak or 2 GiB usage claim.",
+    "Consensus header proposal timestamps provide a separate inter-block denominator; they are not wall-clock commit completion and cannot be subtracted from process-monotonic phases.",
+    "Provider commit observation includes polling and the index/RPC path after successful CheckTx; signer admission remains immediate or HTTP 429, with audit admission priority.",
+    "No owner ACK or byte delivery was performed; delivery, resume, cache, WAN, and maximum capacity remain unqualified."
+  ],
+  "private_inputs": {
+    "blocks": {
+      "bytes": 137169,
+      "sha256": "167e61508be41801cbbadb17bd4d74fa078525691e57751304ccb0e0aa4d7193"
+    },
+    "commit_streams": {
+      "5e57792918a70784da2c24b35265e028e94e11a5": {
+        "sha256": "0286ad0fb6fbd1e841650cf1101f97a1da9de76638ee1119e7c172bdf7486d38"
+      },
+      "6cdc2c478fba8a33b1466627ab6e175e38028c34": {
+        "sha256": "db0ddbc6b00abe687fec4f26ca1335cabd13c0368ad5f8dde4c1e1745a9b6cfc"
+      },
+      "930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8": {
+        "sha256": "4efe809e514319e58b1b384f7a2bedd2843e39f688181523a6f33263da899baa"
+      },
+      "cfc0bf9e9fc62e965989d1392b0900496c823357": {
+        "sha256": "8ccaf4d2ea37cc77855861b1d931caa2ecb44cccb90a33e2efe5e860933fdf8b"
+      }
+    },
+    "evidence": {
+      "bytes": 4650004,
+      "sha256": "137e91de8adf2bfaa585c0edebb1581b91733e82602e9138b15006cf75d25aee"
+    },
+    "transactions": {
+      "bytes": 19532445,
+      "sha256": "d68ffa70200e002d0a71202f7536e7d2c094943fe14073f3bde365ebad5bcb27"
+    }
+  },
+  "profile": {
+    "budgets_measured_for_qualification": false,
+    "commit_p95_budget_ms": 700,
+    "measured_offer_seconds": 180,
+    "measured_openings": 5940,
+    "measured_proof_transactions": 360,
+    "normal_audit_epochs": 2,
+    "normal_audit_transactions": 24,
+    "offered_openings_per_second": 33,
+    "offered_transactions_per_second": 2,
+    "open_batch_sizes": [
+      31,
+      15
+    ],
+    "provider_daemons": 12,
+    "sessions": 46,
+    "systematic_providers": 8,
+    "validator_memory_ceiling_bytes": 2147483648,
+    "validators": 4,
+    "warmup_transactions": 8
+  },
+  "qualification": false,
+  "reproduction": {
+    "harness": "$HARNESS_SOURCE/scripts/retrieval_four_validator_workload.py",
+    "inputs_are_private": true
+  },
+  "result": {
+    "audits": {
+      "all_assignments_accepted": true,
+      "epochs": [
+        4,
+        5
+      ],
+      "missed": 0,
+      "transactions": 24
+    },
+    "authoritative_openings_per_scheduler_second": 32.52568678995803,
+    "block_header_timing": {
+      "committed_proof_transactions": 360,
+      "committed_proof_transactions_per_header_second": 1.989774550827322,
+      "elapsed_ns": 180925019797,
+      "first_proof_height": 293,
+      "first_timestamp": "2026-09-10T13:07:39.99567581Z",
+      "inter_block_intervals": {
+        "count": 134,
+        "max_ms": 1516.20532,
+        "median_ms": 1336.585565,
+        "p50_ms": 1336.503539,
+        "p95_ms": 1431.295127,
+        "p99_ms": 1443.569573,
+        "percentile_method": "nearest rank; median uses conventional midpoint"
+      },
+      "last_proof_height": 426,
+      "last_timestamp": "2026-09-10T13:10:40.920695607Z",
+      "preceding_height": 292,
+      "timestamp_definition": "Consensus header proposal timestamps, including the header preceding the first measured proof; not commit-completion timestamps or transaction inclusion latency."
+    },
+    "client_observation_bins": [
+      {
+        "carryover_in_flight": 0,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 52,
+        "end_offset_ns": 30000000000,
+        "in_flight_at_end": 8,
+        "index": 0,
+        "offered": 60,
+        "outstanding_at_end": 8,
+        "queued_at_end": 0,
+        "start_offset_ns": 0,
+        "terminal": 52
+      },
+      {
+        "carryover_in_flight": 8,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 54,
+        "end_offset_ns": 60000000000,
+        "in_flight_at_end": 6,
+        "index": 1,
+        "offered": 60,
+        "outstanding_at_end": 6,
+        "queued_at_end": 0,
+        "start_offset_ns": 30000000000,
+        "terminal": 62
+      },
+      {
+        "carryover_in_flight": 6,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 53,
+        "end_offset_ns": 90000000000,
+        "in_flight_at_end": 7,
+        "index": 2,
+        "offered": 60,
+        "outstanding_at_end": 7,
+        "queued_at_end": 0,
+        "start_offset_ns": 60000000000,
+        "terminal": 59
+      },
+      {
+        "carryover_in_flight": 7,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 54,
+        "end_offset_ns": 120000000000,
+        "in_flight_at_end": 6,
+        "index": 3,
+        "offered": 60,
+        "outstanding_at_end": 6,
+        "queued_at_end": 0,
+        "start_offset_ns": 90000000000,
+        "terminal": 61
+      },
+      {
+        "carryover_in_flight": 6,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 54,
+        "end_offset_ns": 150000000000,
+        "in_flight_at_end": 6,
+        "index": 4,
+        "offered": 60,
+        "outstanding_at_end": 6,
+        "queued_at_end": 0,
+        "start_offset_ns": 120000000000,
+        "terminal": 60
+      },
+      {
+        "carryover_in_flight": 6,
+        "carryover_queued": 0,
+        "cohort_completed_by_end": 53,
+        "end_offset_ns": 180000000000,
+        "in_flight_at_end": 7,
+        "index": 5,
+        "offered": 60,
+        "outstanding_at_end": 7,
+        "queued_at_end": 0,
+        "start_offset_ns": 150000000000,
+        "terminal": 59
+      }
+    ],
+    "commit_step": [
+      {
+        "fenced_samples": 1389,
+        "observed_blocks": 210,
+        "p95_upper_bound_ms": 372.6362570040109,
+        "raw_samples": 1388,
+        "validator": "5e57792918a70784da2c24b35265e028e94e11a5",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1389,
+        "observed_blocks": 210,
+        "p95_upper_bound_ms": 372.7885280040566,
+        "raw_samples": 1388,
+        "validator": "6cdc2c478fba8a33b1466627ab6e175e38028c34",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1389,
+        "observed_blocks": 210,
+        "p95_upper_bound_ms": 417.79352400343805,
+        "raw_samples": 1388,
+        "validator": "930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8",
+        "within_700ms_budget": true
+      },
+      {
+        "fenced_samples": 1389,
+        "observed_blocks": 210,
+        "p95_upper_bound_ms": 366.5102690010701,
+        "raw_samples": 1388,
+        "validator": "cfc0bf9e9fc62e965989d1392b0900496c823357",
+        "within_700ms_budget": true
+      }
+    ],
+    "committed_valid_transactions_per_scheduler_second": 1.971253744845941,
+    "http_attempts": {
+      "backpressure_http_429": 12,
+      "retried_requests": 12,
+      "scheduled_requests": 360,
+      "successful_http_200": 360,
+      "terminal_failures": 0,
+      "total_attempts": 372,
+      "unclassified_attempts": 0
+    },
+    "initial_dispatch_lag": {
+      "count": 360,
+      "max_ms": 2042.670378,
+      "median_ms": 46.909361,
+      "p50_ms": 46.791363,
+      "p95_ms": 297.584406,
+      "p99_ms": 1856.726549,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "maximum_dispatch_lag_ms": 2042.670378,
+    "maximum_in_flight": 8,
+    "maximum_queued": 3,
+    "measured_authoritative_new_openings": 5940,
+    "measured_committed_valid_proof_transactions": 360,
+    "measured_gas": {
+      "peak_block_gas_used": 34502059,
+      "peak_block_gas_wanted": 56117970,
+      "peak_block_height_by_tx_payload_bytes": 406,
+      "peak_block_height_by_used_gas": 406,
+      "peak_block_tx_payload_bytes": 52239,
+      "proof_count_distribution": {
+        "15": 14,
+        "16": 152,
+        "17": 194
+      },
+      "used_per_authoritative_opening": 513464.8579124579,
+      "used_per_transaction_max": 8725999,
+      "used_per_transaction_median": 8725836.0,
+      "used_per_transaction_min": 7710824,
+      "used_total": 3049981256,
+      "wanted_total": 4870623654
+    },
+    "pre_success_start_delay": {
+      "count": 360,
+      "max_ms": 2187.262063,
+      "median_ms": 49.8111585,
+      "p50_ms": 49.111921,
+      "p95_ms": 1343.815246,
+      "p99_ms": 2134.588958,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "proof_commit_height_span": {
+      "first_anchor": 301,
+      "first_height": 293,
+      "last_height": 426,
+      "second_anchor": 401
+    },
+    "provider_phase_timing": {
+      "explicit_sequence_retry_attempts": 0,
+      "percentile_method": "nearest rank; per-phase observations, never percentile subtraction",
+      "phases": {
+        "authority": {
+          "count": 360,
+          "p50_ms": 1.281362,
+          "p95_ms": 1.772517,
+          "p99_ms": 3.1616
+        },
+        "broadcast_tx_sync": {
+          "count": 360,
+          "p50_ms": 1.13019,
+          "p95_ms": 198.812672,
+          "p99_ms": 268.30156
+        },
+        "commit_observation": {
+          "count": 360,
+          "p50_ms": 1506.171525,
+          "p95_ms": 2507.916096,
+          "p99_ms": 2510.40914
+        },
+        "pre_broadcast": {
+          "count": 360,
+          "p50_ms": 98.021268,
+          "p95_ms": 245.819517,
+          "p99_ms": 323.979637
+        },
+        "proof_preparation": {
+          "count": 360,
+          "p50_ms": 925.994514,
+          "p95_ms": 1081.90585,
+          "p99_ms": 1149.085326
+        },
+        "provider_total": {
+          "count": 360,
+          "p50_ms": 2741.111263,
+          "p95_ms": 3684.949506,
+          "p99_ms": 3831.317982
+        },
+        "unattributed": {
+          "count": 360,
+          "p50_ms": 86.792501,
+          "p95_ms": 137.603974,
+          "p99_ms": 186.665456
+        }
+      },
+      "scope": "same-process monotonic durations; provider total starts at V3 dispatch after route selection and signer admission; pre-broadcast starts at CLI RunE, not process start; unattributed includes process startup, journal work, retry backoff and other local overhead; consensus header times remain separate inter-block wall time",
+      "submission_attempt_count": 360,
+      "transaction_count": 360
+    },
+    "rate_denominator": "all 360 client-observed committed successes over scheduler start through recorded completion after terminal observation, including drain and the final orchestration tail",
+    "reconciled_block_span": {
+      "all_four_headers_agree": true,
+      "all_four_results_agree": true,
+      "blocks": 213,
+      "committed_measured_proof_transactions": 360,
+      "first_height": 217,
+      "last_height": 429
+    },
+    "refunds": {
+      "all_verified": true,
+      "refund_transactions": 46,
+      "sessions_expired": 46
+    },
+    "request_duration": {
+      "count": 360,
+      "max_ms": 3998.07303,
+      "median_ms": 2819.2402725,
+      "p50_ms": 2818.473625,
+      "p95_ms": 3752.990811,
+      "p99_ms": 3915.788251,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "scheduler_drain_seconds": 2.624890855,
+    "scheduler_elapsed_seconds": 182.624890855,
+    "terminal_observation_latency": {
+      "count": 360,
+      "max_ms": 6037.937904,
+      "median_ms": 2912.3899935,
+      "p50_ms": 2909.111339,
+      "p95_ms": 4294.2128,
+      "p99_ms": 5853.849122,
+      "percentile_method": "nearest rank; median uses conventional midpoint"
+    },
+    "validator_cpu": [
+      {
+        "mean_cores_over_window": 0.37871518846021623,
+        "system_cpu_seconds": 0.44,
+        "user_cpu_seconds": 68.73,
+        "validator": "930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8",
+        "window_seconds": 182.643849805
+      },
+      {
+        "mean_cores_over_window": 0.1961741391142048,
+        "system_cpu_seconds": 0.35,
+        "user_cpu_seconds": 35.48,
+        "validator": "5e57792918a70784da2c24b35265e028e94e11a5",
+        "window_seconds": 182.643849805
+      },
+      {
+        "mean_cores_over_window": 0.19639314457232843,
+        "system_cpu_seconds": 0.31,
+        "user_cpu_seconds": 35.56,
+        "validator": "cfc0bf9e9fc62e965989d1392b0900496c823357",
+        "window_seconds": 182.643849805
+      },
+      {
+        "mean_cores_over_window": 0.19584563092701945,
+        "system_cpu_seconds": 0.31,
+        "user_cpu_seconds": 35.46,
+        "validator": "6cdc2c478fba8a33b1466627ab6e175e38028c34",
+        "window_seconds": 182.643849805
+      }
+    ],
+    "validator_resources": [
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 352899072,
+        "returncode": 0,
+        "validator": "930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 330756096,
+        "returncode": 0,
+        "validator": "5e57792918a70784da2c24b35265e028e94e11a5"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 339214336,
+        "returncode": 0,
+        "validator": "cfc0bf9e9fc62e965989d1392b0900496c823357"
+      },
+      {
+        "measurement_scope": "whole validator process lifetime",
+        "peak_rss_bytes": 341544960,
+        "returncode": 0,
+        "validator": "6cdc2c478fba8a33b1466627ab6e175e38028c34"
+      }
+    ],
+    "warmup_provider_phase_timing": {
+      "explicit_sequence_retry_attempts": 0,
+      "percentile_method": "nearest rank; per-phase observations, never percentile subtraction",
+      "phases": {
+        "authority": {
+          "count": 8,
+          "p50_ms": 1.610496,
+          "p95_ms": 3.15203,
+          "p99_ms": 3.15203
+        },
+        "broadcast_tx_sync": {
+          "count": 8,
+          "p50_ms": 85.982824,
+          "p95_ms": 231.448771,
+          "p99_ms": 231.448771
+        },
+        "commit_observation": {
+          "count": 8,
+          "p50_ms": 1505.819852,
+          "p95_ms": 2508.30667,
+          "p99_ms": 2508.30667
+        },
+        "pre_broadcast": {
+          "count": 8,
+          "p50_ms": 213.036846,
+          "p95_ms": 410.924889,
+          "p99_ms": 410.924889
+        },
+        "proof_preparation": {
+          "count": 8,
+          "p50_ms": 1406.3013,
+          "p95_ms": 1527.570107,
+          "p99_ms": 1527.570107
+        },
+        "provider_total": {
+          "count": 8,
+          "p50_ms": 3369.844184,
+          "p95_ms": 4527.511181,
+          "p99_ms": 4527.511181
+        },
+        "unattributed": {
+          "count": 8,
+          "p50_ms": 98.480362,
+          "p95_ms": 126.518637,
+          "p99_ms": 126.518637
+        }
+      },
+      "scope": "same-process monotonic durations; provider total starts at V3 dispatch after route selection and signer admission; pre-broadcast starts at CLI RunE, not process start; unattributed includes process startup, journal work, retry backoff and other local overhead; consensus header times remain separate inter-block wall time",
+      "submission_attempt_count": 8,
+      "transaction_count": 8
+    }
+  },
+  "schema": "polystore.native-v3-cross-audit-retained.v1",
+  "source": {
+    "chain_id": "polystore_260-1",
+    "harness_commit": "70ce16da02e3790ba128ae883f33be4e70d30a9f",
+    "product_source_commit": "70ce16da02e3790ba128ae883f33be4e70d30a9f",
+    "runtime_artifact_source_match": "supplied binaries/library; build correspondence not attested"
+  },
+  "status": "passed"
+}

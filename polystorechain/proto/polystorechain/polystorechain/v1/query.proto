@@ -54,6 +54,12 @@ service Query {
   rpc GetRetrievalSessionV3(QueryGetRetrievalSessionV3Request) returns (QueryGetRetrievalSessionV3Response) {
     option (google.api.http).get = "/polystorechain/polystorechain/v1/retrieval-sessions-v3/{session_id}";
   }
+  rpc GetRetrievalSessionV3Nonce(QueryGetRetrievalSessionV3NonceRequest) returns (QueryGetRetrievalSessionV3NonceResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/retrieval-sessions-v3/by-owner/{owner}/deals/{deal_id}/nonce";
+  }
+  rpc GetRetrievalSessionV3ByNonce(QueryGetRetrievalSessionV3ByNonceRequest) returns (QueryGetRetrievalSessionV3ByNonceResponse) {
+    option (google.api.http).get = "/polystorechain/polystorechain/v1/retrieval-sessions-v3/by-owner/{owner}/deals/{deal_id}/nonces/{nonce}";
+  }
 
   // Queries a list of Provider items.
   rpc ListProviders(QueryListProvidersRequest) returns (QueryListProvidersResponse) {
@@ -592,3 +598,18 @@ message QueryGetRetrievalSessionV3Response {
   // the anchor is released.
   bytes anchor_seed = 2;
 }
+
+message QueryGetRetrievalSessionV3NonceRequest {
+  string owner = 1;
+  uint64 deal_id = 2;
+}
+message QueryGetRetrievalSessionV3NonceResponse {
+  uint64 nonce = 1;
+  bool found = 2;
+}
+message QueryGetRetrievalSessionV3ByNonceRequest {
+  string owner = 1;
+  uint64 deal_id = 2;
+  uint64 nonce = 3;
+}
+message QueryGetRetrievalSessionV3ByNonceResponse { bytes session_id = 1; }

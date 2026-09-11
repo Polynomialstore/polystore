@@ -330,6 +330,35 @@ func TestGenerationPublicationRejectsConcurrentStagedWriter(t *testing.T) {
 	}
 }
 
+func TestOpenFrozenGenerationReleasesMissingPaths(t *testing.T) {
+	useTempUploadDir(t)
+	root := mustTestManifestRoot(t, "missing-frozen-generation")
+	paths := append([]string{dealScopedDir(77, root)}, legacyGenerationPaths(root, root.Canonical)...)
+	assertReleased := func() {
+		t.Helper()
+		generationLifecycle.Lock()
+		defer generationLifecycle.Unlock()
+		for _, path := range paths {
+			absolute, err := filepath.Abs(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if use := generationLifecycle.uses[absolute]; use != nil {
+				t.Fatalf("missing generation retained a lifecycle reference for %s: %+v", absolute, use)
+			}
+		}
+	}
+	for i := 0; i < 3; i++ {
+		_, release, err := openFrozenGeneration(77, root)
+		if err == nil {
+			t.Fatal("opened a missing frozen generation")
+		}
+		assertReleased()
+		release()
+		assertReleased()
+	}
+}
+
 func TestGenerationRetentionAdvancesPastUnavailableBatch(t *testing.T) {
 	useTempUploadDir(t)
 	current := mustTestManifestRoot(t, "cursor-current")

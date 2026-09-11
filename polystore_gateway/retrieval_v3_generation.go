@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/hex"
@@ -81,18 +80,6 @@ func validateGenerationAdmissionV3(a *types.DealGenerationAdmissionV3, expectedD
 	return key, providers, nil
 }
 
-type contextReaderV3 struct {
-	ctx context.Context
-	r   io.Reader
-}
-
-func (r contextReaderV3) Read(p []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
-	}
-	return r.r.Read(p)
-}
-
 func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGenerationKey, slot uint32, metadata *authenticatedGeneration) error {
 	path := filepath.Join(dir, integrityLeavesV3File)
 	f, err := os.Open(path)
@@ -105,10 +92,11 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 	if err != nil || !info.Mode().IsRegular() || info.Size() != wantSize {
 		return fmt.Errorf("integrity leaf vector has invalid type or size")
 	}
-	root, err := retrievalchallenge.IntegrityRootV3Reader(bufio.NewReaderSize(contextReaderV3{ctx, f}, 1<<20), key.Users*retrievalchallenge.IntegrityLeavesPerUserMDU)
-	if err != nil || root != key.Integrity {
-		return fmt.Errorf("integrity leaf vector does not match authenticated header")
+	indexTemp, err := buildIntegrityIndexV3(ctx, dir, key)
+	if err != nil {
+		return err
 	}
+	defer os.Remove(indexTemp)
 	started := time.Now()
 	nextProgress := started.Add(generationVerificationProgressEveryV3)
 	for user := uint64(0); user < key.Users; user++ {
@@ -149,7 +137,7 @@ func verifyIntegrityVectorV3(ctx context.Context, dir string, key retrievalGener
 			nextProgress = now.Add(generationVerificationProgressEveryV3)
 		}
 	}
-	return nil
+	return publishImmutableArtifact(indexTemp, filepath.Join(dir, integrityIndexV3File))
 }
 
 func generationVerificationTimeoutV3(users uint64) (time.Duration, error) {

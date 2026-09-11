@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,12 @@ func TestAcceptDealGenerationV3SubmissionPhase(t *testing.T) {
 			marker, err := os.ReadFile(phase)
 			require.NoError(t, err)
 			if tc.broadcast {
-				require.Empty(t, marker)
+				require.NotEqual(t, submissionNotBroadcast, string(marker))
+				var timing submissionTiming
+				require.NoError(t, json.Unmarshal(marker, &timing))
+				require.Equal(t, submissionTimingSchema, timing.Schema)
+				require.Positive(t, timing.PreBroadcastNS)
+				require.Positive(t, timing.BroadcastTxSyncNS)
 			} else {
 				require.Equal(t, submissionNotBroadcast, string(marker))
 			}

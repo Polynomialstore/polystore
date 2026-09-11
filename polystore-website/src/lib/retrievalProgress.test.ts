@@ -11,6 +11,13 @@ test('unique output and terminal sessions advance; duplicate writes, ACK, fetch 
   p.event({ phase: 'verified_write', atMs: now, offset: 0, bytes: 10 })
   p.event({ phase: 'acked', atMs: now, sessionIds: ['same'] })
   p.event({ phase: 'verified_window', atMs: now, sessionId: 'same' })
+  for (let retry = 0; retry < 2; retry++) {
+    for (const chunkId of ['0:0:56', '0:64:64']) p.event({ phase: 'verified_chunk', atMs: now, sessionId: 'same', chunkId, slot: 0 })
+    p.event({ phase: 'acked_obligation', atMs: now, sessionId: 'same', slot: 0 })
+  }
+  assert.equal(p.snapshot().verifiedChunks, 2)
+  assert.equal(p.snapshot().ackedObligations, 1)
+  assert.equal(p.snapshot().ackedSessions, 1)
   now = 600_000; assert.throws(() => p.check(), /stalled/)
   p.event({ phase: 'verified_write', atMs: now, offset: 5, bytes: 10 })
   assert.equal(p.writtenBytes, 15); p.check()

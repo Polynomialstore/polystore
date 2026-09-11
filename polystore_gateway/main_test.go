@@ -30,7 +30,7 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-func useTempUploadDir(t *testing.T) string {
+func useTempUploadDir(t testing.TB) string {
 	t.Helper()
 	old := uploadDir
 	dir := t.TempDir()
@@ -93,7 +93,7 @@ func mustTestManifestRoot(t *testing.T, tag string) ManifestRoot {
 	return root
 }
 
-func initCryptoForTest(t *testing.T) {
+func initCryptoForTest(t testing.TB) {
 	t.Helper()
 	if err := crypto_ffi.Init(trustedSetup); err != nil {
 		t.Fatalf("crypto_ffi.Init failed: %v", err)

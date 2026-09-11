@@ -1,0 +1,20 @@
+{
+  "schema": "polystore-native-v3-allocation-provenance/v1",
+  "recorded_at": "2026-09-10T22:08:46Z",
+  "os": "Linux 7.0.0-30-generic Ubuntu 26.04 amd64",
+  "cpu": "AMD Ryzen 7 9700X, 8 cores / 16 logical CPUs",
+  "go": "1.25.5",
+  "rust": "1.98.1",
+  "candidate": "36692ac6fbfcf6505920467e000909b3172bcc02",
+  "candidate_tree": "5383d3b0c267f0b4e54ad964d889c51d5a746916",
+  "runtime": "071b2a9fa7f482dcd188c44c85c0d678ac5f3d96",
+  "runtime_tree": "942956a0bb5c924be80af17fb055023a15ea6ceb",
+  "rust_binary_sha256": "9a6382d55888d7ba776740b56443530aa7b65487469e2e345eab08db5dd1140f",
+  "component_sources_identical": true,
+  "private_raw_artifact_sha256": {
+    "provenance.txt": "172b91ea0b274369e2c150a4fe4d39988542e658ab33fba8d86ec31257d4ac87",
+    "rust-build.txt": "4e6a373c42763f395fb002a35546939aefc5b9e9c08bd8f083b771fab0e62cc6",
+    "commands.txt": "b3412c5c948e3ae6b5cdee35b22de813ee18e48e50ea2d7106d91ce5ef140be7",
+    "completed-at.txt": "c5a47165e04cf75070bf227191ebcb147e8e6b1ff24dfaa7b76ed76771f39694"
+  }
+}

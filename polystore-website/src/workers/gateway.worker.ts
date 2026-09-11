@@ -13,7 +13,7 @@ import {
 } from '../lib/kzgCommitBackend'
 import init, { PolyStoreWasm, WasmMdu0Builder } from '../lib/polystoreCoreRuntime.js'
 import { readUserCommitments, verifyWitnessMdu, verifyRecoveredMdu } from '../lib/retrievalRecovery'
-import { verifyRetrievalMetadata, verifyRetrievalWindow } from '../lib/retrievalWire'
+import { verifyRetrievalDataV3, verifyRetrievalMetadata, verifyRetrievalMetadataV3, verifyRetrievalWindow } from '../lib/retrievalWire'
 import { retrievalOutput } from '../lib/storage/retrievalOutput'
 import {
   committedExpansionToUserMduBrowserKzgResult,
@@ -355,6 +355,47 @@ self.onmessage = async (event) => {
                 result = verifyRetrievalMetadata(payload.bytes, payload.pin, polyStoreWasmInstance);
                 break;
             }
+            case 'verifyRetrievalMetadataV3': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalMetadataV3(payload.bytes, payload.authority, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalDataV3': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                result = verifyRetrievalDataV3(payload.authority, payload.envelope, polyStoreWasmInstance);
+                break;
+            }
+            case 'retrievalV3Range': {
+                result = PolyStoreWasm.checked_retrieval_v3_range(payload.fileStart, payload.fileLength, payload.rangeStart, payload.rangeLength, payload.userMdus);
+                break;
+            }
+            case 'retrievalV3Plan': {
+                result = PolyStoreWasm.retrieval_v3_plan(payload.first, payload.last, payload.population, payload.providers);
+                break;
+            }
+            case 'retrievalV3SessionId': {
+                result = PolyStoreWasm.retrieval_v3_session_id(payload.chainId, payload.owner, payload.dealId, payload.generation,
+                    payload.recordIndex, payload.rangeStart, payload.rangeLength, payload.planHash, payload.nonce);
+                break;
+            }
+            case 'retrievalV3ContextHash': {
+                result = PolyStoreWasm.retrieval_v3_context_hash(payload.context);
+                break;
+            }
+            case 'retrievalV3Seed': {
+                result = PolyStoreWasm.retrieval_v3_seed(payload.context, payload.anchor);
+                break;
+            }
+            case 'retrievalV3Challenges': {
+                result = PolyStoreWasm.derive_retrieval_v3_challenges(payload.context, payload.seed);
+                break;
+            }
+            case 'retrievalV3AckHash': {
+                result = PolyStoreWasm.retrieval_v3_obligation_ack_hash(payload.chainId, payload.sessionId, payload.contextHash,
+                    payload.planHash, payload.slot, payload.assigned, payload.payee, payload.blobCount,
+                    payload.billedEncodedBytes, payload.integrityRoot);
+                break;
+            }
             case 'verifyRetrievalWitness': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 verifyWitnessMdu(payload.bytes, payload.cell, polyStoreWasmInstance);
@@ -364,6 +405,12 @@ self.onmessage = async (event) => {
             case 'readRetrievalCommitments': {
                 if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
                 result = readUserCommitments(payload.pin, payload.ordinal, payload.witness, payload.cell, polyStoreWasmInstance);
+                break;
+            }
+            case 'verifyRetrievalMdu': {
+                if (!polyStoreWasmInstance) throw new Error('PolyStoreWasm not initialized');
+                verifyRecoveredMdu(payload.pin, payload.bytes, payload.commitments, polyStoreWasmInstance);
+                result = payload.bytes;
                 break;
             }
             case 'reconstructRetrievalMdu': {

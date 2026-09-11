@@ -1,0 +1,24 @@
+{
+  "blocks": "167e61508be41801cbbadb17bd4d74fa078525691e57751304ccb0e0aa4d7193",
+  "commits": {
+    "5e57792918a70784da2c24b35265e028e94e11a5": "0286ad0fb6fbd1e841650cf1101f97a1da9de76638ee1119e7c172bdf7486d38",
+    "6cdc2c478fba8a33b1466627ab6e175e38028c34": "db0ddbc6b00abe687fec4f26ca1335cabd13c0368ad5f8dde4c1e1745a9b6cfc",
+    "930c9ab0b13c6226fd05bf1b9b72fac1c16f53a8": "4efe809e514319e58b1b384f7a2bedd2843e39f688181523a6f33263da899baa",
+    "cfc0bf9e9fc62e965989d1392b0900496c823357": "8ccaf4d2ea37cc77855861b1d931caa2ecb44cccb90a33e2efe5e860933fdf8b"
+  },
+  "decoder": "dbd794c784eb1f8c46ca1cc66c47fa252de9adf8dc9701e018f3e5d249cfe615",
+  "decoder_library": "7cbfe98f513a215de84c599289de082471466395b9ffb57eab9be0a898214092",
+  "elapsed_ns": 182624890855,
+  "evidence": "137e91de8adf2bfaa585c0edebb1581b91733e82602e9138b15006cf75d25aee",
+  "first_block": 217,
+  "http_retries": 12,
+  "last_block": 429,
+  "modules": {
+    "native_harness": "ae25dac36b85593af4cf7cad03602c5e24d99cfb55e89640df653676e0810f74",
+    "retrieval_bench_artifact": "aeb5f811fb5f93ad4539f49a485c15af3747c765bd3d3997bc38335016a023d8",
+    "retrieval_commit_metrics": "e8b272852684639efe6292d3b72eb2396fee0c2bdb99558d52c611b7d638e11f",
+    "retrieval_fresh_proof": "74ced497d80442a7d463872623879737b7775ad2a49ec4c5a53ced8a8650e67b"
+  },
+  "source": "70ce16da02e3790ba128ae883f33be4e70d30a9f",
+  "transactions": "d68ffa70200e002d0a71202f7536e7d2c094943fe14073f3bde365ebad5bcb27"
+}
