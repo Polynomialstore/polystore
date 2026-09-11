@@ -36,6 +36,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgOpenRetrievalSessionV3{},
 		&MsgOpenRetrievalSessionV3Sponsored{},
 		&MsgSubmitRetrievalSessionProofV3{},
+		&MsgSubmitRetrievalSessionProofBatchV3{},
 		&MsgAcknowledgeRetrievalObligationV3{},
 		&MsgRefundRetrievalSessionV3{},
 		&MsgProveLiveness{},

@@ -26,6 +26,7 @@ func TestRetrievalSessionV3CLI(t *testing.T) {
 		{"open", &types.MsgOpenRetrievalSessionV3{Creator: signer.String(), DealId: 9007199254740993, Generation: 2, Nonce: 1, DeadlineHeight: 100, Range: types.RetrievalRangeV3{FileRecordIndex: 1, FileLength: 1024, RangeLength: 1024}}},
 		{"open-sponsored", &types.MsgOpenRetrievalSessionV3Sponsored{Creator: signer.String(), DealId: 1, MaxTotalFee: math.NewInt(999), Auth: &types.MsgOpenRetrievalSessionV3Sponsored_AllowlistProof{AllowlistProof: &types.AllowlistProof{MerklePath: [][]byte{id}}}}},
 		{"prove", &types.MsgSubmitRetrievalSessionProofV3{Creator: signer.String(), SessionId: id, Slot: 7, Proofs: []types.RetrievalSampleProofV3{{Ordinal: 131, Proof: types.ChainedProof{MduIndex: 3, BlobIndex: 63, ZValue: id}}}}},
+		{"prove-batch", &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: signer.String(), Sessions: []types.RetrievalSessionProofBatchEntryV3{{SessionId: id, Slot: 7, Proofs: []types.RetrievalSampleProofV3{{Ordinal: 131, Proof: types.ChainedProof{MduIndex: 3, BlobIndex: 63, ZValue: id}}}}}}},
 		{"ack", &types.MsgAcknowledgeRetrievalObligationV3{Creator: signer.String(), SessionId: id, Slot: 7, AckDigest: id}},
 		{"refund", &types.MsgRefundRetrievalSessionV3{Creator: signer.String(), SessionId: id}},
 	} {

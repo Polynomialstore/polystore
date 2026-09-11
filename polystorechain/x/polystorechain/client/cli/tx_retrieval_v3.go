@@ -13,12 +13,13 @@ import (
 
 func CmdRetrievalSessionV3() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "retrieval-session-v3 [open|open-sponsored|prove|ack|refund] [message.json]",
+		Use:   "retrieval-session-v3 [open|open-sponsored|prove|prove-batch|ack|refund] [message.json]",
 		Short: "Submit a native v3 session message using protobuf JSON",
 		Long: `Submit a native v3 session message using its protobuf JSON schema:
   open           MsgOpenRetrievalSessionV3
   open-sponsored MsgOpenRetrievalSessionV3Sponsored
   prove          MsgSubmitRetrievalSessionProofV3
+  prove-batch    MsgSubmitRetrievalSessionProofBatchV3
   ack            MsgAcknowledgeRetrievalObligationV3
   refund         MsgRefundRetrievalSessionV3
 
@@ -42,6 +43,8 @@ generate proofs or acknowledge downloaded bytes automatically.`,
 				msg = &types.MsgOpenRetrievalSessionV3Sponsored{}
 			case "prove":
 				msg = &types.MsgSubmitRetrievalSessionProofV3{}
+			case "prove-batch":
+				msg = &types.MsgSubmitRetrievalSessionProofBatchV3{}
 			case "ack":
 				msg = &types.MsgAcknowledgeRetrievalObligationV3{}
 			case "refund":
