@@ -1550,6 +1550,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                           for row in selected], [("1kib", 4992, 4992)])
         with self.assertRaisesRegex(ValueError, "transaction count"):
             workload.native_v3_chain_capacity_profiles("1kib")
+        with self.assertRaisesRegex(ValueError, "balance provider lanes"):
+            workload.native_v3_chain_capacity_profiles("1kib", 4991)
+        with self.assertRaisesRegex(ValueError, "must be 1..4999"):
+            workload.native_v3_chain_capacity_profiles("1kib", 5000)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))

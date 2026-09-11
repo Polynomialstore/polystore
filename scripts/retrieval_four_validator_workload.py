@@ -123,6 +123,8 @@ def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=N
         transactions = artifact.integer(measured_transactions, "measured transactions", 1, 4999)
         if transactions % profile["proof_transactions"]:
             raise ValueError("native v3 capacity inventory must contain complete proof sets")
+        if transactions % V3_SYSTEMATIC_PROVIDERS:
+            raise ValueError("native v3 capacity inventory must balance provider lanes")
         profile.update(measured_transactions=transactions,
                        sessions=transactions // profile["proof_transactions"])
         return selected
@@ -2211,9 +2213,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         profile_simulated = [row for row in simulated if row[0]["profile"] == profile["name"]]
         max_block_gas = artifact.integer(
             lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
-        minimum_gas_blocks = math.ceil(
-            sum(row[2]["gas_limit"] for row in profile_simulated) / max_block_gas)
-        if minimum_gas_blocks < V3_CHAIN_BACKLOG_SECONDS:
+        total_gas = sum(row[2]["gas_limit"] for row in profile_simulated)
+        minimum_gas_blocks = math.ceil(total_gas / max_block_gas)
+        if total_gas < V3_CHAIN_BACKLOG_SECONDS * max_block_gas:
             raise ValueError("fixed inventory cannot occupy ten maximum-gas blocks")
         required_margin = minimum_gas_blocks + 10
         profile_deadline_height = min(row["deadline_height"] for row in
@@ -2226,8 +2228,10 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
             if len(frozen) != profile["measured_transactions"]:
                 raise ValueError("frozen profile transaction count differs from the fixed inventory")
-            if len(frozen) >= 5000 or sum(row["bytes"] for row in frozen) >= 1024**3:
-                raise ValueError("frozen profile reaches the default Comet mempool transaction/byte cap")
+            mempool = lifecycle.doc["profile"]["comet_mempool"]
+            if (len(frozen) >= mempool["size"] or
+                    sum(row["bytes"] for row in frozen) >= mempool["max_txs_bytes"]):
+                raise ValueError("frozen profile reaches the frozen Comet mempool transaction/byte cap")
             post_freeze = require_provider_quiescence(lifecycle, providers)
             ready_height = post_freeze["second_height"]
             ready_epoch = (ready_height - 1) // epoch_length + 1

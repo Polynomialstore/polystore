@@ -1710,6 +1710,9 @@ def set_toml_value(text, section, key, value):
 
 
 BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
+COMET_MEMPOOL_SIZE = 5000
+COMET_MEMPOOL_MAX_TXS_BYTES = 1024**3
+COMET_MEMPOOL_MAX_TX_BYTES = 1024**2
 BROWSER_EVM_PRECOMPILE = "0x0000000000000000000000000000000000000900"
 BROWSER_EVM_MIN_GAS_PRICE = "1.000000000000000000"
 BROWSER_EVM_NATIVE_GAS_PRICES = "1aatom"
@@ -1869,6 +1872,9 @@ class FourValidatorLifecycle:
             config = path.read_text()
             for section, key, value in (("consensus", "timeout_commit", '"1s"'),
                                         ("p2p", "addr_book_strict", "false"),
+                                        ("mempool", "size", str(COMET_MEMPOOL_SIZE)),
+                                        ("mempool", "max_txs_bytes", str(COMET_MEMPOOL_MAX_TXS_BYTES)),
+                                        ("mempool", "max_tx_bytes", str(COMET_MEMPOOL_MAX_TX_BYTES)),
                                         ("instrumentation", "prometheus", "true"),
                                         ("instrumentation", "prometheus_listen_addr", f'"127.0.0.1:{node["metrics"]}"')):
                 config = set_toml_value(config, section, key, value)
@@ -1893,6 +1899,9 @@ class FourValidatorLifecycle:
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"],
                                  "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1,
+                                 "comet_mempool": {"size": COMET_MEMPOOL_SIZE,
+                                                     "max_txs_bytes": COMET_MEMPOOL_MAX_TXS_BYTES,
+                                                     "max_tx_bytes": COMET_MEMPOOL_MAX_TX_BYTES},
                                  **({"browser_evm_fee_policy": {
                                      "native_minimum_gas_prices": BROWSER_EVM_NATIVE_GAS_PRICES,
                                      "evm_min_gas_price_aatom": BROWSER_EVM_MIN_GAS_PRICE,
