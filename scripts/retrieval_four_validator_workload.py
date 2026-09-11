@@ -70,6 +70,9 @@ V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
 V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
+V3_CHAIN_AUDIT_EPOCH_BLOCKS = 100
+V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
+V3_PROOF_CRYPTO_GAS = 500_000
 V3_EXPORT_BATCH_MAX = 8
 V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
@@ -140,6 +143,16 @@ def native_v3_minimum_gas_blocks(total_gas, max_block_gas):
     if blocks <= V3_CHAIN_BACKLOG_SECONDS:
         raise ValueError("fixed inventory must require more than ten maximum-gas blocks")
     return blocks
+
+
+def validate_native_v3_capacity_epoch(profile, max_block_gas):
+    """Reject inventories whose mandatory proof gas cannot fit the fixed epoch."""
+    # Mirrors keeper.ProofCryptoGas; this lower bound excludes all transaction overhead.
+    minimum_gas = profile["sessions"] * profile["sample_count"] * V3_PROOF_CRYPTO_GAS
+    max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
+    minimum_blocks = (minimum_gas + max_block_gas - 1) // max_block_gas
+    if minimum_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS > V3_CHAIN_AUDIT_EPOCH_BLOCKS - 2:
+        raise ValueError("native chain capacity inventory cannot fit within one audit epoch")
 
 
 def native_v3_capacity_deadline(opened_at, session_index):
@@ -2142,6 +2155,8 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
 def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length,
                         profile_name=None, measured_transactions=None):
     """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
+    if epoch_length != V3_CHAIN_AUDIT_EPOCH_BLOCKS:
+        raise ValueError("native chain capacity requires the fixed 100-block audit epoch")
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
         scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")
     owner = lifecycle.signers["owner0"]
@@ -2230,8 +2245,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         profile_deadline_height = min(row["deadline_height"] for row in
                                       sessions[profile["session_start"]:profile["session_end"]])
         while True:
-            window = await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
-                                                     required_margin + 20, profile_deadline_height)
+            window = await_native_v3_capacity_window(
+                lifecycle, wait, audits, epoch_length,
+                minimum_gas_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS, profile_deadline_height)
             quiescence = require_provider_quiescence(lifecycle, providers)
             frozen = freeze_native_v3_transactions(
                 lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
@@ -4919,7 +4935,8 @@ def main():
         native_chain = dict(exporter=exporter)
         if selected_chain_profile:
             try:
-                native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions)
+                profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions)
+                validate_native_v3_capacity_epoch(profiles[0], chain_max_gas)
             except ValueError as error:
                 parser.error(str(error))
             native_chain.update(max_block_gas=chain_max_gas, profile=chain_capacity_profile,
