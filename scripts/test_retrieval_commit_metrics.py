@@ -101,6 +101,8 @@ class CommitMetricsTest(TestCase):
         self.assertTrue(result["qualified"])
         self.assertTrue(result["within_700ms_budget"])
         self.assertGreaterEqual(Decimal(result["p95_upper_bound_seconds"]), Decimal("0.3"))
+        self.assertLess(Decimal(result["p50_upper_bound_seconds"]), Decimal("0.21"))
+        self.assertEqual(result["p100_upper_bound_seconds"], result["max_upper_bound_seconds"])
         grouped = summary([singles[0], singles[-1]], 2, boundaries_reconciled=True)
         self.assertEqual(grouped["intervals"][0]["count"], 2)
         self.assertGreaterEqual(Decimal(grouped["p95_upper_bound_seconds"]), Decimal("0.5"))

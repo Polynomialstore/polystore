@@ -273,20 +273,24 @@ def summarize_commit_metrics(samples, *, start_committed_height, end_committed_h
         reasons.append("observation count differs from committed block range; trailing or extra blocks are unresolved")
     if observed == 0:
         reasons.append("no completed Commit observations")
-    p95 = None
-    if observed:
-        rank = (95 * observed + 99) // 100
+    def quantile(percent):
+        if not observed:
+            return None
+        rank = (percent * observed + 99) // 100
         seen = 0
         for interval in sorted(intervals, key=lambda item: Decimal(item["upper_bound_seconds"])):
             seen += interval["count"]
             if seen >= rank:
-                p95 = interval["upper_bound_seconds"]
-                break
+                return interval["upper_bound_seconds"]
+        raise ValueError("Commit interval counts do not cover the requested quantile")
+    quantiles = {f"p{percent}_upper_bound_seconds": quantile(percent)
+                 for percent in (50, 95, 99, 100)}
+    p95 = quantiles["p95_upper_bound_seconds"]
     return {"boundary": BOUNDARY, "chain_id": samples[0]["chain_id"],
             "start_committed_height": start, "end_committed_height": end,
             "observed_blocks": observed, "qualified": not reasons,
             "qualification_reasons": reasons, "intervals": intervals,
-            "p95_upper_bound_seconds": p95,
+            **quantiles, "max_upper_bound_seconds": quantiles["p100_upper_bound_seconds"],
             "within_700ms_budget": not reasons and p95 is not None and Decimal(p95) <= Decimal("0.7"),
             "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"}
 

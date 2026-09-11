@@ -66,6 +66,12 @@ V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
 V3_ABORT_FREE_BYTES = 768 * 1024**2
 V3_CHAIN_CAPACITY_RANGES = (1024, 8 * V3_DATA_BLOB_PAYLOAD_BYTES, V3_PILOT_BYTES)
 V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
+V3_CHAIN_SUBMISSION_MODES = ("separate", "serial-messages", "batch-message")
+V3_CHAIN_BATCH_SIZES = (8, 32, 64)
+V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
+V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
+V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
+V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND = 398.756
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
 V3_CHAIN_BACKLOG_SECONDS = 10
@@ -110,7 +116,8 @@ def native_v3_range_shape(range_bytes, *, range_start=0, file_bytes=V3_PILOT_BYT
                 obligation_slots=slots, proof_transactions=len(slots))
 
 
-def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=None):
+def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=None, *,
+                                      measured_sessions=None, submission_mode="separate", batch_size=1):
     """The three distinct range shapes needed for a chain-only capacity result."""
     names = ("1kib", "eight-blobs", "sample-cap")
     profiles = []
@@ -121,21 +128,47 @@ def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=N
             raise ValueError("native v3 capacity inventory must contain complete proof sets")
         profiles.append(dict(name=name, measured_transactions=transactions,
             sessions=transactions // shape["proof_transactions"], **shape))
+    if submission_mode not in V3_CHAIN_SUBMISSION_MODES:
+        raise ValueError("invalid native v3 proof submission mode")
+    if submission_mode == "separate" and batch_size != 1:
+        raise ValueError("separate proof submission requires batch size 1")
+    if submission_mode != "separate" and batch_size not in V3_CHAIN_BATCH_SIZES:
+        raise ValueError("batched proof submission requires batch size 8, 32, or 64")
+    if measured_transactions is not None and measured_sessions is not None:
+        raise ValueError("specify measured sessions, not both session and transaction counts")
     if profile_name is not None:
         selected = [profile for profile in profiles if profile["name"] == profile_name]
-        if len(selected) != 1 or measured_transactions is None:
-            raise ValueError("selected native v3 capacity profile requires a transaction count")
+        if len(selected) != 1 or (measured_sessions is None and measured_transactions is None):
+            raise ValueError("selected native v3 capacity profile requires a transaction count or explicit session count")
         profile = selected[0]
-        transactions = artifact.integer(measured_transactions, "measured transactions", 1, 4999)
-        if transactions % profile["proof_transactions"]:
-            raise ValueError("native v3 capacity inventory must contain complete proof sets")
-        if transactions % V3_SYSTEMATIC_PROVIDERS:
+        if submission_mode != "separate" and profile_name != "1kib":
+            raise ValueError("proof batching comparator requires the one-opening 1KiB profile")
+        if measured_sessions is None:
+            if submission_mode != "separate":
+                raise ValueError("batched proof submission requires an explicit session count")
+            transactions = artifact.integer(measured_transactions, "measured transactions", 1, 4999)
+            if transactions % profile["proof_transactions"]:
+                raise ValueError("native v3 capacity inventory must contain complete proof sets")
+            sessions = transactions // profile["proof_transactions"]
+        else:
+            maximum = 4999 if submission_mode == "separate" else V3_CHAIN_MAX_BATCH_SESSIONS
+            sessions = artifact.integer(measured_sessions, "measured sessions", 1, maximum)
+        proof_messages = sessions * profile["proof_transactions"]
+        balance_count = sessions if measured_sessions is not None else proof_messages
+        if balance_count % V3_SYSTEMATIC_PROVIDERS:
             raise ValueError("native v3 capacity inventory must balance provider lanes")
-        profile.update(measured_transactions=transactions,
-                       sessions=transactions // profile["proof_transactions"])
+        if proof_messages % batch_size or (measured_sessions is not None and
+                                           sessions % (V3_SYSTEMATIC_PROVIDERS * batch_size)):
+            raise ValueError("native v3 capacity inventory must form exact provider-local batches")
+        profile.update(sessions=sessions, proof_messages=proof_messages,
+                       measured_transactions=proof_messages // batch_size,
+                       submission_mode=submission_mode, batch_size=batch_size)
         return selected
-    if measured_transactions is not None:
-        raise ValueError("measured transactions require a selected capacity profile")
+    if measured_transactions is not None or measured_sessions is not None or submission_mode != "separate" or batch_size != 1:
+        raise ValueError("capacity controls require a selected profile")
+    for profile in profiles:
+        profile.update(proof_messages=profile["measured_transactions"],
+                       submission_mode="separate", batch_size=1)
     return profiles
 
 
@@ -248,6 +281,81 @@ def parse_proc_stat(raw, *, expected_pid=None):
         raise ValueError("validator proc stat PID changed")
     return dict(pid=pid, user_ticks=producer.uint(fields[11]), system_ticks=producer.uint(fields[12]),
                 starttime_ticks=producer.uint(fields[19]))
+
+
+def parse_host_proc_stat(raw):
+    fields = raw.splitlines()[0].split()
+    if len(fields) < 5 or fields[0] != "cpu":
+        raise ValueError("invalid host proc stat")
+    ticks = [producer.uint(value) for value in fields[1:]]
+    return dict(total_ticks=sum(ticks), idle_ticks=ticks[3] + (ticks[4] if len(ticks) > 4 else 0))
+
+
+def parse_proc_memory(raw, *, process=False):
+    values = {}
+    for line in raw.splitlines():
+        match = re.fullmatch(r"(MemTotal|MemAvailable|VmRSS):\s+(\d+)\s+kB", line)
+        if match:
+            values[match.group(1)] = producer.uint(match.group(2)) * 1024
+    required = {"VmRSS"} if process else {"MemTotal", "MemAvailable"}
+    if not required.issubset(values):
+        raise ValueError("required proc memory fields are absent")
+    return values
+
+
+def native_v3_resource_sample(lifecycle):
+    resources = lifecycle.doc.get("validator_resources", [])
+    validators = []
+    for node in lifecycle.nodes:
+        matches = [row for row in resources if row.get("node_id") == node["node_id"]]
+        if len(matches) != 1:
+            raise ValueError("validator PID is not uniquely retained")
+        pid = producer.uint(matches[0]["pid"])
+        stat = parse_proc_stat(Path(f"/proc/{pid}/stat").read_text(), expected_pid=pid)
+        memory = parse_proc_memory(Path(f"/proc/{pid}/status").read_text(), process=True)
+        validators.append(dict(node_id=node["node_id"], **stat, rss_bytes=memory["VmRSS"]))
+    memory = parse_proc_memory(Path("/proc/meminfo").read_text())
+    return dict(host_cpu=parse_host_proc_stat(Path("/proc/stat").read_text()),
+                host_memory=memory, validators=validators)
+
+
+def summarize_native_v3_resources(samples, elapsed_seconds):
+    if len(samples) < 2 or elapsed_seconds <= 0:
+        raise ValueError("resource utilization requires two samples and positive elapsed time")
+    first, last = samples[0], samples[-1]
+    total = last["host_cpu"]["total_ticks"] - first["host_cpu"]["total_ticks"]
+    idle = last["host_cpu"]["idle_ticks"] - first["host_cpu"]["idle_ticks"]
+    if total <= 0 or idle < 0 or idle > total:
+        raise ValueError("host CPU ticks changed invalidly")
+    tick_rate = os.sysconf("SC_CLK_TCK")
+    if type(tick_rate) is not int or tick_rate <= 0:
+        raise ValueError("invalid Linux clock tick rate")
+    first_validators = {row["node_id"]: row for row in first["validators"]}
+    validator_rows = []
+    for node_id in first_validators:
+        observations = [{row["node_id"]: row for row in sample["validators"]}[node_id]
+                        for sample in samples]
+        start, end = observations[0], observations[-1]
+        if (start["pid"], start["starttime_ticks"]) != (end["pid"], end["starttime_ticks"]):
+            raise ValueError("validator process identity changed during resource sampling")
+        cpu_ticks = end["user_ticks"] + end["system_ticks"] - start["user_ticks"] - start["system_ticks"]
+        if cpu_ticks < 0:
+            raise ValueError("validator CPU ticks moved backwards")
+        validator_rows.append(dict(node_id=node_id, pid=start["pid"],
+            average_cpu_cores=cpu_ticks / tick_rate / elapsed_seconds,
+            peak_rss_bytes=max(row["rss_bytes"] for row in observations)))
+    totals = [sample["host_memory"]["MemTotal"] for sample in samples]
+    if len(set(totals)) != 1:
+        raise ValueError("host memory total changed during resource sampling")
+    used = [totals[0] - sample["host_memory"]["MemAvailable"] for sample in samples]
+    return dict(sample_count=len(samples), elapsed_seconds=elapsed_seconds,
+        host_average_cpu_fraction=(total - idle) / total,
+        host_peak_memory_used_bytes=max(used), host_memory_total_bytes=totals[0],
+        validators=validator_rows,
+        aggregate_validator_average_cpu_cores=sum(row["average_cpu_cores"] for row in validator_rows),
+        aggregate_validator_peak_rss_bytes=max(
+            sum({row["node_id"]: row for row in sample["validators"]}[node_id]["rss_bytes"]
+                for node_id in first_validators) for sample in samples))
 
 
 def validator_cpu_snapshot(lifecycle):
@@ -1660,7 +1768,8 @@ def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
         return dict(height=height, epoch=epoch, next_anchor=next_anchor, audits=views)
 
 
-def v3_generate_only_gas(lifecycle, message_path, provider):
+def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
+                         message_type=V3_SINGLE_PROOF_TYPE):
     message_path = Path(message_path)
     source_raw = message_path.read_bytes()
     if len(source_raw) > 8 * 1024 * 1024:
@@ -1670,7 +1779,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     if len(aliases) != 1:
         raise ValueError("provider address does not identify exactly one simulation key")
     job = transaction_job(lifecycle, provider,
-        ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas="auto")
+        ["retrieval-session-v3", action, str(message_path)], kind="submit-proof", gas="auto")
     argv = [*job["submit"], "--generate-only"]
     argv[argv.index("--from") + 1] = aliases[0]
     deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
@@ -1695,7 +1804,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
         raise ValueError("bounded v3 gas simulation failed")
     unsigned = json.loads(result.stdout)
     messages = unsigned.get("body", {}).get("messages", [])
-    if len(messages) != 1 or messages[0].get("@type") != "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3":
+    if len(messages) != 1 or messages[0].get("@type") != message_type:
         raise ValueError("generated transaction has the wrong message type/count")
     actual = dict(messages[0])
     actual.pop("@type")
@@ -1707,7 +1816,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     unsigned_path = message_path.with_name(message_path.name + ".unsigned.json")
     unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
     job = transaction_job(lifecycle, provider,
-        ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas=str(gas))
+        ["retrieval-session-v3", action, str(message_path)], kind="submit-proof", gas=str(gas))
     return job, dict(message_sha256=hashlib.sha256(source_raw).hexdigest(), gas_limit=gas,
                      simulation_attempts=len(attempts),
                      simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
@@ -1794,6 +1903,45 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
     return dict(directory=str(inventory),
                 manifests=[str(manifest) for _, batches in manifests for manifest, _ in batches],
                 messages=ordered)
+
+
+def build_native_v3_transaction_intents(messages, profile, directory):
+    """Group one frozen provider-local proof corpus into comparable transaction intents."""
+    mode, batch_size = profile["submission_mode"], profile["batch_size"]
+    selected = [row for row in messages if row["profile"] == profile["name"]]
+    grouped = {}
+    for row in selected:
+        grouped.setdefault((row["slot"], row["provider"]), []).append(row)
+    intents = []
+    directory = Path(directory)
+    directory.mkdir(mode=0o700, exist_ok=True)
+    for (slot, provider), rows in sorted(grouped.items()):
+        rows.sort(key=lambda row: row["session_index"])
+        if len(rows) % batch_size:
+            raise ValueError("provider proof corpus does not form exact local batches")
+        for offset in range(0, len(rows), batch_size):
+            members = rows[offset:offset + batch_size]
+            if any(row["slot"] != slot or row["provider"] != provider for row in members):
+                raise ValueError("proof transaction crosses provider authority")
+            intent = dict(id=f"v3-chain-{mode}-{slot}-{offset // batch_size}",
+                profile=profile["name"], submission_mode=mode, batch_size=batch_size,
+                slot=slot, provider=provider, members=members)
+            if mode == "batch-message":
+                sessions = []
+                for member in members:
+                    message = json.loads(Path(member["message_path"]).read_text())
+                    if message.get("creator") != provider or producer.uint(message.get("slot", 99)) != slot:
+                        raise ValueError("batch member differs from frozen provider-local intent")
+                    sessions.append(dict(session_id=message["session_id"], slot=message["slot"],
+                                         proofs=message["proofs"]))
+                path = directory / f"batch-{slot}-{offset // batch_size}.json"
+                path.write_text(json.dumps(dict(creator=provider, sessions=sessions), separators=(",", ":")) + "\n")
+                intent["message_path"] = str(path)
+            intents.append(intent)
+    expected = len(selected) // batch_size
+    if len(intents) != expected or sum(len(row["members"]) for row in intents) != len(selected):
+        raise ValueError("transaction intents differ from the frozen proof corpus")
+    return intents
 
 
 def verify_native_v3_chain_transactions(lifecycle, rows, messages):
@@ -1944,6 +2092,7 @@ def _rpc_broadcast_lane(node, rows, start_event):
 
 def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
     samples = []
+    last_resource_sample_ns = 0
     start_event.wait()
     while not stop_event.is_set():
         sample_started = artifact.monotonic_ns()
@@ -1956,25 +2105,39 @@ def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
                 status.get("node_info", {}).get("network") != lifecycle.chain or
                 status.get("sync_info", {}).get("catching_up") is not False):
             raise ValueError("capacity monitor RPC belongs to a different or catching-up chain")
+        resources = None
+        if sample_started - last_resource_sample_ns >= 1_000_000_000:
+            resources = native_v3_resource_sample(lifecycle)
+            last_resource_sample_ns = sample_started
         samples.append(dict(sample_started_monotonic_ns=sample_started,
                             monotonic_ns=artifact.monotonic_ns(), unix_ns=time.time_ns(),
                             observed_height=producer.uint(
                                 status.get("sync_info", {}).get("latest_block_height", 0)),
-                            nodes=nodes))
+                            nodes=nodes, resources=resources))
         stop_event.wait(.1)
     return samples
 
 
-def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, sequences, command):
-    """Offline sign each provider/profile JSONL once, then pre-encode every TxRaw."""
+def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, providers, sequences, command):
+    """Offline sign exact provider-local transaction intents, then encode every TxRaw."""
     directory = lifecycle.home / "native-v3-chain-frozen"
     directory.mkdir(mode=0o700, exist_ok=True)
     node = lifecycle.nodes[0]
     profile_order = {row["name"]: index for index, row in enumerate(profiles)}
     grouped = {}
-    for message, _, simulation in simulated:
-        grouped.setdefault((message["slot"], message["profile"]), []).append((message, simulation))
+    for intent in intents:
+        grouped.setdefault((intent["slot"], intent["profile"]), []).append(intent)
     pending, next_sequence = [], {address: value["sequence"] for address, value in sequences.items()}
+
+    def validate_signed(intent, signed_tx, expected_messages, gas_limit, sequence, signed_path):
+        signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
+        signed_gas = producer.uint(signed_tx.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
+        if (signed_tx.get("body", {}).get("messages") != expected_messages or signed_gas != gas_limit or
+                len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
+                producer.uint(signer_infos[0].get("sequence", "")) != sequence):
+            raise ValueError("offline signed transaction differs from frozen intent, gas, or sequence")
+        pending.append((intent, sequence, gas_limit, signed_path))
+
     for slot in range(V3_SYSTEMATIC_PROVIDERS):
         provider = providers[slot]
         aliases = [name for name, address in lifecycle.signers.items() if address == provider]
@@ -1984,34 +2147,58 @@ def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, seq
             rows = grouped.get((slot, profile), [])
             if not rows:
                 continue
-            prefix = directory / f"provider-{slot}-{profile}"
-            unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
-            unsigned.write_text("".join(Path(simulation["unsigned_path"]).read_text() for _, simulation in rows))
+            if any(intent["provider"] != provider or any(
+                    member["provider"] != provider or member["slot"] != slot
+                    for member in intent["members"]) for intent in rows):
+                raise ValueError("frozen transaction crosses provider authority")
             start_sequence = next_sequence[provider]
-            command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--from", aliases[0],
-                "--home", node["home"], "--keyring-backend", "test", "--chain-id", lifecycle.chain,
-                "--offline", "--account-number", str(sequences[provider]["account_number"]),
-                "--sequence", str(start_sequence), "--sign-mode", "direct",
-                "--output-document", str(signed)], 300)
-            signed_rows = [json.loads(line) for line in signed.read_text().splitlines()]
-            unsigned_rows = [json.loads(line) for line in unsigned.read_text().splitlines()]
-            if len(signed_rows) != len(rows) or len(unsigned_rows) != len(rows):
-                raise ValueError("sign-batch returned an incomplete transaction inventory")
-            for index, ((message, simulation), unsigned_tx, signed_tx) in enumerate(
-                    zip(rows, unsigned_rows, signed_rows)):
-                sequence = start_sequence + index
-                signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
-                if (signed_tx.get("body", {}).get("messages") != unsigned_tx.get("body", {}).get("messages") or
-                        len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
-                        producer.uint(signer_infos[0].get("sequence", "")) != sequence):
-                    raise ValueError("offline signed transaction differs from frozen intent or sequence")
-                signed_one = prefix.with_name(prefix.name + f"-{index}.json")
-                signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
-                pending.append((message, simulation, profile, slot, provider, sequence, signed_one))
+            common = ["--from", aliases[0], "--home", node["home"], "--keyring-backend", "test",
+                "--chain-id", lifecycle.chain, "--offline",
+                "--account-number", str(sequences[provider]["account_number"]),
+                "--sequence", str(start_sequence), "--sign-mode", "direct"]
+            if rows[0]["submission_mode"] == "serial-messages":
+                for index, intent in enumerate(rows):
+                    prefix = directory / f"provider-{slot}-{profile}-{index}"
+                    unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.json")
+                    member_simulations = [simulations[member["id"]] for member in intent["members"]]
+                    unsigned.write_text("".join(Path(row["unsigned_path"]).read_text()
+                                                for row in member_simulations))
+                    expected_messages = [json.loads(line)["body"]["messages"][0]
+                                         for line in unsigned.read_text().splitlines()]
+                    gas_limit = sum(row["gas_limit"] for row in member_simulations)
+                    serial_common = list(common)
+                    serial_common[serial_common.index("--sequence") + 1] = str(start_sequence + index)
+                    command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append",
+                             *serial_common, "--output-document", str(signed)], 300)
+                    signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
+                    if len(signed_values) != 1:
+                        raise ValueError("append sign-batch returned an incomplete transaction inventory")
+                    validate_signed(intent, signed_values[0], expected_messages, gas_limit,
+                                    start_sequence + index, signed)
+            else:
+                prefix = directory / f"provider-{slot}-{profile}"
+                unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
+                selected_simulations = [simulations[intent["id"] if intent["submission_mode"] == "batch-message"
+                                                    else intent["members"][0]["id"]] for intent in rows]
+                unsigned.write_text("".join(Path(row["unsigned_path"]).read_text()
+                                            for row in selected_simulations))
+                unsigned_values = [json.loads(line) for line in unsigned.read_text().splitlines()]
+                command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), *common,
+                         "--output-document", str(signed)], 300)
+                signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
+                if len(signed_values) != len(rows) or len(unsigned_values) != len(rows):
+                    raise ValueError("sign-batch returned an incomplete transaction inventory")
+                for index, (intent, simulation, unsigned_tx, signed_tx) in enumerate(
+                        zip(rows, selected_simulations, unsigned_values, signed_values)):
+                    signed_one = prefix.with_name(prefix.name + f"-{index}.json")
+                    signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
+                    validate_signed(intent, signed_tx, unsigned_tx["body"]["messages"],
+                                    simulation["gas_limit"], start_sequence + index, signed_one)
             next_sequence[provider] += len(rows)
+
     def encode(item):
-        message, simulation, profile, slot, provider, sequence, signed_one = item
-        encoded = command([str(lifecycle.binary), "tx", "encode", str(signed_one),
+        intent, sequence, gas_limit, signed = item
+        encoded = command([str(lifecycle.binary), "tx", "encode", str(signed),
             "--home", node["home"], "--chain-id", lifecycle.chain], 60).strip()
         try:
             raw = base64.b64decode(encoded, validate=True)
@@ -2019,18 +2206,22 @@ def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, seq
             raise ValueError("tx encode returned malformed TxRaw bytes") from error
         if not raw or len(raw) > 1024 * 1024:
             raise ValueError("frozen TxRaw exceeds the Comet transaction bound")
-        raw_path = signed_one.with_suffix(".tx")
+        raw_path = signed.with_suffix(".tx")
         raw_path.write_bytes(raw)
-        return dict(id=message["id"], profile=profile, session_index=message["session_index"],
-            slot=slot, signer=provider, sequence=sequence, gas_limit=simulation["gas_limit"],
-            ordinals=message["ordinals"], message_path=message["message_path"], signed_path=str(signed_one),
-            raw_path=str(raw_path), bytes=len(raw), txhash=hashlib.sha256(raw).hexdigest().upper(),
-            signed_sha256=artifact.sha256(signed_one), raw_sha256=artifact.sha256(raw_path),
+        members = [dict(id=row["id"], session_index=row["session_index"], slot=row["slot"],
+                        ordinals=row["ordinals"], message_path=row["message_path"],
+                        message_sha256=row["message_sha256"]) for row in intent["members"]]
+        return dict(id=intent["id"], profile=intent["profile"],
+            submission_mode=intent["submission_mode"], batch_size=intent["batch_size"],
+            slot=intent["slot"], signer=intent["provider"], sequence=sequence,
+            gas_limit=gas_limit, members=members, signed_path=str(signed), raw_path=str(raw_path),
+            bytes=len(raw), txhash=hashlib.sha256(raw).hexdigest().upper(),
+            signed_sha256=artifact.sha256(signed), raw_sha256=artifact.sha256(raw_path),
             _tx_base64=encoded)
     with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
         frozen = list(pool.map(encode, pending))
-    if len({row["txhash"] for row in frozen}) != len(frozen):
-        raise ValueError("frozen native v3 transaction inventory repeats a TxRaw hash")
+    if len(frozen) != len(intents) or len({row["txhash"] for row in frozen}) != len(frozen):
+        raise ValueError("frozen native v3 transaction inventory is incomplete or repeats a TxRaw hash")
     for rpc_id, row in enumerate(frozen, 1):
         row["rpc_id"] = rpc_id
     return frozen
@@ -2063,6 +2254,19 @@ def _unix_ns(value):
         raise ValueError("block header has a noncanonical UTC timestamp")
     seconds = calendar.timegm(datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S").timetuple())
     return seconds * 10**9 + int((match.group(2) or "").ljust(9, "0"))
+
+
+def native_v3_transaction_members(row):
+    members = row.get("members")
+    if members is None:
+        members = [{key: row[key] for key in ("session_index", "slot", "ordinals")}]
+    if not isinstance(members, list) or not members:
+        raise ValueError("proof transaction has no logical proof members")
+    identities = [(producer.uint(member["session_index"]), producer.uint(member["slot"]))
+                  for member in members]
+    if len(set(identities)) != len(identities):
+        raise ValueError("proof transaction repeats a logical session obligation")
+    return members
 
 
 def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, offer_end_ns,
@@ -2112,22 +2316,25 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         latencies.append((observed["monotonic_ns"] - offered_ns) / 1e9)
     saturated_hashes = {txhash for row in saturated for txhash in row["txhashes"]}
     saturated_committed = [row for row in committed if row["txhash"] in saturated_hashes]
-    openings = sum(len(row["ordinals"]) for row in saturated_committed)
+    openings = sum(len(member["ordinals"]) for row in saturated_committed
+                   for member in native_v3_transaction_members(row))
     expected_slots = {}
     for row in committed:
-        slots = expected_slots.setdefault(row["session_index"], set())
-        if row["slot"] in slots:
-            raise ValueError("frozen proof inventory repeats a session obligation")
-        slots.add(row["slot"])
+        for member in native_v3_transaction_members(row):
+            slots = expected_slots.setdefault(member["session_index"], set())
+            if member["slot"] in slots:
+                raise ValueError("frozen proof inventory repeats a session obligation")
+            slots.add(member["slot"])
     if (len(expected_slots) != profile["sessions"] or
             any(len(slots) != profile["proof_transactions"] for slots in expected_slots.values())):
         raise ValueError("frozen proof inventory differs from the profile obligation count")
     session_slots = {}
     for row in saturated_committed:
-        slots = session_slots.setdefault(row["session_index"], set())
-        if row["slot"] not in expected_slots[row["session_index"]] or row["slot"] in slots:
-            raise ValueError("saturated proof transaction has an invalid session obligation")
-        slots.add(row["slot"])
+        for member in native_v3_transaction_members(row):
+            slots = session_slots.setdefault(member["session_index"], set())
+            if member["slot"] not in expected_slots[member["session_index"]] or member["slot"] in slots:
+                raise ValueError("saturated proof transaction has an invalid session obligation")
+            slots.add(member["slot"])
     complete_proof_sets = sum(slots == expected_slots[index] for index, slots in session_slots.items())
     if not complete_proof_sets:
         raise ValueError("saturated consensus interval contains no complete proof set")
@@ -2140,6 +2347,11 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         accepted_offer_transactions_per_second=accepted_rate,
         committed_transactions_per_second=committed_rate,
         committed_transactions_per_day=committed_rate * 86400,
+        committed_logical_sessions_per_second=proof_sets_per_second,
+        committed_logical_sessions_per_day=proof_sets_per_day,
+        shared_host_verifier_ceiling_sessions_per_second=V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND,
+        percent_of_shared_host_verifier_ceiling=(
+            proof_sets_per_second / V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND * 100),
         committed_openings_per_second=openings / commit_seconds,
         committed_openings_per_day=openings / commit_seconds * 86400,
         complete_proof_sets_per_second=proof_sets_per_second,
@@ -2165,14 +2377,16 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
 
 
 def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length,
-                        profile_name=None, measured_transactions=None):
+                        profile_name=None, measured_transactions=None, measured_sessions=None,
+                        submission_mode="separate", batch_size=1):
     """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
     if epoch_length != V3_CHAIN_AUDIT_EPOCH_BLOCKS:
         raise ValueError("native chain capacity requires the fixed 100-block audit epoch")
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
         scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")
     owner = lifecycle.signers["owner0"]
-    profiles = native_v3_chain_capacity_profiles(profile_name, measured_transactions)
+    profiles = native_v3_chain_capacity_profiles(profile_name, measured_transactions,
+        measured_sessions=measured_sessions, submission_mode=submission_mode, batch_size=batch_size)
     opened_at = lifecycle.wait_height(3)
     session_count = sum(profile["sessions"] for profile in profiles)
     max_deadline_height = native_v3_capacity_deadline(opened_at, session_count - 1)
@@ -2236,8 +2450,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
         for values in pool.map(simulate_slot, range(V3_SYSTEMATIC_PROVIDERS)):
             simulated.extend(values)
-    expected_transactions = sum(row["measured_transactions"] for row in profiles)
-    if len(simulated) != expected_transactions:
+    expected_messages = sum(row["proof_messages"] for row in profiles)
+    if len(simulated) != expected_messages:
         raise ValueError("native v3 gas preflight omitted a prepared message")
     doc["profiles"] = profiles
     doc["sessions"] = sessions
@@ -2249,9 +2463,26 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     lifecycle.save()
     for profile in profiles:
         profile_simulated = [row for row in simulated if row[0]["profile"] == profile["name"]]
+        simulations = {row[0]["id"]: row[2] for row in profile_simulated}
+        intents = build_native_v3_transaction_intents(
+            inventory["messages"], profile, lifecycle.home / f"native-v3-chain-{profile['name']}-intents")
+        if profile["submission_mode"] == "batch-message":
+            def simulate_batch(intent):
+                _, simulation = v3_generate_only_gas(lifecycle, intent["message_path"], intent["provider"],
+                    action="prove-batch", message_type=V3_BATCH_PROOF_TYPE)
+                return intent["id"], simulation
+            with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
+                simulations.update(pool.map(simulate_batch, intents))
+        if len(intents) != profile["measured_transactions"]:
+            raise ValueError("transaction intent count differs from the selected submission shape")
         max_block_gas = artifact.integer(
             lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
-        total_gas = sum(row[2]["gas_limit"] for row in profile_simulated)
+        if profile["submission_mode"] == "serial-messages":
+            total_gas = sum(sum(simulations[member["id"]]["gas_limit"] for member in intent["members"])
+                            for intent in intents)
+        else:
+            total_gas = sum(simulations[intent["id"] if profile["submission_mode"] == "batch-message"
+                                        else intent["members"][0]["id"]]["gas_limit"] for intent in intents)
         minimum_gas_blocks = native_v3_minimum_gas_blocks(total_gas, max_block_gas)
         required_margin = minimum_gas_blocks + 10
         profile_deadline_height = min(row["deadline_height"] for row in
@@ -2262,9 +2493,16 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 minimum_gas_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS, profile_deadline_height)
             quiescence = require_provider_quiescence(lifecycle, providers)
             frozen = freeze_native_v3_transactions(
-                lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
+                lifecycle, intents, simulations, [profile], providers, quiescence["sequences"], command)
             if len(frozen) != profile["measured_transactions"]:
                 raise ValueError("frozen profile transaction count differs from the fixed inventory")
+            frozen_members = [member for row in frozen for member in row["members"]]
+            expected_member_ids = {row["id"] for row in inventory["messages"] if row["profile"] == profile["name"]}
+            if (len(frozen_members) != profile["proof_messages"] or
+                    len({row["id"] for row in frozen_members}) != len(frozen_members) or
+                    {row["id"] for row in frozen_members} != expected_member_ids or
+                    any(artifact.sha256(row["message_path"]) != row["message_sha256"] for row in frozen_members)):
+                raise ValueError("frozen transaction members differ from the exact exported proof bytes")
             mempool = lifecycle.doc["profile"]["comet_mempool"]
             if (len(frozen) >= mempool["size"] or
                     sum(row["bytes"] for row in frozen) >= mempool["max_txs_bytes"]):
@@ -2297,40 +2535,51 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         for node in lifecycle.nodes:
             if validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))["transactions"]:
                 raise ValueError("native v3 profile started with a nonempty mempool")
-        capture_workload_metrics(lifecycle, f"native_v3_chain_{profile['name']}_before", fenced=True)
-        before_cpu = validator_cpu_snapshot(lifecycle)
-        predecessor_height = lifecycle.wait_height(1)
-        lanes = [[row for row in frozen if row["slot"] == slot]
-                 for slot in range(V3_SYSTEMATIC_PROVIDERS)]
-        start_event, stop_event = threading.Event(), threading.Event()
-        with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS + 1) as pool:
-            monitor = pool.submit(_monitor_native_v3_mempools, lifecycle, start_event, stop_event)
-            broadcasters = [pool.submit(_rpc_broadcast_lane, lifecycle.nodes[0], lane, start_event)
-                            for lane in lanes]
-            started_ns = artifact.monotonic_ns()
-            start_event.set()
-            try:
-                offered = [row for future in broadcasters for row in future.result()]
-                offer_end_ns = artifact.monotonic_ns()
-                drain_deadline = min(lifecycle.deadline,
-                    offer_end_ns + V3_CHAIN_DRAIN_SECONDS * 10**9)
-                while True:
-                    lifecycle.remaining()
-                    if artifact.monotonic_ns() >= drain_deadline:
-                        raise TimeoutError("native v3 chain profile exceeded its fixed drain cap")
-                    pending = [validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))["transactions"]
-                               for node in lifecycle.nodes]
-                    if not any(pending):
-                        break
-                    time.sleep(.1)
-                current_height = lifecycle.wait_height(1)
-                final_height = lifecycle.wait_height(current_height + 2)
-                drain_end_ns = artifact.monotonic_ns()
-            finally:
-                stop_event.set()
-            mempool_samples = monitor.result()
-        after_cpu = validator_cpu_snapshot(lifecycle)
-        capture_workload_metrics(lifecycle, f"native_v3_chain_{profile['name']}_after", fenced=True)
+        before_phase = f"native_v3_chain_{profile['name']}_before"
+        after_phase = f"native_v3_chain_{profile['name']}_after"
+        commit_processes = []
+        stream_key = f"native_v3_chain_{profile['name']}_commit_streams"
+        start_commit_streams(lifecycle, V3_CHAIN_DRAIN_SECONDS + 60, commit_processes,
+                             stream_key=stream_key, filename_prefix=stream_key)
+        try:
+            capture_workload_metrics(lifecycle, before_phase, fenced=True)
+            before_cpu = validator_cpu_snapshot(lifecycle)
+            predecessor_height = lifecycle.wait_height(1)
+            lanes = [[row for row in frozen if row["slot"] == slot]
+                     for slot in range(V3_SYSTEMATIC_PROVIDERS)]
+            start_event, stop_event = threading.Event(), threading.Event()
+            with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS + 1) as pool:
+                monitor = pool.submit(_monitor_native_v3_mempools, lifecycle, start_event, stop_event)
+                broadcasters = [pool.submit(_rpc_broadcast_lane, lifecycle.nodes[0], lane, start_event)
+                                for lane in lanes]
+                started_ns = artifact.monotonic_ns()
+                start_event.set()
+                try:
+                    offered = [row for future in broadcasters for row in future.result()]
+                    offer_end_ns = artifact.monotonic_ns()
+                    drain_deadline = min(lifecycle.deadline,
+                        offer_end_ns + V3_CHAIN_DRAIN_SECONDS * 10**9)
+                    while True:
+                        lifecycle.remaining()
+                        if artifact.monotonic_ns() >= drain_deadline:
+                            raise TimeoutError("native v3 chain profile exceeded its fixed drain cap")
+                        pending = [validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))["transactions"]
+                                   for node in lifecycle.nodes]
+                        if not any(pending):
+                            break
+                        time.sleep(.1)
+                    current_height = lifecycle.wait_height(1)
+                    final_height = lifecycle.wait_height(current_height + 2)
+                    drain_end_ns = artifact.monotonic_ns()
+                finally:
+                    stop_event.set()
+                mempool_samples = monitor.result()
+            after_cpu = validator_cpu_snapshot(lifecycle)
+            capture_workload_metrics(lifecycle, after_phase, fenced=True)
+        finally:
+            artifact.stop_owned_process_groups(commit_processes)
+        summarize_commit_streams(lifecycle, commit_processes, stream_key=stream_key,
+                                 before_phase=before_phase, after_phase=after_phase)
         if len(offered) != len(frozen) or {row["txhash"] for row in offered} != {row["txhash"] for row in frozen}:
             raise ValueError("direct CheckTx outcomes differ from the frozen profile inventory")
         committed, blocks = _discover_frozen_commits(
@@ -2362,6 +2611,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             row["accepted_sample_ordinals"] = accepted
         metrics = native_v3_capacity_metrics(profile, offered, committed, blocks,
             started_ns, offer_end_ns, drain_end_ns, mempool_samples)
+        metrics["resource_utilization"] = summarize_native_v3_resources(
+            [row["resources"] for row in mempool_samples if row["resources"] is not None],
+            (drain_end_ns - started_ns) / 1e9)
         cpu_delta = validator_cpu_delta(before_cpu, after_cpu)
         cpu_delta["measurement_scope"] = "direct broadcast through all-validator mempool drain"
         measurement.update(status="passed", offered=offered, committed=committed,
@@ -2369,8 +2621,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics)
         lifecycle.save()
     doc.update(status="native_v3_chain_capacity_passed", qualification=True,
-        offered_proof_transactions=expected_transactions,
-        committed_valid_proof_transactions=expected_transactions,
+        offered_proof_transactions=sum(row["measured_transactions"] for row in profiles),
+        committed_valid_proof_transactions=sum(row["measured_transactions"] for row in profiles),
+        committed_logical_proof_messages=expected_messages,
         sampled_openings=sum(row["sample_count"] * row["sessions"] for row in profiles),
         delivery_verified=False, owner_acknowledged=False, expiration_verified=False,
         refunds_verified=False)
@@ -4823,7 +5076,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                     audits=audits, exporter=export_binary, command=command,
                                     epoch_length=epoch_length,
                                     profile_name=native_chain.get("profile"),
-                                    measured_transactions=native_chain.get("measured_transactions"))
+                                    measured_transactions=native_chain.get("measured_transactions"),
+                                    measured_sessions=native_chain.get("measured_sessions"),
+                                    submission_mode=native_chain.get("submission_mode", "separate"),
+                                    batch_size=native_chain.get("batch_size", 1))
                 doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
@@ -4899,7 +5155,13 @@ def main():
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
                         help="Run one native-v3-chain range shape")
     parser.add_argument("--chain-capacity-transactions", type=int,
-                        help="Frozen transaction inventory for a selected native-v3-chain profile")
+                        help="Legacy separate-message transaction inventory for a selected profile")
+    parser.add_argument("--chain-capacity-sessions", type=int,
+                        help="Logical session inventory for an exact native-v3-chain comparator")
+    parser.add_argument("--chain-proof-submission-mode", choices=V3_CHAIN_SUBMISSION_MODES, default="separate",
+                        help="Separate transactions, serial messages in one transaction, or the V3 batch message")
+    parser.add_argument("--chain-proof-batch-size", type=int, choices=(1, *V3_CHAIN_BATCH_SIZES), default=1,
+                        help="Provider-local proof messages per transaction; 1 for separate, otherwise 8/32/64")
     parser.add_argument("--browser-bytes", type=int, choices=V3_BROWSER_SIZES,
                         help="Retained browser fixture size; only used by native-v3-browser")
     parser.add_argument("--browser-executor-handoff", action="store_true",
@@ -4922,9 +5184,14 @@ def main():
     chain_max_gas = options.pop("chain_max_gas")
     chain_capacity_profile = options.pop("chain_capacity_profile")
     chain_capacity_transactions = options.pop("chain_capacity_transactions")
+    chain_capacity_sessions = options.pop("chain_capacity_sessions")
+    chain_submission_mode = options.pop("chain_proof_submission_mode")
+    chain_batch_size = options.pop("chain_proof_batch_size")
     if mode != "native-v3-chain" and any(value is not None for value in
-            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions)):
+            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)):
         parser.error("chain capacity controls require native-v3-chain")
+    if mode != "native-v3-chain" and (chain_submission_mode != "separate" or chain_batch_size != 1):
+        parser.error("chain proof submission controls require native-v3-chain")
     if browser_executor_handoff and (mode != "native-v3-browser" or
             (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
         parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
@@ -4936,23 +5203,29 @@ def main():
                            rate_scale=sustained_rate_scale, deputy_count=sustained_deputies), audit_profile=audit_profile))
     elif mode == "native-v3-chain":
         selected_chain_profile = any(value is not None for value in
-            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions))
+            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)) or \
+            chain_submission_mode != "separate" or chain_batch_size != 1
         if (not gateway or not cli or not source or not exporter or k8 or k2 or proof_only or
                 proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
                 sustained_rate_scale != 1 or sustained_deputies != 8 or
                 options["timeout"] > 3600 or audit_profile != "normal" or
-                (selected_chain_profile and None in
-                 (chain_max_gas, chain_capacity_profile, chain_capacity_transactions))):
+                (selected_chain_profile and (chain_max_gas is None or chain_capacity_profile is None or
+                 (chain_capacity_transactions is None) == (chain_capacity_sessions is None)))):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
         native_chain = dict(exporter=exporter)
         if selected_chain_profile:
             try:
-                profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions)
+                profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions,
+                    measured_sessions=chain_capacity_sessions, submission_mode=chain_submission_mode,
+                    batch_size=chain_batch_size)
                 validate_native_v3_capacity_epoch(profiles[0], chain_max_gas)
             except ValueError as error:
                 parser.error(str(error))
             native_chain.update(max_block_gas=chain_max_gas, profile=chain_capacity_profile,
                                 measured_transactions=chain_capacity_transactions)
+            if chain_capacity_sessions is not None:
+                native_chain.update(measured_sessions=chain_capacity_sessions,
+                                    submission_mode=chain_submission_mode, batch_size=chain_batch_size)
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
                           native_chain=native_chain, audit_profile="normal"))
     elif mode == "native-v3-browser":
