@@ -2038,6 +2038,9 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     proof_sets_per_second = complete_proof_sets / commit_seconds
     proof_sets_per_day = proof_sets_per_second * 86400
     return dict(elapsed_seconds=elapsed, offer_seconds=offer_elapsed,
+        daily_equivalent_basis="short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
+        invalid_transactions=0, unknown_transactions=0, duplicate_transactions=0,
+        dropped_transactions=0, retried_transactions=0,
         accepted_offer_transactions_per_second=accepted_rate,
         committed_transactions_per_second=committed_rate,
         committed_transactions_per_day=committed_rate * 86400,
@@ -4462,7 +4465,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         require_retrieval_cli(lifecycle)
         if native_v3:
             require_v3_cli(lifecycle)
-        if (sustained is not None or native_cross_audit or native_browser is not None) and \
+        if (sustained is not None or native_chain is not None or native_cross_audit or
+                native_browser is not None) and \
                 "--append" not in lifecycle.cli(lifecycle.home, "tx", "sign-batch", "--help").split():
             raise ValueError("batched session preparation requires SDK sign-batch --append")
         lifecycle.reserve_ports()

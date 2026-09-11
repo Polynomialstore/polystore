@@ -1607,6 +1607,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
         self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
+        self.assertEqual(metrics["daily_equivalent_basis"],
+            "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
+        self.assertEqual([metrics[name] for name in ("invalid_transactions", "unknown_transactions",
+            "duplicate_transactions", "dropped_transactions", "retried_transactions")], [0] * 5)
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
         with self.assertRaisesRegex(ValueError, "consensus interval"):
             workload.native_v3_capacity_metrics(
