@@ -1,16 +1,20 @@
 # Retrieval V3 parallel-verifier ceiling (#328)
 
-This short diagnostic measures one sampled retrieval V3 chained proof for one session per benchmark operation. It invokes the exact active `VerifyPolyFSSessionProofBatch` path with a valid challenge-version-2 context and seed, including Go batch encoding, native parsing, transcript and challenge-point validation, and one combined pairing that checks the manifest and blob KZG opening equations. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, the verifier scales from **370.80 chained proofs/s on one core** to **2,730.65 chained proofs/s on eight physical cores**. The eight-core rate extrapolates to **235.93 million chained proofs/day**, checking **5,461.30 KZG opening equations/s** or **471.86 million/day**, if verification were the only work.
+This short diagnostic measures one sampled retrieval V3 chained proof for one session per benchmark operation. It invokes the exact pure `verifyPolyFSChainedProof` wrapper used for every sample in `MsgSubmitRetrievalSessionProofV3`, including proof-shape and Merkle-path validation and both native KZG checks. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, one verifier process scales from **221.50 chained-proof sessions/s at GOMAXPROCS=1** to **1,616.39/s at GOMAXPROCS=8**. The eight-worker result is a single-process host upper bound of **139.66 million sessions/day** if verification were the only work.
 
-| Workers | Median ms/chained proof | Chained proofs/s | Derived chained proofs/day |
+| GOMAXPROCS | Median ms/chained-proof session | Chained-proof sessions/s | Derived sessions/day |
 |---:|---:|---:|---:|
-| 1 | 2.697 | 370.80 | 32.04M |
-| 2 | 1.351 | 740.11 | 63.95M |
-| 4 | 0.682 | 1,466.38 | 126.70M |
-| 8 | 0.366 | 2,730.65 | 235.93M |
-| 16 | 0.329 | 3,042.85 | 262.90M |
+| 1 | 4.515 | 221.50 | 19.14M |
+| 2 | 2.260 | 442.56 | 38.24M |
+| 4 | 1.144 | 873.75 | 75.49M |
+| 8 | 0.619 | 1,616.39 | 139.66M |
+| 16 | 0.568 | 1,761.12 | 152.16M |
 
-The retained [gas sweep](../gas-sweep-324/) reached **155.15 committed proof transactions/s** and **13.41 million/day** at 448M gas. Each transaction carries one sampled chained proof for one retrieval session. That is 5.7% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **682.66 chained-proof sessions/s** (2,730.65 / 4), checking **1,365.33 KZG opening equations/s**; the measured chain reaches **22.7%** of that shared-host chained-proof ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
+The retained [gas sweep](../gas-sweep-324/) reached **155.15 committed proof transactions/s** and **13.41 million/day** at 448M gas. Its one-sample profile carries one chained proof for one retrieval session in each transaction. All four validators repeat the same transaction stream and each was configured with `GOMAXPROCS=2`, so the directly comparable logical execution ceiling is the **442.56 sessions/s per-validator two-worker result**, or **38.24 million/day**. The measured chain reaches **35.1%** of that verifier-only ceiling. The **1,616.39/s** eight-worker result is a single-process host upper bound; dividing it by four would not model four validator processes correctly.
+
+Each chained proof checks two KZG opening equations, one for manifest inclusion and one for blob data. The two-worker per-validator ceiling therefore corresponds to **885.13 opening equations/s** and **76.47 million/day**; the eight-worker single-process host upper bound corresponds to **3,232.77/s** and **279.31 million/day**. These are equation counts derived from the chained-proof rate, not additional sessions.
+
+Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
 
 ## BlockSTM stop result
 

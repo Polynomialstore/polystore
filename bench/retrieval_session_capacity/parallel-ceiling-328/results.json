@@ -1,9 +1,9 @@
 {
-  "schema": "polystore-retrieval-v3-parallel-verifier-ceiling-v2",
+  "schema": "polystore-retrieval-v3-parallel-verifier-ceiling-v3",
   "issue": 328,
-  "scope": "one sampled challenge-version-2 retrieval-v3 chained proof for one session through the active VerifyPolyFSSessionProofBatch path; includes batch encoding, native parsing, transcript and z validation, and one combined pairing that checks two KZG opening equations; excludes transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
+  "scope": "one sampled retrieval-v3 chained proof for one session through the exact pure verifyPolyFSChainedProof path used by MsgSubmitRetrievalSessionProofV3; includes proof shape and Merkle-path validation and two native KZG opening checks; excludes challenge derivation and admission, transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
   "provenance": {
-    "source_commit": "bc6c68d66e117a7ca9fee92e948e6cd741261617",
+    "source_commit": "53c197a860cbd88e46709d2e6cf3996d685f7902",
     "host": "mikers@192.168.0.111",
     "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
     "physical_cores": 8,
@@ -13,73 +13,73 @@
     "command": "../scripts/chain_go.sh test ./x/polystorechain/keeper -run '^$' -bench '^BenchmarkVerifyChainedProofParallel$' -benchtime=2s -count=5 -cpu=1,2,4,8,16 -benchmem",
     "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
     "raw_output": "benchmark.txt",
-    "raw_output_sha256": "e0d3854a237204b60cd00b23d0c72af13c4edd169d2fa9e1eda4d027eb82ce78"
+    "raw_output_sha256": "be001f7961def5e5da94d165e0bd484e1dcf6d9cf966bffb51efdd8b0f900f71"
   },
   "parallel_verifier": [
     {
       "workers": 1,
       "samples_ns_per_session": [
-        2696846,
-        2694844,
-        2700884,
-        2696086,
-        2697683
+        4514719,
+        4510049,
+        4514921,
+        4512680,
+        4515192
       ],
-      "median_ns_per_session": 2696846,
-      "median_sessions_per_second": 370.8035238200476,
-      "derived_sessions_per_day": 32037424.45805211
+      "median_ns_per_session": 4514719,
+      "median_sessions_per_second": 221.49772776555972,
+      "derived_sessions_per_day": 19137403.67894436
     },
     {
       "workers": 2,
       "samples_ns_per_session": [
-        1351149,
-        1351179,
-        1349120,
-        1348545,
-        1354251
+        2258734,
+        2261716,
+        2259567,
+        2256796,
+        2261012
       ],
-      "median_ns_per_session": 1351149,
-      "median_sessions_per_second": 740.1108241948149,
-      "derived_sessions_per_day": 63945575.21043201
+      "median_ns_per_session": 2259567,
+      "median_sessions_per_second": 442.56266798019266,
+      "derived_sessions_per_day": 38237414.51348864
     },
     {
       "workers": 4,
       "samples_ns_per_session": [
-        681657,
-        681737,
-        683456,
-        682564,
-        681950
+        1143590,
+        1144494,
+        1146177,
+        1144454,
+        1144903
       ],
-      "median_ns_per_session": 681950,
-      "median_sessions_per_second": 1466.383165921255,
-      "derived_sessions_per_day": 126695505.53559645
+      "median_ns_per_session": 1144494,
+      "median_sessions_per_second": 873.7485736054535,
+      "derived_sessions_per_day": 75491876.75951119
     },
     {
       "workers": 8,
       "samples_ns_per_session": [
-        366525,
-        366213,
-        364882,
-        367246,
-        365784
+        618664,
+        618491,
+        619183,
+        618201,
+        619613
       ],
-      "median_ns_per_session": 366213,
-      "median_sessions_per_second": 2730.6512876386146,
-      "derived_sessions_per_day": 235928271.2519763
+      "median_ns_per_session": 618664,
+      "median_sessions_per_second": 1616.3862775270584,
+      "derived_sessions_per_day": 139655774.37833783
     },
     {
       "workers": 16,
       "samples_ns_per_session": [
-        328933,
-        328639,
-        328753,
-        328208,
-        328408
+        567648,
+        568033,
+        567821,
+        567695,
+        569249
       ],
-      "median_ns_per_session": 328639,
-      "median_sessions_per_second": 3042.852491639763,
-      "derived_sessions_per_day": 262902455.2776755
+      "median_ns_per_session": 567821,
+      "median_sessions_per_second": 1761.1183806164267,
+      "derived_sessions_per_day": 152160628.08525926
     }
   ],
   "retained_chain_comparison": [
@@ -137,24 +137,26 @@
     }
   ],
   "comparison": {
-    "raw_eight_core_sessions_per_second": 2730.6512876386146,
-    "raw_eight_core_sessions_per_day": 235928271.2519763,
+    "raw_eight_core_single_process_sessions_per_second": 1616.3862775270584,
+    "raw_eight_core_single_process_sessions_per_day": 139655774.37833783,
+    "configured_validator_gomaxprocs": 2,
+    "configured_per_validator_verifier_only_sessions_per_second": 442.56266798019266,
+    "configured_per_validator_verifier_only_sessions_per_day": 38237414.51348864,
     "co_located_validator_count": 4,
-    "shared_host_verifier_only_sessions_per_second": 682.6628219096536,
-    "shared_host_verifier_only_sessions_per_day": 58982067.81299408,
     "chain_448m_sessions_per_second": 155.15161202310972,
     "chain_448m_sessions_per_day": 13405099.27879668,
-    "raw_eight_core_to_chain_448m_ratio": 17.5998898885555,
-    "chain_448m_fraction_of_raw_eight_core": 0.05681853729381908,
-    "shared_host_verifier_only_to_chain_448m_ratio": 4.399972472138875,
-    "chain_448m_fraction_of_shared_host_verifier_only": 0.22727414917527633,
+    "raw_eight_core_to_chain_448m_ratio": 10.418108174643386,
+    "chain_448m_fraction_of_raw_eight_core": 0.09598671690066515,
+    "configured_per_validator_to_chain_448m_ratio": 2.8524529149866216,
+    "chain_448m_fraction_of_configured_per_validator": 0.35057546252422195,
     "kzg_opening_equations_checked_per_chained_proof": 2,
-    "raw_eight_core_kzg_opening_equations_checked_per_second": 5461.302575277229,
-    "raw_eight_core_kzg_opening_equations_checked_per_day": 471856542.5039526,
-    "shared_host_verifier_only_kzg_opening_equations_checked_per_second": 1365.3256438193073,
-    "shared_host_verifier_only_kzg_opening_equations_checked_per_day": 117964135.62598816
+    "raw_eight_core_kzg_opening_equations_checked_per_second": 3232.7725550541168,
+    "raw_eight_core_kzg_opening_equations_checked_per_day": 279311548.75667566,
+    "configured_per_validator_kzg_opening_equations_checked_per_second": 885.1253359603853,
+    "configured_per_validator_kzg_opening_equations_checked_per_day": 76474829.02697729,
+    "normalization_note": "Every validator repeats the same transaction stream. The retained four-validator workload configured each validator with GOMAXPROCS=2, so chain logical throughput is compared with the two-worker per-validator verifier ceiling. The eight-worker result is a single-process host upper bound and is not divided by validator count."
   },
-  "conclusion": "execution limited: gas-only reaches a serial FinalizeBlock plateau; the exact active V3 batch verifier scales across eight physical cores",
+  "conclusion": "execution limited: gas-only reaches a serial FinalizeBlock plateau; the exact retained V3 per-sample verifier scales across cores",
   "daily_equivalent_basis": "short benchmark rate multiplied by 86400; not a sustained 24-hour or end-to-end delivery claim",
   "blockstm_spike": {
     "base_commit": "9014fdf116217414484cf00ce932a12d9649231b",
