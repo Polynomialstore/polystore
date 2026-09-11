@@ -68,6 +68,7 @@ V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
+V3_EXPORT_BATCH_MAX = 8
 V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
 V3_CROSS_AUDIT_MEASURED = 360
@@ -1640,7 +1641,6 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
     for slot in range(V3_SYSTEMATIC_PROVIDERS):
         provider = providers[slot]
         directory = Path(directories[provider])
-        manifest = inventory / f"provider-{slot}.manifest.json"
         requests = []
         for index, session in enumerate(sessions):
             slots = [producer.uint(row.get("slot", 99))
@@ -1650,34 +1650,46 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
             requests.append(dict(session_id=session["session_id"], height=session["evidence_height"],
                 view=session["before_proofs"], session_index=index,
                 output_path=str(inventory / f"provider-{slot}-session-{index}.json")))
-        manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain,
-            trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"], deadline_unix_ms=deadline_ms,
-            v3_provider=provider, v3_artifact_directory=str(directory), v3_sessions=requests), separators=(",", ":")))
-        manifests.append((slot, manifest))
+        batches = []
+        for batch_index, offset in enumerate(range(0, len(requests), V3_EXPORT_BATCH_MAX)):
+            batch = requests[offset:offset + V3_EXPORT_BATCH_MAX]
+            manifest = inventory / f"provider-{slot}-batch-{batch_index}.manifest.json"
+            manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain,
+                trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"], deadline_unix_ms=deadline_ms,
+                v3_provider=provider, v3_artifact_directory=str(directory), v3_sessions=batch), separators=(",", ":")))
+            batches.append((manifest, batch))
+        manifests.append((slot, batches))
     def run_one(item):
-        slot, manifest = item
-        env = dict(lifecycle.env, POLYSTORE_RETRIEVAL_EXPORT_MANIFEST=str(manifest))
-        result = artifact.run_bounded_command([str(exporter), "-test.run=^TestExportFrozenRetrievalInventory$", "-test.timeout=600s"],
-                                              lifecycle.deadline, env=env)
-        (inventory / f"provider-{slot}.log").write_text(result.stdout + result.stderr)
-        if result.returncode:
-            raise ValueError(f"provider {slot} v3 inventory export failed")
-        value = json.loads(Path(str(manifest) + ".result.json").read_text())
-        return slot, value.get("messages")
-    exported = {}
+        slot, batches = item
+        requests, rows = [], []
+        for manifest, batch in batches:
+            env = dict(lifecycle.env, POLYSTORE_RETRIEVAL_EXPORT_MANIFEST=str(manifest))
+            result = artifact.run_bounded_command([str(exporter), "-test.run=^TestExportFrozenRetrievalInventory$", "-test.timeout=600s"],
+                                                  lifecycle.deadline, env=env)
+            manifest.with_suffix(".log").write_text(result.stdout + result.stderr)
+            if result.returncode:
+                raise ValueError(f"provider {slot} v3 inventory export failed")
+            exported = json.loads(Path(str(manifest) + ".result.json").read_text()).get("messages")
+            if not isinstance(exported, list) or len(exported) != len(batch):
+                raise ValueError("v3 exporter returned incomplete provider batch")
+            requests.extend(batch)
+            rows.extend(exported)
+        return slot, requests, rows
+    exported, exported_requests = {}, {}
     with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
         futures = [pool.submit(run_one, item) for item in manifests]
         for future in futures:
-            slot, rows = future.result()
+            slot, requests, rows = future.result()
             expected = sum(slot in [producer.uint(obligation.get("slot", 99))
                                     for obligation in session["before_proofs"]["session"]["obligations"]]
                            for session in sessions)
             if not isinstance(rows, list) or len(rows) != expected:
                 raise ValueError("v3 exporter returned incomplete provider inventory")
             exported[slot] = rows
+            exported_requests[slot] = requests
     by_session = {(slot, producer.uint(request["session_index"])): row
-                  for slot, rows in exported.items() for request, row in zip(
-                      json.loads(Path(manifests[slot][1]).read_text())["v3_sessions"], rows)}
+                  for slot, rows in exported.items()
+                  for request, row in zip(exported_requests[slot], rows)}
     ordered = []
     for session_index, session in enumerate(sessions):
         slots = [producer.uint(row.get("slot", 99))
@@ -1695,7 +1707,9 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
                     [producer.uint(proof.get("ordinal", V3_MAX_SAMPLES)) for proof in message.get("proofs", [])] != row.get("ordinals")):
                 raise ValueError("v3 exporter changed frozen message/context/provider intent")
             ordered.append(dict(row, session_index=session_index, provider=provider))
-    return dict(directory=str(inventory), manifests=[str(row[1]) for row in manifests], messages=ordered)
+    return dict(directory=str(inventory),
+                manifests=[str(manifest) for _, batches in manifests for manifest, _ in batches],
+                messages=ordered)
 
 
 def verify_native_v3_chain_transactions(lifecycle, rows, messages):

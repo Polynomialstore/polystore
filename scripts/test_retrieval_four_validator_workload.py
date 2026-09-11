@@ -2090,7 +2090,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             home = Path(tmp)
             providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
             sessions = []
-            for index in range(8):
+            for index in range(9):
                 sessions.append(dict(session_id=f"{index + 1:064x}", evidence_height=70,
                     before_proofs={"session": {"obligations": [{"slot": slot} for slot in range(8)]}},
                     context_hash=f"{index + 9:064x}", seed=f"{index + 17:064x}"))
@@ -2108,7 +2108,9 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 provider = manifest["v3_provider"]
                 slot = next(index for index, address in providers.items() if address == provider)
                 rows = []
-                for index, request in enumerate(manifest["v3_sessions"]):
+                self.assertLessEqual(len(manifest["v3_sessions"]), 8)
+                for request in manifest["v3_sessions"]:
+                    index = request["session_index"]
                     message_path = Path(request["output_path"])
                     message = dict(creator=provider,
                         session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
@@ -2125,10 +2127,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             with patch.object(artifact, "run_bounded_command", side_effect=export):
                 inventory = workload.export_native_v3_chain_inventory(
                     lifecycle, Path("/exporter"), sessions, providers, directories)
-            self.assertEqual(len(inventory["manifests"]), 8)
-            self.assertEqual(len(inventory["messages"]), 64)
+            self.assertEqual(len(inventory["manifests"]), 16)
+            self.assertEqual(len(inventory["messages"]), 72)
             self.assertEqual([(row["session_index"], row["slot"]) for row in inventory["messages"]],
-                             [(session, slot) for session in range(8) for slot in range(8)])
+                             [(session, slot) for session in range(9) for slot in range(8)])
             self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
                              list(providers.values()))
 
