@@ -1900,6 +1900,71 @@ def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
                      unsigned_sha256=artifact.sha256(unsigned_path))
 
 
+def v3_simulate_serial_outer_gas(lifecycle, intent, gas_adjustment="1.6"):
+    """Simulate the fully assembled existing-message comparator transaction."""
+    if gas_adjustment not in V3_CHAIN_GAS_ADJUSTMENTS:
+        raise ValueError("native v3 gas adjustment is outside the benchmark matrix")
+    provider = intent["provider"]
+    aliases = [name for name, address in lifecycle.signers.items() if address == provider]
+    if len(aliases) != 1:
+        raise ValueError("provider address does not identify exactly one simulation key")
+    messages = []
+    member_sha256 = []
+    for member in intent["members"]:
+        source_path = Path(member["message_path"])
+        source_raw = source_path.read_bytes()
+        if len(source_raw) > 8 * 1024 * 1024:
+            raise ValueError("serial comparator member exceeds transaction diagnostic bound")
+        if hashlib.sha256(source_raw).hexdigest() != member["message_sha256"]:
+            raise ValueError("serial comparator member changed before outer simulation")
+        source = json.loads(source_raw)
+        if source.get("creator") != provider or "@type" in source:
+            raise ValueError("serial comparator transaction crosses provider authority")
+        messages.append(dict({"@type": V3_SINGLE_PROOF_TYPE}, **source))
+        member_sha256.append(member["message_sha256"])
+    unsigned = {
+        "body": {"messages": messages, "memo": "", "timeout_height": "0",
+                 "extension_options": [], "non_critical_extension_options": []},
+        "auth_info": {"signer_infos": [], "fee": {"amount": [], "gas_limit": "0",
+                                                    "payer": "", "granter": ""}, "tip": None},
+        "signatures": [],
+    }
+    unsigned_path = lifecycle.home / "native-v3-chain-frozen" / f"{intent['id']}.unsigned.json"
+    unsigned_path.parent.mkdir(mode=0o700, exist_ok=True)
+    unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
+    node = lifecycle.nodes[0]
+    argv = [str(lifecycle.binary), "tx", "simulate", str(unsigned_path),
+        "--from", aliases[0], "--home", node["home"], "--keyring-backend", "test",
+        "--chain-id", lifecycle.chain, "--node", f'http://127.0.0.1:{node["rpc"]}',
+        "--gas", "auto", "--gas-adjustment", gas_adjustment, "--output", "json"]
+    deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
+    result = artifact.run_bounded_command(argv, deadline,
+        env={key: lifecycle.env[key] for key in ENV_KEYS if key in lifecycle.env})
+    diagnostic = unsigned_path.with_name(unsigned_path.name + ".gas-simulation.json")
+    stdout, stderr = result.stdout.encode(), result.stderr.encode()
+    diagnostic.write_text(json.dumps(dict(command=argv, returncode=result.returncode,
+        member_sha256=member_sha256, unsigned_sha256=artifact.sha256(unsigned_path),
+        stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+        stdout_sha256=hashlib.sha256(stdout).hexdigest(), stderr_sha256=hashlib.sha256(stderr).hexdigest(),
+        stdout_tail=stdout[-8192:].decode("utf-8", errors="replace"),
+        stderr_tail=stderr[-8192:].decode("utf-8", errors="replace")), separators=(",", ":")) + "\n")
+    if result.returncode or len(stdout) > 8 * 1024 * 1024:
+        raise ValueError("bounded serial outer-transaction gas simulation failed")
+    try:
+        gas_used = producer.uint(json.loads(result.stdout)["gas_info"]["gas_used"])
+    except (KeyError, TypeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError("serial outer-transaction gas simulation returned malformed gas") from error
+    gas_limit = int(float(gas_adjustment) * gas_used)
+    if not 1 <= gas_limit <= 64_000_000:
+        raise ValueError("simulated serial outer-transaction gas exceeds chain diagnostic bound")
+    unsigned["auth_info"]["fee"]["gas_limit"] = str(gas_limit)
+    unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
+    return dict(member_message_sha256=member_sha256, gas_limit=gas_limit, simulation_attempts=1,
+                simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
+                simulation_diagnostic=str(diagnostic), unsigned_path=str(unsigned_path),
+                unsigned_sha256=artifact.sha256(unsigned_path), gas_used=gas_used)
+
+
 def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, directories):
     inventory = lifecycle.home / "native-v3-chain-inventory"
     inventory.mkdir(mode=0o700)
@@ -2250,21 +2315,20 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
             prefix = directory / f"provider-{slot}-{profile}"
             if rows[0]["submission_mode"] == "serial-messages":
                 for index, intent in enumerate(rows):
-                    unsigned = prefix.with_name(prefix.name + f"-{index}.unsigned.jsonl")
+                    simulation = simulations[intent["id"]]
+                    unsigned = Path(simulation["unsigned_path"])
                     signed = prefix.with_name(prefix.name + f"-{index}.signed.json")
-                    member_simulations = [simulations[member["id"]] for member in intent["members"]]
-                    unsigned.write_text("".join(Path(row["unsigned_path"]).read_text()
-                                                for row in member_simulations))
-                    expected_messages = [json.loads(line)["body"]["messages"][0]
-                                         for line in unsigned.read_text().splitlines()]
-                    gas_limit = sum(row["gas_limit"] for row in member_simulations)
+                    unsigned_value = json.loads(unsigned.read_text())
+                    expected_messages = unsigned_value["body"]["messages"]
+                    gas_limit = simulation["gas_limit"]
                     serial_common = list(common)
                     serial_common[serial_common.index("--sequence") + 1] = str(sequence + index)
-                    command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append",
+                    command([str(lifecycle.binary), "tx", "sign", str(unsigned),
                              *serial_common, "--output-document", str(signed)], 300)
-                    signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
-                    if len(signed_values) != 1:
-                        raise ValueError("append sign-batch returned an incomplete transaction inventory")
+                    try:
+                        signed_values = [json.loads(signed.read_text())]
+                    except (OSError, json.JSONDecodeError) as error:
+                        raise ValueError("tx sign returned an incomplete serial transaction") from error
                     pending.append(validate_frozen_signed_transaction(
                         intent, signed_values[0], expected_messages, gas_limit, sequence + index, signed))
                     encoding_sources.append(signed)
@@ -2699,7 +2763,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         by_slot[row["slot"]].append(row)
     simulated = []
     expected_messages = sum(row["proof_messages"] for row in profiles)
-    if any(profile["submission_mode"] != "batch-message" for profile in profiles):
+    if any(profile["submission_mode"] == "separate" for profile in profiles):
         def simulate_slot(slot):
             return [(row, *v3_generate_only_gas(lifecycle, row["message_path"], row["provider"],
                                                 gas_adjustment=gas_adjustment))
@@ -2729,16 +2793,24 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 return intent["id"], simulation
             with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
                 simulations.update(pool.map(simulate_batch, intents))
+        elif profile["submission_mode"] == "serial-messages":
+            def simulate_serial(intent):
+                return intent["id"], v3_simulate_serial_outer_gas(
+                    lifecycle, intent, gas_adjustment=gas_adjustment)
+            with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
+                simulations.update(pool.map(simulate_serial, intents))
+        if profile["submission_mode"] != "separate":
+            doc["gas_preflight"].extend(dict(id=intent["id"], profile=profile["name"],
+                slot=intent["slot"], submission_mode=profile["submission_mode"],
+                member_ids=[member["id"] for member in intent["members"]], **simulations[intent["id"]])
+                for intent in intents)
+            lifecycle.save()
         if len(intents) != profile["measured_transactions"]:
             raise ValueError("transaction intent count differs from the selected submission shape")
         max_block_gas = artifact.integer(
             lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
-        if profile["submission_mode"] == "serial-messages":
-            total_gas = sum(sum(simulations[member["id"]]["gas_limit"] for member in intent["members"])
-                            for intent in intents)
-        else:
-            total_gas = sum(simulations[intent["id"] if profile["submission_mode"] == "batch-message"
-                                        else intent["members"][0]["id"]]["gas_limit"] for intent in intents)
+        total_gas = sum(simulations[intent["id"] if profile["submission_mode"] != "separate"
+                                    else intent["members"][0]["id"]]["gas_limit"] for intent in intents)
         minimum_gas_blocks = native_v3_minimum_gas_blocks(total_gas, max_block_gas)
         required_margin = minimum_gas_blocks + 10
         profile_deadline_height = min(row["deadline_height"] for row in

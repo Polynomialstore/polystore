@@ -2907,45 +2907,67 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
         self.assertEqual(values, [{"session_id": str(index), "height": 42} for index in range(8)])
         self.assertEqual(workload.v3_session_queries(object(), [], 42), [])
 
-    def test_serial_comparator_append_signs_ordered_existing_messages_once(self):
+    def test_serial_comparator_simulates_and_signs_one_large_outer_transaction(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             messages = self._messages(tmp, 8)
             profile = dict(name="1kib", submission_mode="serial-messages", batch_size=8)
             intent = workload.build_native_v3_transaction_intents(messages, profile, home / "intents")[0]
-            simulations = {}
-            for index, row in enumerate(messages):
+            for row in messages:
                 source = json.loads(Path(row["message_path"]).read_text())
-                source["padding"] = "x" * 70_000
-                unsigned = home / f"unsigned-{index}.json"
-                unsigned.write_text(json.dumps({"body": {"messages": [dict({"@type": workload.V3_SINGLE_PROOF_TYPE}, **source)]},
-                    "auth_info": {"fee": {"gas_limit": "10"}}}, separators=(",", ":")) + "\n")
-                simulations[row["id"]] = {"unsigned_path": str(unsigned), "gas_limit": 10}
+                source["padding"] = "x" * 9_000
+                Path(row["message_path"]).write_text(json.dumps(source, separators=(",", ":")) + "\n")
+                row["message_sha256"] = artifact.sha256(row["message_path"])
             provider = AUDIT_ADDRESSES[0]
             lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="bench",
-                nodes=[{"home": "/node"}], signers={f"provider{i}": address
+                deadline=artifact.monotonic_ns() + 60 * 10**9, env={},
+                nodes=[{"home": "/node", "rpc": 1234}], signers={f"provider{i}": address
                     for i, address in enumerate(AUDIT_ADDRESSES[:8])})
+            simulation_result = SimpleNamespace(returncode=0,
+                stdout=json.dumps({"gas_info": {"gas_used": "41"}}), stderr="")
+            with patch.object(artifact, "run_bounded_command", return_value=simulation_result) as simulate:
+                simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (41, 65))
+            simulate_argv = simulate.call_args.args[0]
+            self.assertEqual(simulate_argv[1:3], ["tx", "simulate"])
+            self.assertEqual(simulate_argv[simulate_argv.index("--gas-adjustment") + 1], "1.6")
+            simulated_unsigned = json.loads(Path(simulation["unsigned_path"]).read_text())
+            self.assertEqual(len(simulated_unsigned["body"]["messages"]), 8)
+            self.assertEqual(simulated_unsigned["auth_info"]["fee"]["gas_limit"], "65")
+            self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
+            self.assertEqual(workload.native_v3_minimum_gas_blocks(simulation["gas_limit"] * 12, 70), 12)
             calls = []
             def command(argv, timeout):
                 calls.append(argv)
-                if argv[2] == "sign-batch":
+                if argv[2] == "sign":
                     source = Path(argv[3])
-                    txs = [json.loads(line) for line in source.read_text().splitlines()]
-                    value = {"body": {"messages": [message for tx in txs for message in tx["body"]["messages"]]},
-                        "auth_info": {"fee": {"gas_limit": str(sum(int(tx["auth_info"]["fee"]["gas_limit"]) for tx in txs))},
-                                      "signer_infos": [{"sequence": "4"}]}, "signatures": ["signed"]}
+                    self.assertGreater(source.stat().st_size, 64 * 1024)
+                    value = json.loads(source.read_text())
+                    value["auth_info"].update(signer_infos=[{"sequence": "4"}])
+                    value["signatures"] = ["signed"]
                     Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
                     return ""
                 if argv[2] == "encode":
                     self.assertGreater(Path(argv[3]).stat().st_size, 64 * 1024)
                     return base64.b64encode(b"frozen-tx-0").decode() + "\n"
                 raise AssertionError(f"unexpected command: {argv}")
-            frozen = workload.freeze_native_v3_transactions(lifecycle, [intent], simulations, [profile],
+            frozen = workload.freeze_native_v3_transactions(lifecycle, [intent],
+                {intent["id"]: simulation}, [profile],
                 dict(enumerate(AUDIT_ADDRESSES[:8])),
                 {provider: {"account_number": 3, "sequence": 4}}, command)
-            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])), (1, 80, 8))
-            sign = next(argv for argv in calls if argv[2] == "sign-batch")
-            self.assertIn("--append", sign)
+            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])), (1, 65, 8))
+            self.assertEqual(sum(argv[2] == "sign" for argv in calls), 1)
+            self.assertEqual(sum(argv[2] == "sign-batch" for argv in calls), 0)
+
+            def incomplete(argv, timeout):
+                if argv[2] == "sign":
+                    Path(argv[argv.index("--output-document") + 1]).write_text("")
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+            with self.assertRaisesRegex(ValueError, "incomplete serial transaction"):
+                workload.freeze_native_v3_transactions(lifecycle, [intent],
+                    {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    {provider: {"account_number": 3, "sequence": 4}}, incomplete)
 
     def test_batch_message_signs_large_transactions_individually_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
