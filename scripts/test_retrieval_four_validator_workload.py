@@ -1560,10 +1560,15 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             10 * 64_000_000 + 1, 64_000_000), 11)
         workload.validate_native_v3_capacity_epoch(selected[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("sample-cap", 3688)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 4832)[0], 64_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("sample-cap", 3696)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 4840)[0], 64_000_000)
+        workload.validate_native_v3_capacity_epoch(
+            workload.native_v3_chain_capacity_profiles("sample-cap", 3520)[0], 448_000_000)
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            workload.validate_native_v3_capacity_epoch(
+                workload.native_v3_chain_capacity_profiles("sample-cap", 3528)[0], 448_000_000)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
@@ -2388,12 +2393,15 @@ class HealthyAuditViewsTest(unittest.TestCase):
             constructor.assert_not_called()
         impossible = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "sample-cap",
                                  "--chain-capacity-transactions", "4992"]
-        with patch.object(workload.sys, "argv", common + impossible), \
-             patch.object(workload.sys, "stderr"), \
-             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
-             self.assertRaises(SystemExit):
-            workload.main()
-        constructor.assert_not_called()
+        overhead = required + ["--chain-max-gas", "64000000", "--chain-capacity-profile", "1kib",
+                               "--chain-capacity-transactions", "4992"]
+        for rejected in (impossible, overhead):
+            with patch.object(workload.sys, "argv", common + rejected), \
+                 patch.object(workload.sys, "stderr"), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 self.assertRaises(SystemExit):
+                workload.main()
+            constructor.assert_not_called()
 
     def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
