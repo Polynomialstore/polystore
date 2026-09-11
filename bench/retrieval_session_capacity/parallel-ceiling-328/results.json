@@ -139,10 +139,15 @@
   "comparison": {
     "raw_eight_core_sessions_per_second": 1595.0235265970173,
     "raw_eight_core_sessions_per_day": 137810032.69798228,
+    "co_located_validator_count": 4,
+    "shared_host_verifier_only_sessions_per_second": 398.7558816492543,
+    "shared_host_verifier_only_sessions_per_day": 34452508.17449557,
     "chain_448m_sessions_per_second": 155.15161202310972,
     "chain_448m_sessions_per_day": 13405099.27879668,
     "raw_eight_core_to_chain_448m_ratio": 10.280418655008495,
-    "chain_448m_fraction_of_raw_eight_core": 0.09727230315788864
+    "chain_448m_fraction_of_raw_eight_core": 0.09727230315788864,
+    "shared_host_verifier_only_to_chain_448m_ratio": 2.5701046637521237,
+    "chain_448m_fraction_of_shared_host_verifier_only": 0.38908921263155456
   },
   "conclusion": "execution limited: gas-only reaches a serial FinalizeBlock plateau; the native verifier scales across eight physical cores",
   "daily_equivalent_basis": "short benchmark rate multiplied by 86400; not a sustained 24-hour or end-to-end delivery claim",

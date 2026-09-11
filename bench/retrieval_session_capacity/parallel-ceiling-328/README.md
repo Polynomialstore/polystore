@@ -10,7 +10,7 @@ This short diagnostic isolates the two native verification calls used by one-ope
 | 8 | 0.627 | 1,595.02 | 137.81M |
 | 16 | 0.570 | 1,753.93 | 151.54M |
 
-The retained [gas sweep](../gas-sweep-324/) reached **155.15 sessions/s** and **13.41 million/day** at 448M gas. That is 9.7% of the raw eight-core verifier rate. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
+The retained [gas sweep](../gas-sweep-324/) reached **155.15 sessions/s** and **13.41 million/day** at 448M gas. That is 9.7% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **398.76 sessions/s** (1,595.02 / 4); the measured chain reaches **38.9%** of that shared-host ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
 
 ## BlockSTM stop result
 
