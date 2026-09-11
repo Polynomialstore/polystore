@@ -145,7 +145,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Candidate prepaid cryptography per proof | 500000 gas |
 | Candidate reserved future retention work per open | 100000 gas |
 | Checked-in consensus block gas / bytes | 64000000 / 2097152 |
-| Fresh-genesis activation gas / bytes ceilings | 448000000 / 2097152 |
+| Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
 prepaid for the entire proof list only after all cheap authority, range, shape and
