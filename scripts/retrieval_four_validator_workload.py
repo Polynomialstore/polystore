@@ -4857,7 +4857,7 @@ def main():
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--chain-max-gas", type=int,
-                        choices=(64_000_000, 128_000_000, 256_000_000, 448_000_000, 512_000_000),
+                        choices=(64_000_000, 128_000_000, 256_000_000, 448_000_000),
                         help="Experimental native-v3-chain maximum block gas")
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
                         help="Run one native-v3-chain range shape")

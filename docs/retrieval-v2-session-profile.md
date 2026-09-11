@@ -144,7 +144,8 @@ deputy service or session cancellation independently punishes an assigned provid
 | Shared proof count per message | 64 |
 | Candidate prepaid cryptography per proof | 500000 gas |
 | Candidate reserved future retention work per open | 100000 gas |
-| Activation consensus block gas / bytes ceilings | 64000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
+| Fresh-genesis activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
 prepaid for the entire proof list only after all cheap authority, range, shape and
@@ -169,8 +170,9 @@ provider filesystem enforcement remains in #257.
 `retrieval_v2_activation_height=0` is disabled. A positive scheduled height must
 be a one-indexed epoch boundary `(height-1)%epoch_length=0`, with epoch length >=2.
 Admission rejects a past schedule. BeginBlock executes activation at exactly the
-scheduled height, validates finite positive consensus gas/byte bounds, then stores
-a durable once-active latch. The C4 bounded deal/slot inventory preflight and
+scheduled height, validates finite positive consensus gas/byte bounds no greater
+than 448000000 gas and 2097152 bytes, then stores a durable once-active latch. The
+C4 bounded deal/slot inventory preflight and
 legacy readiness clearing run before that write; implementation does not qualify
 funded activation. Governance cannot unset or move an already active boundary to revive old
 payout paths. Skipping the scheduled boundary fails closed.

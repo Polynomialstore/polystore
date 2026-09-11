@@ -1684,13 +1684,13 @@ class FourValidatorLifecycleTest(unittest.TestCase):
 
     def test_block_gas_override_is_shared_and_recorded(self):
         self.runner.home.mkdir(mode=0o700)
-        self.runner.prepare(max_block_gas=512_000_000)
+        self.runner.prepare(max_block_gas=448_000_000)
         self.assertEqual(self.runner.doc["profile"]["consensus"]["block"],
-                         {"max_bytes": "2097152", "max_gas": "512000000"})
+                         {"max_bytes": "2097152", "max_gas": "448000000"})
         for node in self.runner.nodes:
             genesis = json.loads((Path(node["home"]) / "config/genesis.json").read_text())
             self.assertEqual(genesis["consensus"]["params"]["block"],
-                             {"max_bytes": "2097152", "max_gas": "512000000"})
+                             {"max_bytes": "2097152", "max_gas": "448000000"})
             self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"),
                              self.runner.doc["genesis_sha256"])
 

@@ -101,22 +101,27 @@ func TestGenerationV3ActivationBoundary(t *testing.T) {
 		MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: types.MaxRetrievalV2BlockBytes,
 	}}
 
-	t.Run("scheduled boundary latches irreversibly", func(t *testing.T) {
-		g := setupGenerationV3(t)
-		ctx := g.ctx.WithBlockHeight(2).WithConsensusParams(bounded)
-		params := g.fixture.keeper.GetParams(ctx)
-		params.RetrievalV2ActivationHeight = 101
-		params.RetrievalV3ActivationHeight = 101
-		require.NoError(t, g.fixture.keeper.SetParams(ctx, params))
-		require.NoError(t, g.fixture.keeper.BeginBlock(ctx.WithBlockHeight(101)))
-		active, err := g.fixture.keeper.RetrievalV3Active(ctx.WithBlockHeight(101))
-		require.NoError(t, err)
-		require.True(t, active)
-		latched, err := g.fixture.keeper.RetrievalV3ActivatedHeight.Get(ctx)
-		require.NoError(t, err)
-		require.Equal(t, uint64(101), latched)
-		params.RetrievalV3ActivationHeight = 0
-		require.ErrorContains(t, g.fixture.keeper.SetParams(ctx.WithBlockHeight(102), params), "irreversible")
+	t.Run("supported gas limits latch irreversibly", func(t *testing.T) {
+		for _, maxGas := range []int64{64_000_000, 128_000_000, 256_000_000, types.MaxRetrievalActivationBlockGas} {
+			t.Run(fmt.Sprint(maxGas), func(t *testing.T) {
+				g := setupGenerationV3(t)
+				limits := cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: maxGas, MaxBytes: types.MaxRetrievalV2BlockBytes}}
+				ctx := g.ctx.WithBlockHeight(2).WithConsensusParams(limits)
+				params := g.fixture.keeper.GetParams(ctx)
+				params.RetrievalV2ActivationHeight = 101
+				params.RetrievalV3ActivationHeight = 101
+				require.NoError(t, g.fixture.keeper.SetParams(ctx, params))
+				require.NoError(t, g.fixture.keeper.BeginBlock(ctx.WithBlockHeight(101)))
+				active, err := g.fixture.keeper.RetrievalV3Active(ctx.WithBlockHeight(101))
+				require.NoError(t, err)
+				require.True(t, active)
+				latched, err := g.fixture.keeper.RetrievalV3ActivatedHeight.Get(ctx)
+				require.NoError(t, err)
+				require.Equal(t, uint64(101), latched)
+				params.RetrievalV3ActivationHeight = 0
+				require.ErrorContains(t, g.fixture.keeper.SetParams(ctx.WithBlockHeight(102), params), "irreversible")
+			})
+		}
 	})
 
 	t.Run("absent v2 fails closed", func(t *testing.T) {
@@ -135,7 +140,12 @@ func TestGenerationV3ActivationBoundary(t *testing.T) {
 			want   string
 		}{
 			{name: "missed", height: 102, limits: bounded, want: "missed retrieval v3 activation boundary"},
-			{name: "invalid caps", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas + 1, MaxBytes: types.MaxRetrievalV2BlockBytes}}, want: "requires bounded consensus gas and bytes"},
+			{name: "gas above ceiling", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalActivationBlockGas + 1, MaxBytes: types.MaxRetrievalV2BlockBytes}}, want: "requires bounded consensus gas and bytes"},
+			{name: "zero gas", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: 0, MaxBytes: types.MaxRetrievalV2BlockBytes}}, want: "requires bounded consensus gas and bytes"},
+			{name: "unlimited gas", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: -1, MaxBytes: types.MaxRetrievalV2BlockBytes}}, want: "requires bounded consensus gas and bytes"},
+			{name: "bytes above ceiling", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: types.MaxRetrievalV2BlockBytes + 1}}, want: "requires bounded consensus gas and bytes"},
+			{name: "zero bytes", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: 0}}, want: "requires bounded consensus gas and bytes"},
+			{name: "unlimited bytes", height: 101, limits: cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: -1}}, want: "requires bounded consensus gas and bytes"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				g := setupGenerationV3(t)

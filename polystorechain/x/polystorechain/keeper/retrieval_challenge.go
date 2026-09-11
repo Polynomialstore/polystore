@@ -97,8 +97,8 @@ func (k Keeper) activateRetrievalV2(ctx sdk.Context) error {
 		return err
 	}
 	block := ctx.ConsensusParams().Block
-	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalV2BlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
-		return fmt.Errorf("retrieval v2 activation requires bounded consensus gas and bytes within the qualified candidate profile")
+	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalActivationBlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
+		return fmt.Errorf("retrieval v2 activation requires bounded consensus gas and bytes within the fresh-genesis activation limits")
 	}
 	if err := k.preflightStorageAudits(ctx, params); err != nil {
 		return err
@@ -129,8 +129,8 @@ func (k Keeper) activateRetrievalV3(ctx sdk.Context) error {
 		return err
 	}
 	block := ctx.ConsensusParams().Block
-	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalV2BlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
-		return fmt.Errorf("retrieval v3 activation requires bounded consensus gas and bytes within the qualified candidate profile")
+	if block == nil || block.MaxGas <= 0 || block.MaxGas > types.MaxRetrievalActivationBlockGas || block.MaxBytes <= 0 || block.MaxBytes > types.MaxRetrievalV2BlockBytes {
+		return fmt.Errorf("retrieval v3 activation requires bounded consensus gas and bytes within the fresh-genesis activation limits")
 	}
 	return k.RetrievalV3ActivatedHeight.Set(ctx, params.RetrievalV3ActivationHeight)
 }
