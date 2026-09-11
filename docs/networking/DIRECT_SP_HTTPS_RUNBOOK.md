@@ -114,24 +114,31 @@ Prefer a root-owned deployment path under `/etc/caddy` or `/var/lib/caddy`.
 For local operator-owned cert storage, grant only the `caddy` service user read
 access to the cert/key and traverse access to parent directories.
 
-Renew before expiry:
+Install the repository's user-systemd renewal timer instead of relying on a
+manual command. It renews daily when the certificate is within 30 days of
+expiry, restores the Caddy read ACL, reloads Caddy, and fails visibly in the
+user journal if any step fails:
+
+Prerequisites are lego v4.35.2, `setfacl`, a mode-0600 Cloudflare token env,
+the existing lego state, parent-directory traverse access, and a Caddy local
+admin endpoint that permits the operator to reload the configured server.
+Enable lingering for the operator account so its user timers run after logout
+and start at boot without an interactive login.
 
 ```bash
-export CLOUDFLARE_DNS_API_TOKEN="<token-with-zone-dns-edit>"
-export CLOUDFLARE_ZONE_API_TOKEN="$CLOUDFLARE_DNS_API_TOKEN"
-
-lego \
-  --path "$HOME/.config/polystore-bench/lego" \
-  --email "<operator-email>" \
-  --accept-tos \
-  --dns cloudflare \
-  --domains sp1.polynomialstore.com \
-  --domains sp2.polynomialstore.com \
-  --domains sp3.polynomialstore.com \
-  --key-type ec256 \
-  renew
-
-sudo systemctl reload caddy || sudo systemctl restart caddy
+sudo loginctl enable-linger "$USER"
+test "$(loginctl show-user "$USER" -p Linger --value)" = yes
+mkdir -p ~/.config/systemd/user ~/.config/polystore
+install -d /opt/polystore/scripts
+install -m 755 scripts/renew_provider_certificates.sh /opt/polystore/scripts/
+cp ops/systemd/polystore-provider-cert-renewal.{service,timer} ~/.config/systemd/user/
+cp ops/systemd/env/polystore-provider-cert-renewal.env ~/.config/polystore/
+chmod 600 ~/.config/polystore/polystore-provider-cert-renewal.env
+# Edit the env file, including POLYSTORE_LEGO_EMAIL and the mode-600 token path.
+systemctl --user daemon-reload
+systemctl --user enable --now polystore-provider-cert-renewal.timer
+systemctl --user start polystore-provider-cert-renewal.service
+journalctl --user -u polystore-provider-cert-renewal.service --no-pager
 ```
 
 ## Caddy Configuration

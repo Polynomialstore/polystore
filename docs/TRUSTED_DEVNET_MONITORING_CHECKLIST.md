@@ -4,6 +4,18 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 ## Hub (VPS) — daily checks
 
+- Run the complete public gate from an external host. The checked-in profile
+  pins the public chain IDs, retrieval-v2 activation, 64M/2MiB consensus
+  limits, EVM precompile, denomination metadata, active provider identities,
+  placement eligibility, first-advertised public endpoint routing, TLS lifetime,
+  browser CORS, and advancing blocks. Harmless upload requests to the user-gateway
+  and every provider, retrieval requests, and faucet requests must reach their
+  handlers; the faucet probe accepts its exact
+  malformed-body or missing-token rejection without exercising funding:
+  - `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
+  - `.github/workflows/public-devnet-health.yml` runs the same read-only gate
+    every 15 minutes and supports `workflow_dispatch`; failed runs are the
+    independent alert and log record when the devnet host itself is down.
 - Run the healthcheck script (recommended; `curl` required, `jq` optional):
   - Hub-local ports: `scripts/devnet_healthcheck.sh hub`
   - Public HTTPS endpoints + local router: `scripts/devnet_healthcheck.sh hub --rpc https://rpc.<domain> --lcd https://lcd.<domain> --evm https://evm.<domain> --gateway http://127.0.0.1:8080 --faucet https://faucet.<domain>`
@@ -26,6 +38,10 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 - RAM: `free -h`
 - Open ports (hub-local): `ss -lntp | rg '(:26657|:1317|:8545|:8080|:8081)'`
 - Reverse-proxy/TLS (if used): confirm each public subdomain returns 200s (and CORS headers where needed).
+- Provider certificates managed by external lego files must use
+  `polystore-provider-cert-renewal.timer`; a manually issued certificate alone
+  is not a renewal strategy. Inspect failures with
+  `journalctl --user -u polystore-provider-cert-renewal.service`.
 
 ## Hub — logs
 

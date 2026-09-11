@@ -385,7 +385,7 @@ ensure_metadata() {
   if [ ! -f "$genesis" ]; then
     return 0
   fi
-  python3 - "$genesis" <<'PY' || true
+  python3 - "$genesis" <<'PY'
 import json, sys
 import os
 import re
@@ -447,10 +447,10 @@ def set_uint_param(key, env_key):
         return
     try:
         val = int(raw, 10)
-    except Exception:
-        return
+    except Exception as exc:
+        raise ValueError(f"{env_key} must be a non-negative integer") from exc
     if val < 0:
-        return
+        raise ValueError(f"{env_key} must be a non-negative integer")
     params[key] = str(val)
 
 def set_dec_param(key, env_key):
@@ -571,6 +571,25 @@ if dynamic_enabled is True:
 if isinstance(polystorechain, dict):
     polystorechain["params"] = params
     data["app_state"][module_key] = polystorechain
+
+# These assertions run after collect-gentxs, which may rewrite consensus
+# defaults. A public bootstrap must fail before start if its final genesis
+# cannot support the configured browser retrieval flow.
+assert any(m.get("base") == "aatom" for m in data["app_state"]["bank"]["denom_metadata"])
+assert addr in data["app_state"]["evm"]["params"]["active_static_precompiles"]
+raw_chain_id = (os.getenv("EVM_CHAIN_ID") or "").strip()
+if raw_chain_id:
+    assert raw_chain_id.isdigit() and params.get("eip712_chain_id") == raw_chain_id
+expected_min_bond = parse_coin(os.getenv("POLYSTORE_MIN_PROVIDER_BOND"), default_denom)
+if expected_min_bond is None and env_enabled("POLYSTORE_DEVNET_POLICING_DEFAULTS", "1"):
+    expected_min_bond = {"denom": default_denom, "amount": "150"}
+if expected_min_bond is not None:
+    assert params.get("min_provider_bond") == expected_min_bond
+v2_height = int(params.get("retrieval_v2_activation_height", "0"))
+if v2_height > 0:
+    block = data["consensus"]["params"]["block"]
+    assert block.get("max_gas") == "64000000"
+    assert block.get("max_bytes") == "2097152"
 
 json.dump(data, open(path, "w"), indent=1)
 PY
