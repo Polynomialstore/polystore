@@ -1720,17 +1720,19 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["committed_sampled_chained_proofs_per_second"], .4)
         self.assertAlmostEqual(metrics["committed_kzg_opening_verifications_per_second"], .8)
         self.assertAlmostEqual(
-            metrics["provisional_shared_host_standalone_kzg_session_proxy_per_second"],
-            workload.V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND / 2)
+            metrics["configured_validator_v3_linearized_session_ceiling_per_second"],
+            workload.V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND / 2)
         self.assertAlmostEqual(
-            metrics["provisional_percent_of_shared_host_standalone_kzg_sampled_proof_proxy"],
-            .4 / workload.V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND * 100)
-        self.assertEqual(metrics["provisional_shared_host_standalone_kzg_provenance"]["artifact_path"],
+            metrics["percent_of_configured_validator_v3_verifier_capacity"],
+            .4 / workload.V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND * 100)
+        self.assertEqual(metrics["configured_validator_v3_verifier_provenance"]["artifact_path"],
             "bench/retrieval_session_capacity/parallel-ceiling-328/results.json")
-        self.assertEqual(metrics["provisional_shared_host_standalone_kzg_provenance"]["artifact_commit"],
-            "db9fe2b691935a198e35d3676f2ad71c9aff5f42")
-        self.assertIn("does not execute the active VerifyPolyFSSessionProofBatch",
-            metrics["provisional_shared_host_standalone_kzg_provenance"]["limitation"])
+        self.assertEqual(metrics["configured_validator_v3_verifier_provenance"]["artifact_commit"],
+            "1bf6762d2bce694917833a6f9a626769e9fd7578")
+        self.assertIn("verifyPolyFSChainedProof",
+            metrics["configured_validator_v3_verifier_provenance"]["source_statistic_semantics"])
+        self.assertIn("sample_count=1",
+            metrics["configured_validator_v3_verifier_provenance"]["linearization"])
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")

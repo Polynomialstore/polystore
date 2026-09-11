@@ -72,19 +72,19 @@ V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
 V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
-V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND = 407.57170408990055
-V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_PROVENANCE = {
+V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND = 442.56266798019266
+V3_CONFIGURED_VALIDATOR_V3_VERIFIER_PROVENANCE = {
     "artifact_path": "bench/retrieval_session_capacity/parallel-ceiling-328/results.json",
-    "artifact_commit": "db9fe2b691935a198e35d3676f2ad71c9aff5f42",
-    "benchmark_source_commit": "ad80bfadbe378b09d2ed237fec0e33a7aa0d8d7b",
-    "raw_benchmark_sha256": "56ec69a33cc3a95b8a4727ac5fa336034cda65a178d944290e50a0c9f1c1d1b5",
-    "source_statistic": "comparison.shared_host_verifier_only_sessions_per_second",
+    "artifact_commit": "1bf6762d2bce694917833a6f9a626769e9fd7578",
+    "benchmark_source_commit": "53c197a860cbd88e46709d2e6cf3996d685f7902",
+    "raw_benchmark_sha256": "be001f7961def5e5da94d165e0bd484e1dcf6d9cf966bffb51efdd8b0f900f71",
+    "source_statistic": "comparison.configured_per_validator_verifier_only_sessions_per_second",
     "source_statistic_semantics": (
-        "standalone KZG component throughput expressed as sampled chained-proof equivalents "
-        "on one shared eight-core host, normalized across four validator processes"),
-    "limitation": (
-        "provisional comparison only: this source does not execute the active "
-        "VerifyPolyFSSessionProofBatch verifier path"),
+        "exact pure verifyPolyFSChainedProof throughput for one sampled chained proof per "
+        "session at GOMAXPROCS=2; each configured validator repeats the same transaction stream"),
+    "linearization": (
+        "profiles with more than one sampled chained proof divide the one-sample rate by "
+        "sample_count; the current 1 KiB capacity profile has sample_count=1"),
 }
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
@@ -2509,9 +2509,8 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     proof_sets_per_day = proof_sets_per_second * 86400
     sampled_chained_proofs_per_second = sampled_chained_proofs / commit_seconds
     sampled_chained_proofs_per_day = sampled_chained_proofs_per_second * 86400
-    provisional_verifier_sessions_per_second = (
-        V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND /
-        sample_count)
+    verifier_sessions_per_second = (
+        V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND / sample_count)
     resource_metrics = validator_backlog_resources(
         mempool_samples, backlog, mempool_samples[0]["clock_ticks_per_second"])
     max_mempool_transactions = max(row["transactions"] for sample in mempool_samples
@@ -2529,19 +2528,17 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         committed_sampled_chained_proofs_per_day=sampled_chained_proofs_per_day,
         committed_kzg_opening_verifications_per_second=2 * sampled_chained_proofs_per_second,
         committed_kzg_opening_verifications_per_day=2 * sampled_chained_proofs_per_day,
-        provisional_shared_host_standalone_kzg_sampled_proof_proxy_per_second=(
-            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND),
-        provisional_shared_host_standalone_kzg_openings_per_second=(
-            2 * V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND),
-        provisional_shared_host_standalone_kzg_session_proxy_per_second=(
-            provisional_verifier_sessions_per_second),
-        provisional_shared_host_standalone_kzg_session_proxy_per_day=(
-            provisional_verifier_sessions_per_second * 86400),
-        provisional_percent_of_shared_host_standalone_kzg_sampled_proof_proxy=(
+        configured_validator_v3_one_sample_verifier_sessions_per_second=(
+            V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND),
+        configured_validator_v3_linearized_session_ceiling_per_second=(
+            verifier_sessions_per_second),
+        configured_validator_v3_linearized_session_ceiling_per_day=(
+            verifier_sessions_per_second * 86400),
+        percent_of_configured_validator_v3_verifier_capacity=(
             sampled_chained_proofs_per_second /
-            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_SAMPLED_PROOF_PROXY_PER_SECOND * 100),
-        provisional_shared_host_standalone_kzg_provenance=dict(
-            V3_PROVISIONAL_SHARED_HOST_STANDALONE_KZG_PROVENANCE),
+            V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND * 100),
+        configured_validator_v3_verifier_provenance=dict(
+            V3_CONFIGURED_VALIDATOR_V3_VERIFIER_PROVENANCE),
         complete_proof_sets_per_second=proof_sets_per_second,
         complete_proof_sets_per_day=proof_sets_per_day,
         complete_proof_sets_in_saturated_interval=complete_proof_sets,
