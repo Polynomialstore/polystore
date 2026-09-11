@@ -1899,6 +1899,14 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
                     producer.uint(message.get("slot", 0)) != slot or
                     [producer.uint(proof.get("ordinal", V3_MAX_SAMPLES)) for proof in message.get("proofs", [])] != row.get("ordinals")):
                 raise ValueError("v3 exporter changed frozen message/context/provider intent")
+            for proof_index, sample in enumerate(message.get("proofs", [])):
+                chained = sample.get("proof", {})
+                for field in ("manifest_opening", "root_table_du_commitment",
+                              "blob_commitment", "kzg_opening_proof"):
+                    value = producer.b64(chained.get(field, ""), 48)
+                    if value in (bytes(48), b"\xc0" + bytes(47)):
+                        raise ValueError(
+                            f"v3 exported proof {proof_index} has identity {field}")
             ordered.append(dict(row, session_index=session_index, provider=provider))
     return dict(directory=str(inventory),
                 manifests=[str(manifest) for _, batches in manifests for manifest, _ in batches],
@@ -3560,6 +3568,13 @@ def copy_fixture(source, destination, k):
                 metadata_sha256=hashlib.sha256(raw_meta).hexdigest())
 
 
+def file_is_nonconstant(path):
+    with Path(path).open("rb") as source:
+        first = source.read(1)
+        return bool(first) and any(byte != first[0]
+            for chunk in iter(lambda: source.read(1024 * 1024), b"") for byte in chunk)
+
+
 def transaction_job(lifecycle, signer, args, *, kind="setup", gas="2000000"):
     home, node = lifecycle.nodes[0]["home"], lifecycle.nodes[0]
     common = ["--home", home, "--node", f'http://127.0.0.1:{node["rpc"]}']
@@ -4981,6 +4996,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             for _ in range(payload_bytes // len(block)):
                 output.write(block)
             output.write(block[:payload_bytes % len(block)])
+        if payload.stat().st_size != payload_bytes or not file_is_nonconstant(payload):
+            raise ValueError("retrieval payload must be exact-length and nonconstant")
         doc["payload"] = dict(path=str(payload), bytes=payload.stat().st_size, sha256=artifact.sha256(payload))
         uploaded = json.loads(command([curl, "--silent", "--show-error", "--fail", "--max-time", "180",
             "--form-string", "owner=" + lifecycle.signers["owner0"], "--form-string", "file_path=payload.bin",

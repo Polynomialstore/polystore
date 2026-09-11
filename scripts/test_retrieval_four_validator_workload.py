@@ -7,6 +7,7 @@ import inspect
 import io
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -861,6 +862,14 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
     ROOT = "11" * 32
     INTEGRITY = "22" * 32
     SESSION = "33" * 32
+
+    def test_payload_nonconstant_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "payload.bin"
+            for raw, expected in ((b"", False), (b"\x07" * 2048, False),
+                                  (b"\x07" * 2047 + b"\x08", True)):
+                path.write_bytes(raw)
+                self.assertEqual(workload.file_is_nonconstant(path), expected)
 
     def session(self, *, expired=False, refunded=False):
         bitmap = bytearray(17)
@@ -2222,7 +2231,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                     message_path = Path(request["output_path"])
                     message = dict(creator=provider,
                         session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
-                        slot=str(slot), proofs=[dict(ordinal=str(slot))])
+                        slot=str(slot), proofs=[dict(ordinal=str(slot), proof=dict(
+                            manifest_opening=base64.b64encode(bytes([1]) * 48).decode(),
+                            root_table_du_commitment=base64.b64encode(bytes([2]) * 48).decode(),
+                            blob_commitment=base64.b64encode(bytes([3]) * 48).decode(),
+                            kzg_opening_proof=base64.b64encode(bytes([4]) * 48).decode()))])
                     raw = json.dumps(message, separators=(",", ":")).encode()
                     message_path.write_bytes(raw)
                     rows.append(dict(session_id=request["session_id"], message_path=str(message_path),
@@ -2241,6 +2254,57 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                              [(session, slot) for session in range(9) for slot in range(8)])
             self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
                              list(providers.values()))
+
+    def test_native_chain_inventory_rejects_identity_commitment_or_opening(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+            provider = providers[0]
+            directories = {}
+            for address in providers.values():
+                directories[address] = home / address
+                directories[address].mkdir()
+            lifecycle = SimpleNamespace(home=home, chain="polystore_290-1",
+                env={"POLYSTORE_TRUSTED_SETUP": "/setup"},
+                deadline=artifact.monotonic_ns() + 30 * 10**9)
+            session = dict(session_id=f"{1:064x}", evidence_height=70,
+                before_proofs={"session": {"obligations": [{"slot": 0}]}},
+                context_hash=f"{9:064x}", seed=f"{17:064x}")
+
+            for field, identity in (("manifest_opening", bytes(48)),
+                                    ("root_table_du_commitment", b"\xc0" + bytes(47)),
+                                    ("blob_commitment", bytes(48)),
+                                    ("kzg_opening_proof", b"\xc0" + bytes(47))):
+                def export(argv, deadline, env, field=field, identity=identity):
+                    manifest_path = Path(env["POLYSTORE_RETRIEVAL_EXPORT_MANIFEST"])
+                    request = json.loads(manifest_path.read_text())["v3_sessions"][0]
+                    chained = {name: base64.b64encode(bytes([index + 1]) * 48).decode()
+                               for index, name in enumerate(("manifest_opening",
+                                   "root_table_du_commitment", "blob_commitment",
+                                   "kzg_opening_proof"))}
+                    chained[field] = base64.b64encode(identity).decode()
+                    message = dict(creator=provider,
+                        session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
+                        slot="0", proofs=[dict(ordinal="0", proof=chained)])
+                    raw = json.dumps(message, separators=(",", ":")).encode()
+                    message_path = Path(request["output_path"])
+                    message_path.write_bytes(raw)
+                    result = dict(messages=[dict(session_id=request["session_id"],
+                        message_path=str(message_path),
+                        message_sha256=hashlib.sha256(raw).hexdigest(),
+                        context_hash=session["context_hash"], seed=session["seed"],
+                        slot=0, ordinals=[0], generation_ms=1.0)])
+                    Path(str(manifest_path) + ".result.json").write_text(json.dumps(result))
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+                with self.subTest(field=field), patch.object(
+                        artifact, "run_bounded_command", side_effect=export), \
+                        self.assertRaisesRegex(ValueError, "identity " + field):
+                    workload.export_native_v3_chain_inventory(lifecycle, Path("/exporter"),
+                        [session], providers, directories)
+                for path in home.glob("native-v3-chain-inventory*"):
+                    if path.is_dir():
+                        shutil.rmtree(path)
 
     def test_native_chain_exporter_identity_records_exact_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
