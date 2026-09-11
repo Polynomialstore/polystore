@@ -4745,6 +4745,12 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         doc["disk_guard"] = dict(preflight_free_bytes=preflight_free,
                                  preflight_minimum_bytes=V3_PREFLIGHT_FREE_BYTES,
                                  runtime_minimum_bytes=V3_ABORT_FREE_BYTES)
+    native_chain_inventory = None
+    if native_chain is not None and native_chain.get("profile"):
+        if native_chain.get("measured_sessions") is not None:
+            native_chain_inventory = f"{native_chain['measured_sessions']:,} logical proof sessions"
+        else:
+            native_chain_inventory = f"{native_chain['measured_transactions']:,} frozen native proof transactions"
     doc.update(mode=("four-validator-native-v3-browser-qualification" if native_browser is not None else
                      "four-validator-native-v3-chain-capacity" if native_chain is not None else
                      "four-validator-native-v3-cross-audit-diagnostic" if native_cross_audit else
@@ -4753,7 +4759,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         workload=(f"one {v3_bytes}-byte FAT v3 K8 PUBLIC deal; production DealDetail sponsored browser retrieval"
                   if native_browser is not None else
                   (f"one 16 MiB FAT v3 K8 deal; {native_chain['profile']} range; "
-                   f"{native_chain['measured_transactions']:,} frozen native proof transactions"
+                   f"{native_chain_inventory}"
                    if native_chain.get("profile") else
                    "one 16 MiB FAT v3 K8 deal; 1 KiB, 992 KiB, and 16 MiB ranges; 2,640 frozen native proof transactions")
                   if native_chain is not None else
