@@ -193,28 +193,33 @@ func checkedAddAmountV3(a, b cosmosmath.Int) (cosmosmath.Int, error) {
 	return cosmosmath.NewIntFromBigInt(v), nil
 }
 
-func (k Keeper) retrievalSessionV3(ctx sdk.Context, sessionID []byte) (types.RetrievalSessionV3, error) {
+func (k Keeper) validatedRetrievalSessionV3(ctx sdk.Context, sessionID []byte) (types.RetrievalSessionV3, retrievalchallenge.ContextV3, error) {
 	if len(sessionID) != 32 {
-		return types.RetrievalSessionV3{}, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+		return types.RetrievalSessionV3{}, retrievalchallenge.ContextV3{}, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
 	s, err := k.RetrievalSessionsV3.Get(ctx, sessionID)
 	if err != nil {
-		return types.RetrievalSessionV3{}, err
+		return types.RetrievalSessionV3{}, retrievalchallenge.ContextV3{}, err
 	}
 	if !bytes.Equal(s.SessionId, sessionID) || s.ChainId != ctx.ChainID() {
-		return types.RetrievalSessionV3{}, sdkerrors.ErrInvalidRequest.Wrap("v3 session key or chain ID mismatch")
+		return types.RetrievalSessionV3{}, retrievalchallenge.ContextV3{}, sdkerrors.ErrInvalidRequest.Wrap("v3 session key or chain ID mismatch")
 	}
-	if _, err := validateStoredSessionV3(s); err != nil {
-		return types.RetrievalSessionV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	c, err := validateStoredSessionV3(s)
+	if err != nil {
+		return types.RetrievalSessionV3{}, retrievalchallenge.ContextV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	return s, c, nil
+}
+
+func (k Keeper) retrievalSessionV3(ctx sdk.Context, sessionID []byte) (types.RetrievalSessionV3, error) {
+	s, _, err := k.validatedRetrievalSessionV3(ctx, sessionID)
+	if err != nil {
+		return types.RetrievalSessionV3{}, err
 	}
 	return s, nil
 }
 
-func materializeV3Samples(s *types.RetrievalSessionV3, anchor []byte) ([]retrievalchallenge.ChallengeV3, error) {
-	c, err := validateStoredSessionV3(*s)
-	if err != nil {
-		return nil, err
-	}
+func materializeV3Samples(s *types.RetrievalSessionV3, c retrievalchallenge.ContextV3, anchor []byte) ([]retrievalchallenge.ChallengeV3, error) {
 	seed, err := c.Seed(anchor)
 	if err != nil {
 		return nil, err
@@ -248,7 +253,7 @@ func materializeV3Samples(s *types.RetrievalSessionV3, anchor []byte) ([]retriev
 	return challenges, nil
 }
 
-func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSessionV3) ([]retrievalchallenge.ChallengeV3, error) {
+func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSessionV3, c retrievalchallenge.ContextV3) ([]retrievalchallenge.ChallengeV3, error) {
 	if s.ChainId != ctx.ChainID() {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session chain ID mismatch")
 	}
@@ -259,7 +264,7 @@ func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSession
 	if err != nil || len(anchor.Seed) != 32 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session challenge seed unavailable")
 	}
-	return materializeV3Samples(s, anchor.Seed)
+	return materializeV3Samples(s, c, anchor.Seed)
 }
 
 func openRequestMatchesV3(s types.RetrievalSessionV3, creator string, dealID, generation uint64, r types.RetrievalRangeV3, nonce, deadline uint64, funding types.RetrievalSessionFunding) bool {
@@ -656,7 +661,7 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 	if err != nil {
 		return preparedRetrievalSessionProofV3{}, err
 	}
-	s, err := k.retrievalSessionV3(ctx, sessionID)
+	s, challengeContext, err := k.validatedRetrievalSessionV3(ctx, sessionID)
 	if err != nil {
 		return preparedRetrievalSessionProofV3{}, err
 	}
@@ -674,7 +679,7 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 	for i := range s.Obligations {
 		samplesBefore += s.Obligations[i].SampleCount
 	}
-	challenges, err := k.v3AnchorAndChallenges(ctx, &s)
+	challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
 	if err != nil {
 		return preparedRetrievalSessionProofV3{}, err
 	}
@@ -858,7 +863,7 @@ func (k msgServer) AcknowledgeRetrievalObligationV3(goCtx context.Context, msg *
 	if err != nil {
 		return nil, err
 	}
-	s, err := k.retrievalSessionV3(ctx, msg.SessionId)
+	s, challengeContext, err := k.validatedRetrievalSessionV3(ctx, msg.SessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -873,7 +878,7 @@ func (k msgServer) AcknowledgeRetrievalObligationV3(goCtx context.Context, msg *
 	for i := range s.Obligations {
 		samplesBefore += s.Obligations[i].SampleCount
 	}
-	challenges, err := k.v3AnchorAndChallenges(ctx, &s)
+	challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
 	if err != nil {
 		return nil, err
 	}
