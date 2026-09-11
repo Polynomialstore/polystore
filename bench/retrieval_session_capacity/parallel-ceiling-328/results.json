@@ -1,7 +1,7 @@
 {
   "schema": "polystore-retrieval-v3-parallel-verifier-ceiling-v1",
   "issue": 328,
-  "scope": "pure one-opening retrieval-v3 chained-proof verification; excludes transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
+  "scope": "one sampled retrieval-v3 chained proof for one session; each proof performs two KZG opening verifications (manifest and blob); excludes transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
   "provenance": {
     "source_commit": "ad80bfadbe378b09d2ed237fec0e33a7aa0d8d7b",
     "host": "mikers@192.168.0.111",
@@ -137,11 +137,16 @@
     }
   ],
   "comparison": {
+    "kzg_opening_verifications_per_chained_proof": 2,
     "raw_eight_core_sessions_per_second": 1630.2868163596022,
     "raw_eight_core_sessions_per_day": 140856780.93346962,
+    "raw_eight_core_kzg_opening_verifications_per_second": 3260.5736327192044,
+    "raw_eight_core_kzg_opening_verifications_per_day": 281713561.86693925,
     "co_located_validator_count": 4,
     "shared_host_verifier_only_sessions_per_second": 407.57170408990055,
     "shared_host_verifier_only_sessions_per_day": 35214195.233367406,
+    "shared_host_verifier_only_kzg_opening_verifications_per_second": 815.1434081798011,
+    "shared_host_verifier_only_kzg_opening_verifications_per_day": 70428390.46673481,
     "chain_448m_sessions_per_second": 155.15161202310972,
     "chain_448m_sessions_per_day": 13405099.27879668,
     "raw_eight_core_to_chain_448m_ratio": 10.507701435398378,
