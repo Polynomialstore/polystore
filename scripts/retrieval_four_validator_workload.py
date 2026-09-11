@@ -1016,6 +1016,16 @@ def v3_session_query(lifecycle, session_id, height=None):
     return rows[0]
 
 
+def v3_session_queries(lifecycle, sessions, height):
+    """Read a fixed session inventory concurrently while preserving input order."""
+    if not sessions:
+        return []
+    def query(row):
+        return v3_session_query(lifecycle, row["session_id"], height)
+    with ThreadPoolExecutor(max_workers=min(V3_SYSTEMATIC_PROVIDERS, len(sessions))) as pool:
+        return list(pool.map(query, sessions))
+
+
 def v3_retained_generations(lifecycle, *, deal_id, root, height=None):
     """Record the all-validator retention union without attributing its source."""
     if height is None:
@@ -2650,9 +2660,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             row["session_id"] = session_id
         opened_heights.append(height)
     evidence_height = wait(max(opened_heights) + 2)
-    for row in sessions:
+    for row, view in zip(sessions, v3_session_queries(lifecycle, sessions, evidence_height)):
         profile = next(value for value in profiles if value["name"] == row["profile"])
-        view = v3_session_query(lifecycle, row["session_id"], evidence_height)
         session, accepted = validate_v3_session(view, session_id=row["session_id"], deal_id=deal["id"],
             owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
             chain_id=lifecycle.chain, deadline_height=row["deadline_height"], range_start=row["range_start"],
@@ -2832,8 +2841,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         if audits(final_height, False, ready_epoch) != current_audits:
             raise ValueError("audit authority or coverage changed during the capacity profile")
         profile_sessions = sessions[profile["session_start"]:profile["session_end"]]
-        for row in profile_sessions:
-            state = v3_session_query(lifecycle, row["session_id"], final_height)
+        for row, state in zip(profile_sessions,
+                              v3_session_queries(lifecycle, profile_sessions, final_height)):
             _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"],
                 owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
                 chain_id=lifecycle.chain, deadline_height=row["deadline_height"], range_start=row["range_start"],

@@ -2866,6 +2866,29 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "exact local batches"):
                 workload.build_native_v3_transaction_intents(messages, profile, Path(tmp) / "bad")
 
+    def test_session_queries_are_bounded_parallel_and_ordered(self):
+        sessions = [{"session_id": str(index)} for index in range(8)]
+        barrier = threading.Barrier(8)
+        lock = threading.Lock()
+        active = peak = 0
+
+        def query(lifecycle, session_id, height):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            barrier.wait(timeout=5)
+            time.sleep((7 - int(session_id)) / 10_000)
+            with lock:
+                active -= 1
+            return {"session_id": session_id, "height": height}
+
+        with patch.object(workload, "v3_session_query", side_effect=query):
+            values = workload.v3_session_queries(object(), sessions, 42)
+        self.assertEqual(peak, 8)
+        self.assertEqual(values, [{"session_id": str(index), "height": 42} for index in range(8)])
+        self.assertEqual(workload.v3_session_queries(object(), [], 42), [])
+
     def test_serial_comparator_append_signs_ordered_existing_messages_once(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
