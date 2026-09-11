@@ -442,6 +442,8 @@ func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	ctx, msg, _ := env.challengedBenchSession(b, activateSessionFixture(b, env.f), 1, 1)
 	session, err := env.f.keeper.RetrievalSessions.Get(ctx, msg.SessionId)
 	require.NoError(b, err)
+	require.Equal(b, uint32(2), session.ChallengeVersion)
+	require.Len(b, msg.Proofs, 1)
 	challenge, err := types.RetrievalChallengeContext(session)
 	require.NoError(b, err)
 	contextHash, err := challenge.Hash()
@@ -456,7 +458,7 @@ func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	require.NotEqual(b, infinity, proof.BlobCommitment)
 	require.NotEqual(b, infinity, proof.KzgOpeningProof)
 	ok, err := crypto_ffi.VerifyPolyFSSessionProofBatch(
-		env.deal.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
+		session.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
 	require.NoError(b, err)
 	require.True(b, ok)
 	b.ResetTimer()
@@ -464,7 +466,7 @@ func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ok, err := crypto_ffi.VerifyPolyFSSessionProofBatch(
-				env.deal.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
+				session.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
 			if err != nil || !ok {
 				b.Fatalf("active V3 batch verify failed: ok=%v err=%v", ok, err)
 			}
