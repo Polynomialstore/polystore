@@ -1560,15 +1560,15 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             10 * 64_000_000 + 1, 64_000_000), 11)
         workload.validate_native_v3_capacity_epoch(selected[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("1kib", 4832)[0], 64_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 4608)[0], 64_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("1kib", 4840)[0], 64_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 4616)[0], 64_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("sample-cap", 3520)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("sample-cap", 2248)[0], 448_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("sample-cap", 3528)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("sample-cap", 2256)[0], 448_000_000)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
