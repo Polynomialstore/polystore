@@ -24,7 +24,17 @@ The host was therefore underutilized at the measured normal chain configuration.
 
 ## Reproduce
 
-The checked-in reproducer is `scripts/retrieval_four_validator_workload.py --mode native-v3-chain`. It requires the product chain, native library, gateway, CLI, source checkout, proof exporter, and a fresh output directory:
+The checked-in reproducer is `scripts/retrieval_four_validator_workload.py --mode native-v3-chain`. Build the proof exporter as the gateway package's opt-in Go test executable, linked to the same native library used by the run:
+
+```sh
+export POLYSTORE_CORE_RELEASE=/path/to/polystore_core/target/release
+export POLYSTORE_PROOF_EXPORTER=/path/to/retrieval-inventory-exporter.test
+(cd polystore_gateway && \
+  CGO_LDFLAGS="-L$POLYSTORE_CORE_RELEASE -lpolystore_core" \
+  go test -c -o "$POLYSTORE_PROOF_EXPORTER" .)
+```
+
+Then supply the product chain, native library, gateway, CLI, source checkout, exporter, and a fresh output directory:
 
 ```sh
 python3 scripts/retrieval_four_validator_workload.py \
@@ -34,7 +44,7 @@ python3 scripts/retrieval_four_validator_workload.py \
   --gateway-binary /path/to/polystore_gateway \
   --cli-binary /path/to/polystore_cli \
   --product-source "$PWD" \
-  --proof-exporter /path/to/native_chain_exporter.py \
+  --proof-exporter "$POLYSTORE_PROOF_EXPORTER" \
   --home /path/to/new-run-directory \
   --timeout 3600
 ```
