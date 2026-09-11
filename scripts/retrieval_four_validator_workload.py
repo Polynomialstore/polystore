@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded four-validator diagnostics; never capacity qualification.
+"""Bounded four-validator diagnostics and native-v3 chain-capacity qualification.
 
 Settlement smoke uses exported K8/K2 fixtures without provider transport.
 Healthy-providers uses canonical K2 ingest and three provider-daemons to check
@@ -8,10 +8,14 @@ proof load.
 Native-v3-browser verifies one delivered file through the production browser,
 worker, OPFS, EVM, gateway, and provider path. Owned services start only when
 this command is explicitly invoked.
+Native-v3-chain saturates proof confirmation from frozen signed transactions;
+it excludes provider transport, proof preparation, ACK, refund and full lifecycle.
 """
 import argparse
 import base64
+import calendar
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -24,8 +28,10 @@ import sqlite3
 import subprocess
 import sys
 import time
+import threading
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait as wait_futures
 
 import retrieval_bench_artifact as artifact
@@ -43,6 +49,7 @@ OPEN_SESSION_BATCH_BASE_GAS = 100_000
 OPEN_SESSION_BATCH_MAX = 64
 OPEN_SESSION_BATCH_GAS_CAP = OPEN_SESSION_BATCH_BASE_GAS + OPEN_SESSION_PREPARATION_GAS * OPEN_SESSION_BATCH_MAX
 V3_PILOT_BYTES = 16 * 1024 * 1024
+V3_DATA_BLOB_PAYLOAD_BYTES = 126_976
 V3_USER_MDU_BYTES = 8_126_464
 V3_BROWSER_DEFAULT_BYTES = 1024
 V3_BROWSER_SIZES = (1024, 16_777_217, 130_023_424, 1_073_741_824)
@@ -56,10 +63,11 @@ V3_BUSY_MAX_ATTEMPTS = 4
 V3_BUSY_RETRY_SECONDS = 2
 V3_PREFLIGHT_FREE_BYTES = 2 * 1024**3
 V3_ABORT_FREE_BYTES = 768 * 1024**2
-V3_CHAIN_SESSIONS = 8
-V3_CHAIN_WARMUPS = 8
-V3_CHAIN_MEASURED = 56
-V3_CHAIN_MEASURED_CAP_SECONDS = 45
+V3_CHAIN_CAPACITY_RANGES = (1024, 8 * V3_DATA_BLOB_PAYLOAD_BYTES, V3_PILOT_BYTES)
+V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
+V3_CHAIN_SESSION_TTL_BLOCKS = 4096
+V3_CHAIN_BACKLOG_SECONDS = 10
+V3_CHAIN_DRAIN_SECONDS = 300
 V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
 V3_CROSS_AUDIT_MEASURED = 360
@@ -75,11 +83,32 @@ V3_PROVIDER_TIMING_SCHEMA = "polystore-v3-provider-timing-v1"
 V3_PROVIDER_TIMING_MAX_NS = 90 * 10**9
 
 
-def native_v3_chain_offsets():
-    """Fixed 1/2/4 tx/s stages: 8 + 16 + 32 = 56 transactions."""
-    return ([i * 10**9 for i in range(8)] +
-            [8 * 10**9 + i * 500_000_000 for i in range(16)] +
-            [16 * 10**9 + i * 250_000_000 for i in range(32)])
+def native_v3_range_shape(range_bytes, *, range_start=0, file_bytes=V3_PILOT_BYTES):
+    """Return the exact v3 chain-proof shape for one logical range."""
+    range_bytes = artifact.integer(range_bytes, "v3 range bytes", 1, file_bytes)
+    range_start = artifact.integer(range_start, "v3 range start", 0, file_bytes - range_bytes)
+    first = range_start // V3_DATA_BLOB_PAYLOAD_BYTES
+    last = (range_start + range_bytes - 1) // V3_DATA_BLOB_PAYLOAD_BYTES
+    population = last - first + 1
+    slots = [slot for slot in range(V3_SYSTEMATIC_PROVIDERS)
+             if any(blob % V3_SYSTEMATIC_PROVIDERS == slot for blob in range(first, last + 1))]
+    return dict(range_bytes=range_bytes, range_start=range_start, first_blob=first,
+                last_blob=last, population=population, sample_count=min(population, V3_MAX_SAMPLES),
+                obligation_slots=slots, proof_transactions=len(slots))
+
+
+def native_v3_chain_capacity_profiles():
+    """The three distinct range shapes needed for a chain-only capacity result."""
+    names = ("1kib", "eight-blobs", "sample-cap")
+    profiles = []
+    for name, size, transactions in zip(
+            names, V3_CHAIN_CAPACITY_RANGES, V3_CHAIN_CAPACITY_TRANSACTIONS):
+        shape = native_v3_range_shape(size)
+        if transactions % shape["proof_transactions"]:
+            raise ValueError("native v3 capacity inventory must contain complete proof sets")
+        profiles.append(dict(name=name, measured_transactions=transactions,
+            sessions=transactions // shape["proof_transactions"], **shape))
+    return profiles
 
 
 def native_v3_cross_audit_schedule():
@@ -239,8 +268,11 @@ def v3_bitmap_ordinals(session):
 
 def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonce,
                         polyfs_root, integrity_root, chain_id, deadline_height,
-                        file_bytes=V3_PILOT_BYTES, expired=False, refunded=False):
+                        file_bytes=V3_PILOT_BYTES, range_start=0, range_length=None,
+                        expired=False, refunded=False):
     """Fail closed on the v3 fields that define pilot claims and liabilities."""
+    shape = native_v3_range_shape(range_length or file_bytes,
+                                  range_start=range_start, file_bytes=file_bytes)
     session = response.get("session")
     if not isinstance(session, dict):
         raise ValueError("v3 session query is missing session state")
@@ -254,15 +286,15 @@ def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonc
             producer.uint(session.get("file_record_index", 1)) != 0 or
             producer.uint(session.get("file_start_offset", 1)) != 0 or
             producer.uint(session.get("file_length", 0)) != file_bytes or
-            producer.uint(session.get("range_start", 1)) != 0 or
-            producer.uint(session.get("range_length", 0)) != file_bytes or
+            producer.uint(session.get("range_start", 1)) != range_start or
+            producer.uint(session.get("range_length", 0)) != shape["range_bytes"] or
             producer.uint(session.get("generation", 0)) != 1 or
             producer.uint(session.get("metadata_mdus", 0)) != 2 or
             producer.uint(session.get("user_mdus", 0)) != 3 or
-            producer.uint(session.get("first_blob", 1)) != 0 or
-            producer.uint(session.get("last_blob", 0)) != 132 or
-            producer.uint(session.get("population", 0)) != 133 or
-            producer.uint(session.get("sample_count", 0)) != V3_MAX_SAMPLES or
+            producer.uint(session.get("first_blob", 1)) != shape["first_blob"] or
+            producer.uint(session.get("last_blob", 0)) != shape["last_blob"] or
+            producer.uint(session.get("population", 0)) != shape["population"] or
+            producer.uint(session.get("sample_count", 0)) != shape["sample_count"] or
             producer.uint(session.get("deadline_height", 0)) != deadline_height or
             session.get("chain_id") != chain_id or
             producer.b64(session.get("polyfs_root", ""), 32).hex() != polyfs_root or
@@ -272,8 +304,8 @@ def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonc
             bool(session.get("expired", False)) is not expired):
         raise ValueError("v3 session differs from the fixed pilot authority")
     obligations = session.get("obligations")
-    if not isinstance(obligations, list) or len(obligations) != V3_SYSTEMATIC_PROVIDERS:
-        raise ValueError("v3 session must bind all eight systematic providers")
+    if not isinstance(obligations, list) or len(obligations) != len(shape["obligation_slots"]):
+        raise ValueError("v3 session has the wrong provider obligation count")
     slots = []
     for obligation in obligations:
         slot = producer.uint(obligation.get("slot", 99))
@@ -282,13 +314,13 @@ def validate_v3_session(response, *, session_id, deal_id, owner, providers, nonc
                 producer.uint(obligation.get("blob_count", 0)) == 0):
             raise ValueError("v3 session obligation differs from the finalized assignment")
         slots.append(slot)
-    if (slots != list(range(V3_SYSTEMATIC_PROVIDERS)) or
-            sum(producer.uint(row["blob_count"]) for row in obligations) != 133):
+    if (slots != shape["obligation_slots"] or
+            sum(producer.uint(row["blob_count"]) for row in obligations) != shape["population"]):
         raise ValueError("v3 systematic obligations must be ordered and unique")
     ordinals = v3_bitmap_ordinals(session)
     if refunded and not expired:
         raise ValueError("v3 session cannot be refunded before expiry")
-    expected_mask = (1 << V3_SYSTEMATIC_PROVIDERS) - 1
+    expected_mask = sum(1 << slot for slot in shape["obligation_slots"])
     if (producer.uint(session.get("refunded_slots_mask", 0)) != (expected_mask if refunded else 0) or
             producer.uint(session.get("settled_slots_mask", 0)) != 0 or
             producer.uint(session.get("acked_slots_mask", 0)) != 0 or
@@ -1527,6 +1559,32 @@ def require_provider_quiescence(lifecycle, providers):
     return dict(first_height=first, second_height=second, sequences=after)
 
 
+def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
+                                    required_margin, deadline_height):
+    """Wait for complete normal audits with enough blocks left in the epoch."""
+    while True:
+        height = lifecycle.wait_height(1)
+        epoch = (height - 1) // epoch_length + 1
+        next_anchor = epoch * epoch_length + 1
+        if deadline_height - height < required_margin:
+            raise ValueError("native chain capacity sessions lack their required measurement margin")
+        if next_anchor - height < required_margin:
+            wait(next_anchor + 2)
+            continue
+        try:
+            views = audits(height, False, epoch)
+        except ValueError as error:
+            if str(error) != "missing or duplicate all-slot audit evidence":
+                raise
+            wait(height + 1)
+            continue
+        if any(producer.uint(row["audit"].get("accepted_count", 0)) !=
+               producer.uint(row["audit"].get("sample_count", 0)) for row in views.values()):
+            wait(height + 1)
+            continue
+        return dict(height=height, epoch=epoch, next_anchor=next_anchor, audits=views)
+
+
 def v3_generate_only_gas(lifecycle, message_path, provider):
     message_path = Path(message_path)
     source_raw = message_path.read_bytes()
@@ -1564,11 +1622,14 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     gas = producer.uint(unsigned.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
     if not 1 <= gas <= 64_000_000:
         raise ValueError("simulated v3 gas exceeds chain diagnostic bound")
+    unsigned_path = message_path.with_name(message_path.name + ".unsigned.json")
+    unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
     job = transaction_job(lifecycle, provider,
         ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas=str(gas))
     return job, dict(message_sha256=hashlib.sha256(source_raw).hexdigest(), gas_limit=gas,
                      simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
-                     simulation_diagnostic=str(diagnostic))
+                     simulation_diagnostic=str(diagnostic), unsigned_path=str(unsigned_path),
+                     unsigned_sha256=artifact.sha256(unsigned_path))
 
 
 def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, directories):
@@ -1582,8 +1643,13 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
         manifest = inventory / f"provider-{slot}.manifest.json"
         requests = []
         for index, session in enumerate(sessions):
+            slots = [producer.uint(row.get("slot", 99))
+                     for row in session.get("before_proofs", {}).get("session", {}).get("obligations", [])]
+            if slot not in slots:
+                continue
             requests.append(dict(session_id=session["session_id"], height=session["evidence_height"],
-                view=session["before_proofs"], output_path=str(inventory / f"provider-{slot}-session-{index}.json")))
+                view=session["before_proofs"], session_index=index,
+                output_path=str(inventory / f"provider-{slot}-session-{index}.json")))
         manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain,
             trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"], deadline_unix_ms=deadline_ms,
             v3_provider=provider, v3_artifact_directory=str(directory), v3_sessions=requests), separators=(",", ":")))
@@ -1603,13 +1669,21 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
         futures = [pool.submit(run_one, item) for item in manifests]
         for future in futures:
             slot, rows = future.result()
-            if not isinstance(rows, list) or len(rows) != V3_CHAIN_SESSIONS:
+            expected = sum(slot in [producer.uint(obligation.get("slot", 99))
+                                    for obligation in session["before_proofs"]["session"]["obligations"]]
+                           for session in sessions)
+            if not isinstance(rows, list) or len(rows) != expected:
                 raise ValueError("v3 exporter returned incomplete provider inventory")
             exported[slot] = rows
+    by_session = {(slot, producer.uint(request["session_index"])): row
+                  for slot, rows in exported.items() for request, row in zip(
+                      json.loads(Path(manifests[slot][1]).read_text())["v3_sessions"], rows)}
     ordered = []
     for session_index, session in enumerate(sessions):
-        for slot in range(V3_SYSTEMATIC_PROVIDERS):
-            row = exported[slot][session_index]
+        slots = [producer.uint(row.get("slot", 99))
+                 for row in session["before_proofs"]["session"]["obligations"]]
+        for slot in slots:
+            row = by_session[(slot, session_index)]
             provider = providers[slot]
             raw = Path(row["message_path"]).read_bytes()
             message = json.loads(raw)
@@ -1682,36 +1756,307 @@ def native_v3_chain_exporter_identity(value):
                           native_chain_exporter_sha256=artifact.sha256(exporter))
 
 
-def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, exporter, epoch_length):
-    """Finite chain-only proof submission diagnostic; proof creation is untimed."""
-    doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False)
+def validate_broadcast_tx_sync(value, expected_hash, request_id):
+    """Accept only an unambiguous CheckTx success for the frozen bytes."""
+    if not isinstance(value, dict) or value.get("jsonrpc") != "2.0" or value.get("id") != request_id or value.get("error"):
+        raise ValueError("broadcast_tx_sync returned an ambiguous JSON-RPC response")
+    result = value.get("result")
+    if (not isinstance(result, dict) or producer.uint(result.get("code", 1)) != 0 or
+            str(result.get("hash", "")).upper() != expected_hash):
+        raise ValueError("broadcast_tx_sync rejected or changed the frozen transaction")
+    return result
+
+
+def validate_mempool_sample(value):
+    if not isinstance(value, dict):
+        raise ValueError("num_unconfirmed_txs returned no result")
+    current = producer.uint(value.get("n_txs", ""))
+    total = producer.uint(value.get("total", ""))
+    total_bytes = producer.uint(value.get("total_bytes", ""))
+    if current != total:
+        raise ValueError("num_unconfirmed_txs counters disagree")
+    return dict(transactions=total, bytes=total_bytes)
+
+
+def native_v3_backlog_duration_ns(samples, *, max_gap_ns=2_000_000_000):
+    """Longest sufficiently observed interval with a positive mempool."""
+    return native_v3_backlog_interval(samples, max_gap_ns=max_gap_ns)["duration_ns"]
+
+
+def native_v3_backlog_interval(samples, *, max_gap_ns=2_000_000_000):
+    best = dict(duration_ns=0)
+    start = previous = None
+    for sample in samples:
+        at = producer.uint(sample.get("monotonic_ns", ""))
+        unix = producer.uint(sample.get("unix_ns", ""))
+        nodes = sample.get("nodes", [])
+        positive = len(nodes) == 4 and min(producer.uint(row.get("transactions", "")) for row in nodes) > 0
+        if positive and (previous is None or at - previous <= max_gap_ns):
+            start = (at, unix) if start is None else start
+        elif positive:
+            start = (at, unix)
+        else:
+            start = None
+        if start is not None:
+            duration = at - start[0]
+            if duration > best["duration_ns"]:
+                best = dict(duration_ns=duration, monotonic_start_ns=start[0], monotonic_end_ns=at,
+                            unix_start_ns=start[1], unix_end_ns=unix)
+        previous = at
+    return best
+
+
+def _rpc_broadcast_lane(node, rows, start_event):
+    connection = http.client.HTTPConnection("127.0.0.1", node["rpc"], timeout=5)
+    outcomes = []
+    start_event.wait()
+    try:
+        for row in rows:
+            request_id = row["rpc_id"]
+            body = json.dumps({"jsonrpc": "2.0", "id": request_id,
+                "method": "broadcast_tx_sync", "params": {"tx": row["_tx_base64"]}},
+                separators=(",", ":")).encode()
+            offered_ns, offered_unix_ns = artifact.monotonic_ns(), time.time_ns()
+            connection.request("POST", "/", body=body, headers={"Content-Type": "application/json"})
+            response = connection.getresponse()
+            raw = response.read(1_048_577)
+            if response.status != 200 or len(raw) > 1_048_576:
+                raise ValueError("broadcast_tx_sync returned an invalid HTTP response")
+            try:
+                value = json.loads(raw)
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError("broadcast_tx_sync returned malformed JSON") from error
+            validate_broadcast_tx_sync(value, row["txhash"], request_id)
+            outcomes.append(dict(id=row["id"], txhash=row["txhash"], signer=row["signer"],
+                sequence=row["sequence"], offered_monotonic_ns=offered_ns,
+                offered_unix_ns=offered_unix_ns, accepted_monotonic_ns=artifact.monotonic_ns()))
+    finally:
+        connection.close()
+    return outcomes
+
+
+def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
+    samples = []
+    start_event.wait()
+    while not stop_event.is_set():
+        nodes = []
+        for node in lifecycle.nodes:
+            nodes.append(dict(node_id=node["node_id"],
+                **validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))))
+        samples.append(dict(monotonic_ns=artifact.monotonic_ns(), unix_ns=time.time_ns(), nodes=nodes))
+        stop_event.wait(.1)
+    return samples
+
+
+def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, sequences, command):
+    """Offline sign each provider/profile JSONL once, then pre-encode every TxRaw."""
+    directory = lifecycle.home / "native-v3-chain-frozen"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    node = lifecycle.nodes[0]
+    profile_order = {row["name"]: index for index, row in enumerate(profiles)}
+    grouped = {}
+    for message, _, simulation in simulated:
+        grouped.setdefault((message["slot"], message["profile"]), []).append((message, simulation))
+    pending, next_sequence = [], {address: value["sequence"] for address, value in sequences.items()}
+    for slot in range(V3_SYSTEMATIC_PROVIDERS):
+        provider = providers[slot]
+        aliases = [name for name, address in lifecycle.signers.items() if address == provider]
+        if len(aliases) != 1:
+            raise ValueError("provider address does not identify exactly one signing key")
+        for profile in sorted((row["name"] for row in profiles), key=profile_order.get):
+            rows = grouped.get((slot, profile), [])
+            if not rows:
+                continue
+            prefix = directory / f"provider-{slot}-{profile}"
+            unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
+            unsigned.write_text("".join(Path(simulation["unsigned_path"]).read_text() for _, simulation in rows))
+            start_sequence = next_sequence[provider]
+            command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--from", aliases[0],
+                "--home", node["home"], "--keyring-backend", "test", "--chain-id", lifecycle.chain,
+                "--offline", "--account-number", str(sequences[provider]["account_number"]),
+                "--sequence", str(start_sequence), "--sign-mode", "direct",
+                "--output-document", str(signed)], 300)
+            signed_rows = [json.loads(line) for line in signed.read_text().splitlines()]
+            unsigned_rows = [json.loads(line) for line in unsigned.read_text().splitlines()]
+            if len(signed_rows) != len(rows) or len(unsigned_rows) != len(rows):
+                raise ValueError("sign-batch returned an incomplete transaction inventory")
+            for index, ((message, simulation), unsigned_tx, signed_tx) in enumerate(
+                    zip(rows, unsigned_rows, signed_rows)):
+                sequence = start_sequence + index
+                signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
+                if (signed_tx.get("body", {}).get("messages") != unsigned_tx.get("body", {}).get("messages") or
+                        len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
+                        producer.uint(signer_infos[0].get("sequence", "")) != sequence):
+                    raise ValueError("offline signed transaction differs from frozen intent or sequence")
+                signed_one = prefix.with_name(prefix.name + f"-{index}.json")
+                signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
+                pending.append((message, simulation, profile, slot, provider, sequence, signed_one))
+            next_sequence[provider] += len(rows)
+    def encode(item):
+        message, simulation, profile, slot, provider, sequence, signed_one = item
+        encoded = command([str(lifecycle.binary), "tx", "encode", str(signed_one),
+            "--home", node["home"], "--chain-id", lifecycle.chain], 60).strip()
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (ValueError, TypeError) as error:
+            raise ValueError("tx encode returned malformed TxRaw bytes") from error
+        if not raw or len(raw) > 1024 * 1024:
+            raise ValueError("frozen TxRaw exceeds the Comet transaction bound")
+        raw_path = signed_one.with_suffix(".tx")
+        raw_path.write_bytes(raw)
+        return dict(id=message["id"], profile=profile, session_index=message["session_index"],
+            slot=slot, signer=provider, sequence=sequence, gas_limit=simulation["gas_limit"],
+            ordinals=message["ordinals"], message_path=message["message_path"], signed_path=str(signed_one),
+            raw_path=str(raw_path), bytes=len(raw), txhash=hashlib.sha256(raw).hexdigest().upper(),
+            signed_sha256=artifact.sha256(signed_one), raw_sha256=artifact.sha256(raw_path),
+            _tx_base64=encoded)
+    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
+        frozen = list(pool.map(encode, pending))
+    if len({row["txhash"] for row in frozen}) != len(frozen):
+        raise ValueError("frozen native v3 transaction inventory repeats a TxRaw hash")
+    for rpc_id, row in enumerate(frozen, 1):
+        row["rpc_id"] = rpc_id
+    return frozen
+
+def _discover_frozen_commits(lifecycle, frozen, first, last):
+    expected, found, blocks = {row["txhash"]: row for row in frozen}, {}, []
+    for height in range(first, last + 1):
+        block = lifecycle.query(lifecycle.nodes[0], f"/block?height={height}")
+        summary = artifact.committed_block_summary(block,
+            lifecycle.query(lifecycle.nodes[0], f"/block_results?height={height}"), height, lifecycle.chain)
+        blocks.append(summary)
+        for tx in summary["transactions"]:
+            row = expected.get(tx["txhash"])
+            if row is None:
+                continue
+            if tx["txhash"] in found or tx["code"] != 0 or tx["bytes"] != row["bytes"] or tx["gas_wanted"] != row["gas_limit"]:
+                raise ValueError("committed frozen transaction differs in identity, result, bytes, or gas")
+            found[tx["txhash"]] = dict({key: value for key, value in row.items() if not key.startswith("_")},
+                outcome="committed_success", height=height,
+                code=tx["code"], gas_wanted=tx["gas_wanted"], gas_used=tx["gas_used"],
+                committed_time=summary["time"], operation_id=row["id"])
+    if set(found) != set(expected):
+        raise ValueError("drained blocks omit an accepted frozen transaction")
+    return list(found.values()), blocks
+
+
+def _unix_ns(value):
+    match = re.fullmatch(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z", value)
+    if match is None:
+        raise ValueError("block header has a noncanonical UTC timestamp")
+    seconds = calendar.timegm(datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S").timetuple())
+    return seconds * 10**9 + int((match.group(2) or "").ljust(9, "0"))
+
+
+def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, offer_end_ns,
+                               drain_end_ns, mempool_samples):
+    offered_by_hash = {row["txhash"]: row for row in offered}
+    latencies = [(_unix_ns(row["committed_time"]) - offered_by_hash[row["txhash"]]["offered_unix_ns"]) / 1e9
+                 for row in committed]
+    if any(value < 0 for value in latencies):
+        raise ValueError("committed block time precedes CheckTx offer time")
+    elapsed = (drain_end_ns - start_ns) / 1e9
+    offer_elapsed = (offer_end_ns - start_ns) / 1e9
+    accepted_rate = len(offered) / offer_elapsed
+    backlog = native_v3_backlog_interval(mempool_samples)
+    if backlog["duration_ns"] < V3_CHAIN_BACKLOG_SECONDS * 10**9:
+        raise ValueError("native v3 chain profile did not sustain a positive mempool backlog for ten seconds")
+    hashes = set(offered_by_hash)
+    measured_blocks = []
+    for block in blocks:
+        transactions = [row for row in block["transactions"] if row["txhash"] in hashes]
+        if transactions:
+            measured_blocks.append(dict(height=block["height"], transaction_count=len(transactions),
+                txhashes=[row["txhash"] for row in transactions],
+                proof_gas_wanted=sum(row["gas_wanted"] for row in transactions),
+                proof_gas_used=sum(row["gas_used"] for row in transactions),
+                proof_transaction_bytes=sum(row["bytes"] for row in transactions),
+                block_gas_wanted=block["gas_wanted"], block_gas_used=block["gas_used"],
+                block_transaction_bytes=block["tx_payload_bytes"], time=block["time"]))
+    by_height = {row["height"]: row for row in blocks}
+    saturated = [row for row in measured_blocks
+                 if row["height"] - 1 in by_height and
+                 backlog["unix_start_ns"] <= _unix_ns(by_height[row["height"] - 1]["time"]) and
+                 _unix_ns(row["time"]) <= backlog["unix_end_ns"]]
+    if not saturated:
+        raise ValueError("positive mempool evidence contains no committed workload block")
+    predecessor = by_height[saturated[0]["height"] - 1]
+    commit_seconds = (_unix_ns(saturated[-1]["time"]) - _unix_ns(predecessor["time"])) / 1e9
+    saturated_transactions = sum(row["transaction_count"] for row in saturated)
+    if commit_seconds <= 0 or saturated_transactions <= 0:
+        raise ValueError("saturated committed interval is empty")
+    committed_rate = saturated_transactions / commit_seconds
+    if accepted_rate < 1.5 * committed_rate:
+        raise ValueError("native v3 accepted offer rate did not exceed committed rate by 1.5x")
+    saturated_hashes = {txhash for row in saturated for txhash in row["txhashes"]}
+    openings = sum(len(row["ordinals"]) for row in committed if row["txhash"] in saturated_hashes)
+    proof_sets_per_day = committed_rate / profile["proof_transactions"] * 86400
+    return dict(elapsed_seconds=elapsed, offer_seconds=offer_elapsed,
+        accepted_offer_transactions_per_second=accepted_rate,
+        committed_transactions_per_second=committed_rate,
+        committed_transactions_per_day=committed_rate * 86400,
+        committed_openings_per_second=openings / commit_seconds,
+        committed_openings_per_day=openings / commit_seconds * 86400,
+        proof_set_equivalents_per_day=proof_sets_per_day,
+        logical_requested_bytes_per_day=proof_sets_per_day * profile["range_bytes"],
+        logical_requested_gib_per_day=proof_sets_per_day * profile["range_bytes"] / 1024**3,
+        saturated_commit_interval=dict(predecessor_height=predecessor["height"],
+            first_height=saturated[0]["height"], last_height=saturated[-1]["height"],
+            elapsed_seconds=commit_seconds, transactions=saturated_transactions),
+        positive_backlog_seconds=backlog["duration_ns"] / 1e9,
+        positive_backlog_interval=backlog, mempool_samples=mempool_samples,
+        inclusion_latency_seconds=dict(min=min(latencies), p50=_nearest_rank(latencies, 50),
+                                       p95=_nearest_rank(latencies, 95), max=max(latencies)),
+        blocks=measured_blocks,
+        average_proof_gas_wanted_per_saturated_block=sum(row["proof_gas_wanted"] for row in saturated) / len(saturated),
+        average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))
+
+
+def run_native_v3_chain(lifecycle, *, deal, providers, wait, exporter, command, epoch_length):
+    """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
+    doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
+        scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")
     owner = lifecycle.signers["owner0"]
-    systematic = {slot: providers[slot] for slot in range(V3_SYSTEMATIC_PROVIDERS)}
+    profiles = native_v3_chain_capacity_profiles()
     opened_at = lifecycle.wait_height(3)
-    deadline_height = opened_at + 180
+    deadline_height = opened_at + V3_CHAIN_SESSION_TTL_BLOCKS
     if deadline_height >= producer.uint(deal["end_block"]):
-        raise ValueError("native chain sessions reach the deal end")
+        raise ValueError("native chain capacity sessions reach the deal end")
     root = producer.b64(deal["manifest_root"], 32).hex()
     integrity = lifecycle.doc["native_v3_generation"]["candidate"]["integrity_root"][2:]
-    sessions = doc["sessions"] = []
-    for nonce in range(1, V3_CHAIN_SESSIONS + 1):
-        path = lifecycle.home / f"native-chain-open-{nonce}.json"
-        path.write_text(json.dumps(dict(creator=owner, deal_id=str(deal["id"]), generation="1",
-            range=dict(file_record_index=0, file_start_offset="0", file_length=str(V3_PILOT_BYTES),
-                       range_start="0", range_length=str(V3_PILOT_BYTES)), nonce=str(nonce),
-            deadline_height=str(deadline_height)), separators=(",", ":")))
-        result = send("owner0", ["retrieval-session-v3", "open", str(path)])
-        result["validators"] = verify_transaction_nodes(lifecycle, result)
-        sessions.append(dict(session_id=opened_v3_session(result), nonce=nonce, open_transaction=result))
-        lifecycle.save()
-    evidence_height = wait(max(row["open_transaction"]["height"] for row in sessions) + 2)
+    sessions, nonce = [], 1
+    for profile in profiles:
+        profile["session_start"] = len(sessions)
+        for profile_session in range(profile["sessions"]):
+            range_start = (profile_session % V3_SYSTEMATIC_PROVIDERS) * V3_DATA_BLOB_PAYLOAD_BYTES \
+                if profile["name"] == "1kib" else 0
+            path = lifecycle.home / f"native-chain-open-{nonce}.json"
+            path.write_text(json.dumps(dict(creator=owner, deal_id=str(deal["id"]), generation="1",
+                range=dict(file_record_index=0, file_start_offset="0", file_length=str(V3_PILOT_BYTES),
+                           range_start=str(range_start), range_length=str(profile["range_bytes"])), nonce=str(nonce),
+                deadline_height=str(deadline_height)), separators=(",", ":")))
+            sessions.append(dict(session_index=len(sessions), nonce=nonce, profile=profile["name"], profile_session=profile_session,
+                                 range_start=range_start, open_path=str(path)))
+            nonce += 1
+        profile["session_end"] = len(sessions)
+    opened_heights = []
+    for batch_index, offset in enumerate(range(0, len(sessions), V3_CROSS_AUDIT_OPEN_BATCH_MAX)):
+        batch = sessions[offset:offset + V3_CROSS_AUDIT_OPEN_BATCH_MAX]
+        session_ids, height = open_v3_session_batch(lifecycle, [row["open_path"] for row in batch],
+            lifecycle.home / f"native-chain-open-batch-{batch_index}", command)
+        for row, session_id in zip(batch, session_ids):
+            row["session_id"] = session_id
+        opened_heights.append(height)
+    evidence_height = wait(max(opened_heights) + 2)
     for row in sessions:
+        profile = next(value for value in profiles if value["name"] == row["profile"])
         view = v3_session_query(lifecycle, row["session_id"], evidence_height)
         session, accepted = validate_v3_session(view, session_id=row["session_id"], deal_id=deal["id"],
-            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root,
-            integrity_root=integrity, chain_id=lifecycle.chain, deadline_height=deadline_height)
+            owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
+            chain_id=lifecycle.chain, deadline_height=deadline_height, range_start=row["range_start"],
+            range_length=profile["range_bytes"])
         if accepted:
-            raise ValueError("native chain session starts with accepted samples")
+            raise ValueError("native chain capacity session starts with accepted samples")
         row.update(before_proofs=view, evidence_height=evidence_height,
                    context_hash=producer.b64(session["context_hash"], 32).hex(),
                    anchor_seed=producer.b64(view["anchor_seed"], 32).hex())
@@ -1721,152 +2066,152 @@ def run_native_v3_chain(lifecycle, *, deal, providers, send, wait, audits, expor
                    for row in lifecycle.doc["providers"] if row["address"] in providers.values()}
     inventory = export_native_v3_chain_inventory(lifecycle, Path(exporter).resolve(strict=True),
                                                  sessions, providers, directories)
-    doc["inventory"] = inventory
+    for row in inventory["messages"]:
+        row["profile"] = sessions[row["session_index"]]["profile"]
+        row["id"] = f"v3-chain-{row['session_index']}-{row['slot']}"
     by_slot = {slot: [] for slot in range(V3_SYSTEMATIC_PROVIDERS)}
     for row in inventory["messages"]:
         by_slot[row["slot"]].append(row)
     def simulate_slot(slot):
-        values = []
-        for row in by_slot[slot]:
-            job, simulation = v3_generate_only_gas(lifecycle, row["message_path"], row["provider"])
-            values.append((row, job, simulation))
-        return values
+        return [(row, *v3_generate_only_gas(lifecycle, row["message_path"], row["provider"]))
+                for row in by_slot[slot]]
     simulated = []
     with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
         for values in pool.map(simulate_slot, range(V3_SYSTEMATIC_PROVIDERS)):
             simulated.extend(values)
-    if len(simulated) != V3_CHAIN_SESSIONS * V3_SYSTEMATIC_PROVIDERS:
+    expected_transactions = sum(row["measured_transactions"] for row in profiles)
+    if len(simulated) != expected_transactions:
         raise ValueError("native v3 gas preflight omitted a prepared message")
-    indexed = {(row["session_index"], row["slot"]): (row, job, simulation)
-               for row, job, simulation in simulated}
-    doc["gas_preflight"] = [dict(session_index=row["session_index"], slot=row["slot"], **simulation)
-                            for row, _, simulation in simulated]
-    warmup_jobs, measured_jobs, message_rows = [], [], []
-    for session_index in range(V3_CHAIN_SESSIONS):
-        for slot in range(V3_SYSTEMATIC_PROVIDERS):
-            row, job, _ = indexed[(session_index, slot)]
-            item = dict(job, id=f"v3-chain-{session_index}-{slot}", operation_id=f"session-{session_index}",
-                        phase="warmup" if session_index == 0 else "measurement", offered_offset_ns=0)
-            (warmup_jobs if session_index == 0 else measured_jobs).append(item)
-            message_rows.append(dict(id=item["id"], **row))
-    warmup_deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
-    for job in warmup_jobs:
-        job["_deadline_ns"] = warmup_deadline
-    doc["warmup_scheduler"] = artifact.schedule_transactions(warmup_jobs, max_in_flight=8,
-        max_queued=8, max_queued_per_signer=1)
-    warmup_rows = doc["warmup_scheduler"]["transactions"]
-    warmup_verified = verify_native_v3_chain_transactions(
-        lifecycle, warmup_rows, message_rows[:V3_CHAIN_WARMUPS])
-    warmup_height = max(row["height"] for row in warmup_rows)
-    wait(warmup_height + 1)
-    warm = v3_session_query(lifecycle, sessions[0]["session_id"], warmup_height)
-    _, accepted = validate_v3_session(warm, session_id=sessions[0]["session_id"], deal_id=deal["id"], owner=owner,
-        providers=providers, nonce=1, polyfs_root=root, integrity_root=integrity,
-        chain_id=lifecycle.chain, deadline_height=deadline_height)
-    expected_warm = sorted(ordinal for row in message_rows[:8] for ordinal in row["ordinals"])
-    if accepted != expected_warm or len(accepted) != V3_MAX_SAMPLES:
-        raise ValueError("warmup bitmap differs from prepared proof messages")
-    quiescence = require_provider_quiescence(lifecycle, providers)
-    ready_height = quiescence["second_height"]
-    ready_epoch = (ready_height - 1) // epoch_length + 1
-    current_audits = audits(ready_height, False, ready_epoch)
-    if any(producer.uint(row["audit"].get("accepted_count", 0)) != producer.uint(row["audit"]["sample_count"])
-           for row in current_audits.values()):
-        raise ValueError("current epoch audit coverage is incomplete before measurement")
-    next_anchor = ready_epoch * epoch_length + 1
-    if next_anchor - ready_height < 60 or deadline_height - ready_height < 60:
-        raise ValueError("native chain measurement lacks sixty-block authority margin")
-    for row in sessions[1:]:
-        current = v3_session_query(lifecycle, row["session_id"], ready_height)
-        if current != row["before_proofs"]:
-            raise ValueError("prepared native chain session authority changed before timing")
-    offsets = native_v3_chain_offsets()
-    if len(offsets) != len(measured_jobs):
-        raise ValueError("native v3 chain schedule/profile mismatch")
-    for job, offset in zip(measured_jobs, offsets):
-        job["offered_offset_ns"] = offset
-    doc["measurement_preconditions"] = dict(ready_height=ready_height, epoch=ready_epoch,
-        next_anchor=next_anchor, session_deadline=deadline_height, audits=current_audits,
-        provider_quiescence=quiescence)
-    retained = doc["timed_scheduler_outcomes"] = []
-    capture_workload_metrics(lifecycle, "native_v3_chain_before", fenced=True)
-    before_cpu = validator_cpu_snapshot(lifecycle)
-    started = artifact.monotonic_ns()
-    phase_deadline = min(lifecycle.deadline, started + V3_CHAIN_MEASURED_CAP_SECONDS * 10**9)
-    for job in measured_jobs:
-        job["_deadline_ns"] = phase_deadline
-    scheduler = artifact.schedule_transactions(measured_jobs, max_in_flight=8, max_queued=56,
-        max_queued_per_signer=7, record_transaction=lambda row: retained.append(row),
-        heartbeat_seconds=45, stall_timeout_seconds=45)
-    finished = artifact.monotonic_ns()
-    after_cpu = validator_cpu_snapshot(lifecycle)
-    end_height = lifecycle.wait_height(1)
-    if finished - started > V3_CHAIN_MEASURED_CAP_SECONDS * 10**9:
-        raise ValueError("native v3 chain measured phase exceeded its absolute cap")
-    capture_workload_metrics(lifecycle, "native_v3_chain_after", fenced=True)
-    doc["measured_window"] = dict(monotonic_start_ns=started, monotonic_end_ns=finished,
-        elapsed_ns=finished-started, committed_end_height=end_height,
-        validator_cpu_before=before_cpu, validator_cpu_after=after_cpu,
-        validator_cpu_delta=validator_cpu_delta(before_cpu, after_cpu),
-        scope="scheduler submit and commit observation only; proof generation and gas simulation excluded; no RSS phase peak")
-    doc["scheduler"] = scheduler
-    verified = verify_native_v3_chain_transactions(lifecycle, scheduler["transactions"], message_rows[8:])
-    final_height = max(row["height"] for row in verified)
-    if final_height > end_height:
-        raise ValueError("committed proof lies beyond the measured end-height fence")
-    before_metrics = lifecycle.doc["commit_step_metrics"]["phases"]["native_v3_chain_before"]
-    first_height = min(row["sample"]["committed_height"] for row in before_metrics["nodes"]) + 1
-    reconcile_transaction_blocks(lifecycle, scheduler["transactions"], first_height, end_height,
-                                 lifecycle.home / "native-v3-chain-blocks.jsonl")
-    final_sequences = provider_sequences(lifecycle, providers, end_height)
-    expected_sequence_delta = {address: 0 for address in providers.values()}
-    for job in measured_jobs:
-        expected_sequence_delta[job["signer"]] += 1
-    for address, before in quiescence["sequences"].items():
-        if final_sequences[address]["sequence"] - before["sequence"] != expected_sequence_delta[address]:
-            raise ValueError("provider sequence changed outside the measured submission inventory")
-    if (end_height - 1) // epoch_length + 1 != ready_epoch:
-        raise ValueError("native v3 chain measurement crossed an audit epoch")
-    final_audits = audits(end_height, False, ready_epoch)
-    if final_audits != current_audits:
-        raise ValueError("current epoch audit authority/coverage changed during measurement")
-    for index, row in enumerate(sessions):
-        state = v3_session_query(lifecycle, row["session_id"], end_height)
-        _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
-            providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
-            chain_id=lifecycle.chain, deadline_height=deadline_height)
-        expected = sorted(ordinal for message in message_rows if message["session_index"] == index
-                          for ordinal in message["ordinals"])
-        if accepted != expected or len(accepted) != V3_MAX_SAMPLES:
-            raise ValueError("authoritative session bitmap differs from committed proof messages")
-        row.update(after_proofs=state, accepted_sample_ordinals=accepted)
-    committed_summary = native_v3_chain_committed_summary(
-        sessions, message_rows, warmup_verified, verified)
-    doc.update(offered_proof_transactions=64, warmup_transactions=8, measured_transactions=56,
-        **committed_summary,
-        measured_gas_wanted=sum(row["gas_wanted"] for row in verified),
-        measured_gas_used=sum(row["gas_used"] for row in verified), delivery_verified=False,
-        owner_acknowledged=False, qualification=False)
-    wait(deadline_height + 2)
-    for row in sessions:
-        expired = v3_session_query(lifecycle, row["session_id"])
-        validate_v3_session(expired, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
-            providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
-            chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True)
-        refund = send("owner0", ["retrieval-session-v3", "refund", str(_write_v3_refund(lifecycle, owner, row["session_id"]))])
-        verify_v3_refund_transaction(lifecycle, refund, owner=owner, session_id=row["session_id"])
-        row.update(expired_before_refund=expired, refund_transaction=refund)
-    wait(max(row["refund_transaction"]["height"] for row in sessions) + 1)
-    for row in sessions:
-        after = v3_session_query(lifecycle, row["session_id"])
-        validate_v3_session(after, session_id=row["session_id"], deal_id=deal["id"], owner=owner,
-            providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
-            chain_id=lifecycle.chain, deadline_height=deadline_height, expired=True, refunded=True)
-        row["after_refund"] = after
-    doc.update(status="native_v3_chain_diagnostic_finished", expiration_verified=True,
-               refunds_verified=True, qualification=False)
+    doc["profiles"] = profiles
+    doc["sessions"] = sessions
+    doc["inventory"] = dict(inventory, messages=[{key: value for key, value in row.items()}
+        for row in inventory["messages"]])
+    doc["gas_preflight"] = [dict(id=row["id"], profile=row["profile"], session_index=row["session_index"],
+        slot=row["slot"], **simulation) for row, _, simulation in simulated]
+    doc["measurements"] = []
     lifecycle.save()
-
+    for profile in profiles:
+        profile_simulated = [row for row in simulated if row[0]["profile"] == profile["name"]]
+        minimum_gas_blocks = math.ceil(sum(row[2]["gas_limit"] for row in profile_simulated) / 64_000_000)
+        if minimum_gas_blocks < V3_CHAIN_BACKLOG_SECONDS:
+            raise ValueError("fixed inventory cannot occupy ten maximum-gas blocks")
+        required_margin = minimum_gas_blocks + 10
+        while True:
+            window = await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
+                                                     required_margin + 20, deadline_height)
+            quiescence = require_provider_quiescence(lifecycle, providers)
+            frozen = freeze_native_v3_transactions(
+                lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
+            if len(frozen) != profile["measured_transactions"]:
+                raise ValueError("frozen profile transaction count differs from the fixed inventory")
+            if len(frozen) >= 5000 or sum(row["bytes"] for row in frozen) >= 1024**3:
+                raise ValueError("frozen profile reaches the default Comet mempool transaction/byte cap")
+            post_freeze = require_provider_quiescence(lifecycle, providers)
+            ready_height = post_freeze["second_height"]
+            ready_epoch = (ready_height - 1) // epoch_length + 1
+            if post_freeze["sequences"] != quiescence["sequences"]:
+                if ready_epoch != window["epoch"]:
+                    continue
+                raise ValueError("provider sequence changed while offline transactions were frozen")
+            next_anchor = ready_epoch * epoch_length + 1
+            if (ready_epoch != window["epoch"] or next_anchor - ready_height < required_margin):
+                continue
+            current_audits = audits(ready_height, False, ready_epoch)
+            if current_audits != window["audits"]:
+                raise ValueError("audit authority or coverage changed while transactions were frozen")
+            break
+        public_frozen = [{key: value for key, value in row.items() if not key.startswith("_")}
+                         for row in frozen]
+        measurement = dict(profile={key: value for key, value in profile.items()
+                                    if key not in ("session_start", "session_end")},
+                           minimum_gas_limited_blocks=minimum_gas_blocks,
+                           preconditions=dict(ready_height=ready_height, ready_epoch=ready_epoch,
+                                              next_anchor=next_anchor, audits=current_audits,
+                                              provider_quiescence=post_freeze),
+                           frozen_transactions=public_frozen)
+        doc["measurements"].append(measurement)
+        lifecycle.save()
+        for node in lifecycle.nodes:
+            if validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))["transactions"]:
+                raise ValueError("native v3 profile started with a nonempty mempool")
+        capture_workload_metrics(lifecycle, f"native_v3_chain_{profile['name']}_before", fenced=True)
+        before_cpu = validator_cpu_snapshot(lifecycle)
+        predecessor_height = lifecycle.wait_height(1)
+        lanes = [[row for row in frozen if row["slot"] == slot]
+                 for slot in range(V3_SYSTEMATIC_PROVIDERS)]
+        start_event, stop_event = threading.Event(), threading.Event()
+        with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS + 1) as pool:
+            monitor = pool.submit(_monitor_native_v3_mempools, lifecycle, start_event, stop_event)
+            broadcasters = [pool.submit(_rpc_broadcast_lane, lifecycle.nodes[0], lane, start_event)
+                            for lane in lanes]
+            started_ns = artifact.monotonic_ns()
+            start_event.set()
+            try:
+                offered = [row for future in broadcasters for row in future.result()]
+                offer_end_ns = artifact.monotonic_ns()
+                drain_deadline = min(lifecycle.deadline,
+                    offer_end_ns + V3_CHAIN_DRAIN_SECONDS * 10**9)
+                while True:
+                    lifecycle.remaining()
+                    if artifact.monotonic_ns() >= drain_deadline:
+                        raise TimeoutError("native v3 chain profile exceeded its fixed drain cap")
+                    pending = [validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))["transactions"]
+                               for node in lifecycle.nodes]
+                    if not any(pending):
+                        break
+                    time.sleep(.1)
+                current_height = lifecycle.wait_height(1)
+                final_height = lifecycle.wait_height(current_height + 2)
+                drain_end_ns = artifact.monotonic_ns()
+            finally:
+                stop_event.set()
+            mempool_samples = monitor.result()
+        after_cpu = validator_cpu_snapshot(lifecycle)
+        capture_workload_metrics(lifecycle, f"native_v3_chain_{profile['name']}_after", fenced=True)
+        if len(offered) != len(frozen) or {row["txhash"] for row in offered} != {row["txhash"] for row in frozen}:
+            raise ValueError("direct CheckTx outcomes differ from the frozen profile inventory")
+        committed, blocks = _discover_frozen_commits(
+            lifecycle, frozen, predecessor_height, final_height)
+        block_path = lifecycle.home / f"native-v3-chain-{profile['name']}-blocks.jsonl"
+        reconcile_transaction_blocks(lifecycle, committed, predecessor_height, final_height, block_path)
+        final_sequences = provider_sequences(lifecycle, providers, final_height)
+        for address, before in quiescence["sequences"].items():
+            expected = sum(row["signer"] == address for row in frozen)
+            if (final_sequences[address]["account_number"] != before["account_number"] or
+                    final_sequences[address]["sequence"] - before["sequence"] != expected):
+                raise ValueError("provider sequence changed outside the accepted profile inventory")
+        if (final_height - 1) // epoch_length + 1 != ready_epoch:
+            raise ValueError("native v3 chain capacity profile crossed an audit epoch")
+        if audits(final_height, False, ready_epoch) != current_audits:
+            raise ValueError("audit authority or coverage changed during the capacity profile")
+        profile_sessions = sessions[profile["session_start"]:profile["session_end"]]
+        for row in profile_sessions:
+            state = v3_session_query(lifecycle, row["session_id"], final_height)
+            _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"],
+                owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
+                chain_id=lifecycle.chain, deadline_height=deadline_height, range_start=row["range_start"],
+                range_length=profile["range_bytes"])
+            expected = sorted(ordinal for message in inventory["messages"]
+                              if message["session_index"] == row["session_index"]
+                              for ordinal in message["ordinals"])
+            if accepted != expected or len(accepted) != profile["sample_count"]:
+                raise ValueError("four-validator session bitmap differs from the frozen proof set")
+            row["accepted_sample_ordinals"] = accepted
+        metrics = native_v3_capacity_metrics(profile, offered, committed, blocks,
+            started_ns, offer_end_ns, drain_end_ns, mempool_samples)
+        cpu_delta = validator_cpu_delta(before_cpu, after_cpu)
+        cpu_delta["measurement_scope"] = "direct broadcast through all-validator mempool drain"
+        measurement.update(status="passed", offered=offered, committed=committed,
+            provider_sequences_after=final_sequences, validator_cpu_delta=cpu_delta,
+            blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics)
+        lifecycle.save()
+    doc.update(status="native_v3_chain_capacity_passed", qualification=True,
+        offered_proof_transactions=expected_transactions,
+        committed_valid_proof_transactions=expected_transactions,
+        sampled_openings=sum(row["sample_count"] * row["sessions"] for row in profiles),
+        delivery_verified=False, owner_acknowledged=False, expiration_verified=False,
+        refunds_verified=False)
+    lifecycle.save()
 
 def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send, curl,
                                file_bytes=V3_PILOT_BYTES, evidence_key="native_v3_generation",
@@ -3985,13 +4330,13 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                  preflight_minimum_bytes=V3_PREFLIGHT_FREE_BYTES,
                                  runtime_minimum_bytes=V3_ABORT_FREE_BYTES)
     doc.update(mode=("four-validator-native-v3-browser-qualification" if native_browser is not None else
-                     "four-validator-native-v3-chain-diagnostic" if native_chain is not None else
+                     "four-validator-native-v3-chain-capacity" if native_chain is not None else
                      "four-validator-native-v3-cross-audit-diagnostic" if native_cross_audit else
                      "four-validator-native-v3-provider-diagnostic" if native_v3 else "four-validator-healthy-provider-diagnostic"),
         setup_transactions=[], providers=[],
         workload=(f"one {v3_bytes}-byte FAT v3 K8 PUBLIC deal; production DealDetail sponsored browser retrieval"
                   if native_browser is not None else
-                  "one 16 MiB FAT v3 K8 deal; eight sessions; 64 native proof transactions with untimed proof preparation"
+                  "one 16 MiB FAT v3 K8 deal; 1 KiB, 992 KiB, and 16 MiB ranges; 2,640 frozen native proof transactions"
                   if native_chain is not None else
                   "one 16 MiB FAT v3 K8 deal; 46 sessions; 368 production-route proof transactions across two normal audit anchors"
                   if native_cross_audit else
@@ -3999,8 +4344,12 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                   if native_v3 else f"one real K{k} deal; {layout['assignments']} assigned provider-daemons; one normal audit epoch"),
         qualification=False, limits=([artifact.BROWSER_EXECUTOR_SCOPE if browser_executor_handoff else
                                       "One owned local-host production browser path; no WAN or public activation qualification"]
-            if native_browser is not None else ["No capacity or delivered retrieval qualification"])+[
-            ("Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
+            if native_browser is not None else
+            ["Proof-confirmation chain capacity only; no file transport, proof preparation, signing, ACK, or refund"]
+            if native_chain is not None else ["No capacity or delivered retrieval qualification"])+[
+            ("Frozen signed transactions are submitted directly; setup and proof work are outside the timed interval"
+             if native_chain is not None else
+             "Provider HTTP durations combine proof generation, gas simulation, signing, broadcast, and commit observation"
              if native_v3 else "No deputy retrieval yet"),
             ("Normal mint and audit parameters retained; browser payer/provider/supply conservation checked"
              if native_browser is not None else "Normal mint and audit parameters retained; no economic conservation assertion"),
@@ -4300,9 +4649,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         doc.update(status="healthy_provider_audit_diagnostic_passed", audit_coverage_verified=True)
         if native_v3:
             if native_chain is not None:
-                run_native_v3_chain(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
-                                    audits=audits, exporter=export_binary, epoch_length=epoch_length)
-                doc["status"] = "native_v3_chain_diagnostic_passed"
+                run_native_v3_chain(lifecycle, deal=deal, providers=providers, wait=wait,
+                                    audits=audits, exporter=export_binary, command=command,
+                                    epoch_length=epoch_length)
+                doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
                                           curl=curl, audits=audits, epoch_length=epoch_length, command=command)
@@ -4360,7 +4710,8 @@ def main():
     parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers",
                                            "native-v3-providers", "native-v3-providers-cross-audit",
                                            "native-v3-chain", "native-v3-browser"), default="settlement-smoke")
-    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--timeout", type=int,
+                        help="Owned-run cap in seconds; defaults to 3600 for native-v3-chain and 600 otherwise")
     parser.add_argument("--audit-profile", choices=("normal", "c6"), default="normal")
     parser.add_argument("--step-seconds", type=int, default=180, help="Each of five offered-rate steps; 4 is a same-path pilot")
     parser.add_argument("--sustained-k", type=int, choices=(2, 8), default=2,
@@ -4379,6 +4730,7 @@ def main():
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
     proof_only = options.pop("proof_only")
     mode, gateway = options.pop("mode"), options.pop("gateway_binary")
+    options["timeout"] = options["timeout"] or (3600 if mode == "native-v3-chain" else 600)
     audit_profile = options.pop("audit_profile")
     cli, source = options.pop("cli_binary"), options.pop("product_source")
     exporter = options.pop("proof_exporter")
@@ -4401,9 +4753,9 @@ def main():
         if (not gateway or not cli or not source or not exporter or k8 or k2 or proof_only or
                 proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
                 sustained_rate_scale != 1 or sustained_deputies != 8 or
-                options["timeout"] > 600 or audit_profile != "normal"):
-            parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 600, and fixed profile")
-        print(run_healthy(artifact.FourValidatorLifecycle(**options), gateway, cli, source,
+                options["timeout"] > 3600 or audit_profile != "normal"):
+            parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
+        print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
                           native_chain=dict(exporter=exporter), audit_profile="normal"))
     elif mode == "native-v3-browser":
         if (not gateway or not cli or not source or k8 or k2 or proof_only or
