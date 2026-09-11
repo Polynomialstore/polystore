@@ -1,0 +1,356 @@
+{
+  "artifacts": {
+    "blocks": {
+      "path": "/home/mikers/polystore-bench-290/runs/qualification-128m-1bbcd770-001/native-v3-chain-1kib-blocks.jsonl",
+      "sha256": "271d5b48941ecafc6c852dc1387cce3600e83cd053dc13a6ee32fff71ebc2fe4"
+    },
+    "command": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/provenance/qualification-command.txt",
+    "evidence": {
+      "path": "/home/mikers/polystore-bench-290/runs/qualification-128m-1bbcd770-001/evidence.json",
+      "sha256": "240c8b1edd7b0111dafb6e0bf273efe8eafae0911a624cc7cac7321db34df17e"
+    },
+    "host_capture_hashes": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/host-qualification-128m-1bbcd770-001/artifact-sha256.txt",
+    "host_capture_path": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/host-qualification-128m-1bbcd770-001",
+    "run_path": "/home/mikers/polystore-bench-290/runs/qualification-128m-1bbcd770-001"
+  },
+  "blocks": {
+    "average_proof_gas_wanted": 125453470.3611111,
+    "average_proof_transaction_bytes": 149942.0,
+    "count": 36,
+    "first_height": 917,
+    "last_height": 952,
+    "minimum_gas_limited_blocks_preflight": 36,
+    "proof_gas_used_maximum": 82027218,
+    "proof_gas_used_minimum": 33159282,
+    "proof_gas_wanted_maximum": 127576941,
+    "proof_gas_wanted_minimum": 51573657,
+    "proof_transaction_bytes_maximum": 152562,
+    "proof_transaction_bytes_minimum": 61674,
+    "transaction_count_maximum": 141,
+    "transaction_count_minimum": 57
+  },
+  "candidate": {
+    "app_mempool_max_txs": 0,
+    "comet_mempool": {
+      "max_tx_bytes": 1048576,
+      "max_txs_bytes": 1073741824,
+      "size": 5000
+    },
+    "gomaxprocs_per_validator": "2",
+    "max_block_bytes": 2097152,
+    "max_block_gas": 128000000,
+    "openings_per_transaction": 1,
+    "profile": "1kib",
+    "timeout_commit": "1s",
+    "transactions": 4992
+  },
+  "capacity": {
+    "committed_transactions_per_day": 8519391.530289525,
+    "committed_transactions_per_second": 98.60406863761025,
+    "complete_proof_sets": 4992,
+    "daily_equivalent_basis": "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
+    "full_offer_to_drain_elapsed_seconds": 53.216465679,
+    "logical_requested_gib_per_day": 8.124724893846059,
+    "offer_seconds": 2.105675741,
+    "partial_proof_sets": 0,
+    "saturated_elapsed_seconds": 50.626714181
+  },
+  "commit_intervals_seconds": {
+    "basis": "differences between consecutive canonical Comet block header timestamps",
+    "observations": 36,
+    "p50": 1.403479657,
+    "p95": 1.5435253,
+    "p99": 1.555567616
+  },
+  "consensus": {
+    "blocks_above_round_zero": 0,
+    "maximum_round": 0,
+    "missed_signature_observations": [
+      {
+        "block_id_flags": [
+          2,
+          1,
+          2,
+          2
+        ],
+        "commit_signatures": 3,
+        "height": 918,
+        "missed_signatures": 1,
+        "round": 0,
+        "signatures": 4
+      },
+      {
+        "block_id_flags": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "commit_signatures": 3,
+        "height": 920,
+        "missed_signatures": 1,
+        "round": 0,
+        "signatures": 4
+      },
+      {
+        "block_id_flags": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "commit_signatures": 3,
+        "height": 922,
+        "missed_signatures": 1,
+        "round": 0,
+        "signatures": 4
+      }
+    ],
+    "missed_signatures": 3
+  },
+  "decision": {
+    "candidate_max_block_gas": 128000000,
+    "canonical_max_block_gas": 64000000,
+    "outcome": "retain 64M canonical profile because the 128M candidate failed consensus signature, validator CPU, and FinalizeBlock latency gates"
+  },
+  "failure": {
+    "classification": "chain/host qualification behavior; harness correctly failed closed",
+    "error": "128M qualification gates failed: a saturated block used a nonzero round or missed a validator signature; a validator reached 60 percent of one CPU core during backlog; a validator's native FinalizeBlock p95 bucket upper bound exceeded 650ms or was unknown",
+    "reasons": [
+      "a saturated block used a nonzero round or missed a validator signature",
+      "a validator reached 60 percent of one CPU core during backlog",
+      "a validator's native FinalizeBlock p95 bucket upper bound exceeded 650ms or was unknown"
+    ]
+  },
+  "finalize_block": {
+    "counts_at_or_below_650ms": [
+      3,
+      3,
+      3,
+      3
+    ],
+    "measurement": "native CometBFT sync FinalizeBlock histogram bucket upper bounds",
+    "observed_blocks_per_validator": [
+      38,
+      38,
+      38,
+      38
+    ],
+    "p50_bucket_upper_bound_seconds": [
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ],
+    "p95_bucket_upper_bound_seconds": [
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ],
+    "p99_bucket_upper_bound_seconds": [
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ]
+  },
+  "gates": {
+    "comet_mempool_count_cap_not_reached": {
+      "cap": 5000,
+      "observed_peak": 4851,
+      "passed": true
+    },
+    "commit_interval_p95_seconds": {
+      "observed": 1.5435253,
+      "passed": true,
+      "required_maximum": 1.6
+    },
+    "finalize_block_p95_bucket_upper_bound_seconds": {
+      "known": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "observed": [
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "passed": false,
+      "required_maximum": 0.65
+    },
+    "maximum_consensus_round": {
+      "observed": 0,
+      "passed": true,
+      "required_maximum": 0
+    },
+    "missed_validator_signatures": {
+      "observed": 3,
+      "passed": false,
+      "required_maximum": 0
+    },
+    "positive_backlog_seconds": {
+      "observed": 50.626714181,
+      "passed": true,
+      "required_minimum": 10
+    },
+    "saturated_blocks": {
+      "observed": 36,
+      "passed": true,
+      "required_minimum": 30
+    },
+    "validator_cpu_percent_of_one_core": {
+      "observed_maximum": 74.43215934091027,
+      "passed": false,
+      "required_strictly_less_than": 60
+    }
+  },
+  "host": {
+    "hardware": {
+      "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+      "logical_cpus": 16,
+      "memory_gib": 32,
+      "physical_cores": 8
+    },
+    "proof_preparation_15_second_capture": {
+      "cpu_percent": {
+        "idle": 31.47,
+        "iowait": 1.17,
+        "system": 1.6,
+        "user": 65.74
+      },
+      "note": "trigger recorded eight proof exporter PIDs; their short lifetimes were not represented in the final pidstat averages",
+      "nvme_last_sample": {
+        "util_percent": 23.5,
+        "write_await_ms": 1.21
+      },
+      "validator_process_cpu_percent_of_one_core": [
+        1.47,
+        1.2,
+        1.87,
+        1.87
+      ]
+    },
+    "saturated_chain_15_second_capture": {
+      "cpu_percent": {
+        "idle": 76.57,
+        "iowait": 1.04,
+        "system": 0.45,
+        "user": 21.9
+      },
+      "nvme_last_sample": {
+        "util_percent": 20.0,
+        "write_await_ms": 1.02
+      },
+      "validator_process_cpu_percent_of_one_core": [
+        88.47,
+        81.93,
+        85.47,
+        85.87
+      ],
+      "workload_process_cpu_percent_of_one_core": 4.0
+    }
+  },
+  "inclusion_latency_upper_bound_seconds": {
+    "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+    "max": 48.547755254,
+    "min": 0.695982775,
+    "p50": 23.304808745,
+    "p95": 47.202197138
+  },
+  "issue": 326,
+  "limits": [
+    "Proof-confirmation chain capacity only; no file transport, proof preparation, signing, ACK, or refund",
+    "Frozen signed transactions are submitted directly; setup and proof work are outside the timed interval",
+    "Normal mint and audit parameters retained; no economic conservation assertion",
+    "Post-qualification validator restart is required for the exact 128M/4,992 candidate"
+  ],
+  "provenance": {
+    "artifact_source_match": "supplied binaries/library; build correspondence not attested",
+    "binary": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/bin/polystorechaind",
+    "binary_sha256": "e304034b7bebd5d7b202ea32dadb5d70a7795795a33d6e357a63743d31c806e2",
+    "cli_binary": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/bin/polystore_cli",
+    "cli_sha256": "843013ec94b98de0526a7ca5daedad71492fe35963dbbd34eada651761ae9282",
+    "cli_source_sha256": "0e3c4c15c3569afb402633d329e308e770b7e6e0d4df9f9fdfb67ff72aca98d2",
+    "curl_binary": "/usr/bin/curl",
+    "curl_sha256": "b585017e66eb4b2b87ce55f2e80a528efa73912dbca489049fc8e542512a09cd",
+    "driver_sha256": "e745136aa904f7fef0f336648076f02a1295fdc8c1bbce49b012ed4e13272ec5",
+    "gateway_binary": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/bin/polystore_gateway",
+    "gateway_sha256": "ca166022db3b8be2cc6dcf17c26791b29b6cc072c782a1b93f91ee21c5caa5d6",
+    "host": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+    "logical_cpus": 16,
+    "machine": "x86_64",
+    "native_chain_exporter": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-build/bin/retrieval-exporter.test",
+    "native_chain_exporter_sha256": "27b73c2fa8184b7f69690285ac7b02b25139e6acc61bca38dfcb25901994b75c",
+    "native_library": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-source/polystore_core/target/release/libpolystore_core.so",
+    "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+    "product_source": "/home/mikers/polystore-bench-290/qualification-128m-1bbcd770-source",
+    "product_source_commit": "1bbcd77068b5ad0f34c287f3bcf6be3a90bbc86c",
+    "product_source_status": "",
+    "source_checkout": "1bbcd77068b5ad0f34c287f3bcf6be3a90bbc86c",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "qualified": false,
+  "reconciliation": {
+    "committed": 4992,
+    "dropped": 0,
+    "duplicate": 0,
+    "invalid": 0,
+    "offered": 4992,
+    "retried": 0,
+    "unknown": 0
+  },
+  "schema": "polystore-retrieval-128m-qualification-v1",
+  "scope": "proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded",
+  "source_commit": "1bbcd77068b5ad0f34c287f3bcf6be3a90bbc86c",
+  "status": "failed",
+  "validator_resources_during_backlog": [
+    {
+      "cpu_percent_of_one_core": 68.82224656841197,
+      "elapsed_seconds": 50.623165818,
+      "node_id": "2a2bf30c7e7707923ece6df332c68745429baca6",
+      "peak_mempool_bytes": 4100048,
+      "peak_mempool_transactions": 3792,
+      "pid": 3278133,
+      "sampled_peak_rss_bytes": 641089536,
+      "system_cpu_seconds": 0.0,
+      "user_cpu_seconds": 34.84
+    },
+    {
+      "cpu_percent_of_one_core": 71.44994601475078,
+      "elapsed_seconds": 50.622851405,
+      "node_id": "4e086bcfff8559cd3c3553ac6337c4197ed11539",
+      "peak_mempool_bytes": 5028789,
+      "peak_mempool_transactions": 4650,
+      "pid": 3278135,
+      "sampled_peak_rss_bytes": 653230080,
+      "system_cpu_seconds": 0.0,
+      "user_cpu_seconds": 36.17
+    },
+    {
+      "cpu_percent_of_one_core": 74.43215934091027,
+      "elapsed_seconds": 50.623279418,
+      "node_id": "7a1eb7d07726002df15be6cf1924c6fbc3768956",
+      "peak_mempool_bytes": 5245467,
+      "peak_mempool_transactions": 4851,
+      "pid": 3278132,
+      "sampled_peak_rss_bytes": 696352768,
+      "system_cpu_seconds": 0.28,
+      "user_cpu_seconds": 37.4
+    },
+    {
+      "cpu_percent_of_one_core": 71.44967003865511,
+      "elapsed_seconds": 50.623046937,
+      "node_id": "a6832fbc5748bf7938826a843c2b6f710df0233e",
+      "peak_mempool_bytes": 5245467,
+      "peak_mempool_transactions": 4851,
+      "pid": 3278134,
+      "sampled_peak_rss_bytes": 655872000,
+      "system_cpu_seconds": 0.0,
+      "user_cpu_seconds": 36.17
+    }
+  ]
+}

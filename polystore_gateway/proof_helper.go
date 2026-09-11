@@ -25,7 +25,7 @@ import (
 // mduPath must point to the encoded 8 MiB MDU bytes stored on disk.
 //
 // providerKeyName is the local keyring name used to submit the proof (MsgSubmitRetrievalProof).
-func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, mdu0Path string, providerKeyName string, ownerAddr string) (string, error) {
+func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, mduIndex uint64, mduPath string, mdu0Path string, providerKeyName string, ownerAddr string, proofPayload []byte, receiptFilePath string, rangeStart uint64, rangeLen uint64) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -50,17 +50,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	epochStr := strconv.FormatUint(epoch, 10)
 	mduIndexStr := strconv.FormatUint(mduIndex, 10)
 
-	// 1. Compute KZG commitments/roots for the already-encoded MDU.
-	prefix := mduPath + ".proof"
-	_, err = shardFile(ctx, mduPath, true, prefix)
-	if err != nil {
-		return "", fmt.Errorf("failed to encode MDU for proof: %w", err)
-	}
-	encodedMduPath := fmt.Sprintf("%s.mdu.0.bin", prefix)
-	defer os.Remove(encodedMduPath)
-	defer os.Remove(prefix + ".json")
-
-	// 4. Sign Receipt (Must be signed by Deal Owner)
+	// 1. Sign Receipt (Must be signed by Deal Owner)
 	signCtx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
 
@@ -77,13 +67,12 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		signer = name
 	}
 
-	signOut, err := execPolystorechaind(
-		signCtx,
+	signArgs := []string{
 		"tx", "polystorechain", "sign-retrieval-receipt",
 		dealIDStr,
 		providerAddr,
 		epochStr,
-		encodedMduPath,
+		mduPath,
 		trustedSetup,
 		mdu0Path,
 		mduIndexStr,
@@ -91,7 +80,30 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 		"--home", homeDir,
 		"--keyring-backend", "test",
 		"--offline",
-	)
+		"--receipt-file-path", receiptFilePath,
+		"--range-start", strconv.FormatUint(rangeStart, 10),
+		"--range-len", strconv.FormatUint(rangeLen, 10),
+	}
+	if len(proofPayload) != 0 {
+		proofFile, err := createTempInUploadRoot(uploadDir, "retrieval-proof-*.json")
+		if err != nil {
+			return "", fmt.Errorf("create prebuilt proof file: %w", err)
+		}
+		proofPath := proofFile.Name()
+		if _, err := proofFile.Write(proofPayload); err != nil {
+			proofFile.Close()
+			os.Remove(proofPath)
+			return "", fmt.Errorf("write prebuilt proof file: %w", err)
+		}
+		if err := proofFile.Close(); err != nil {
+			os.Remove(proofPath)
+			return "", fmt.Errorf("close prebuilt proof file: %w", err)
+		}
+		defer os.Remove(proofPath)
+		signArgs = append(signArgs, "--proof-json", proofPath)
+	}
+
+	signOut, err := execPolystorechaind(signCtx, signArgs...)
 
 	if errors.Is(signCtx.Err(), context.DeadlineExceeded) {
 		return "", fmt.Errorf("sign-retrieval-receipt timed out after %s", cmdTimeout)
@@ -122,7 +134,7 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	}
 	defer os.Remove(tmpPath)
 
-	// 5. Submit Proof
+	// 2. Submit Proof
 	submitOut, err := runTxWithRetry(
 		ctx,
 		"tx", "polystorechain", "submit-retrieval-proof",
