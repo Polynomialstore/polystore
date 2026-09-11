@@ -144,7 +144,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Shared proof count per message | 64 |
 | Candidate prepaid cryptography per proof | 500000 gas |
 | Candidate reserved future retention work per open | 100000 gas |
-| Checked-in consensus block gas / bytes | 128000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
 | Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
@@ -170,11 +170,12 @@ provider filesystem enforcement remains in #257.
 `scripts/retrieval_consensus_profile.json` is the single checked-in source for
 the devnet genesis and public healthcheck block limits. The native chain
 benchmark uses that profile by default; an explicit `--chain-max-gas` remains
-available only for bounded capacity experiments. Activating or rolling back the
-128000000 gas value requires a coordinated fresh-genesis rollout because it is
-a consensus parameter. Rollback restores 64000000 in that profile, rebuilds the
-same release, and reinitializes every validator from the same genesis; changing
-only a healthcheck expectation or one validator is invalid.
+available only for bounded capacity experiments. Changing the gas value requires
+a coordinated fresh-genesis rollout because it is a consensus parameter;
+changing only a healthcheck expectation or one validator is invalid. The
+128000000 candidate failed the #326 execution-latency, validator-headroom, and
+signature gates, so the checked-in profile remains 64000000. Issue #328 owns
+the separate default-off parallel-execution feasibility spike.
 
 The bounded activation qualification is one fresh four-validator run on Linux:
 

@@ -26,7 +26,7 @@ const (
 	// MaxRetrievalV2BlockGas bounds one retrieval transaction's estimated gas.
 	MaxRetrievalV2BlockGas = int64(64000000)
 	// MaxRetrievalActivationBlockGas permits bounded first-activation throughput
-	// qualification above the checked-in canonical 128M consensus profile.
+	// qualification above the checked-in canonical 64M consensus profile.
 	MaxRetrievalActivationBlockGas        = int64(448000000)
 	MaxRetrievalV2BlockBytes              = int64(2 * 1024 * 1024)
 	MaxRetrievalSessionOpensPerBlock      = uint64(128)
