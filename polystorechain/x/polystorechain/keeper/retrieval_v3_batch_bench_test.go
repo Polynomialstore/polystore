@@ -12,13 +12,21 @@ import (
 
 func batchVerifierFixtureV3(tb testing.TB, count int) ([]byte, []*types.ChainedProof) {
 	tb.Helper()
+	tb.Setenv("POLYSTORE_BENCH_FIXTURE_NONCONSTANT", "1")
 	env := setupBenchRetrievalEnv(tb)
 	proofValues := make([]types.ChainedProof, count)
 	proofs := make([]*types.ChainedProof, count)
+	infinity := make([]byte, 48)
+	infinity[0] = 0xc0
 	for i := range proofValues {
 		proofValues[i] = env.benchBuildChainedProof(tb, uint64(i%int(env.leafCount)), uint64(i)+100)
+		require.NotEqual(tb, infinity, proofValues[i].ManifestOpening)
+		require.NotEqual(tb, infinity, proofValues[i].RootTableDuCommitment)
+		require.NotEqual(tb, infinity, proofValues[i].BlobCommitment)
+		require.NotEqual(tb, infinity, proofValues[i].KzgOpeningProof)
 		proofs[i] = &proofValues[i]
 	}
+	require.NotEqual(tb, infinity, env.deal.ManifestRoot)
 	return append([]byte(nil), env.deal.ManifestRoot...), proofs
 }
 
