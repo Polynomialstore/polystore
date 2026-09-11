@@ -1,0 +1,452 @@
+{
+  "schema": "polystore-native-v3-chain-capacity-v1",
+  "issue": 322,
+  "run": "native-v3-chain-capacity-4e7860ff-005",
+  "status": "native_v3_chain_capacity_passed",
+  "proof_only_qualification": true,
+  "full_lifecycle_qualification": false,
+  "full_lifecycle_unqualified_reason": "delivery, owner acknowledgment, expiry, and refunds were intentionally outside this chain-only run",
+  "scope": "proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded",
+  "daily_equivalent_basis": "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
+  "source_evidence_sha256": "a3413cf2f8d1927ddf12db35dc45885297b81a5b0a563d0bd952d156948a0c73",
+  "chain_id": "polystore_260-1",
+  "genesis_sha256": "87e94f74c73ae6ff0bcf9b36a2e60ff76116076e7a044bb9ba0db541b2d3a037",
+  "consensus": {
+    "max_bytes": 2097152,
+    "max_gas": 64000000
+  },
+  "provenance": {
+    "host": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+    "machine": "x86_64",
+    "logical_cpus": 16,
+    "source_checkout": "4e7860ffc99fc1bc188a64a4187443bc29cf018d",
+    "product_source_commit": "4e7860ffc99fc1bc188a64a4187443bc29cf018d",
+    "product_source_status": "",
+    "artifact_source_match": "supplied binaries/library; build correspondence not attested",
+    "binary_sha256": "cc9d09b2b99d566142bb1eb43523bdf0c10b4e8a15fa62b28b8f5404dd3464d9",
+    "native_library_sha256": "7cbfe98f513a215de84c599289de082471466395b9ffb57eab9be0a898214092",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7",
+    "gateway_sha256": "738098228f18edd831dac0d124f8902c6b59b94c4dfb819a4b54047f03549a69",
+    "driver_sha256": "c83a1d86b23b3af7e130863a8530e17e83e94274a5c076a157ef127682f3b2bc",
+    "cli_sha256": "60bd72d84e8755e24fe020caa684aea101ac398b270b0a042f4c2c59b16d1647",
+    "cli_source_sha256": "0e3c4c15c3569afb402633d329e308e770b7e6e0d4df9f9fdfb67ff72aca98d2",
+    "curl_sha256": "b585017e66eb4b2b87ce55f2e80a528efa73912dbca489049fc8e542512a09cd",
+    "native_chain_exporter_sha256": "57fde3d7e2d15bd53d9b41bef3bc547f1652e00b31fc6741639412ce34898183"
+  },
+  "host_memory_bytes": 32109105152,
+  "totals": {
+    "offered_proof_transactions": 2640,
+    "committed_valid_proof_transactions": 2640,
+    "sampled_openings": 3880
+  },
+  "gas_preflight": {
+    "messages": 2640,
+    "attempts_1": 2632,
+    "attempts_2": 3,
+    "attempts_3": 5,
+    "timed_retries": 0
+  },
+  "validator_lifetime_peak_rss_bytes": [
+    414392320,
+    402411520,
+    385449984,
+    393682944
+  ],
+  "profiles": [
+    {
+      "name": "1kib",
+      "range_bytes": 1024,
+      "population": 1,
+      "sampled_openings_per_session": 1,
+      "provider_proof_transactions_per_session": 1,
+      "sessions": 1280,
+      "offered_transactions": 1280,
+      "committed_transactions": 1280,
+      "saturated_interval": {
+        "predecessor_height": 449,
+        "first_height": 450,
+        "last_height": 467,
+        "observation_start_height": 449,
+        "observation_end_height": 467,
+        "elapsed_seconds": 25.316016421,
+        "transactions": 1260,
+        "timing_basis": "monotonic all-validator-positive observation fence"
+      },
+      "committed_transactions_per_second": 49.7708635926943,
+      "committed_transactions_per_day": 4300202.614408787,
+      "committed_openings_per_second": 49.7708635926943,
+      "committed_openings_per_day": 4300202.614408787,
+      "complete_proof_sets_per_second": 49.7708635926943,
+      "complete_proof_sets_per_day": 4300202.614408787,
+      "logical_requested_gib_per_day": 4.100992788704669,
+      "complete_proof_sets_in_saturated_interval": 1260,
+      "partial_proof_sets_in_saturated_interval": 0,
+      "inclusion_latency_upper_bound_seconds": {
+        "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+        "min": 1.00249766,
+        "p50": 12.846364205,
+        "p95": 23.849215307,
+        "max": 25.25713721
+      },
+      "transaction": {
+        "gas_wanted": {
+          "total": 1158027029,
+          "average": 904708.61640625,
+          "minimum": 904051,
+          "maximum": 904801
+        },
+        "gas_used": {
+          "total": 744497664,
+          "average": 581638.8,
+          "minimum": 581177,
+          "maximum": 581749
+        },
+        "encoded_bytes": {
+          "total": 1383344,
+          "average": 1080.7375,
+          "minimum": 1077,
+          "maximum": 1082
+        }
+      },
+      "block": {
+        "count": 19,
+        "transactions": {
+          "total": 1280,
+          "average": 67.36842105263158,
+          "minimum": 20,
+          "maximum": 70
+        },
+        "gas_wanted": {
+          "total": 1158027029,
+          "average": 60948791.0,
+          "minimum": 18093232,
+          "maximum": 63336070
+        },
+        "gas_used": {
+          "total": 744497664,
+          "average": 39184087.578947365,
+          "minimum": 11632825,
+          "maximum": 40722019
+        },
+        "encoded_transaction_bytes": {
+          "total": 1383344,
+          "average": 72807.57894736843,
+          "minimum": 21624,
+          "maximum": 75740
+        },
+        "source_sha256": "4109d9d03843f0d52d13673fe0b00b62ff4fc35b049bfa9cbc2f2f09c8fde6e9"
+      },
+      "failures": {
+        "invalid_transactions": 0,
+        "unknown_transactions": 0,
+        "duplicate_transactions": 0,
+        "dropped_transactions": 0,
+        "retried_transactions": 0
+      },
+      "validator_cpu_seconds": [
+        8.48,
+        8.19,
+        8.18,
+        7.91
+      ]
+    },
+    {
+      "name": "eight-blobs",
+      "range_bytes": 1015808,
+      "population": 8,
+      "sampled_openings_per_session": 8,
+      "provider_proof_transactions_per_session": 8,
+      "sessions": 160,
+      "offered_transactions": 1280,
+      "committed_transactions": 1280,
+      "saturated_interval": {
+        "predecessor_height": 528,
+        "first_height": 529,
+        "last_height": 547,
+        "observation_start_height": 528,
+        "observation_end_height": 547,
+        "elapsed_seconds": 26.003088608,
+        "transactions": 1270,
+        "timing_basis": "monotonic all-validator-positive observation fence"
+      },
+      "committed_transactions_per_second": 48.84035197300667,
+      "committed_transactions_per_day": 4219806.4104677765,
+      "committed_openings_per_second": 48.84035197300667,
+      "committed_openings_per_day": 4219806.4104677765,
+      "complete_proof_sets_per_second": 5.768545508622835,
+      "complete_proof_sets_per_day": 498402.33194501296,
+      "logical_requested_gib_per_day": 471.5109951872376,
+      "complete_proof_sets_in_saturated_interval": 150,
+      "partial_proof_sets_in_saturated_interval": 10,
+      "inclusion_latency_upper_bound_seconds": {
+        "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+        "min": 1.017520434,
+        "p50": 13.253016788,
+        "p95": 25.532224042,
+        "max": 26.953907456
+      },
+      "transaction": {
+        "gas_wanted": {
+          "total": 1204853760,
+          "average": 941292.0,
+          "minimum": 941208,
+          "maximum": 941304
+        },
+        "gas_used": {
+          "total": 773877243,
+          "average": 604591.59609375,
+          "minimum": 604428,
+          "maximum": 604611
+        },
+        "encoded_bytes": {
+          "total": 1386560,
+          "average": 1083.25,
+          "minimum": 1078,
+          "maximum": 1084
+        }
+      },
+      "block": {
+        "count": 20,
+        "transactions": {
+          "total": 1280,
+          "average": 64.0,
+          "minimum": 10,
+          "maximum": 67
+        },
+        "gas_wanted": {
+          "total": 1204853760,
+          "average": 60242688.0,
+          "minimum": 9413008,
+          "maximum": 63066760
+        },
+        "gas_used": {
+          "total": 773877243,
+          "average": 38693862.15,
+          "minimum": 6045715,
+          "maximum": 40507843
+        },
+        "encoded_transaction_bytes": {
+          "total": 1386560,
+          "average": 69328.0,
+          "minimum": 10838,
+          "maximum": 72590
+        },
+        "source_sha256": "5a27caeab6397fd8a35b1a8b4c8d07dc8ebcf44bd9f24b07238a88de55ff03db"
+      },
+      "failures": {
+        "invalid_transactions": 0,
+        "unknown_transactions": 0,
+        "duplicate_transactions": 0,
+        "dropped_transactions": 0,
+        "retried_transactions": 0
+      },
+      "validator_cpu_seconds": [
+        8.66,
+        8.18,
+        8.17,
+        8.07
+      ]
+    },
+    {
+      "name": "sample-cap",
+      "range_bytes": 16777216,
+      "population": 133,
+      "sampled_openings_per_session": 132,
+      "provider_proof_transactions_per_session": 8,
+      "sessions": 10,
+      "offered_transactions": 80,
+      "committed_transactions": 80,
+      "saturated_interval": {
+        "predecessor_height": 556,
+        "first_height": 557,
+        "last_height": 576,
+        "observation_start_height": 556,
+        "observation_end_height": 576,
+        "elapsed_seconds": 26.589739198,
+        "transactions": 80,
+        "timing_basis": "monotonic all-validator-positive observation fence"
+      },
+      "committed_transactions_per_second": 3.0086793783226486,
+      "committed_transactions_per_day": 259949.89828707685,
+      "committed_openings_per_second": 49.6432097423237,
+      "committed_openings_per_day": 4289173.321736768,
+      "complete_proof_sets_per_second": 0.3760849222903311,
+      "complete_proof_sets_per_day": 32493.737285884607,
+      "logical_requested_gib_per_day": 507.714645091947,
+      "complete_proof_sets_in_saturated_interval": 10,
+      "partial_proof_sets_in_saturated_interval": 0,
+      "inclusion_latency_upper_bound_seconds": {
+        "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+        "min": 1.01709811,
+        "p50": 13.152690244,
+        "p95": 25.161124037,
+        "max": 26.470107338
+      },
+      "transaction": {
+        "gas_wanted": {
+          "total": 1082361520,
+          "average": 13529519.0,
+          "minimum": 12311371,
+          "maximum": 13935627
+        },
+        "gas_used": {
+          "total": 677781260,
+          "average": 8472265.75,
+          "minimum": 7710918,
+          "maximum": 8726093
+        },
+        "encoded_bytes": {
+          "total": 1024340,
+          "average": 12804.25,
+          "minimum": 11670,
+          "maximum": 13186
+        }
+      },
+      "block": {
+        "count": 20,
+        "transactions": {
+          "total": 80,
+          "average": 4.0,
+          "minimum": 4,
+          "maximum": 4
+        },
+        "gas_wanted": {
+          "total": 1082361520,
+          "average": 54118076.0,
+          "minimum": 52493948,
+          "maximum": 55742332
+        },
+        "gas_used": {
+          "total": 677781260,
+          "average": 33889063.0,
+          "minimum": 32873959,
+          "maximum": 34904151
+        },
+        "encoded_transaction_bytes": {
+          "total": 1024340,
+          "average": 51217.0,
+          "minimum": 49709,
+          "maximum": 52733
+        },
+        "source_sha256": "12406606c3b645c14583f3cf5eec08d304a4064baf01c2b9966be9953bf951e4"
+      },
+      "failures": {
+        "invalid_transactions": 0,
+        "unknown_transactions": 0,
+        "duplicate_transactions": 0,
+        "dropped_transactions": 0,
+        "retried_transactions": 0
+      },
+      "validator_cpu_seconds": [
+        7.01,
+        6.82,
+        6.82,
+        6.88
+      ]
+    }
+  ],
+  "host_utilization": [
+    {
+      "profile": "1kib",
+      "trigger_mempool_transactions": [
+        410,
+        287,
+        353,
+        310
+      ],
+      "aggregate_cpu_percent": {
+        "user": 9.47,
+        "system": 0.25,
+        "iowait": 0.9,
+        "idle": 89.34
+      },
+      "validator_cpu_percent": [
+        37.83,
+        35.67,
+        35.83,
+        34.17
+      ],
+      "validator_average_rss_kib": [
+        359038,
+        333481,
+        332364,
+        339636
+      ],
+      "raw_sha256": {
+        "trigger": "785b83e369d4b738013f527dbdc9596c5551e4bde191b0272c485909233e5d4e",
+        "cpu": "ddb79f22e3855e36b3926839b10ab23d862e2df1e3b9881258b2e910a3cfbea2",
+        "io": "7a146a774d5830fceaf242b1f74b87deb3dba1f51fa438b6675fee719ab2d483",
+        "process": "1a09fbc10193cd2947b7d451d8667f9cab83c96827d9d78d1c7a3ce993c4c4a2"
+      },
+      "sampling_seconds": 12
+    },
+    {
+      "profile": "eight-blobs",
+      "trigger_mempool_transactions": [
+        99,
+        46,
+        45,
+        59
+      ],
+      "aggregate_cpu_percent": {
+        "user": 8.53,
+        "system": 0.23,
+        "iowait": 1.1,
+        "idle": 90.1
+      },
+      "validator_cpu_percent": [
+        33.08,
+        32.25,
+        31.83,
+        31.42
+      ],
+      "validator_average_rss_kib": [
+        366282,
+        368874,
+        355770,
+        355966
+      ],
+      "raw_sha256": {
+        "trigger": "f180e0f669d3209e809d024d75df07ad7790ceff6183e133bc94a3b81a44c421",
+        "cpu": "ac2e670a7b8da2bc2c37ef3df36ac4069fd17ccd4cb93a85c2124a0c2c54cf54",
+        "io": "32128916e60c6e3e407c433e26329561f3a15d3fc263717bc9f62f685890bc08",
+        "process": "ba5069555d08ca9194bd1f6790594aba7c1764de9678add1a904d9ae44d39a94"
+      },
+      "sampling_seconds": 12
+    },
+    {
+      "profile": "sample-cap",
+      "trigger_mempool_transactions": [
+        80,
+        35,
+        35,
+        35
+      ],
+      "aggregate_cpu_percent": {
+        "user": 7.0,
+        "system": 0.23,
+        "iowait": 0.85,
+        "idle": 91.9
+      },
+      "validator_cpu_percent": [
+        26.08,
+        25.92,
+        26.0,
+        25.83
+      ],
+      "validator_average_rss_kib": [
+        357626,
+        354691,
+        358621,
+        359840
+      ],
+      "raw_sha256": {
+        "trigger": "bbca4dccaf4b90df3472a3affb74d0124acf3c33722664635bc5dee9e79aaa48",
+        "cpu": "583e7901493ffeb0a04b166ac43d71fde12637e8105537ee7ccc40fe7c844238",
+        "io": "87acd958fcc1deb2b8734c341999d6d94ed2e85e9ac52f249892d79bdd6293b3",
+        "process": "4a57f1ffe0eb5b7853c2a280f22b758bad8d65db3bb962a7a1b297828ce630c2"
+      },
+      "sampling_seconds": 12
+    }
+  ]
+}
