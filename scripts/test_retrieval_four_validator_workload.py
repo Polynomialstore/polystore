@@ -112,9 +112,9 @@ class FourValidatorWorkloadTest(unittest.TestCase):
         generated = '[api]\naddress = "tcp://localhost:1317"\nenabled-unsafe-cors = false\n[mempool]\nmax-txs = -1\n'
         existing = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317")
         browser = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317", browser_evm=True)
-        self.assertIn('[mempool]\nmax-txs = -1\n', existing)
-        self.assertIn(f'[mempool]\nmax-txs = {artifact.BROWSER_EVM_MEMPOOL_MAX_TXS}\n', browser)
-        self.assertEqual(artifact.BROWSER_EVM_MEMPOOL_MAX_TXS, 5000)
+        self.assertIn(f'[mempool]\nmax-txs = {artifact.APP_MEMPOOL_MAX_TXS}\n', existing)
+        self.assertIn(f'[mempool]\nmax-txs = {artifact.APP_MEMPOOL_MAX_TXS}\n', browser)
+        self.assertEqual(artifact.APP_MEMPOOL_MAX_TXS, 5000)
         self.assertIn('enabled-unsafe-cors = false', existing)
         self.assertIn('enabled-unsafe-cors = true', browser)
 

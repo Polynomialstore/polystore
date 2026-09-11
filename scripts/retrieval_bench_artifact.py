@@ -1709,7 +1709,7 @@ def set_toml_value(text, section, key, value):
     return "".join(lines)
 
 
-BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
+APP_MEMPOOL_MAX_TXS = 5000
 COMET_MEMPOOL_SIZE = 5000
 COMET_MEMPOOL_MAX_TXS_BYTES = 1024**3
 COMET_MEMPOOL_MAX_TX_BYTES = 1024**2
@@ -1720,9 +1720,9 @@ BROWSER_EVM_NATIVE_GAS_PRICES = "1aatom"
 
 def configure_four_validator_app(text, api_address, *, browser_evm=False):
     text = set_toml_value(text, "api", "address", f'"{api_address}"')
+    text = set_toml_value(text, "mempool", "max-txs", str(APP_MEMPOOL_MAX_TXS))
     if browser_evm:
         text = set_toml_value(text, "api", "enabled-unsafe-cors", "true")
-        text = set_toml_value(text, "mempool", "max-txs", str(BROWSER_EVM_MEMPOOL_MAX_TXS))
     return text
 
 
@@ -1898,7 +1898,7 @@ class FourValidatorLifecycle:
                         profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"],
-                                 "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1,
+                                 "app_mempool_max_txs": APP_MEMPOOL_MAX_TXS,
                                  "comet_mempool": {"size": COMET_MEMPOOL_SIZE,
                                                      "max_txs_bytes": COMET_MEMPOOL_MAX_TXS_BYTES,
                                                      "max_tx_bytes": COMET_MEMPOOL_MAX_TX_BYTES},

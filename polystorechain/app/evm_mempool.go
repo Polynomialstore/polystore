@@ -82,6 +82,7 @@ func (app *App) initEVMMempool() error {
 	)
 
 	cfg := sdkmempool.DefaultPriorityNonceMempoolConfig()
+	cfg.MaxTx = cosmosPoolMaxTx
 	cfg.SignerExtractor = ethSignerExtractor
 	cosmosMempool := sdkmempool.NewPriorityMempool(cfg)
 	app.SetMempool(cosmosMempool)
