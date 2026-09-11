@@ -136,16 +136,96 @@ func (r *deadlineRequiredReader) Read(p []byte) (int, error) {
 }
 
 func TestPublicContinuationBoundsBodyRead(t *testing.T) {
-	w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
-	body := &deadlineRequiredReader{w: w, reader: strings.NewReader(`{}`)}
-	request := httptest.NewRequest(http.MethodPost, "/sp/retrieval/session-proof/continue", body)
-	started := time.Now()
-	SpContinueRetrievalSessionProof(w, request)
-	if w.Code != http.StatusBadRequest || !body.checked {
-		t.Fatalf("continuation did not read malformed body under deadline: status=%d checked=%v body=%s", w.Code, body.checked, w.Body.String())
+	for _, tc := range []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"provider", "/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof},
+		{"gateway", "/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+			body := &deadlineRequiredReader{w: w, reader: strings.NewReader(`{}`)}
+			request := httptest.NewRequest(http.MethodPost, tc.path, body)
+			started := time.Now()
+			tc.handler(w, request)
+			if w.Code != http.StatusBadRequest || !body.checked {
+				t.Fatalf("continuation did not read malformed body under deadline: status=%d checked=%v body=%s", w.Code, body.checked, w.Body.String())
+			}
+			if len(w.deadlines) != 2 || w.deadlines[0].Before(started) || w.deadlines[0].After(started.Add(publicContinuationBodyTimeout+time.Second)) || !w.deadlines[1].IsZero() {
+				t.Fatalf("unexpected request body deadlines: %v", w.deadlines)
+			}
+		})
 	}
-	if len(w.deadlines) != 2 || w.deadlines[0].Before(started) || w.deadlines[0].After(started.Add(publicContinuationBodyTimeout+time.Second)) || !w.deadlines[1].IsZero() {
-		t.Fatalf("unexpected request body deadlines: %v", w.deadlines)
+}
+
+type gatedBodyReader struct {
+	reader  *strings.Reader
+	entered chan<- struct{}
+	release <-chan struct{}
+	started bool
+}
+
+func (r *gatedBodyReader) Read(p []byte) (int, error) {
+	if !r.started {
+		r.started = true
+		r.entered <- struct{}{}
+		<-r.release
+	}
+	return r.reader.Read(p)
+}
+
+func TestPublicContinuationBodyReadsDoNotConsumeSubmissionSlots(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"provider", "/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof},
+		{"gateway", "/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := len(publicRetrievalContinuations); got != 0 {
+				t.Fatalf("continuation slots already occupied: %d", got)
+			}
+			entered := make(chan struct{}, cap(publicRetrievalContinuations))
+			releaseBodies := make(chan struct{})
+			done := make(chan *httptest.ResponseRecorder, cap(publicRetrievalContinuations))
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				body := &gatedBodyReader{reader: strings.NewReader(`{}`), entered: entered, release: releaseBodies}
+				request := httptest.NewRequest(http.MethodPost, tc.path, body)
+				go func() {
+					w := httptest.NewRecorder()
+					tc.handler(w, request)
+					done <- w
+				}()
+			}
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				select {
+				case <-entered:
+				case <-time.After(time.Second):
+					t.Fatal("continuation did not start reading request body")
+				}
+			}
+			releaseSlot, err := claimPublicRetrievalContinuation()
+			if err != nil {
+				close(releaseBodies)
+				t.Fatalf("blocked request bodies consumed continuation slots: %v", err)
+			}
+			releaseSlot()
+			close(releaseBodies)
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				select {
+				case w := <-done:
+					if w.Code != http.StatusBadRequest {
+						t.Fatalf("malformed continuation status=%d body=%s", w.Code, w.Body.String())
+					}
+				case <-time.After(time.Second):
+					t.Fatal("continuation did not finish after body release")
+				}
+			}
+		})
 	}
 }
 

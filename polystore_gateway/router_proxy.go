@@ -837,12 +837,6 @@ func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	release, err := claimPublicRetrievalContinuation()
-	if err != nil {
-		writeJSONError(w, http.StatusTooManyRequests, "retrieval continuation busy", err.Error())
-		return
-	}
-	defer release()
 	controller := http.NewResponseController(w)
 	if err := controller.SetReadDeadline(time.Now().Add(publicContinuationBodyTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 		writeJSONError(w, http.StatusInternalServerError, "cannot bound continuation request", err.Error())
@@ -858,6 +852,12 @@ func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.R
 		writeJSONError(w, http.StatusBadRequest, "invalid session continuation request", err.Error())
 		return
 	}
+	release, err := claimPublicRetrievalContinuation()
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "retrieval continuation busy", err.Error())
+		return
+	}
+	defer release()
 	if request.Slot != nil {
 		continueRetrievalSessionProofV3(w, r, sessionID, *request.Slot)
 		return
