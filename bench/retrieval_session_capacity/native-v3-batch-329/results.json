@@ -94,30 +94,34 @@
           "submission_mode": "batch-message"
         },
         "resources": {
-          "aggregate_validator_average_cpu_cores": 2.8631962782555864,
+          "aggregate_validator_average_cpu_cores": 2.9426616956779963,
           "aggregate_validator_peak_rss_bytes": 1808203776,
+          "elapsed_seconds": 31.488499047,
           "host_average_cpu_fraction": 0.19737733668141416,
+          "host_memory_total_bytes": 32109105152,
+          "host_peak_memory_used_bytes": 7360876544,
+          "sample_count": 32,
           "validators": [
             {
-              "average_cpu_cores": 0.7425275908318772,
+              "average_cpu_cores": 0.7631357710677991,
               "node_id": "0311bc1f1f6a58a5a7dbe078e4dc66472673409e",
               "peak_rss_bytes": 497102848,
               "pid": 158712
             },
             {
-              "average_cpu_cores": 0.7113185659987438,
+              "average_cpu_cores": 0.7310605680391482,
               "node_id": "e3e8bef526f002b50e3508f2b9a61250eba89053",
               "peak_rss_bytes": 452259840,
               "pid": 158713
             },
             {
-              "average_cpu_cores": 0.706374562064782,
+              "average_cpu_cores": 0.7259793477573818,
               "node_id": "04c45a012dd663863f7fcbbe5b1bde909c70dcd5",
               "peak_rss_bytes": 442617856,
               "pid": 158714
             },
             {
-              "average_cpu_cores": 0.7029755593601833,
+              "average_cpu_cores": 0.7224860088136674,
               "node_id": "d2afc4b00e3c4b93c5352c5ae652341c941ce84b",
               "peak_rss_bytes": 440819712,
               "pid": 158715
@@ -229,30 +233,34 @@
           "submission_mode": "separate"
         },
         "resources": {
-          "aggregate_validator_average_cpu_cores": 3.035558786118535,
+          "aggregate_validator_average_cpu_cores": 3.0888583504092537,
           "aggregate_validator_peak_rss_bytes": 2248577024,
+          "elapsed_seconds": 34.747465835,
           "host_average_cpu_fraction": 0.20723986797251231,
+          "host_memory_total_bytes": 32109105152,
+          "host_peak_memory_used_bytes": 7136354304,
+          "sample_count": 35,
           "validators": [
             {
-              "average_cpu_cores": 0.7896468956343008,
+              "average_cpu_cores": 0.8035118340019227,
               "node_id": "e8615f655fa0c369522a6db7df0e252a112aad66",
               "peak_rss_bytes": 604958720,
               "pid": 50406
             },
             {
-              "average_cpu_cores": 0.7534453187570835,
+              "average_cpu_cores": 0.7666746152511182,
               "node_id": "48b5ca8c4ab3a48a3c2d6f0e8269eeb686c9ee89",
               "peak_rss_bytes": 557473792,
               "pid": 50407
             },
             {
-              "average_cpu_cores": 0.7469403479119585,
+              "average_cpu_cores": 0.7600554275068331,
               "node_id": "d5dac68314ea4d3b284ace2962420abe0174eb70",
               "peak_rss_bytes": 555577344,
               "pid": 50408
             },
             {
-              "average_cpu_cores": 0.7455262238151923,
+              "average_cpu_cores": 0.7586164736493797,
               "node_id": "5850a697c9c2608d5c7d7fe537f18f10e0b82f5e",
               "peak_rss_bytes": 552271872,
               "pid": 50409
@@ -363,30 +371,34 @@
           "submission_mode": "serial-messages"
         },
         "resources": {
-          "aggregate_validator_average_cpu_cores": 2.551547543862067,
+          "aggregate_validator_average_cpu_cores": 2.5692387051816805,
           "aggregate_validator_peak_rss_bytes": 1878646784,
+          "elapsed_seconds": 32.50768402,
           "host_average_cpu_fraction": 0.17376467639630608,
+          "host_memory_total_bytes": 32109105152,
+          "host_peak_memory_used_bytes": 6814482432,
+          "sample_count": 33,
           "validators": [
             {
-              "average_cpu_cores": 0.6598829854815691,
+              "average_cpu_cores": 0.6644582858228484,
               "node_id": "8ac549db144f54adb7059841216c347554e739d7",
               "peak_rss_bytes": 546467840,
               "pid": 4186199
             },
             {
-              "average_cpu_cores": 0.6290273458826624,
+              "average_cpu_cores": 0.6333887085690948,
               "node_id": "c47a738208495fc38c4f6368d48a952bc801d2ba",
               "peak_rss_bytes": 458731520,
               "pid": 4186200
             },
             {
-              "average_cpu_cores": 0.6317768583221689,
+              "average_cpu_cores": 0.6361572847600233,
               "node_id": "b176824a8800fb80fc9ec6f31be2daca5e94a869",
               "peak_rss_bytes": 466391040,
               "pid": 4186201
             },
             {
-              "average_cpu_cores": 0.6308603541756667,
+              "average_cpu_cores": 0.6352344260297138,
               "node_id": "4d8ea35720b1bf1387bc0b698185b365d13e73ba",
               "peak_rss_bytes": 473460736,
               "pid": 4186202
@@ -1034,30 +1046,34 @@
       "submission_mode": "batch-message"
     },
     "resources": {
-      "aggregate_validator_average_cpu_cores": 4.010718845962651,
+      "aggregate_validator_average_cpu_cores": 4.078932319625748,
       "aggregate_validator_peak_rss_bytes": 1974587392,
+      "elapsed_seconds": 28.536879477,
       "host_average_cpu_fraction": 0.2702774050201289,
+      "host_memory_total_bytes": 32109105152,
+      "host_peak_memory_used_bytes": 6916829184,
+      "sample_count": 29,
       "validators": [
         {
-          "average_cpu_cores": 1.033690424217178,
+          "average_cpu_cores": 1.0512712163983886,
           "node_id": "a0acb346ec111f56d1b0234dab32227b1d59288b",
           "peak_rss_bytes": 553021440,
           "pid": 216181
         },
         {
-          "average_cpu_cores": 0.9957884419958813,
+          "average_cpu_cores": 1.0127246051304477,
           "node_id": "aa85ed275dc882787cc3a1f09af0148628d92a08",
           "peak_rss_bytes": 494063616,
           "pid": 216182
         },
         {
-          "average_cpu_cores": 0.9950993150464033,
+          "average_cpu_cores": 1.0120237576528488,
           "node_id": "acf5cdbbc5eabb5f8c79e71a7558e208895840f8",
           "peak_rss_bytes": 487665664,
           "pid": 216183
         },
         {
-          "average_cpu_cores": 0.9861406647031878,
+          "average_cpu_cores": 1.0029127404440628,
           "node_id": "46707382ffbaf5c845dbe66680fb54a4d10df92f",
           "peak_rss_bytes": 491577344,
           "pid": 216184
@@ -1107,6 +1123,11 @@
     "sessions_per_second": 139.10460480102972,
     "timeout_commit_ms": 1000,
     "validator_gomaxprocs": 2
+  },
+  "resource_metrics_recalculation": {
+    "method": "CPU tick deltas divided by elapsed time between the first and last retained resource-bearing mempool samples",
+    "raw_evidence_sha256_unchanged": true,
+    "sampler_fix_commit": "4e7b738fcc717b6fdc8e75f3ce3094e8354bcc5c"
   },
   "schema": "polystore-retrieval-v3-batch-329-v1",
   "scope": "one-opening 1 KiB retrieval V3 proof verification and four-validator proof-confirmation capacity",
