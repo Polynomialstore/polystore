@@ -2936,6 +2936,19 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             self.assertEqual(simulated_unsigned["auth_info"]["fee"]["gas_limit"], "65")
             self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
             self.assertEqual(workload.native_v3_minimum_gas_blocks(simulation["gas_limit"] * 12, 70), 12)
+            with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                    returncode=0, stdout="{}", stderr="")), self.assertRaisesRegex(
+                        ValueError, "returned malformed gas"):
+                workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            with patch.object(artifact, "run_bounded_command", return_value=simulation_result):
+                simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            original = Path(messages[0]["message_path"]).read_text()
+            Path(messages[0]["message_path"]).write_text(original + " ")
+            with patch.object(artifact, "run_bounded_command") as skipped, self.assertRaisesRegex(
+                    ValueError, "changed before outer simulation"):
+                workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            skipped.assert_not_called()
+            Path(messages[0]["message_path"]).write_text(original)
             calls = []
             def command(argv, timeout):
                 calls.append(argv)
