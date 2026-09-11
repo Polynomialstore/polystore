@@ -2034,45 +2034,64 @@ def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, seq
     grouped = {}
     for message, _, simulation in simulated:
         grouped.setdefault((message["slot"], message["profile"]), []).append((message, simulation))
-    pending, next_sequence = [], {address: value["sequence"] for address, value in sequences.items()}
+    pending, signing_batches = [], []
+    next_sequence = {address: value["sequence"] for address, value in sequences.items()}
     for slot in range(V3_SYSTEMATIC_PROVIDERS):
         provider = providers[slot]
         aliases = [name for name, address in lifecycle.signers.items() if address == provider]
         if len(aliases) != 1:
             raise ValueError("provider address does not identify exactly one signing key")
+        batch_rows = []
         for profile in sorted((row["name"] for row in profiles), key=profile_order.get):
             rows = grouped.get((slot, profile), [])
             if not rows:
                 continue
-            prefix = directory / f"provider-{slot}-{profile}"
-            unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
-            unsigned.write_text("".join(Path(simulation["unsigned_path"]).read_text() for _, simulation in rows))
-            start_sequence = next_sequence[provider]
-            command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--from", aliases[0],
+            batch_rows.extend((message, simulation, profile) for message, simulation in rows)
+        if not batch_rows:
+            continue
+        prefix = directory / f"provider-{slot}"
+        unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
+        unsigned.write_text("".join(Path(simulation["unsigned_path"]).read_text()
+                                    for _, simulation, _ in batch_rows))
+        start_sequence = next_sequence[provider]
+        signing_batches.append((slot, provider, aliases[0], start_sequence, unsigned, signed, batch_rows))
+        next_sequence[provider] += len(batch_rows)
+    def sign_batch(batch):
+        _, provider, alias, start_sequence, unsigned, signed, _ = batch
+        command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--from", alias,
                 "--home", node["home"], "--keyring-backend", "test", "--chain-id", lifecycle.chain,
                 "--offline", "--account-number", str(sequences[provider]["account_number"]),
                 "--sequence", str(start_sequence), "--sign-mode", "direct",
                 "--output-document", str(signed)], 300)
-            signed_rows = [json.loads(line) for line in signed.read_text().splitlines()]
-            unsigned_rows = [json.loads(line) for line in unsigned.read_text().splitlines()]
-            if len(signed_rows) != len(rows) or len(unsigned_rows) != len(rows):
-                raise ValueError("sign-batch returned an incomplete transaction inventory")
-            for index, ((message, simulation), unsigned_tx, signed_tx) in enumerate(
-                    zip(rows, unsigned_rows, signed_rows)):
-                sequence = start_sequence + index
-                signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
-                if (signed_tx.get("body", {}).get("messages") != unsigned_tx.get("body", {}).get("messages") or
-                        len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
-                        producer.uint(signer_infos[0].get("sequence", "")) != sequence):
-                    raise ValueError("offline signed transaction differs from frozen intent or sequence")
-                signed_one = prefix.with_name(prefix.name + f"-{index}.json")
-                signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
-                pending.append((message, simulation, profile, slot, provider, sequence, signed_one))
-            next_sequence[provider] += len(rows)
+    with ThreadPoolExecutor(max_workers=len(signing_batches)) as pool:
+        list(pool.map(sign_batch, signing_batches))
+    for slot, provider, _, start_sequence, unsigned, signed, batch_rows in signing_batches:
+        signed_rows = [json.loads(line) for line in signed.read_text().splitlines()]
+        unsigned_rows = [json.loads(line) for line in unsigned.read_text().splitlines()]
+        if len(signed_rows) != len(batch_rows) or len(unsigned_rows) != len(batch_rows):
+            raise ValueError("sign-batch returned an incomplete transaction inventory")
+        prefix = signed.with_suffix("")
+        for index, ((message, simulation, profile), unsigned_tx, signed_tx) in enumerate(
+                zip(batch_rows, unsigned_rows, signed_rows)):
+            sequence = start_sequence + index
+            signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
+            if (signed_tx.get("body", {}).get("messages") != unsigned_tx.get("body", {}).get("messages") or
+                    len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
+                    producer.uint(signer_infos[0].get("sequence", "")) != sequence):
+                raise ValueError("offline signed transaction differs from frozen intent or sequence")
+            signed_one = prefix.with_name(prefix.name + f"-{index}.json")
+            signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
+            pending.append((message, simulation, profile, slot, provider, sequence, signed_one))
+    encoded = directory / "transactions.base64"
+    command([str(lifecycle.binary), "tx", "encode-batch",
+        *(str(batch[5]) for batch in signing_batches), "--output-document", str(encoded),
+        "--home", node["home"], "--chain-id", lifecycle.chain], 300)
+    encoded_rows = encoded.read_text().splitlines()
+    if len(encoded_rows) != len(pending):
+        raise ValueError("tx encode-batch returned an incomplete transaction inventory")
     def encode(item):
+        item, encoded = item
         message, simulation, profile, slot, provider, sequence, signed_one = item
-        encoded = command([str(lifecycle.binary), "tx", "encode", str(signed_one),
-            "--home", node["home"], "--chain-id", lifecycle.chain], 60).strip()
         try:
             raw = base64.b64decode(encoded, validate=True)
         except (ValueError, TypeError) as error:
@@ -2087,8 +2106,7 @@ def freeze_native_v3_transactions(lifecycle, simulated, profiles, providers, seq
             raw_path=str(raw_path), bytes=len(raw), txhash=hashlib.sha256(raw).hexdigest().upper(),
             signed_sha256=artifact.sha256(signed_one), raw_sha256=artifact.sha256(raw_path),
             _tx_base64=encoded)
-    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
-        frozen = list(pool.map(encode, pending))
+    frozen = [encode(item) for item in zip(pending, encoded_rows)]
     if len({row["txhash"] for row in frozen}) != len(frozen):
         raise ValueError("frozen native v3 transaction inventory repeats a TxRaw hash")
     for rpc_id, row in enumerate(frozen, 1):

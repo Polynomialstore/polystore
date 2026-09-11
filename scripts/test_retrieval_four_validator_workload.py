@@ -2358,6 +2358,63 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 _, retry_evidence = workload.v3_generate_only_gas(life, retry_path, AUDIT_ADDRESSES[0])
             self.assertEqual((run.call_count, sleep.call_count, retry_evidence["simulation_attempts"]), (2, 1, 2))
 
+    def test_native_chain_freeze_batch_encodes_without_per_transaction_processes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_290-1",
+                nodes=[{"home": "/validator"}],
+                signers={f"provider{slot}": address for slot, address in providers.items()})
+            simulated = []
+            for slot, provider in providers.items():
+                unsigned = home / f"unsigned-{slot}.json"
+                unsigned.write_text(json.dumps({"body": {"messages": [{"slot": slot}]}}) + "\n")
+                message_path = home / f"message-{slot}.json"
+                message_path.write_text("{}")
+                simulated.append((dict(id=f"tx-{slot}", profile="1kib", session_index=slot,
+                    slot=slot, provider=provider, ordinals=[0], message_path=str(message_path)), None,
+                    dict(unsigned_path=str(unsigned), gas_limit=904_801)))
+            calls = []
+            sign_barrier = threading.Barrier(8)
+
+            def command(argv, _timeout):
+                calls.append(argv)
+                if argv[2] == "sign-batch":
+                    source = Path(argv[3])
+                    output = Path(argv[argv.index("--output-document") + 1])
+                    sequence = int(argv[argv.index("--sequence") + 1])
+                    rows = []
+                    for index, line in enumerate(source.read_text().splitlines()):
+                        row = json.loads(line)
+                        row.update(signatures=["signature"], auth_info={"signer_infos": [
+                            {"sequence": str(sequence + index)}]})
+                        rows.append(json.dumps(row, separators=(",", ":")))
+                    output.write_text("\n".join(rows) + "\n")
+                    sign_barrier.wait(timeout=5)
+                    return ""
+                if argv[2] == "encode-batch":
+                    lines = []
+                    for source in argv[3:argv.index("--output-document")]:
+                        for row in Path(source).read_text().splitlines():
+                            slot = json.loads(row)["body"]["messages"][0]["slot"]
+                            lines.append(base64.b64encode(f"raw-{slot}".encode()).decode())
+                    Path(argv[argv.index("--output-document") + 1]).write_text("\n".join(lines) + "\n")
+                    return ""
+                raise AssertionError(f"unexpected per-transaction command: {argv}")
+
+            sequences = {provider: {"account_number": slot + 20, "sequence": slot + 3}
+                         for slot, provider in providers.items()}
+            frozen = workload.freeze_native_v3_transactions(
+                lifecycle, simulated, [{"name": "1kib"}], providers, sequences, command)
+            self.assertEqual(sum(row[2] == "sign-batch" for row in calls), 8)
+            self.assertEqual(sum(row[2] == "encode-batch" for row in calls), 1)
+            encode_call = next(row for row in calls if row[2] == "encode-batch")
+            self.assertEqual([Path(path).name for path in encode_call[3:encode_call.index("--output-document")]],
+                             [f"provider-{slot}.signed.jsonl" for slot in range(8)])
+            self.assertEqual([Path(row["raw_path"]).read_bytes() for row in frozen],
+                             [f"raw-{slot}".encode() for slot in range(8)])
+            self.assertEqual([row["sequence"] for row in frozen], [slot + 3 for slot in range(8)])
+
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
