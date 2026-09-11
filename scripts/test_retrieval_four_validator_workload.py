@@ -1,7 +1,9 @@
 """Offline orchestration/economic regressions; no nodes, ports, native load or builds."""
 import base64
 import copy
+import datetime
 import hashlib
+import inspect
 import io
 import json
 from pathlib import Path
@@ -911,6 +913,21 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 self.validate_session(value)
 
+    def test_session_validation_accepts_one_blob_rotated_provider_shape(self):
+        value = self.session()
+        session = value["session"]
+        session.update(range_start=str(7 * workload.V3_DATA_BLOB_PAYLOAD_BYTES),
+                       range_length="1024", first_blob="7", last_blob="7",
+                       population="1", sample_count="1",
+                       accepted_sample_bitmap=base64.b64encode(bytes(17)).decode(),
+                       obligations=[dict(slot=7, assigned_provider=AUDIT_ADDRESSES[7],
+                                         payee=AUDIT_ADDRESSES[7], blob_count="1",
+                                         sample_count="0", locked_fee="1")],
+                       locked_fee="1")
+        parsed, accepted = self.validate_session(value,
+            range_start=7 * workload.V3_DATA_BLOB_PAYLOAD_BYTES, range_length=1024)
+        self.assertEqual((accepted, parsed["obligations"][0]["slot"]), ([], 7))
+
     def test_open_response_is_exact_and_nonzero(self):
         sid = bytes.fromhex(self.SESSION)
         kind = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
@@ -934,9 +951,27 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             [(bytes([index]) * 32).hex() for index in range(1, 32)])
         self.assertEqual(len(workload.opened_v3_sessions(
             dict(outcome="committed_success", data=b"".join(ordered[:15]).hex()), 15)), 15)
+        small_suffix = (b"\x10" + workload._encode_varint(1024) +
+                        b"\x18" + workload._encode_varint(artifact.ENCODED_BLOB_BYTES) + b"\x20\x01")
+        small_response = b"\x0a\x20" + bytes.fromhex("44" * 32) + small_suffix
+        small_any = (b"\x0a" + workload._encode_varint(len(kind)) + kind +
+                     b"\x12" + workload._encode_varint(len(small_response)) + small_response)
+        small = b"\x12" + workload._encode_varint(len(small_any)) + small_any
+        self.assertEqual(workload.opened_v3_sessions(
+            dict(outcome="committed_success", data=(small + raw).hex()), 2, shapes=[
+                dict(range_start="0", range_length="1024", file_length=str(workload.V3_PILOT_BYTES)),
+                dict(range_start="0", range_length=str(workload.V3_PILOT_BYTES),
+                     file_length=str(workload.V3_PILOT_BYTES)),
+            ]), ["44" * 32, self.SESSION])
         with self.assertRaisesRegex(ValueError, "repeats"):
             workload.opened_v3_sessions(
                 dict(outcome="committed_success", data=(raw + raw).hex()), 2)
+        with self.assertRaisesRegex(ValueError, "zero file start offset"):
+            workload.opened_v3_sessions(
+                dict(outcome="committed_success", data=small.hex()), 1, shapes=[
+                    dict(file_start_offset="1", range_start="0", range_length="1024",
+                         file_length=str(workload.V3_PILOT_BYTES)),
+                ])
 
     def test_native_v3_open_batch_binds_order_gas_bytes_and_response(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1468,10 +1503,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertNotIn("", argv)
             self.assertEqual(argv[argv.index("--previous-polyfs-root") + 1], "0x")
 
-    def test_native_chain_fixed_profile_proc_accounting_and_identity(self):
-        offsets = workload.native_v3_chain_offsets()
-        self.assertEqual((len(offsets), offsets[:2], offsets[7:10], offsets[-1]),
-                         (56, [0, 10**9], [7*10**9, 8*10**9, 8_500_000_000], 23_750_000_000))
+    def test_native_chain_proc_accounting_and_identity(self):
         fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 4
         fields[11], fields[12] = "101", "17"
         parsed = workload.parse_proc_stat("42 (validator worker) name) " + " ".join(fields), expected_pid=42)
@@ -1493,6 +1525,154 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         after["validators"][0]["user_ticks"] -= 1
         with self.assertRaisesRegex(ValueError, "backwards"):
             workload.validator_cpu_delta(before, after)
+
+    def test_native_chain_host_identity_is_frozen(self):
+        with patch.object(workload.platform, "platform", return_value="Linux-test"), \
+             patch.object(workload.platform, "machine", return_value="x86_64"), \
+             patch.object(workload.os, "cpu_count", return_value=16):
+            self.assertEqual(workload.host_identity(), {
+                "host": "Linux-test", "machine": "x86_64", "logical_cpus": 16})
+
+    def test_native_chain_capacity_profiles_cover_distinct_protocol_shapes(self):
+        inspect.signature(workload.run_native_v3_chain).bind(
+            SimpleNamespace(), deal={}, providers={}, wait=Mock(), audits=Mock(),
+            exporter=Path("/exporter"), command=Mock(), epoch_length=100)
+        profiles = workload.native_v3_chain_capacity_profiles()
+        self.assertEqual([(row["name"], row["range_bytes"], row["population"],
+                           row["sample_count"], row["proof_transactions"], row["sessions"],
+                           row["measured_transactions"]) for row in profiles], [
+            ("1kib", 1024, 1, 1, 1, 1280, 1280),
+            ("eight-blobs", 8 * 126_976, 8, 8, 8, 160, 1280),
+            ("sample-cap", 16 * 1024 * 1024, 133, 132, 8, 10, 80),
+        ])
+        rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
+        self.assertEqual((rotated["first_blob"], rotated["last_blob"],
+                          rotated["obligation_slots"]), (7, 7, [7]))
+        deadlines = [workload.native_v3_capacity_deadline(10, index) for index in range(1450)]
+        self.assertEqual((deadlines[0], deadlines[127], deadlines[128], deadlines[-1],
+                          max(deadlines.count(value) for value in set(deadlines))),
+                         (4106, 4106, 4107, 4117, 128))
+
+    def test_capacity_window_waits_for_next_epoch_and_complete_audits(self):
+        heights = iter((95, 103, 104, 105))
+        lifecycle = SimpleNamespace(wait_height=lambda _: next(heights))
+        waited = []
+        audits = Mock(side_effect=(
+            ValueError("missing or duplicate all-slot audit evidence"),
+            {0: {"audit": {"accepted_count": "0", "sample_count": "1"}}},
+            {0: {"audit": {"accepted_count": "1", "sample_count": "1"}}},
+        ))
+        result = workload.await_native_v3_capacity_window(
+            lifecycle, waited.append, audits, 100, 20, 500)
+        self.assertEqual((waited, result["height"], result["epoch"], result["next_anchor"]),
+                         ([103, 104, 105], 105, 2, 201))
+
+    def test_direct_broadcast_and_mempool_responses_fail_closed(self):
+        txhash = "AB" * 32
+        result = workload.validate_broadcast_tx_sync(
+            {"jsonrpc": "2.0", "id": 7, "result": {"code": "0", "hash": txhash.lower()}}, txhash, 7)
+        self.assertEqual(result["code"], "0")
+        for value in (
+            {"jsonrpc": "2.0", "id": 8, "result": {"code": 0, "hash": txhash}},
+            {"jsonrpc": "2.0", "id": 7, "result": {"code": 19, "hash": txhash}},
+            {"jsonrpc": "2.0", "id": 7, "result": {"code": 0, "hash": "CD" * 32}},
+            {"jsonrpc": "2.0", "id": 7, "error": {"code": -1}},
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                workload.validate_broadcast_tx_sync(value, txhash, 7)
+        self.assertEqual(workload.validate_mempool_sample(
+            {"n_txs": "3", "total": "3", "total_bytes": "99"}),
+            {"transactions": 3, "bytes": 99})
+        with self.assertRaises(ValueError):
+            workload.validate_mempool_sample({"n_txs": "2", "total": "3", "total_bytes": "99"})
+
+    def test_backlog_requires_all_four_validators_and_bounded_sample_gaps(self):
+        def sample(second, counts):
+            return {"sample_started_monotonic_ns": second * 10**9,
+                    "monotonic_ns": second * 10**9, "unix_ns": (100 + second) * 10**9,
+                    "observed_height": 10 + second,
+                    "nodes": [{"transactions": count, "bytes": count * 10} for count in counts]}
+        samples = [sample(second, [1, 1, 1, 1]) for second in range(11)]
+        self.assertEqual(workload.native_v3_backlog_duration_ns(samples), 10 * 10**9)
+        samples[5] = sample(5, [1, 1, 1, 0])
+        self.assertEqual(workload.native_v3_backlog_duration_ns(samples), 4 * 10**9)
+        sparse = [sample(0, [1] * 4), sample(3, [1] * 4)]
+        self.assertEqual(workload.native_v3_backlog_duration_ns(sparse), 0)
+        with self.assertRaisesRegex(ValueError, "height regressed"):
+            workload.native_v3_backlog_duration_ns([
+                sample(0, [1] * 4), dict(sample(1, [1] * 4), observed_height=9)])
+        with self.assertRaisesRegex(ValueError, "monotonic bounds"):
+            workload.native_v3_backlog_duration_ns([
+                dict(sample(0, [1] * 4), sample_started_monotonic_ns=1)])
+
+    def test_capacity_metrics_use_monotonic_backlog_and_height_fence(self):
+        base = 1_700_000_000 * 10**9
+        def timestamp(seconds):
+            return datetime.datetime.fromtimestamp((base + seconds * 10**9) / 10**9,
+                datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        hashes = [f"{index + 1:064X}" for index in range(4)]
+        offered = [dict(txhash=txhash, offered_monotonic_ns=10**9,
+                        offered_unix_ns=base + 30 * 10**9) for txhash in hashes]
+        committed = [dict(txhash=txhash, height=11 + index,
+                          committed_time=timestamp(5 * (index + 1)),
+                          ordinals=[0, 1], session_index=index, slot=index)
+                     for index, txhash in enumerate(hashes)]
+        blocks = [dict(height=10, time=timestamp(0), transactions=[], gas_wanted=0, gas_used=0,
+                       tx_payload_bytes=0)]
+        for index, txhash in enumerate(hashes):
+            blocks.append(dict(height=11 + index, time=timestamp(5 * (index + 1)),
+                transactions=[dict(txhash=txhash, gas_wanted=10, gas_used=9, bytes=100)],
+                gas_wanted=10, gas_used=9, tx_payload_bytes=100))
+        samples = [{"sample_started_monotonic_ns": second * 10**9,
+                    "monotonic_ns": second * 10**9, "unix_ns": base + second * 10**9,
+                    "observed_height": 10 + second // 5,
+                    "nodes": [{"transactions": 1, "bytes": 100}] * 4} for second in range(16)]
+        samples.append({"sample_started_monotonic_ns": 20 * 10**9,
+                        "monotonic_ns": 20 * 10**9, "unix_ns": base + 20 * 10**9,
+                        "observed_height": 14,
+                        "nodes": [{"transactions": 0, "bytes": 0}] * 4})
+        metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            offered, committed, blocks,
+            0, 2 * 10**9, 25 * 10**9, samples)
+        self.assertEqual(metrics["saturated_commit_interval"], {
+            "predecessor_height": 10, "first_height": 11, "last_height": 13,
+            "observation_start_height": 10, "observation_end_height": 13,
+            "elapsed_seconds": 15.0, "transactions": 3,
+            "timing_basis": "monotonic all-validator-positive observation fence"})
+        self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
+        self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
+        self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
+        self.assertEqual(metrics["daily_equivalent_basis"],
+            "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
+        self.assertEqual(metrics["inclusion_latency_upper_bound_seconds"], {
+            "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+            "min": 4.0, "p50": 9.0, "p95": 19.0, "max": 19.0})
+        self.assertEqual([metrics[name] for name in ("invalid_transactions", "unknown_transactions",
+            "duplicate_transactions", "dropped_transactions", "retried_transactions")], [0] * 5)
+        self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
+        skewed = [dict(row, time=timestamp(-100 + index)) for index, row in enumerate(blocks)]
+        skewed_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            offered, committed, skewed, 0, 2 * 10**9, 25 * 10**9, samples)
+        self.assertEqual(skewed_metrics["committed_transactions_per_second"],
+                         metrics["committed_transactions_per_second"])
+        with self.assertRaisesRegex(ValueError, "did not observe a committed transaction height"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+                offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples[:-1])
+        with self.assertRaisesRegex(ValueError, "positive mempool backlog"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4}, offered,
+                committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:10])
+
+        imbalanced = [dict(row, session_index=index // 2, slot=index % 2)
+                      for index, row in enumerate(committed)]
+        imbalanced_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8, "sessions": 2},
+            offered, imbalanced, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
+        self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
+        self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
 
     def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
         profile = workload.native_v3_cross_audit_schedule()
@@ -1985,9 +2165,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             home = Path(tmp)
             providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
             sessions = []
-            for index in range(8):
+            for index in range(9):
                 sessions.append(dict(session_id=f"{index + 1:064x}", evidence_height=70,
-                    before_proofs={}, context_hash=f"{index + 9:064x}", seed=f"{index + 17:064x}"))
+                    before_proofs={"session": {"obligations": [{"slot": slot} for slot in range(8)]}},
+                    context_hash=f"{index + 9:064x}", seed=f"{index + 17:064x}"))
             directories = {}
             for provider in providers.values():
                 directories[provider] = home / provider
@@ -2002,7 +2183,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 provider = manifest["v3_provider"]
                 slot = next(index for index, address in providers.items() if address == provider)
                 rows = []
-                for index, request in enumerate(manifest["v3_sessions"]):
+                self.assertLessEqual(len(manifest["v3_sessions"]), 8)
+                for request in manifest["v3_sessions"]:
+                    self.assertNotIn("session_index", request)
+                    index = int(request["session_id"], 16) - 1
                     message_path = Path(request["output_path"])
                     message = dict(creator=provider,
                         session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
@@ -2019,10 +2203,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             with patch.object(artifact, "run_bounded_command", side_effect=export):
                 inventory = workload.export_native_v3_chain_inventory(
                     lifecycle, Path("/exporter"), sessions, providers, directories)
-            self.assertEqual(len(inventory["manifests"]), 8)
-            self.assertEqual(len(inventory["messages"]), 64)
+            self.assertEqual(len(inventory["manifests"]), 16)
+            self.assertEqual(len(inventory["messages"]), 72)
             self.assertEqual([(row["session_index"], row["slot"]) for row in inventory["messages"]],
-                             [(session, slot) for session in range(8) for slot in range(8)])
+                             [(session, slot) for session in range(9) for slot in range(8)])
             self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
                              list(providers.values()))
 
@@ -2052,6 +2236,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 job, evidence = workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
             diagnostic = json.loads(Path(evidence["simulation_diagnostic"]).read_text())
             self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (0, "provider0"))
+            self.assertEqual((diagnostic["attempts"], evidence["simulation_attempts"]), (1, 1))
             self.assertEqual(evidence["gas_limit"], 13_530_000)
             self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
             self.assertEqual(run.call_args.args[0][-1], "--generate-only")
@@ -2077,6 +2262,14 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(diagnostic["stderr_tail"], "simulation rejected")
             self.assertEqual(diagnostic["stdout_bytes"], len(b"partial output"))
             self.assertEqual(diagnostic["stderr_bytes"], len(b"simulation rejected"))
+
+            retry_path = Path(tmp) / "retry.json"
+            retry_path.write_text(json.dumps(message))
+            stale = SimpleNamespace(returncode=1, stdout="", stderr="account sequence mismatch, expected 6, got 5")
+            with patch.object(artifact, "run_bounded_command", side_effect=[stale, result]) as run, \
+                 patch.object(workload.time, "sleep") as sleep:
+                _, retry_evidence = workload.v3_generate_only_gas(life, retry_path, AUDIT_ADDRESSES[0])
+            self.assertEqual((run.call_count, sleep.call_count, retry_evidence["simulation_attempts"]), (2, 1, 2))
 
 
 
@@ -2138,7 +2331,8 @@ class HealthyAuditViewsTest(unittest.TestCase):
                   "--library", "/lib", "--home", "/new-home"]
         required = ["--gateway-binary", "/gateway", "--cli-binary", "/native-cli",
                     "--product-source", "/source", "--proof-exporter", "/exporter"]
-        for extra in ([], required + ["--proof-gas", "100"], required + ["--audit-profile", "c6"]):
+        for extra in ([], required + ["--proof-gas", "100"], required + ["--audit-profile", "c6"],
+                      required + ["--timeout", "3601"]):
             with self.subTest(extra=extra), patch.object(workload.sys, "argv", common + extra), \
                  patch.object(workload.sys, "stderr"), patch.object(artifact, "FourValidatorLifecycle") as constructor:
                 with self.assertRaises(SystemExit):
@@ -2148,6 +2342,8 @@ class HealthyAuditViewsTest(unittest.TestCase):
              patch.object(artifact, "FourValidatorLifecycle") as constructor, \
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
+            constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
+                                                timeout=3600, sustained=True)
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
                                         native_chain=dict(exporter="/exporter"), audit_profile="normal")
 
