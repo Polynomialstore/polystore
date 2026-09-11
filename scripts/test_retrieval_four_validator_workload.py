@@ -2148,7 +2148,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 rows = []
                 self.assertLessEqual(len(manifest["v3_sessions"]), 8)
                 for request in manifest["v3_sessions"]:
-                    index = request["session_index"]
+                    self.assertNotIn("session_index", request)
+                    index = int(request["session_id"], 16) - 1
                     message_path = Path(request["output_path"])
                     message = dict(creator=provider,
                         session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),

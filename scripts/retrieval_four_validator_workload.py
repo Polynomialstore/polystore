@@ -1677,7 +1677,9 @@ def export_native_v3_chain_inventory(lifecycle, exporter, sessions, providers, d
             manifest = inventory / f"provider-{slot}-batch-{batch_index}.manifest.json"
             manifest.write_text(json.dumps(dict(chain_id=lifecycle.chain,
                 trusted_setup=lifecycle.env["POLYSTORE_TRUSTED_SETUP"], deadline_unix_ms=deadline_ms,
-                v3_provider=provider, v3_artifact_directory=str(directory), v3_sessions=batch), separators=(",", ":")))
+                v3_provider=provider, v3_artifact_directory=str(directory),
+                v3_sessions=[{key: value for key, value in request.items() if key != "session_index"}
+                             for request in batch]), separators=(",", ":")))
             batches.append((manifest, batch))
         manifests.append((slot, batches))
     def run_one(item):
