@@ -33,8 +33,8 @@ Hub flags (defaults are localhost):
   --expected-evm-chain-id ID
   --expected-eip712-chain-id ID
   --expected-evm-denom DENOM
-  --expected-consensus-max-gas GAS
-  --expected-consensus-max-bytes BYTES
+  --consensus-profile FILE
+                   Strict checked-in max-gas/max-bytes profile
   --expected-min-provider-bond COIN
   --expected-provider 'ADDR|HTTPS_BASE|ONCHAIN_MULTIADDR'
                    Repeat once per required provider-daemon
@@ -831,6 +831,7 @@ EXPECTED_COSMOS_CHAIN_ID=""
 EXPECTED_EVM_CHAIN_ID=""
 EXPECTED_EIP712_CHAIN_ID=""
 EXPECTED_EVM_DENOM=""
+CONSENSUS_PROFILE=""
 EXPECTED_CONSENSUS_MAX_GAS=""
 EXPECTED_CONSENSUS_MAX_BYTES=""
 EXPECTED_MIN_PROVIDER_BOND=""
@@ -859,8 +860,7 @@ while [[ $# -gt 0 ]]; do
     --expected-evm-chain-id) EXPECTED_EVM_CHAIN_ID="$2"; shift 2 ;;
     --expected-eip712-chain-id) EXPECTED_EIP712_CHAIN_ID="$2"; shift 2 ;;
     --expected-evm-denom) EXPECTED_EVM_DENOM="$2"; shift 2 ;;
-    --expected-consensus-max-gas) EXPECTED_CONSENSUS_MAX_GAS="$2"; shift 2 ;;
-    --expected-consensus-max-bytes) EXPECTED_CONSENSUS_MAX_BYTES="$2"; shift 2 ;;
+    --consensus-profile) CONSENSUS_PROFILE="$2"; shift 2 ;;
     --expected-min-provider-bond) EXPECTED_MIN_PROVIDER_BOND="$2"; shift 2 ;;
     --expected-provider) EXPECTED_PROVIDERS+=("$2"); shift 2 ;;
     --polystore-precompile) POLYSTORE_PRECOMPILE="$2"; shift 2 ;;
@@ -883,6 +883,13 @@ done
 
 require_cmd curl
 
+if [[ -n "$CONSENSUS_PROFILE" ]]; then
+  require_cmd python3
+  read -r EXPECTED_CONSENSUS_MAX_GAS EXPECTED_CONSENSUS_MAX_BYTES < <(
+    python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/retrieval_consensus_profile.py" "$CONSENSUS_PROFILE"
+  )
+fi
+
 if [[ ! "$HC_TIMEOUT" =~ ^[1-9][0-9]*$ || ! "$BLOCK_WAIT" =~ ^[1-9][0-9]*$ ||
       ! "$TLS_MIN_VALID_DAYS" =~ ^[0-9]+$ ]]; then
   echo "ERROR: timeout and block-wait must be positive integers; tls-min-valid-days must be a non-negative integer" >&2
@@ -894,7 +901,7 @@ if [[ "$PUBLIC_MODE" == "1" ]]; then
   require_cmd python3
   if [[ "$MODE" != "hub" || -z "$BROWSER_ORIGIN" || -z "$EXPECTED_COSMOS_CHAIN_ID" ||
         -z "$EXPECTED_EVM_CHAIN_ID" || -z "$EXPECTED_EIP712_CHAIN_ID" || -z "$EXPECTED_EVM_DENOM" ||
-        -z "$EXPECTED_CONSENSUS_MAX_GAS" || -z "$EXPECTED_CONSENSUS_MAX_BYTES" ||
+        -z "$CONSENSUS_PROFILE" || -z "$EXPECTED_CONSENSUS_MAX_GAS" || -z "$EXPECTED_CONSENSUS_MAX_BYTES" ||
         -z "$EXPECTED_MIN_PROVIDER_BOND" ||
         "${#EXPECTED_PROVIDERS[@]}" -eq 0 || -z "$POLYSTORE_PRECOMPILE" ||
         "$CHECK_FAUCET" != "1" ]]; then

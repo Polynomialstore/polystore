@@ -815,10 +815,14 @@ PY
 ensure_metadata() {
   GENESIS="$CHAIN_HOME/config/genesis.json"
   if [ ! -f "$GENESIS" ]; then return; fi
-  python3 - "$GENESIS" <<'PY'
+  python3 - "$GENESIS" "$ROOT_DIR/scripts/retrieval_consensus_profile.json" "$ROOT_DIR/scripts" <<'PY'
 import json, os, sys
 path = sys.argv[1]
+sys.path.insert(0, sys.argv[3])
+from retrieval_consensus_profile import load_consensus_profile
+consensus = load_consensus_profile(sys.argv[2])
 data = json.load(open(path))
+data["consensus"]["params"]["block"].update(consensus["block"])
 bank = data.get("app_state", {}).get("bank", {})
 md = bank.get("denom_metadata", [])
 if not any(m.get("base") == "aatom" for m in md):
@@ -874,6 +878,7 @@ if isinstance(polystorechain, dict):
 
 assert any(m.get("base") == "aatom" for m in data["app_state"]["bank"]["denom_metadata"])
 assert addr in data["app_state"]["evm"]["params"]["active_static_precompiles"]
+assert data["consensus"]["params"]["block"] == consensus["block"]
 raw_chain_id = (os.getenv("EVM_CHAIN_ID") or "").strip()
 if raw_chain_id:
     assert raw_chain_id.isdigit() and nparams.get("eip712_chain_id") == raw_chain_id

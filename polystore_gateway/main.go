@@ -2738,7 +2738,7 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mduIdx, mduPath, _, err := GetFileLocation(dealDir, filePath)
+	mduIdx, mduPath, fileLength, err := GetFileLocation(dealDir, filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			writeJSONError(
@@ -2790,7 +2790,26 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 		providerKeyName = name
 	}
 
-	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, mdu0Path, providerKeyName, dealOwner)
+	var proofPayload []byte
+	if stripe.mode == 2 {
+		proofPayload, _, err = generateProofHeaderJSON(r.Context(), dealID, epoch, mduIdx, mduPath, mdu0Path, 0, 0, stripe.leafCount, 0)
+		if err != nil {
+			log.Printf("GatewayProveRetrieval: generate Mode 2 proof failed: %v", err)
+			writeJSONError(w, http.StatusInternalServerError, "failed to generate retrieval proof", err.Error())
+			return
+		}
+	}
+	const maxLegacyReceiptRange = uint64(types.BLOB_SIZE / 32 * 31)
+	rangeLen := fileLength
+	if rangeLen > maxLegacyReceiptRange {
+		rangeLen = maxLegacyReceiptRange
+	}
+	if rangeLen == 0 {
+		writeJSONError(w, http.StatusConflict, "cannot prove an empty file", "")
+		return
+	}
+
+	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, mdu0Path, providerKeyName, dealOwner, proofPayload, filePath, 0, rangeLen)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
 		// Surface the underlying chain/CLI error in the HTTP response so CI/E2E
