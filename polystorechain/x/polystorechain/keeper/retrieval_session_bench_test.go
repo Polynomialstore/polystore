@@ -432,9 +432,10 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 	}
 }
 
-// BenchmarkVerifyChainedProofParallel measures the two pure native checks that
-// verifyPolyFSChainedProof invokes for each MsgSubmitRetrievalSessionProofV3
-// sample. It excludes challenge derivation and admission, keeper reads/writes,
+// BenchmarkVerifyChainedProofParallel measures the exact pure
+// verifyPolyFSChainedProof path used for each MsgSubmitRetrievalSessionProofV3
+// sample, including shape/path validation and both native KZG checks. It
+// excludes challenge derivation and admission, keeper reads/writes,
 // transaction handling, and gas accounting.
 func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	b.Setenv("POLYSTORE_BENCH_FIXTURE_NONCONSTANT", "1")
@@ -446,33 +447,18 @@ func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	require.NotEqual(b, infinity, proof.ManifestOpening)
 	require.NotEqual(b, infinity, proof.BlobCommitment)
 	require.NotEqual(b, infinity, proof.KzgOpeningProof)
-	rootPath := benchFlattenPath(proof.RootTableDuMerklePath)
-	blobPath := benchFlattenPath(proof.MerklePath)
-	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
-		env.deal.ManifestRoot, proof.MduIndex, proof.MduRootFr,
-		proof.RootTableDuCommitment, rootPath, proof.ManifestOpening)
-	require.NoError(b, err)
-	require.True(b, ok)
-	ok, err = crypto_ffi.VerifyMduProof(
-		proof.MduRootFr, proof.BlobCommitment, blobPath, proof.BlobIndex,
-		env.leafCount, proof.ZValue, proof.YValue, proof.KzgOpeningProof)
+	ok, err := keeper.VerifyPolyFSChainedProofForTest(
+		env.deal.ManifestRoot, &proof, env.leafCount)
 	require.NoError(b, err)
 	require.True(b, ok)
 	b.ResetTimer()
 	b.ReportMetric(1, "sessions/op")
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ok, err := crypto_ffi.VerifyMdu0RootTableProof(
-				env.deal.ManifestRoot, proof.MduIndex, proof.MduRootFr,
-				proof.RootTableDuCommitment, rootPath, proof.ManifestOpening)
+			ok, err := keeper.VerifyPolyFSChainedProofForTest(
+				env.deal.ManifestRoot, &proof, env.leafCount)
 			if err != nil || !ok {
-				b.Fatalf("manifest verify failed: ok=%v err=%v", ok, err)
-			}
-			ok, err = crypto_ffi.VerifyMduProof(
-				proof.MduRootFr, proof.BlobCommitment, blobPath, proof.BlobIndex,
-				env.leafCount, proof.ZValue, proof.YValue, proof.KzgOpeningProof)
-			if err != nil || !ok {
-				b.Fatalf("blob verify failed: ok=%v err=%v", ok, err)
+				b.Fatalf("V3 chained proof verify failed: ok=%v err=%v", ok, err)
 			}
 		}
 	})
