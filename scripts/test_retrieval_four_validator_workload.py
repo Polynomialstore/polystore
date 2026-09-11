@@ -2199,6 +2199,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 job, evidence = workload.v3_generate_only_gas(life, path, AUDIT_ADDRESSES[0])
             diagnostic = json.loads(Path(evidence["simulation_diagnostic"]).read_text())
             self.assertEqual((diagnostic["returncode"], diagnostic["simulation_key"]), (0, "provider0"))
+            self.assertEqual((diagnostic["attempts"], evidence["simulation_attempts"]), (1, 1))
             self.assertEqual(evidence["gas_limit"], 13_530_000)
             self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
             self.assertEqual(run.call_args.args[0][-1], "--generate-only")
@@ -2224,6 +2225,14 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(diagnostic["stderr_tail"], "simulation rejected")
             self.assertEqual(diagnostic["stdout_bytes"], len(b"partial output"))
             self.assertEqual(diagnostic["stderr_bytes"], len(b"simulation rejected"))
+
+            retry_path = Path(tmp) / "retry.json"
+            retry_path.write_text(json.dumps(message))
+            stale = SimpleNamespace(returncode=1, stdout="", stderr="account sequence mismatch, expected 6, got 5")
+            with patch.object(artifact, "run_bounded_command", side_effect=[stale, result]) as run, \
+                 patch.object(workload.time, "sleep") as sleep:
+                _, retry_evidence = workload.v3_generate_only_gas(life, retry_path, AUDIT_ADDRESSES[0])
+            self.assertEqual((run.call_count, sleep.call_count, retry_evidence["simulation_attempts"]), (2, 1, 2))
 
 
 

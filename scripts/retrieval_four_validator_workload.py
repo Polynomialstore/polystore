@@ -1621,13 +1621,20 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     argv = [*job["submit"], "--generate-only"]
     argv[argv.index("--from") + 1] = aliases[0]
     deadline = min(lifecycle.deadline, artifact.monotonic_ns() + 60 * 10**9)
-    result = artifact.run_bounded_command(argv, deadline,
-        env={key: lifecycle.env[key] for key in ENV_KEYS if key in lifecycle.env})
+    attempts = []
+    for attempt in range(3):
+        result = artifact.run_bounded_command(argv, deadline,
+            env={key: lifecycle.env[key] for key in ENV_KEYS if key in lifecycle.env})
+        attempts.append(result)
+        if (not result.returncode or "account sequence mismatch" not in result.stderr or attempt == 2 or
+                artifact.monotonic_ns() + 10**9 >= deadline):
+            break
+        time.sleep(1)
     stdout, stderr = result.stdout.encode(), result.stderr.encode()
     diagnostic = message_path.with_name(message_path.name + ".gas-simulation.json")
     with diagnostic.open("x") as output:
         json.dump(dict(message_path=str(message_path), provider=provider, simulation_key=aliases[0], command=argv,
-            returncode=result.returncode, stdout_bytes=len(stdout), stderr_bytes=len(stderr),
+            returncode=result.returncode, attempts=len(attempts), stdout_bytes=len(stdout), stderr_bytes=len(stderr),
             stdout_sha256=hashlib.sha256(stdout).hexdigest(), stderr_sha256=hashlib.sha256(stderr).hexdigest(),
             stdout_tail=stdout[-8192:].decode("utf-8", errors="replace"),
             stderr_tail=stderr[-8192:].decode("utf-8", errors="replace")), output, separators=(",", ":"))
@@ -1649,6 +1656,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider):
     job = transaction_job(lifecycle, provider,
         ["retrieval-session-v3", "prove", str(message_path)], kind="submit-proof", gas=str(gas))
     return job, dict(message_sha256=hashlib.sha256(source_raw).hexdigest(), gas_limit=gas,
+                     simulation_attempts=len(attempts),
                      simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
                      simulation_diagnostic=str(diagnostic), unsigned_path=str(unsigned_path),
                      unsigned_sha256=artifact.sha256(unsigned_path))
