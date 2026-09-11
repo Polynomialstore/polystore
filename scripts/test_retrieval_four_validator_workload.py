@@ -1554,6 +1554,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.native_v3_chain_capacity_profiles("1kib", 4991)
         with self.assertRaisesRegex(ValueError, "must be 1..4999"):
             workload.native_v3_chain_capacity_profiles("1kib", 5000)
+        with self.assertRaisesRegex(ValueError, "more than ten"):
+            workload.native_v3_minimum_gas_blocks(10 * 64_000_000, 64_000_000)
+        self.assertEqual(workload.native_v3_minimum_gas_blocks(
+            10 * 64_000_000 + 1, 64_000_000), 11)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
@@ -1575,6 +1579,9 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             lifecycle, waited.append, audits, 100, 20, 500)
         self.assertEqual((waited, result["height"], result["epoch"], result["next_anchor"]),
                          ([103, 104, 105], 105, 2, 201))
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            workload.await_native_v3_capacity_window(
+                SimpleNamespace(wait_height=Mock()), Mock(), Mock(), 100, 99, 500)
 
     def test_direct_broadcast_and_mempool_responses_fail_closed(self):
         txhash = "AB" * 32
@@ -2364,6 +2371,15 @@ class HealthyAuditViewsTest(unittest.TestCase):
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
                 native_chain=dict(exporter="/exporter", max_block_gas=448_000_000,
                                   profile="1kib", measured_transactions=4992), audit_profile="normal")
+        for profile in ("1kib", "eight-blobs"):
+            invalid = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", profile,
+                                  "--chain-capacity-transactions", "4991"]
+            with self.subTest(profile=profile), patch.object(workload.sys, "argv", common + invalid), \
+                 patch.object(workload.sys, "stderr"), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 self.assertRaises(SystemExit):
+                workload.main()
+            constructor.assert_not_called()
 
     def test_native_v3_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",

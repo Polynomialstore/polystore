@@ -133,6 +133,15 @@ def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=N
     return profiles
 
 
+def native_v3_minimum_gas_blocks(total_gas, max_block_gas):
+    total_gas = artifact.integer(total_gas, "inventory gas", 1)
+    max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
+    blocks = (total_gas + max_block_gas - 1) // max_block_gas
+    if blocks <= V3_CHAIN_BACKLOG_SECONDS:
+        raise ValueError("fixed inventory must require more than ten maximum-gas blocks")
+    return blocks
+
+
 def native_v3_capacity_deadline(opened_at, session_index):
     return opened_at + V3_CHAIN_SESSION_TTL_BLOCKS + session_index // V3_EXPIRY_REFS_PER_BLOCK
 
@@ -1601,6 +1610,8 @@ def require_provider_quiescence(lifecycle, providers):
 def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
                                     required_margin, deadline_height):
     """Wait for complete normal audits with enough blocks left in the epoch."""
+    if required_margin > epoch_length - 2:
+        raise ValueError("native chain capacity margin cannot fit within one audit epoch")
     while True:
         height = lifecycle.wait_height(1)
         epoch = (height - 1) // epoch_length + 1
@@ -2214,9 +2225,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         max_block_gas = artifact.integer(
             lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
         total_gas = sum(row[2]["gas_limit"] for row in profile_simulated)
-        minimum_gas_blocks = math.ceil(total_gas / max_block_gas)
-        if total_gas < V3_CHAIN_BACKLOG_SECONDS * max_block_gas:
-            raise ValueError("fixed inventory cannot occupy ten maximum-gas blocks")
+        minimum_gas_blocks = native_v3_minimum_gas_blocks(total_gas, max_block_gas)
         required_margin = minimum_gas_blocks + 10
         profile_deadline_height = min(row["deadline_height"] for row in
                                       sessions[profile["session_start"]:profile["session_end"]])
@@ -4905,11 +4914,14 @@ def main():
                 sustained_rate_scale != 1 or sustained_deputies != 8 or
                 options["timeout"] > 3600 or audit_profile != "normal" or
                 (selected_chain_profile and None in
-                 (chain_max_gas, chain_capacity_profile, chain_capacity_transactions)) or
-                (chain_capacity_transactions is not None and not 1 <= chain_capacity_transactions <= 4999)):
+                 (chain_max_gas, chain_capacity_profile, chain_capacity_transactions))):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
         native_chain = dict(exporter=exporter)
         if selected_chain_profile:
+            try:
+                native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions)
+            except ValueError as error:
+                parser.error(str(error))
             native_chain.update(max_block_gas=chain_max_gas, profile=chain_capacity_profile,
                                 measured_transactions=chain_capacity_transactions)
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
