@@ -11,6 +11,7 @@ million sessions/day** by short-run extrapolation.
 | --- | ---: | ---: | ---: | ---: | --- |
 | 160M gas, 1s | 188.35 | 16.27M | 1.434s | 602-621ms | round 0, no missed signatures |
 | 160M gas, 500ms | 246.11 | 21.26M | 1.180s | 608-629ms | round 0, 6 missed signatures |
+| 384M gas, 1s | 317.00 | 27.39M | 2.069s | 1.539-1.581s | round 0, 5 missed signatures |
 
 The one-second profile passed exact transaction/session reconciliation, 25-block
 saturation, ten-second backlog, commit-latency, execution-latency, consensus,
@@ -23,6 +24,16 @@ five, approximately 187.2M at the retained 1.1 gas adjustment. The measured 192M
 diagnostic reached 234.57 sessions/s but its 757-771ms `FinalizeBlock` p95 failed
 the 700ms execution budget. A smaller gas increase would admit no additional
 batch, and the next increase already exceeds the measured latency budget.
+
+A saturated 384M diagnostic admitted ten batches, or 640 sessions, per full
+block. It raised throughput to 317.00 sessions/s, but execution took about
+1.54-1.58 seconds and five validator signatures were missed. Full blocks were
+only 510 KiB, so the 2 MiB byte limit was not involved. The host averaged 67.7%
+CPU and the validators used 10.49 cores together, reaching only 36.3% of the
+four-worker verifier-only ceiling. The 448M hard experimental limit was not run:
+384M had already failed both the execution and validator-health gates. Raising
+block gas alone therefore cannot safely bring full-chain throughput in line
+with the pure verifier ceiling.
 
 The host was underutilized as a whole: the four validators averaged 6.27 CPU
 cores together on a 16-logical-CPU Ryzen 7 9700X host, while each validator
