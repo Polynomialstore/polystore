@@ -2259,17 +2259,37 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                 signed = prefix.with_suffix(".signed.jsonl")
                 selected = [simulations[intent["id"] if intent["submission_mode"] == "batch-message"
                                         else intent["members"][0]["id"]] for intent in rows]
-                unsigned.write_text("".join(Path(row["unsigned_path"]).read_text() for row in selected))
-                unsigned_values = [json.loads(line) for line in unsigned.read_text().splitlines()]
-                command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), *common,
-                         "--output-document", str(signed)], 300)
-                signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
-                if len(signed_values) != len(rows) or len(unsigned_values) != len(rows):
-                    raise ValueError("sign-batch returned an incomplete transaction inventory")
+                if rows[0]["submission_mode"] == "batch-message":
+                    unsigned_values, signed_values = [], []
+                    for index, simulation in enumerate(selected):
+                        unsigned_one = prefix.with_name(prefix.name + f"-{index}.unsigned.json")
+                        signed_one = prefix.with_name(prefix.name + f"-{index}.signed.json")
+                        unsigned_one.write_text(Path(simulation["unsigned_path"]).read_text())
+                        values = [json.loads(line) for line in unsigned_one.read_text().splitlines()]
+                        if len(values) != 1:
+                            raise ValueError("batch-message unsigned transaction inventory is incomplete")
+                        per_tx_common = list(common)
+                        per_tx_common[per_tx_common.index("--sequence") + 1] = str(sequence + index)
+                        command([str(lifecycle.binary), "tx", "sign", str(unsigned_one),
+                                 *per_tx_common, "--output-document", str(signed_one)], 300)
+                        values_signed = [json.loads(line) for line in signed_one.read_text().splitlines()]
+                        if len(values_signed) != 1:
+                            raise ValueError("tx sign returned an incomplete transaction inventory")
+                        unsigned_values.extend(values)
+                        signed_values.extend(values_signed)
+                else:
+                    unsigned.write_text("".join(Path(row["unsigned_path"]).read_text() for row in selected))
+                    unsigned_values = [json.loads(line) for line in unsigned.read_text().splitlines()]
+                    command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), *common,
+                             "--output-document", str(signed)], 300)
+                    signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
+                    if len(signed_values) != len(rows) or len(unsigned_values) != len(rows):
+                        raise ValueError("sign-batch returned an incomplete transaction inventory")
                 for index, (intent, simulation, unsigned_tx, signed_tx) in enumerate(
                         zip(rows, selected, unsigned_values, signed_values)):
                     signed_one = prefix.with_name(prefix.name + f"-{index}.signed.json")
-                    signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
+                    if rows[0]["submission_mode"] != "batch-message":
+                        signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
                     pending.append(validate_frozen_signed_transaction(intent, signed_tx,
                         unsigned_tx["body"]["messages"], simulation["gas_limit"], sequence + index, signed_one))
                     encoding_sources.append(signed_one)

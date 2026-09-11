@@ -2906,6 +2906,62 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             sign = next(argv for argv in calls if argv[2] == "sign-batch")
             self.assertIn("--append", sign)
 
+    def test_batch_message_signs_large_transactions_individually_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            messages = self._messages(tmp, 16)
+            profile = dict(name="1kib", submission_mode="batch-message", batch_size=8)
+            intents = workload.build_native_v3_transaction_intents(messages, profile, home / "intents")
+            simulations = {}
+            for intent in intents:
+                message = json.loads(Path(intent["message_path"]).read_text())
+                unsigned = home / f"{intent['id']}.unsigned.json"
+                unsigned.write_text(json.dumps({
+                    "body": {"messages": [dict({"@type": workload.V3_BATCH_PROOF_TYPE}, **message)],
+                             "memo": "x" * 70_000},
+                    "auth_info": {"fee": {"gas_limit": "100"}},
+                }, separators=(",", ":")) + "\n")
+                simulations[intent["id"]] = {"unsigned_path": str(unsigned), "gas_limit": 100}
+            provider = AUDIT_ADDRESSES[0]
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="bench",
+                nodes=[{"home": "/node"}], signers={f"provider{i}": address
+                    for i, address in enumerate(AUDIT_ADDRESSES[:8])})
+            calls = []
+
+            def command(argv, timeout):
+                calls.append(argv)
+                if argv[2] == "sign":
+                    source = Path(argv[3])
+                    self.assertGreater(source.stat().st_size, 64 * 1024)
+                    value = json.loads(source.read_text())
+                    value["auth_info"].update(signer_infos=[{
+                        "sequence": argv[argv.index("--sequence") + 1]}])
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                if argv[2] == "encode":
+                    sequence = json.loads(Path(argv[3]).read_text())["auth_info"]["signer_infos"][0]["sequence"]
+                    return base64.b64encode(f"raw-{sequence}".encode()).decode() + "\n"
+                raise AssertionError(f"unexpected command: {argv}")
+
+            sequences = {provider: {"account_number": 3, "sequence": 4}}
+            frozen = workload.freeze_native_v3_transactions(lifecycle, intents, simulations, [profile],
+                dict(enumerate(AUDIT_ADDRESSES[:8])), sequences, command)
+            self.assertEqual(sum(row[2] == "sign" for row in calls), 2)
+            self.assertEqual(sum(row[2] == "sign-batch" for row in calls), 0)
+            self.assertEqual([row["sequence"] for row in frozen], [4, 5])
+            self.assertEqual([Path(row["raw_path"]).read_bytes() for row in frozen], [b"raw-4", b"raw-5"])
+
+            def incomplete(argv, timeout):
+                if argv[2] == "sign":
+                    Path(argv[argv.index("--output-document") + 1]).write_text("")
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+
+            with self.assertRaisesRegex(ValueError, "tx sign returned an incomplete transaction inventory"):
+                workload.freeze_native_v3_transactions(lifecycle, intents, simulations, [profile],
+                    dict(enumerate(AUDIT_ADDRESSES[:8])), sequences, incomplete)
+
     def test_resource_summary_reports_host_and_aggregate_validator_usage(self):
         self.assertEqual(workload.parse_host_proc_stat("cpu  1 2 3 4 5 6 7 8\n")["idle_ticks"], 9)
         self.assertEqual(workload.parse_proc_memory("VmRSS: 12 kB\n", process=True)["VmRSS"], 12288)
