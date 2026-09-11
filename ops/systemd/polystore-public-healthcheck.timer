@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PolyStore public deployment qualification every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=polystore-public-healthcheck.service
+
+[Install]
+WantedBy=timers.target

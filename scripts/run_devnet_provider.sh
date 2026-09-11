@@ -21,6 +21,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Load canonical public testnet defaults unless the operator has explicitly overridden them.
 # shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/chain_cli_helpers.sh"
 
 ACTION="${1:-start}"
 
@@ -1249,8 +1251,9 @@ register_provider() {
   fi
   validate_provider_endpoints_for_profile "register"
 
-  local addr
+  local addr chain_module
   addr="$(provider_addr)"
+  chain_module="$(detect_chain_module_cli_name "$POLYSTORECHAIND_BIN")"
 
   ensure_provider_account_funded "$addr"
 
@@ -1269,7 +1272,7 @@ register_provider() {
 
   if provider_registered; then
     echo "==> Updating provider endpoints on-chain..."
-    "$POLYSTORECHAIND_BIN" tx polystorechain update-provider-endpoints \
+    "$POLYSTORECHAIND_BIN" tx "$chain_module" update-provider-endpoints \
       "${endpoint_args[@]}" \
       --from "$PROVIDER_KEY" \
       --chain-id "$CHAIN_ID" \
@@ -1287,7 +1290,7 @@ register_provider() {
       bond_args=(--bond "$PROVIDER_REGISTRATION_BOND")
     fi
     echo "==> Registering provider on-chain..."
-    "$POLYSTORECHAIND_BIN" tx polystorechain register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
+    "$POLYSTORECHAIND_BIN" tx "$chain_module" register-provider "$PROVIDER_CAPABILITIES" "$PROVIDER_TOTAL_STORAGE" \
       "${endpoint_args[@]}" \
       "${bond_args[@]}" \
       --from "$PROVIDER_KEY" \
@@ -1320,8 +1323,9 @@ request_provider_link() {
     exit 1
   fi
 
-  local addr current_operator requested_operator
+  local addr current_operator requested_operator chain_module
   addr="$(provider_addr)"
+  chain_module="$(detect_chain_module_cli_name "$POLYSTORECHAIND_BIN")"
   if [ -z "$addr" ]; then
     echo "ERROR: provider key not found; run: ./scripts/run_devnet_provider.sh init" >&2
     exit 1
@@ -1351,7 +1355,7 @@ request_provider_link() {
   ensure_provider_account_funded "$addr"
 
   echo "==> Requesting provider link on-chain..."
-  "$POLYSTORECHAIND_BIN" tx polystorechain request-provider-link "$operator" \
+  "$POLYSTORECHAIND_BIN" tx "$chain_module" request-provider-link "$operator" \
     --from "$PROVIDER_KEY" \
     --chain-id "$CHAIN_ID" \
     --node "$NODE_ADDR" \
