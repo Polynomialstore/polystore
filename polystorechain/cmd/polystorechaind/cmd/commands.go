@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bufio"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,7 +14,6 @@ import (
 	"cosmossdk.io/log"
 	confixcmd "cosmossdk.io/tools/confix/cmd"
 	dbm "github.com/cosmos/cosmos-db"
-	cosmosevmserver "github.com/cosmos/evm/server"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/debug"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -21,9 +24,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	authclient "github.com/cosmos/cosmos-sdk/x/auth/client"
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
+	cosmosevmserver "github.com/cosmos/evm/server"
 
 	"polystorechain/app"
 )
@@ -114,10 +119,59 @@ func txCommand() *cobra.Command {
 		flags.LineBreak,
 		authcmd.GetBroadcastCommand(),
 		authcmd.GetEncodeCommand(),
+		newEncodeBatchCommand(),
 		authcmd.GetDecodeCommand(),
 		authcmd.GetSimulateCmd(),
 	)
 
+	return cmd
+}
+
+// newEncodeBatchCommand encodes newline-delimited transaction JSON without
+// paying the command startup cost once per transaction.
+func newEncodeBatchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "encode-batch [file] ([file2]...)",
+		Short: "Encode transaction batch files",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx := client.GetClientContextFromCmd(cmd)
+			scanner, err := authclient.ReadTxsFromInput(clientCtx.TxConfig, args...)
+			if err != nil {
+				return err
+			}
+			output := cmd.OutOrStdout()
+			outputDocument, _ := cmd.Flags().GetString(flags.FlagOutputDocument)
+			if outputDocument != "" {
+				file, err := os.Create(outputDocument)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+				output = file
+			}
+			writer := bufio.NewWriter(output)
+			for scanner.Scan() {
+				txBytes, err := clientCtx.TxConfig.TxEncoder()(scanner.Tx())
+				if err != nil {
+					return err
+				}
+				if _, err := fmt.Fprintln(writer, base64.StdEncoding.EncodeToString(txBytes)); err != nil {
+					return err
+				}
+			}
+			if err := scanner.UnmarshalErr(); err != nil {
+				return err
+			}
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+			return writer.Flush()
+		},
+	}
+	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().String(flags.FlagOutputDocument, "", "The encoded transactions are written to the given file instead of STDOUT")
+	_ = cmd.Flags().MarkHidden(flags.FlagOutput)
 	return cmd
 }
 

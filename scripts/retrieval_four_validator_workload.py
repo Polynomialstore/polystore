@@ -79,6 +79,8 @@ V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
 V3_CHAIN_AUDIT_EPOCH_BLOCKS = 100
 V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
+V3_128M_QUALIFICATION_TRANSACTIONS = 4992
+V3_128M_QUALIFICATION_GAS = 128_000_000
 V3_PROOF_CRYPTO_GAS = 500_000
 V3_PROOF_OPENING_OVERHEAD_GAS = 313_000
 V3_PROOF_TRANSACTION_OVERHEAD_GAS = 130_000
@@ -267,7 +269,7 @@ def v3_http_schedule_bins(schedule, outcomes, *, start_ns):
 
 
 def parse_proc_stat(raw, *, expected_pid=None):
-    """Parse only stable /proc/<pid>/stat identity and CPU fields."""
+    """Parse stable /proc/<pid>/stat identity, CPU and resident-page fields."""
     if not isinstance(raw, str) or ")" not in raw:
         raise ValueError("invalid validator proc stat")
     prefix, suffix = raw.rstrip("\n").rsplit(")", 1)
@@ -275,13 +277,13 @@ def parse_proc_stat(raw, *, expected_pid=None):
         raise ValueError("invalid validator proc stat command")
     pid_text, _ = prefix.split("(", 1)
     fields = suffix.strip().split()
-    if len(fields) < 20:
+    if len(fields) < 22:
         raise ValueError("short validator proc stat")
     pid = producer.uint(pid_text.strip())
     if expected_pid is not None and pid != expected_pid:
         raise ValueError("validator proc stat PID changed")
     return dict(pid=pid, user_ticks=producer.uint(fields[11]), system_ticks=producer.uint(fields[12]),
-                starttime_ticks=producer.uint(fields[19]))
+                starttime_ticks=producer.uint(fields[19]), rss_pages=producer.uint(fields[21]))
 
 
 def parse_host_proc_stat(raw):
@@ -363,6 +365,9 @@ def validator_cpu_snapshot(lifecycle):
     ticks = os.sysconf("SC_CLK_TCK")
     if type(ticks) is not int or ticks <= 0:
         raise ValueError("invalid Linux clock tick rate")
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    if type(page_size) is not int or page_size <= 0:
+        raise ValueError("invalid Linux page size")
     at = artifact.monotonic_ns()
     rows = []
     resources = lifecycle.doc.get("validator_resources", [])
@@ -372,8 +377,10 @@ def validator_cpu_snapshot(lifecycle):
             raise ValueError("validator PID is not uniquely retained")
         pid = producer.uint(matches[0]["pid"])
         stat = parse_proc_stat(Path(f"/proc/{pid}/stat").read_text(), expected_pid=pid)
-        rows.append(dict(node_id=node["node_id"], **stat))
-    return dict(monotonic_ns=at, clock_ticks_per_second=ticks, validators=rows)
+        rss_bytes = stat.pop("rss_pages") * page_size
+        rows.append(dict(node_id=node["node_id"], **stat, rss_bytes=rss_bytes))
+    return dict(monotonic_ns=at, clock_ticks_per_second=ticks,
+                page_size_bytes=page_size, validators=rows)
 
 
 def validator_cpu_delta(before, after):
@@ -394,10 +401,48 @@ def validator_cpu_delta(before, after):
         rows.append(dict(node_id=node_id, pid=start["pid"], starttime_ticks=start["starttime_ticks"],
                          user_ticks=user, system_ticks=system,
                          user_cpu_seconds=user / before["clock_ticks_per_second"],
-                         system_cpu_seconds=system / before["clock_ticks_per_second"]))
+                         system_cpu_seconds=system / before["clock_ticks_per_second"],
+                         rss_start_bytes=start.get("rss_bytes"), rss_end_bytes=end.get("rss_bytes")))
     return dict(measurement_scope="measured scheduler window", monotonic_start_ns=before["monotonic_ns"],
                 monotonic_end_ns=after["monotonic_ns"], clock_ticks_per_second=before["clock_ticks_per_second"],
                 validators=rows)
+
+
+def validator_backlog_resources(samples, backlog, clock_ticks_per_second):
+    """CPU and sampled RSS for each validator inside the positive-backlog fence."""
+    ticks = producer.uint(clock_ticks_per_second)
+    selected = [sample for sample in samples if
+                backlog["monotonic_start_ns"] <= sample["monotonic_ns"] <= backlog["monotonic_end_ns"]]
+    if len(selected) < 2 or ticks == 0:
+        raise ValueError("positive backlog has insufficient validator resource samples")
+    node_ids = {row["node_id"] for row in selected[0]["nodes"]}
+    if len(node_ids) != 4:
+        raise ValueError("validator resource samples do not identify four nodes")
+    rows = []
+    for node_id in sorted(node_ids):
+        observed = []
+        for sample in selected:
+            matches = [row for row in sample["nodes"] if row.get("node_id") == node_id]
+            if len(matches) != 1:
+                raise ValueError("validator resource sample set changed")
+            observed.append(matches[0])
+        first, last = observed[0], observed[-1]
+        if (first["pid"], first["starttime_ticks"]) != (last["pid"], last["starttime_ticks"]):
+            raise ValueError("validator process identity changed during backlog")
+        elapsed = (last["process_monotonic_ns"] - first["process_monotonic_ns"]) / 1e9
+        user = last["user_ticks"] - first["user_ticks"]
+        system = last["system_ticks"] - first["system_ticks"]
+        if elapsed <= 0 or user < 0 or system < 0:
+            raise ValueError("validator backlog resource counters are invalid")
+        rows.append(dict(node_id=node_id, pid=first["pid"], elapsed_seconds=elapsed,
+            cpu_percent_of_one_core=(user + system) / ticks / elapsed * 100,
+            user_cpu_seconds=user / ticks, system_cpu_seconds=system / ticks,
+            sampled_peak_rss_bytes=max(row["rss_bytes"] for row in observed),
+            peak_mempool_transactions=max(row["transactions"] for row in observed),
+            peak_mempool_bytes=max(row["bytes"] for row in observed)))
+    return {"measurement_scope": "longest all-validator-positive mempool interval",
+            "rss_basis": "100ms /proc resident-set samples; sampled peak, not process-lifetime peak",
+            "validators": rows}
 
 
 def require_free_disk(path, minimum, phase):
@@ -2105,13 +2150,28 @@ def _rpc_broadcast_lane(node, rows, start_event):
 def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
     samples = []
     last_resource_sample_ns = 0
+    ticks = os.sysconf("SC_CLK_TCK")
+    page_size = os.sysconf("SC_PAGE_SIZE")
+    if type(ticks) is not int or ticks <= 0 or type(page_size) is not int or page_size <= 0:
+        raise ValueError("invalid Linux process accounting units")
+    resources = lifecycle.doc.get("validator_resources", [])
+    pids = {}
+    for node in lifecycle.nodes:
+        matches = [row for row in resources if row.get("node_id") == node["node_id"]]
+        if len(matches) != 1:
+            raise ValueError("capacity monitor requires one retained validator PID")
+        pids[node["node_id"]] = producer.uint(matches[0]["pid"])
     start_event.wait()
     while not stop_event.is_set():
         sample_started = artifact.monotonic_ns()
         nodes = []
         for node in lifecycle.nodes:
+            pid = pids[node["node_id"]]
+            stat = parse_proc_stat(Path(f"/proc/{pid}/stat").read_text(), expected_pid=pid)
+            rss_bytes = stat.pop("rss_pages") * page_size
             nodes.append(dict(node_id=node["node_id"],
-                **validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))))
+                **validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs")), **stat,
+                rss_bytes=rss_bytes, process_monotonic_ns=artifact.monotonic_ns()))
         status = lifecycle.query(lifecycle.nodes[0], "/status")
         if (status.get("node_info", {}).get("id") != lifecycle.nodes[0]["node_id"] or
                 status.get("node_info", {}).get("network") != lifecycle.chain or
@@ -2125,13 +2185,14 @@ def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
                             monotonic_ns=artifact.monotonic_ns(), unix_ns=time.time_ns(),
                             observed_height=producer.uint(
                                 status.get("sync_info", {}).get("latest_block_height", 0)),
+                            clock_ticks_per_second=ticks, page_size_bytes=page_size,
                             nodes=nodes, resources=resources))
         stop_event.wait(.1)
     return samples
 
 
 def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, providers, sequences, command):
-    """Offline sign exact provider-local transaction intents, then encode every TxRaw."""
+    """Offline sign provider-local intents in parallel, then batch-encode every TxRaw."""
     directory = lifecycle.home / "native-v3-chain-frozen"
     directory.mkdir(mode=0o700, exist_ok=True)
     node = lifecycle.nodes[0]
@@ -2139,22 +2200,14 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
     grouped = {}
     for intent in intents:
         grouped.setdefault((intent["slot"], intent["profile"]), []).append(intent)
-    pending, next_sequence = [], {address: value["sequence"] for address, value in sequences.items()}
 
-    def validate_signed(intent, signed_tx, expected_messages, gas_limit, sequence, signed_path):
-        signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
-        signed_gas = producer.uint(signed_tx.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
-        if (signed_tx.get("body", {}).get("messages") != expected_messages or signed_gas != gas_limit or
-                len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
-                producer.uint(signer_infos[0].get("sequence", "")) != sequence):
-            raise ValueError("offline signed transaction differs from frozen intent, gas, or sequence")
-        pending.append((intent, sequence, gas_limit, signed_path))
-
-    for slot in range(V3_SYSTEMATIC_PROVIDERS):
+    def sign_provider(slot):
         provider = providers[slot]
         aliases = [name for name, address in lifecycle.signers.items() if address == provider]
         if len(aliases) != 1:
             raise ValueError("provider address does not identify exactly one signing key")
+        sequence = sequences[provider]["sequence"]
+        pending, encoding_sources = [], []
         for profile in sorted((row["name"] for row in profiles), key=profile_order.get):
             rows = grouped.get((slot, profile), [])
             if not rows:
@@ -2163,15 +2216,15 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                     member["provider"] != provider or member["slot"] != slot
                     for member in intent["members"]) for intent in rows):
                 raise ValueError("frozen transaction crosses provider authority")
-            start_sequence = next_sequence[provider]
             common = ["--from", aliases[0], "--home", node["home"], "--keyring-backend", "test",
                 "--chain-id", lifecycle.chain, "--offline",
                 "--account-number", str(sequences[provider]["account_number"]),
-                "--sequence", str(start_sequence), "--sign-mode", "direct"]
+                "--sequence", str(sequence), "--sign-mode", "direct"]
+            prefix = directory / f"provider-{slot}-{profile}"
             if rows[0]["submission_mode"] == "serial-messages":
                 for index, intent in enumerate(rows):
-                    prefix = directory / f"provider-{slot}-{profile}-{index}"
-                    unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.json")
+                    unsigned = prefix.with_name(prefix.name + f"-{index}.unsigned.jsonl")
+                    signed = prefix.with_name(prefix.name + f"-{index}.signed.json")
                     member_simulations = [simulations[member["id"]] for member in intent["members"]]
                     unsigned.write_text("".join(Path(row["unsigned_path"]).read_text()
                                                 for row in member_simulations))
@@ -2179,21 +2232,21 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                                          for line in unsigned.read_text().splitlines()]
                     gas_limit = sum(row["gas_limit"] for row in member_simulations)
                     serial_common = list(common)
-                    serial_common[serial_common.index("--sequence") + 1] = str(start_sequence + index)
+                    serial_common[serial_common.index("--sequence") + 1] = str(sequence + index)
                     command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), "--append",
                              *serial_common, "--output-document", str(signed)], 300)
                     signed_values = [json.loads(line) for line in signed.read_text().splitlines()]
                     if len(signed_values) != 1:
                         raise ValueError("append sign-batch returned an incomplete transaction inventory")
-                    validate_signed(intent, signed_values[0], expected_messages, gas_limit,
-                                    start_sequence + index, signed)
+                    pending.append(validate_frozen_signed_transaction(
+                        intent, signed_values[0], expected_messages, gas_limit, sequence + index, signed))
+                    encoding_sources.append(signed)
             else:
-                prefix = directory / f"provider-{slot}-{profile}"
-                unsigned, signed = prefix.with_suffix(".unsigned.jsonl"), prefix.with_suffix(".signed.jsonl")
-                selected_simulations = [simulations[intent["id"] if intent["submission_mode"] == "batch-message"
-                                                    else intent["members"][0]["id"]] for intent in rows]
-                unsigned.write_text("".join(Path(row["unsigned_path"]).read_text()
-                                            for row in selected_simulations))
+                unsigned = prefix.with_suffix(".unsigned.jsonl")
+                signed = prefix.with_suffix(".signed.jsonl")
+                selected = [simulations[intent["id"] if intent["submission_mode"] == "batch-message"
+                                        else intent["members"][0]["id"]] for intent in rows]
+                unsigned.write_text("".join(Path(row["unsigned_path"]).read_text() for row in selected))
                 unsigned_values = [json.loads(line) for line in unsigned.read_text().splitlines()]
                 command([str(lifecycle.binary), "tx", "sign-batch", str(unsigned), *common,
                          "--output-document", str(signed)], 300)
@@ -2201,17 +2254,41 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                 if len(signed_values) != len(rows) or len(unsigned_values) != len(rows):
                     raise ValueError("sign-batch returned an incomplete transaction inventory")
                 for index, (intent, simulation, unsigned_tx, signed_tx) in enumerate(
-                        zip(rows, selected_simulations, unsigned_values, signed_values)):
-                    signed_one = prefix.with_name(prefix.name + f"-{index}.json")
+                        zip(rows, selected, unsigned_values, signed_values)):
+                    signed_one = prefix.with_name(prefix.name + f"-{index}.signed.json")
                     signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
-                    validate_signed(intent, signed_tx, unsigned_tx["body"]["messages"],
-                                    simulation["gas_limit"], start_sequence + index, signed_one)
-            next_sequence[provider] += len(rows)
+                    pending.append(validate_frozen_signed_transaction(intent, signed_tx,
+                        unsigned_tx["body"]["messages"], simulation["gas_limit"], sequence + index, signed_one))
+                encoding_sources.append(signed)
+            sequence += len(rows)
+        return pending, encoding_sources
+
+    def validate_frozen_signed_transaction(intent, signed_tx, expected_messages, gas_limit,
+                                           sequence, signed_path):
+        signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
+        signed_gas = producer.uint(signed_tx.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
+        if (signed_tx.get("body", {}).get("messages") != expected_messages or signed_gas != gas_limit or
+                len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
+                producer.uint(signer_infos[0].get("sequence", "")) != sequence):
+            raise ValueError("offline signed transaction differs from frozen intent, gas, or sequence")
+        return intent, sequence, gas_limit, signed_path
+
+    slots = [slot for slot in range(V3_SYSTEMATIC_PROVIDERS)
+             if any(key[0] == slot for key in grouped)]
+    with ThreadPoolExecutor(max_workers=len(slots)) as pool:
+        signed_groups = list(pool.map(sign_provider, slots))
+    pending = [row for group, _ in signed_groups for row in group]
+    encoding_sources = [source for _, sources in signed_groups for source in sources]
+    encoded_path = directory / "transactions.base64"
+    command([str(lifecycle.binary), "tx", "encode-batch", *(str(path) for path in encoding_sources),
+             "--output-document", str(encoded_path), "--home", node["home"],
+             "--chain-id", lifecycle.chain], 300)
+    encoded_rows = encoded_path.read_text().splitlines()
+    if len(encoded_rows) != len(pending):
+        raise ValueError("tx encode-batch returned an incomplete transaction inventory")
 
     def encode(item):
-        intent, sequence, gas_limit, signed = item
-        encoded = command([str(lifecycle.binary), "tx", "encode", str(signed),
-            "--home", node["home"], "--chain-id", lifecycle.chain], 60).strip()
+        (intent, sequence, gas_limit, signed), encoded = item
         try:
             raw = base64.b64decode(encoded, validate=True)
         except (ValueError, TypeError) as error:
@@ -2230,8 +2307,7 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
             bytes=len(raw), txhash=hashlib.sha256(raw).hexdigest().upper(),
             signed_sha256=artifact.sha256(signed), raw_sha256=artifact.sha256(raw_path),
             _tx_base64=encoded)
-    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
-        frozen = list(pool.map(encode, pending))
+    frozen = [encode(row) for row in zip(pending, encoded_rows)]
     if len(frozen) != len(intents) or len({row["txhash"] for row in frozen}) != len(frozen):
         raise ValueError("frozen native v3 transaction inventory is incomplete or repeats a TxRaw hash")
     for rpc_id, row in enumerate(frozen, 1):
@@ -2307,7 +2383,21 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     saturated = [row for row in measured_blocks if start_height < row["height"] <= end_height]
     if not saturated:
         raise ValueError("positive mempool evidence contains no committed workload block")
-    predecessor = by_height.get(saturated[0]["height"] - 1)
+    saturated_blocks = [by_height.get(height) for height in range(start_height + 1, end_height + 1)]
+    if not saturated_blocks or any(row is None for row in saturated_blocks):
+        raise ValueError("positive backlog interval is missing a reconciled canonical block")
+    predecessor = by_height.get(start_height)
+    if predecessor is None:
+        raise ValueError("saturated interval is missing its timestamp predecessor")
+    commit_intervals = []
+    for row in saturated_blocks:
+        previous = by_height.get(row["height"] - 1)
+        if previous is None:
+            raise ValueError("saturated block is missing its timestamp predecessor")
+        seconds = (_unix_ns(row["time"]) - _unix_ns(previous["time"])) / 1e9
+        if seconds <= 0:
+            raise ValueError("saturated block timestamps did not advance")
+        commit_intervals.append(seconds)
     commit_seconds = backlog["duration_ns"] / 1e9
     saturated_transactions = sum(row["transaction_count"] for row in saturated)
     if commit_seconds <= 0 or saturated_transactions <= 0:
@@ -2352,6 +2442,10 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         raise ValueError("saturated consensus interval contains no complete proof set")
     proof_sets_per_second = complete_proof_sets / commit_seconds
     proof_sets_per_day = proof_sets_per_second * 86400
+    resource_metrics = validator_backlog_resources(
+        mempool_samples, backlog, mempool_samples[0]["clock_ticks_per_second"])
+    max_mempool_transactions = max(row["transactions"] for sample in mempool_samples
+                                    for row in sample["nodes"])
     return dict(elapsed_seconds=elapsed, offer_seconds=offer_elapsed,
         daily_equivalent_basis="short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
         invalid_transactions=0, unknown_transactions=0, duplicate_transactions=0,
@@ -2373,12 +2467,19 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         logical_requested_bytes_per_day=proof_sets_per_day * profile["range_bytes"],
         logical_requested_gib_per_day=proof_sets_per_day * profile["range_bytes"] / 1024**3,
         saturated_commit_interval=dict(predecessor_height=predecessor["height"] if predecessor else None,
-            first_height=saturated[0]["height"], last_height=saturated[-1]["height"],
+            first_height=saturated_blocks[0]["height"], last_height=saturated_blocks[-1]["height"],
             observation_start_height=start_height, observation_end_height=end_height,
             elapsed_seconds=commit_seconds, transactions=saturated_transactions,
+            blocks=len(saturated_blocks),
             timing_basis="monotonic all-validator-positive observation fence"),
+        commit_interval_seconds=dict(
+            basis="differences between consecutive canonical Comet block header timestamps",
+            observations=len(commit_intervals), p50=_nearest_rank(commit_intervals, 50),
+            p95=_nearest_rank(commit_intervals, 95), p99=_nearest_rank(commit_intervals, 99)),
         positive_backlog_seconds=backlog["duration_ns"] / 1e9,
         positive_backlog_interval=backlog, mempool_samples=mempool_samples,
+        validator_resources_during_backlog=resource_metrics,
+        peak_observed_mempool_transactions=max_mempool_transactions,
         inclusion_latency_upper_bound_seconds=dict(
             basis="offer to first local RPC observation at or above the committed height; conservative upper bound",
             min=min(latencies), p50=_nearest_rank(latencies, 50),
@@ -2386,6 +2487,42 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         blocks=measured_blocks,
         average_proof_gas_wanted_per_saturated_block=sum(row["proof_gas_wanted"] for row in saturated) / len(saturated),
         average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))
+
+
+def native_v3_128m_qualification(metrics, finalize_blocks, consensus, offered, committed,
+                                 comet_mempool_size):
+    """Evaluate only the fixed issue #326 candidate against its published gates."""
+    reasons = []
+    if offered != V3_128M_QUALIFICATION_TRANSACTIONS or committed != offered:
+        reasons.append("the fixed 4,992 transaction inventory was not accepted and committed exactly once")
+    if metrics["saturated_commit_interval"]["blocks"] < 30:
+        reasons.append("fewer than 30 saturated blocks were reconciled")
+    if metrics["positive_backlog_seconds"] < V3_CHAIN_BACKLOG_SECONDS:
+        reasons.append("all-validator positive backlog lasted less than ten seconds")
+    if metrics["commit_interval_seconds"]["p95"] > 1.6:
+        reasons.append("p95 commit interval exceeded 1.6 seconds")
+    if consensus["maximum_round"] != 0 or consensus["missed_signatures"] != 0:
+        reasons.append("a saturated block used a nonzero round or missed a validator signature")
+    if any(row["cpu_percent_of_one_core"] >= 60 for row in
+           metrics["validator_resources_during_backlog"]["validators"]):
+        reasons.append("a validator reached 60 percent of one CPU core during backlog")
+    if metrics["peak_observed_mempool_transactions"] >= comet_mempool_size:
+        reasons.append("the observed mempool reached its transaction-count cap")
+    if len(finalize_blocks) != 4 or any(not row["summary"]["p95_within_650ms"]
+                                        for row in finalize_blocks):
+        reasons.append("a validator's native FinalizeBlock p95 bucket upper bound exceeded 650ms or was unknown")
+    for name in ("invalid_transactions", "unknown_transactions", "duplicate_transactions",
+                 "dropped_transactions", "retried_transactions"):
+        if metrics[name] != 0:
+            reasons.append(f"{name} was nonzero")
+    return dict(qualified=not reasons, reasons=reasons,
+        candidate="128M max gas, 2MiB max bytes, 4,992 one-opening 1KiB transactions",
+        gates={"minimum_saturated_blocks": 30, "minimum_positive_backlog_seconds": 10,
+               "finalize_block_p95_upper_bound_seconds": .65,
+               "commit_interval_p95_seconds": 1.6,
+               "maximum_consensus_round": 0, "missed_validator_signatures": 0,
+               "maximum_validator_cpu_percent_of_one_core_during_backlog": 60,
+               "comet_mempool_count_cap_must_not_be_reached": comet_mempool_size})
 
 
 def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length,
@@ -2402,6 +2539,13 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     owner = lifecycle.signers["owner0"]
     profiles = native_v3_chain_capacity_profiles(profile_name, measured_transactions,
         measured_sessions=measured_sessions, submission_mode=submission_mode, batch_size=batch_size)
+    max_block_gas = artifact.integer(
+        lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
+    issue_326_candidate = (len(profiles) == 1 and profiles[0]["name"] == "1kib" and
+        profiles[0]["submission_mode"] == "separate" and
+        profiles[0]["measured_transactions"] == V3_128M_QUALIFICATION_TRANSACTIONS and
+        max_block_gas == V3_128M_QUALIFICATION_GAS)
+    doc["issue_326_candidate"] = issue_326_candidate
     opened_at = lifecycle.wait_height(3)
     session_count = sum(profile["sessions"] for profile in profiles)
     max_deadline_height = native_v3_capacity_deadline(opened_at, session_count - 1)
@@ -2559,7 +2703,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         start_commit_streams(lifecycle, V3_CHAIN_DRAIN_SECONDS + 60, commit_processes,
                              stream_key=stream_key, filename_prefix=stream_key)
         try:
-            capture_workload_metrics(lifecycle, before_phase, fenced=True)
+            capture_workload_metrics(lifecycle, before_phase, fenced=True,
+                                     finalize_block=issue_326_candidate)
             before_cpu = validator_cpu_snapshot(lifecycle)
             predecessor_height = lifecycle.wait_height(1)
             lanes = [[row for row in frozen if row["slot"] == slot]
@@ -2592,7 +2737,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                     stop_event.set()
                 mempool_samples = monitor.result()
             after_cpu = validator_cpu_snapshot(lifecycle)
-            capture_workload_metrics(lifecycle, after_phase, fenced=True)
+            capture_workload_metrics(lifecycle, after_phase, fenced=True,
+                                     finalize_block=issue_326_candidate)
         finally:
             artifact.stop_owned_process_groups(commit_processes)
         summarize_commit_streams(lifecycle, commit_processes, stream_key=stream_key,
@@ -2602,7 +2748,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         committed, blocks = _discover_frozen_commits(
             lifecycle, frozen, predecessor_height, final_height)
         block_path = lifecycle.home / f"native-v3-chain-{profile['name']}-blocks.jsonl"
-        reconcile_transaction_blocks(lifecycle, committed, predecessor_height, final_height, block_path)
+        consensus_observations = []
+        reconcile_transaction_blocks(lifecycle, committed, predecessor_height, final_height, block_path,
+                                     consensus_observations=consensus_observations)
         final_sequences = provider_sequences(lifecycle, providers, final_height)
         for address, before in quiescence["sequences"].items():
             expected = sum(row["signer"] == address for row in frozen)
@@ -2631,19 +2779,113 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         metrics["resource_utilization"] = summarize_native_v3_resources(
             [row["resources"] for row in mempool_samples if row["resources"] is not None],
             (drain_end_ns - started_ns) / 1e9)
+        saturated = metrics["saturated_commit_interval"]
+        consensus = summarize_consensus_commits(consensus_observations,
+            saturated["first_height"], saturated["last_height"])
         cpu_delta = validator_cpu_delta(before_cpu, after_cpu)
         cpu_delta["measurement_scope"] = "direct broadcast through all-validator mempool drain"
+        finalize_blocks = []
+        if issue_326_candidate:
+            phases = lifecycle.doc["commit_step_metrics"]["phases"]
+            before_by_node = {row["node_id"]: row["sample"] for row in phases[before_phase]["nodes"]}
+            after_by_node = {row["node_id"]: row["sample"] for row in phases[after_phase]["nodes"]}
+            if set(before_by_node) != set(after_by_node) or len(before_by_node) != 4:
+                raise ValueError("FinalizeBlock capture boundaries do not cover four validators")
+            for node_id in sorted(before_by_node):
+                before_histogram = before_by_node[node_id].get("finalize_block_histogram")
+                after_histogram = after_by_node[node_id].get("finalize_block_histogram")
+                expected_blocks = (after_by_node[node_id]["committed_height"] -
+                                   before_by_node[node_id]["committed_height"])
+                finalize_blocks.append(dict(node_id=node_id, summary=
+                    commit_metrics.summarize_finalize_block_histogram(
+                        before_histogram, after_histogram, expected_blocks)))
+            qualification = native_v3_128m_qualification(metrics, finalize_blocks, consensus,
+                len(offered), len(committed), lifecycle.doc["profile"]["comet_mempool"]["size"])
+        else:
+            qualification = {"qualified": False,
+                "reason": "only the exact 128M/4,992 one-opening 1KiB profile is issue #326 qualification"}
         measurement.update(status="passed", offered=offered, committed=committed,
             provider_sequences_after=final_sequences, validator_cpu_delta=cpu_delta,
-            blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics)
+            blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics,
+            consensus=consensus, finalize_block_histograms=finalize_blocks,
+            issue_326_qualification=qualification)
         lifecycle.save()
-    doc.update(status="native_v3_chain_capacity_passed", qualification=True,
-        offered_proof_transactions=sum(row["measured_transactions"] for row in profiles),
-        committed_valid_proof_transactions=sum(row["measured_transactions"] for row in profiles),
+        doc.pop("qualification_error", None)
+        if issue_326_candidate and not qualification["qualified"]:
+            measurement["status"] = "qualification_failed"
+            doc["qualification_error"] = (
+                "128M qualification gates failed: " + "; ".join(qualification["reasons"]))
+    expected_transactions = sum(row["measured_transactions"] for row in profiles)
+    doc.update(status=("native_v3_chain_capacity_qualification_pending_restart"
+                       if issue_326_candidate else "native_v3_chain_capacity_passed"),
+        qualification=not issue_326_candidate,
+        offered_proof_transactions=expected_transactions,
+        committed_valid_proof_transactions=expected_transactions,
         committed_logical_proof_messages=expected_messages,
         sampled_openings=sum(row["sample_count"] * row["sessions"] for row in profiles),
         delivery_verified=False, owner_acknowledged=False, expiration_verified=False,
         refunds_verified=False)
+    lifecycle.save()
+
+
+def validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length):
+    fixed_height = lifecycle.wait_height(1) - 1
+    before_restart = lifecycle.snapshot(fixed_height)
+    lifecycle.stop()
+    lifecycle.reserve_ports()
+    lifecycle.start("post-qualification-restart")
+    later = wait(fixed_height + 3) - 1
+    original = lifecycle.snapshot(fixed_height)
+    if original != before_restart:
+        raise ValueError("post-qualification restart changed the fixed committed state")
+    consensus = []
+    expected_block = lifecycle.doc["profile"]["consensus"]["block"]
+    for node in lifecycle.nodes:
+        params = lifecycle.query(node, "/cosmos/consensus/v1/params", later)["params"]["block"]
+        if {key: params[key] for key in ("max_bytes", "max_gas")} != expected_block:
+            raise ValueError("post-qualification consensus profile changed")
+        consensus.append(dict(node_id=node["node_id"], block=params))
+    restart_epoch = (later - 1) // epoch_length + 2
+    audit_height = wait((restart_epoch - 1) * epoch_length + 2)
+    restart_audits = None
+    for _ in range(21):
+        restart_audits = audits(audit_height, False, restart_epoch)
+        if sum(producer.uint(row["audit"].get("accepted_count", 0))
+               for row in restart_audits.values()) > 0:
+            break
+        audit_height = wait(audit_height + 1)
+    else:
+        raise ValueError("normal audit proof did not execute after validator restart")
+    return dict(fixed_height=fixed_height, later_height=later, audit_height=audit_height,
+        before=before_restart, original_after_restart=original,
+        later=lifecycle.snapshot(later), consensus=consensus, normal_audits=restart_audits,
+        nonce_ordered_admission="all 4,992 frozen per-signer sequences committed exactly once before restart",
+        chain_progress_verified=True, qualification=True)
+
+
+def finalize_native_v3_candidate(lifecycle, wait, audits, epoch_length):
+    doc = lifecycle.doc["native_v3_chain"]
+    qualification_error = doc.get("qualification_error")
+    doc["qualification"] = False
+    lifecycle.save()
+    try:
+        restart = validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length)
+    except Exception as restart_error:
+        doc["post_qualification_restart"] = dict(
+            qualification=False, error=str(restart_error)[-8192:])
+        doc["status"] = ("native_v3_chain_capacity_qualification_failed"
+                         if qualification_error else "native_v3_chain_capacity_restart_failed")
+        lifecycle.save()
+        if qualification_error:
+            raise ValueError(qualification_error) from restart_error
+        raise
+    doc["post_qualification_restart"] = restart
+    if qualification_error:
+        doc["status"] = "native_v3_chain_capacity_qualification_failed"
+        lifecycle.save()
+        raise ValueError(qualification_error)
+    doc["qualification"] = True
+    doc["status"] = "native_v3_chain_capacity_passed"
     lifecycle.save()
 
 def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send, curl,
@@ -3461,7 +3703,7 @@ def sustained_profile(k, step_seconds, offsets, proof_gas, rate_scale=1, deputy_
         qualification=False)
 
 
-def capture_workload_metrics(lifecycle, phase, *, fenced=False):
+def capture_workload_metrics(lifecycle, phase, *, fenced=False, finalize_block=False):
     """Retain raw per-node captures, with one hard deadline for the whole phase."""
     evidence = lifecycle.doc.setdefault("commit_step_metrics", dict(
         boundary=commit_metrics.BOUNDARY, qualification=False, boundaries_reconciled=False,
@@ -3480,6 +3722,8 @@ def capture_workload_metrics(lifecycle, phase, *, fenced=False):
             if fenced:
                 argv += ["--rpc-url", f'http://127.0.0.1:{node["rpc"]}/status', "--node-id", node["node_id"],
                          "--process-initial-height", "0"]  # Only the initial fresh process, before restart.
+            if finalize_block:
+                argv.append("--finalize-block-histogram")
             while True:
                 result = artifact.run_bounded_command(argv, deadline, env=lifecycle.env)
                 if result.returncode == 0 or not fenced or "boundary is moving or not fully observed" not in result.stderr:
@@ -4409,7 +4653,34 @@ def reconcile_sustained_blocks(lifecycle, journal):
                                  lifecycle.home / "sustained-blocks.jsonl")
 
 
-def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_transaction=None):
+def consensus_commit_observation(signed, height, chain_id):
+    header, commit = signed["signed_header"]["header"], signed["signed_header"]["commit"]
+    signatures = commit.get("signatures")
+    if (signed.get("canonical") is not True or producer.uint(header.get("height", 0)) != height or
+            producer.uint(commit.get("height", 0)) != height or header.get("chain_id") != chain_id or
+            not isinstance(signatures, list) or len(signatures) != 4):
+        raise ValueError("invalid canonical consensus commit observation")
+    flags = [producer.uint(row.get("block_id_flag", 0)) for row in signatures]
+    if any(flag not in (1, 2, 3) for flag in flags):
+        raise ValueError("consensus commit has an unknown signature flag")
+    return dict(height=height, round=producer.uint(commit.get("round", 0)),
+                signatures=len(signatures), commit_signatures=sum(flag == 2 for flag in flags),
+                missed_signatures=sum(flag != 2 for flag in flags), block_id_flags=flags)
+
+
+def summarize_consensus_commits(observations, first_height, last_height):
+    selected = [row for row in observations if first_height <= row["height"] <= last_height]
+    expected = list(range(first_height, last_height + 1))
+    if [row["height"] for row in selected] != expected:
+        raise ValueError("consensus commit observations do not cover the saturated height range")
+    return dict(first_height=first_height, last_height=last_height, blocks=len(selected),
+        maximum_round=max(row["round"] for row in selected),
+        blocks_above_round_zero=sum(row["round"] != 0 for row in selected),
+        missed_signatures=sum(row["missed_signatures"] for row in selected), observations=selected)
+
+
+def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_transaction=None,
+                                 consensus_observations=None):
     """Retain raw block gas/bytes and validate workload txs on all validators."""
     artifact.integer(last - first + 1, "fenced block count", 1, 1200)
     committed = [row for row in results if row["outcome"] in ("committed_success", "committed_failure")]
@@ -4427,6 +4698,7 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_
             block = lifecycle.query(node, f"/block?height={height}")
             summary = artifact.committed_block_summary(block,
                 lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
+            canonical_commit = None
             for node in lifecycle.nodes:
                 signed = lifecycle.query(node, f"/commit?height={height}")
                 header, commit = signed["signed_header"]["header"], signed["signed_header"]["commit"]
@@ -4435,6 +4707,14 @@ def reconcile_transaction_blocks(lifecycle, results, first, last, path, observe_
                         header["time"] != summary["time"] or header["app_hash"].upper() != summary["preceding_app_hash"] or
                         commit["block_id"]["hash"].upper() != summary["block_hash"]):
                     raise ValueError("validators disagree on committed block/application hash or header identity")
+                if canonical_commit is None:
+                    canonical_commit = commit
+                    if consensus_observations is not None:
+                        observation = consensus_commit_observation(signed, height, lifecycle.chain)
+                elif commit != canonical_commit:
+                    raise ValueError("validators disagree on canonical commit signatures or round")
+            if consensus_observations is not None:
+                consensus_observations.append(observation)
             for node in lifecycle.nodes[1:]:
                 other = artifact.committed_block_summary(block,
                     lifecycle.query(node, f"/block_results?height={height}"), height, lifecycle.chain)
@@ -4806,7 +5086,11 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
              if native_v3 else "No deputy retrieval yet"),
             ("Normal mint and audit parameters retained; browser payer/provider/supply conservation checked"
              if native_browser is not None else "Normal mint and audit parameters retained; no economic conservation assertion"),
-            "No validator restart qualification"])
+            ("Post-qualification validator restart is required for the exact 128M/4,992 candidate"
+             if native_chain is not None and native_chain.get("profile") == "1kib" and
+                native_chain.get("measured_transactions") == V3_128M_QUALIFICATION_TRANSACTIONS and
+                native_chain.get("max_block_gas") == V3_128M_QUALIFICATION_GAS
+             else "No post-workload validator restart qualification")])
     def check_disk(phase):
         if native_v3:
             free = require_free_disk(lifecycle.home, V3_ABORT_FREE_BYTES, phase)
@@ -4924,8 +5208,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
                           enable_retrieval_v3=native_v3,
                           browser_payer=V3_BROWSER_PAYER if native_browser is not None else None,
-                          max_block_gas=native_chain.get("max_block_gas", 64_000_000)
-                          if native_chain is not None else 64_000_000)
+                          max_block_gas=native_chain.get("max_block_gas")
+                          if native_chain is not None else None)
         # Normal mint is retained for both explicit audit profiles.
         population = layout["openings_per_bundle"] * (v3_geometry["user_mdus"] if native_v3 else 1)
         expected_samples = frozen_audit_quota(doc["frozen_module_params"], population,
@@ -5117,6 +5401,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                     submission_mode=native_chain.get("submission_mode", "separate"),
                                     batch_size=native_chain.get("batch_size", 1),
                                     gas_adjustment=native_chain.get("gas_adjustment", "1.6"))
+                if lifecycle.doc["native_v3_chain"].get("issue_326_candidate"):
+                    finalize_native_v3_candidate(lifecycle, wait, audits, epoch_length)
                 doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,

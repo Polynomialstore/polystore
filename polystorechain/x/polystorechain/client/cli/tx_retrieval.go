@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"strconv"
@@ -29,6 +28,11 @@ import (
 )
 
 func CmdSignRetrievalReceipt() *cobra.Command {
+	var proofJSONPath string
+	var receiptFilePath string
+	var rangeStart uint64
+	var rangeLen uint64
+
 	cmd := &cobra.Command{
 		Use:   "sign-retrieval-receipt [deal-id] [provider-addr] [epoch-id] [file-path] [trusted-setup] [mdu0-path] [mdu-index]",
 		Short: "Generate and sign a retrieval receipt for a downloaded file",
@@ -48,7 +52,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			filePath := args[3]
+			proofInputPath := args[3]
 			trustedSetupPath := args[4]
 			mdu0Path := args[5]
 			mduIndex, err := strconv.ParseUint(args[6], 10, 64)
@@ -59,66 +63,33 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				return fmt.Errorf("mdu-index must target a user data MDU; MDU #0 and Witness MDUs are metadata")
 			}
 
-			// 1. Read File & Compute Proof
-			mduBytes, err := ioutil.ReadFile(filePath)
+			mduBytes, err := os.ReadFile(proofInputPath)
 			if err != nil {
 				return err
 			}
 
-			// Verify size (mock)
-			bytesServed := uint64(len(mduBytes))
-			rangeStart := uint64(0)
-			rangeLen := bytesServed
+			if receiptFilePath == "" {
+				receiptFilePath = proofInputPath
+			}
+			if rangeLen == 0 {
+				rangeLen = uint64(len(mduBytes))
+			}
+			if rangeStart > math.MaxUint64-rangeLen {
+				return fmt.Errorf("retrieval range overflows uint64")
+			}
+			bytesServed := rangeLen
 
-			if err := crypto_ffi.Init(trustedSetupPath); err != nil {
-				return err
-			}
-			root, err := crypto_ffi.ComputeMduMerkleRoot(mduBytes)
-			if err != nil {
-				return err
-			}
-			chunkIndex := uint32(0) // Mock: always chunk 0 of MDU
-			commitment, merkleProof, z, y, kzgProofBytes, err := crypto_ffi.ComputeMduProofTest(mduBytes, chunkIndex)
-			if err != nil {
-				return err
-			}
-
-			// Unflatten Merkle Proof
-			merklePath := make([][]byte, 0)
-			for i := 0; i < len(merkleProof); i += 32 {
-				merklePath = append(merklePath, merkleProof[i:i+32])
-			}
-
-			// --- Hop 1: MDU #0 root-table proof ---
-			mdu0Bytes, err := ioutil.ReadFile(mdu0Path)
-			if err != nil {
-				return fmt.Errorf("failed to read MDU #0: %w", err)
-			}
-			rootTableDuCommitment, rootTableDuMerkleFlat, rootTableOpening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0Bytes, mduIndex, root)
-			if err != nil {
-				return fmt.Errorf("ComputeMdu0RootTableProof failed: %w", err)
-			}
-			rootTableDuMerklePath := make([][]byte, 0, len(rootTableDuMerkleFlat)/32)
-			for i := 0; i < len(rootTableDuMerkleFlat); i += 32 {
-				end := i + 32
-				if end > len(rootTableDuMerkleFlat) {
-					return fmt.Errorf("invalid root-table Merkle proof length")
+			var chainedProof types.ChainedProof
+			if proofJSONPath != "" {
+				chainedProof, err = readChainedProofJSON(proofJSONPath, mduIndex)
+				if err != nil {
+					return err
 				}
-				rootTableDuMerklePath = append(rootTableDuMerklePath, rootTableDuMerkleFlat[i:end])
-			}
-
-			chainedProof := types.ChainedProof{
-				MduIndex:              mduIndex,
-				MduRootFr:             root,
-				ManifestOpening:       rootTableOpening,
-				RootTableDuCommitment: rootTableDuCommitment,
-				RootTableDuMerklePath: rootTableDuMerklePath,
-				BlobCommitment:        commitment,
-				MerklePath:            merklePath,
-				BlobIndex:             chunkIndex,
-				ZValue:                z,
-				YValue:                y,
-				KzgOpeningProof:       kzgProofBytes,
+			} else {
+				chainedProof, err = computeLegacyChainedProof(mduBytes, trustedSetupPath, mdu0Path, mduIndex)
+				if err != nil {
+					return err
+				}
 			}
 
 			// 2. Prepare anti-replay fields
@@ -133,15 +104,17 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 			buf = append(buf, sdk.Uint64ToBigEndian(dealId)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(epochId)...)
 			buf = append(buf, []byte(providerAddr)...)
-			buf = append(buf, []byte(filePath)...)
+			buf = append(buf, []byte(receiptFilePath)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(rangeStart)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(rangeLen)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(bytesServed)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(nonce)...)
 			buf = append(buf, sdk.Uint64ToBigEndian(expiresAt)...)
-			if proofHash, err := types.HashChainedProof(&chainedProof); err == nil {
-				buf = append(buf, proofHash.Bytes()...)
+			proofHash, err := types.HashChainedProof(&chainedProof)
+			if err != nil {
+				return fmt.Errorf("hash chained proof: %w", err)
 			}
+			buf = append(buf, proofHash.Bytes()...)
 
 			// Sign with Keyring
 			name := clientCtx.GetFromName()
@@ -159,7 +132,7 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 				DealId:        dealId,
 				EpochId:       epochId,
 				Provider:      providerAddr,
-				FilePath:      filePath,
+				FilePath:      receiptFilePath,
 				RangeStart:    rangeStart,
 				RangeLen:      rangeLen,
 				BytesServed:   bytesServed,
@@ -184,7 +157,88 @@ func CmdSignRetrievalReceipt() *cobra.Command {
 	}
 
 	flags.AddTxFlagsToCmd(cmd)
+	cmd.Flags().StringVar(&proofJSONPath, "proof-json", "", "Use a prebuilt ChainedProof JSON file instead of recomputing it from the MDU")
+	cmd.Flags().StringVar(&receiptFilePath, "receipt-file-path", "", "Logical file path to bind into the signed receipt (defaults to the proof input path)")
+	cmd.Flags().Uint64Var(&rangeStart, "range-start", 0, "Logical file byte offset served")
+	cmd.Flags().Uint64Var(&rangeLen, "range-len", 0, "Logical file bytes served (defaults to proof input size)")
 	return cmd
+}
+
+func readChainedProofJSON(path string, mduIndex uint64) (types.ChainedProof, error) {
+	bz, err := os.ReadFile(path)
+	if err != nil {
+		return types.ChainedProof{}, fmt.Errorf("read prebuilt proof: %w", err)
+	}
+	var wrapper struct {
+		ProofDetails json.RawMessage `json:"proof_details"`
+	}
+	if err := json.Unmarshal(bz, &wrapper); err != nil {
+		return types.ChainedProof{}, fmt.Errorf("decode prebuilt proof: %w", err)
+	}
+	proofJSON := bz
+	if len(wrapper.ProofDetails) != 0 && string(wrapper.ProofDetails) != "null" {
+		proofJSON = wrapper.ProofDetails
+	}
+	var proof types.ChainedProof
+	if err := json.Unmarshal(proofJSON, &proof); err != nil {
+		return types.ChainedProof{}, fmt.Errorf("decode chained proof: %w", err)
+	}
+	if proof.MduIndex != mduIndex {
+		return types.ChainedProof{}, fmt.Errorf("prebuilt proof mdu_index %d does not match argument %d", proof.MduIndex, mduIndex)
+	}
+	return proof, nil
+}
+
+func computeLegacyChainedProof(mduBytes []byte, trustedSetupPath, mdu0Path string, mduIndex uint64) (types.ChainedProof, error) {
+	if err := crypto_ffi.Init(trustedSetupPath); err != nil {
+		return types.ChainedProof{}, err
+	}
+	root, err := crypto_ffi.ComputeMduMerkleRoot(mduBytes)
+	if err != nil {
+		return types.ChainedProof{}, err
+	}
+	chunkIndex := uint32(0)
+	commitment, merkleProof, z, y, kzgProofBytes, err := crypto_ffi.ComputeMduProofTest(mduBytes, chunkIndex)
+	if err != nil {
+		return types.ChainedProof{}, err
+	}
+	merklePath := make([][]byte, 0, len(merkleProof)/32)
+	for i := 0; i < len(merkleProof); i += 32 {
+		end := i + 32
+		if end > len(merkleProof) {
+			return types.ChainedProof{}, fmt.Errorf("invalid MDU Merkle proof length")
+		}
+		merklePath = append(merklePath, merkleProof[i:end])
+	}
+	mdu0Bytes, err := os.ReadFile(mdu0Path)
+	if err != nil {
+		return types.ChainedProof{}, fmt.Errorf("failed to read MDU #0: %w", err)
+	}
+	rootTableDuCommitment, rootTableDuMerkleFlat, rootTableOpening, _, err := crypto_ffi.ComputeMdu0RootTableProof(mdu0Bytes, mduIndex, root)
+	if err != nil {
+		return types.ChainedProof{}, fmt.Errorf("ComputeMdu0RootTableProof failed: %w", err)
+	}
+	rootTableDuMerklePath := make([][]byte, 0, len(rootTableDuMerkleFlat)/32)
+	for i := 0; i < len(rootTableDuMerkleFlat); i += 32 {
+		end := i + 32
+		if end > len(rootTableDuMerkleFlat) {
+			return types.ChainedProof{}, fmt.Errorf("invalid root-table Merkle proof length")
+		}
+		rootTableDuMerklePath = append(rootTableDuMerklePath, rootTableDuMerkleFlat[i:end])
+	}
+	return types.ChainedProof{
+		MduIndex:              mduIndex,
+		MduRootFr:             root,
+		ManifestOpening:       rootTableOpening,
+		RootTableDuCommitment: rootTableDuCommitment,
+		RootTableDuMerklePath: rootTableDuMerklePath,
+		BlobCommitment:        commitment,
+		MerklePath:            merklePath,
+		BlobIndex:             chunkIndex,
+		ZValue:                z,
+		YValue:                y,
+		KzgOpeningProof:       kzgProofBytes,
+	}, nil
 }
 
 // The JSON representation includes base64 and field names. Its independent file

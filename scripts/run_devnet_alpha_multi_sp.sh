@@ -44,6 +44,8 @@ POLYSTORE_BIND_ALL="${POLYSTORE_BIND_ALL:-0}" # set to 1 to bind LCD/EVM JSON-RP
 POLYSTORE_REINIT_HOME="${POLYSTORE_REINIT_HOME:-0}" # set to 1 to allow wiping an existing CHAIN_HOME outside _artifacts/
 POLYSTORE_DEVNET_POLICING_DEFAULTS="${POLYSTORE_DEVNET_POLICING_DEFAULTS:-1}" # set to 0 to keep provider bond/slash defaults disabled
 POLYSTORE_PROVIDER_REGISTRATION_BOND="${POLYSTORE_PROVIDER_REGISTRATION_BOND:-}" # defaulted to 200${DENOM} when policing defaults are enabled
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT="${POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT:-1}"
+export POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT
 
 POLYSTORECHAIND_BIN="$ROOT_DIR/polystorechain/polystorechaind"
 POLYSTORE_CLI_BIN="$ROOT_DIR/polystore_cli/target/release/polystore_cli"
@@ -385,11 +387,14 @@ ensure_metadata() {
   if [ ! -f "$genesis" ]; then
     return 0
   fi
-  python3 - "$genesis" <<'PY'
+  python3 - "$genesis" "$ROOT_DIR/scripts/retrieval_consensus_profile.json" "$ROOT_DIR/scripts" <<'PY'
 import json, sys
 import os
 import re
 path = sys.argv[1]
+sys.path.insert(0, sys.argv[3])
+from retrieval_consensus_profile import load_consensus_profile
+consensus = load_consensus_profile(sys.argv[2])
 data = json.load(open(path))
 bank = data.get("app_state", {}).get("bank", {})
 md = bank.get("denom_metadata", [])
@@ -514,7 +519,7 @@ def set_bool_param(key, env_key):
 set_uint_param("eip712_chain_id", "EVM_CHAIN_ID")
 set_uint_param("retrieval_v2_activation_height", "POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT")
 if int(params.get("retrieval_v2_activation_height", "0")) > 0:
-    data["consensus"]["params"]["block"].update(max_bytes="2097152", max_gas="64000000")
+    data["consensus"]["params"]["block"].update(consensus["block"])
 set_uint_param("month_len_blocks", "POLYSTORE_MONTH_LEN_BLOCKS")
 set_uint_param("epoch_len_blocks", "POLYSTORE_EPOCH_LEN_BLOCKS")
 set_uint_param("quota_bps_per_epoch_hot", "POLYSTORE_QUOTA_BPS_PER_EPOCH_HOT")
@@ -588,8 +593,7 @@ if expected_min_bond is not None:
 v2_height = int(params.get("retrieval_v2_activation_height", "0"))
 if v2_height > 0:
     block = data["consensus"]["params"]["block"]
-    assert block.get("max_gas") == "64000000"
-    assert block.get("max_bytes") == "2097152"
+    assert block == consensus["block"]
 
 json.dump(data, open(path, "w"), indent=1)
 PY

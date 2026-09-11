@@ -30,6 +30,8 @@ import time
 import urllib.error
 import urllib.request
 
+from retrieval_consensus_profile import load_consensus_profile, validate_consensus_profile
+
 
 # Encoding/layout from polystore_core/src/{kzg,coding}.rs. The offline report
 # uses the default RS(8,12) profile; the legacy fixture below uses RS(2,3).
@@ -1576,8 +1578,9 @@ def profile(sessions, proofs, execution_ms, memory_bytes, consensus):
     proofs = integer(proofs, "proofs_per_session", 0, 32)
     execution_ms = integer(execution_ms, "execution_budget_ms", 1, 1000)
     memory_bytes = integer(memory_bytes, "memory_ceiling_bytes", 1)
+    consensus = validate_consensus_profile(consensus)
     block = consensus["block"]
-    integer(block["max_gas"], "max_gas", 1, 64000000)
+    integer(block["max_gas"], "max_gas", 1, 448000000)
     integer(block["max_bytes"], "max_bytes", 1, 2097152)
     return {"sessions": sessions, "proofs_per_session": proofs,
             "gas_limit": str(1000000 + proofs * 500000),
@@ -1709,7 +1712,7 @@ def set_toml_value(text, section, key, value):
     return "".join(lines)
 
 
-APP_MEMPOOL_MAX_TXS = 5000
+APP_MEMPOOL_MAX_TXS = 0
 COMET_MEMPOOL_SIZE = 5000
 COMET_MEMPOOL_MAX_TXS_BYTES = 1024**3
 COMET_MEMPOOL_MAX_TX_BYTES = 1024**2
@@ -1806,8 +1809,10 @@ class FourValidatorLifecycle:
                 reservation.listen(1)
 
     def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False,
-                browser_payer=None, max_block_gas=64_000_000):
-        max_block_gas = integer(max_block_gas, "max block gas", 1, 448_000_000)
+                browser_payer=None, max_block_gas=None):
+        consensus = load_consensus_profile(self.root / "scripts/retrieval_consensus_profile.json")
+        if max_block_gas is not None:
+            consensus["block"]["max_gas"] = str(integer(max_block_gas, "max block gas", 1, 448_000_000))
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
         provider_count = integer(provider_count, "provider signer count", 12, 44)
@@ -1839,10 +1844,6 @@ class FourValidatorLifecycle:
         elif browser_payer is not None:
             raise ValueError("browser payer requires browser EVM mode")
         genesis = json.loads((first / "config/genesis.json").read_text())
-        consensus = json.loads((self.root / "scripts/retrieval_consensus_profile.json").read_text())
-        if consensus["block"] != {"max_bytes": "2097152", "max_gas": "64000000"}:
-            raise ValueError("four-validator frozen consensus profile changed")
-        consensus["block"]["max_gas"] = str(max_block_gas)
         genesis["consensus"]["params"]["block"].update(consensus["block"])
         params = genesis["app_state"]["nilchain"]["params"]
         if "retrieval_v2_activation_height" not in params:
@@ -2205,7 +2206,7 @@ def main():
     elif action == "fixture":
         print(json.dumps(fixture(args[0], int(args[1]), int(args[2]), args[3])))
     elif action == "profile":
-        print(json.dumps(profile(*args[:4], json.loads(Path(args[4]).read_text()))))
+        print(json.dumps(profile(*args[:4], load_consensus_profile(args[4]))))
     elif action == "provenance":
         print(json.dumps(provenance(*args)))
     elif action == "abort":

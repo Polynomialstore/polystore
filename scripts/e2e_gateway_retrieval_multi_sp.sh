@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # E2E Regression Test: Multi-SP Retrieval Proofs
-# Tests that a Gateway can submit a retrieval proof for a deal owned by a DIFFERENT
-# account (e.g. Provider A owns deal, Provider B hosts data).
+# Tests that an assigned provider can submit a retrieval proof for a deal owned by
+# a DIFFERENT account (e.g. Provider A owns deal, Provider B hosts data).
 #
 # Requires: run_devnet_alpha_multi_sp.sh stack to be running.
 
@@ -19,6 +19,19 @@ mkdir -p "$TMP_DIR"
 banner() { printf '\n>>> %s\n' "$*"; }
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
+
+query_committed_tx() {
+  local hash="$1" out=""
+  for _ in $(seq 1 20); do
+    out=$($POLYSTORECHAIND query tx "$hash" --output json 2>/dev/null || true)
+    if [ -n "$out" ]; then
+      printf '%s' "$out"
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
 
 chain_tx() {
   local module_cli
@@ -66,23 +79,31 @@ echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
 banner "Creating Deal"
-# Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1).
-# The gateway /gateway/prove-retrieval endpoint reconstructs the full MDU from per-slot shards on the router
-# and submits the proof "as" the assigned provider.
-CREATE_OUT=$(chain_tx create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+# Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1). The assigned
+# provider reconstructs the data MDU and builds its proof from replicated witness metadata.
+CREATE_OUT=$(chain_tx create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas auto --gas-adjustment 1.6 --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
-sleep 6
-TX_QUERY=$($POLYSTORECHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
+TX_QUERY=$(query_committed_tx "$TX_HASH" || true)
+TX_CODE=$(echo "$TX_QUERY" | jq -r '.code // empty')
+if [ -z "$TX_CODE" ]; then
+    echo "Create deal transaction was not committed: $TX_HASH"
+    exit 1
+fi
+if [ "$TX_CODE" != "0" ]; then
+    echo "Create deal transaction failed with code $TX_CODE: $(echo "$TX_QUERY" | jq -r '.raw_log // empty')"
+    exit 1
+fi
 DEAL_ID=$(echo "$TX_QUERY" | jq -r '
   .events? // []
-  | map(select(.type == "polystorechain.polystorechain.v1.EventCreateDeal" or .type == "create_deal"))
-  | map(.attributes // [])
-  | add
-  | map(select(.key == "deal_id" or .key == "id"))
-  | .[0].value // empty
+  | [.[]
+      | select(.type == "polystorechain.polystorechain.v1.EventCreateDeal" or .type == "create_deal")
+      | .attributes[]?
+      | select(.key == "deal_id" or .key == "id")
+      | .value]
+  | first // empty
 ')
 if [ -z "$DEAL_ID" ]; then
   DEAL_LIST=$(chain_query list-deals --output json)
@@ -137,19 +158,17 @@ PORT=$(echo "$ENDPOINT" | awk -F/ '{print $5}')
 echo "Provider Port: $PORT"
 
 # 7. Prove Retrieval (The Regression Test)
-banner "Proving Retrieval (via Router, submitting as assigned provider)"
+banner "Proving Retrieval (via assigned provider daemon)"
 EPOCH_ID="$(current_epoch)"
 echo "Current Epoch: $EPOCH_ID"
-# This call triggers 'submitRetrievalProofNew' on the router gateway, which reconstructs the Mode 2 MDU and
-# submits the proof using the assigned provider key (shared keyring in local devnet).
+# The assigned provider submits the proof using the key configured for that daemon.
 PROVE_RESP=$(curl -s -X POST -H "Content-Type: application/json" -d '{
     "deal_id": '$DEAL_ID',
     "manifest_root": "'$CID'",
     "file_path": "payload.bin",
     "owner": "'$OWNER_ADDR'",
-    "provider": "'$ASSIGNED_ADDR'",
     "epoch_id": '$EPOCH_ID'
-}' "$GATEWAY_ROUTER/gateway/prove-retrieval")
+}' "http://localhost:$PORT/sp/retrieval/prove-retrieval")
 
 echo "Prove Response: $PROVE_RESP"
 
@@ -160,9 +179,20 @@ if [ -n "$ERR" ]; then
 fi
 
 TX_HASH_PROOF=$(echo "$PROVE_RESP" | jq -r '.tx_hash')
-if [ "$TX_HASH_PROOF" == "null" ]; then
+if [ -z "$TX_HASH_PROOF" ] || [ "$TX_HASH_PROOF" == "null" ]; then
     echo "❌ TEST FAILED: No tx_hash in response"
     exit 1
 fi
 
-echo "✅ TEST PASSED: Retrieval proof submitted successfully."
+PROOF_TX_QUERY=$(query_committed_tx "$TX_HASH_PROOF" || true)
+PROOF_TX_CODE=$(echo "$PROOF_TX_QUERY" | jq -r '.code // empty')
+if [ -z "$PROOF_TX_CODE" ]; then
+    echo "❌ TEST FAILED: Retrieval proof transaction was not committed: $TX_HASH_PROOF"
+    exit 1
+fi
+if [ "$PROOF_TX_CODE" != "0" ]; then
+    echo "❌ TEST FAILED: Retrieval proof transaction failed with code $PROOF_TX_CODE: $(echo "$PROOF_TX_QUERY" | jq -r '.raw_log // empty')"
+    exit 1
+fi
+
+echo "✅ TEST PASSED: Retrieval proof committed successfully."

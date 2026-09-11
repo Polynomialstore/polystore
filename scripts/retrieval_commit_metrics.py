@@ -22,6 +22,7 @@ import urllib.request
 
 
 METRIC = "cometbft_consensus_step_duration_seconds"
+FINALIZE_BLOCK_METRIC = "cometbft_abci_connection_method_timing_seconds"
 BOUNDARY = "commit-step execution upper bound"
 MAX_BYTES = 4 * 1024 * 1024
 _MAX_COUNT = (1 << 53) - 5
@@ -110,6 +111,60 @@ def parse_commit_metrics(text, chain_id):
     return {"chain_id": chain_id, **found}
 
 
+def parse_finalize_block_histogram(text, chain_id):
+    """Read one native CometBFT sync FinalizeBlock histogram."""
+    if not isinstance(chain_id, str) or not chain_id:
+        raise ValueError("chain_id is required")
+    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_BYTES:
+        raise ValueError("metrics response exceeds limit or is not text")
+    buckets, count = {}, None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name = re.match(r"[a-zA-Z_:][a-zA-Z0-9_:]*", line)
+        if not name or name[0] not in (
+                FINALIZE_BLOCK_METRIC + "_bucket", FINALIZE_BLOCK_METRIC + "_count"):
+            continue
+        match = re.fullmatch(r"([^{}\s]+)\{(.*)\}\s+(\S+)", line)
+        if not match:
+            raise ValueError("malformed FinalizeBlock histogram sample")
+        labels = _labels(match[2])
+        if labels.get("method") != "finalize_block" or labels.get("type") != "sync":
+            continue
+        base = {"method": "finalize_block", "type": "sync", "chain_id": chain_id}
+        if match[1].endswith("_bucket"):
+            if set(labels) != set(base) | {"le"} or any(labels[key] != value for key, value in base.items()):
+                raise ValueError("FinalizeBlock histogram chain or labels mismatch")
+            bound = labels["le"]
+            if bound != "+Inf":
+                if not _NUMBER.fullmatch(bound) or Decimal(bound) <= 0:
+                    raise ValueError("FinalizeBlock histogram has an invalid bucket")
+            if bound in buckets:
+                raise ValueError("duplicate FinalizeBlock histogram bucket")
+            value = Decimal(match[3]) if _NUMBER.fullmatch(match[3]) else None
+            if value is None or value != value.to_integral_value() or not 0 <= value <= _MAX_COUNT:
+                raise ValueError("FinalizeBlock bucket count must be a bounded integer")
+            buckets[bound] = int(value)
+        else:
+            if labels != base or count is not None:
+                raise ValueError("FinalizeBlock histogram chain or labels mismatch")
+            value = Decimal(match[3]) if _NUMBER.fullmatch(match[3]) else None
+            if value is None or value != value.to_integral_value() or not 0 <= value <= _MAX_COUNT:
+                raise ValueError("FinalizeBlock count must be a bounded integer")
+            count = int(value)
+    if count is None or "+Inf" not in buckets or buckets["+Inf"] != count:
+        raise ValueError("FinalizeBlock histogram count/buckets are missing or inconsistent")
+    ordered = sorted(((Decimal(key), key, value) for key, value in buckets.items() if key != "+Inf"))
+    if any(current[0] <= previous[0] for previous, current in zip(ordered, ordered[1:])):
+        raise ValueError("FinalizeBlock histogram bucket bounds are not strictly increasing")
+    ordered.append((Decimal("Infinity"), "+Inf", buckets["+Inf"]))
+    if any(current[2] < previous[2] for previous, current in zip(ordered, ordered[1:])):
+        raise ValueError("FinalizeBlock histogram buckets are not cumulative")
+    return {"chain_id": chain_id, "count": count,
+            "buckets": [{"le": key, "count": value} for _, key, value in ordered]}
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -136,7 +191,7 @@ def _read_owned_endpoint(url, path, timeout):
     return body.decode("utf-8")
 
 
-def capture_commit_metrics(url, chain_id, timeout=2.0):
+def capture_commit_metrics(url, chain_id, timeout=2.0, include_finalize_block=False):
     """One size/socket-time-bounded scrape; use the command adapter for hard time.
 
     The monotonic timestamps bracket the HTTP operation, not block execution.
@@ -146,12 +201,16 @@ def capture_commit_metrics(url, chain_id, timeout=2.0):
     started = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
     body = _read_owned_endpoint(url, "/metrics", timeout)
     ended = time.clock_gettime_ns(time.CLOCK_MONOTONIC)
-    return {**parse_commit_metrics(body, chain_id),
+    result = {**parse_commit_metrics(body, chain_id),
             "wall_time_ns": wall_time_ns, "monotonic_start_ns": started,
             "monotonic_end_ns": ended}
+    if include_finalize_block:
+        result["finalize_block_histogram"] = parse_finalize_block_histogram(body, chain_id)
+    return result
 
 
-def capture_fenced_commit_metrics(url, chain_id, rpc_url, node_id, initial_height, timeout=2.0):
+def capture_fenced_commit_metrics(url, chain_id, rpc_url, node_id, initial_height, timeout=2.0,
+                                  include_finalize_block=False):
     """Attest a fully observed Commit boundary for one owned process lifetime.
 
     initial_height is the persisted app height BEFORE this process starts, not
@@ -177,16 +236,56 @@ def capture_fenced_commit_metrics(url, chain_id, rpc_url, node_id, initial_heigh
             raise ValueError("invalid committed status height")
         heights.append(int(height))
         if index < 2:
-            captures.append(capture_commit_metrics(url, chain_id, timeout))
+            captures.append(capture_commit_metrics(url, chain_id, timeout, include_finalize_block))
     first, last = captures
+    finalize_count = (last.get("finalize_block_histogram") or {}).get("count")
     if (len(set(heights)) != 1 or heights[0] < initial_height
             or first["count"] != last["count"] or first["sum_seconds"] != last["sum_seconds"]
-            or last["count"] != heights[0] - initial_height):
+            or first.get("finalize_block_histogram") != last.get("finalize_block_histogram")
+            or last["count"] != heights[0] - initial_height
+            or (include_finalize_block and finalize_count != heights[0] - initial_height)):
         raise ValueError("Commit observation boundary is moving or not fully observed")
     return {**last, "committed_height": heights[0], "boundary_fence": {
         "node_id": node_id, "process_initial_height": initial_height,
         "status_heights": heights, "captures": captures,
         "fully_observed": True}}
+
+
+def summarize_finalize_block_histogram(before, after, expected_blocks):
+    """Return nearest-rank quantile bucket upper bounds for one fenced interval."""
+    expected = _integer(expected_blocks, "expected FinalizeBlock observations")
+    if before.get("chain_id") != after.get("chain_id") or not before.get("chain_id"):
+        raise ValueError("FinalizeBlock histogram chain changed")
+    old = {row["le"]: _integer(row["count"], "FinalizeBlock bucket count")
+           for row in before.get("buckets", [])}
+    new = {row["le"]: _integer(row["count"], "FinalizeBlock bucket count")
+           for row in after.get("buckets", [])}
+    if set(old) != set(new) or "+Inf" not in old:
+        raise ValueError("FinalizeBlock histogram bucket layout changed")
+    count = _integer(after.get("count"), "FinalizeBlock count") - _integer(
+        before.get("count"), "FinalizeBlock count")
+    deltas = {key: new[key] - old[key] for key in old}
+    ordered = sorted(((Decimal(key), key, value) for key, value in deltas.items() if key != "+Inf"))
+    ordered.append((Decimal("Infinity"), "+Inf", deltas["+Inf"]))
+    if count < 0 or count != expected or deltas["+Inf"] != count or any(
+            value < 0 for value in deltas.values()) or any(
+                current[2] < previous[2] for previous, current in zip(ordered, ordered[1:])):
+        raise ValueError("FinalizeBlock histogram delta does not match the fenced block range")
+    if count == 0:
+        raise ValueError("FinalizeBlock histogram interval is empty")
+    quantiles = {}
+    for percentile in (50, 95, 99):
+        rank = (percentile * count + 99) // 100
+        _, bucket, _ = next(row for row in ordered if row[2] >= rank)
+        quantiles[f"p{percentile}"] = {
+            "bucket": bucket, "upper_bound_seconds": None if bucket == "+Inf" else bucket,
+            "known": bucket != "+Inf"}
+    return {"boundary": "native CometBFT sync FinalizeBlock histogram bucket upper bounds",
+            "chain_id": before["chain_id"], "observed_blocks": count,
+            "quantiles": quantiles, "buckets": [{"le": key, "count": value}
+                                                  for _, key, value in ordered],
+            "p95_within_650ms": quantiles["p95"]["known"] and
+                Decimal(quantiles["p95"]["upper_bound_seconds"]) <= Decimal("0.65")}
 
 
 def _sum_bounds(count, total):
@@ -327,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--process-initial-height", type=int)
     parser.add_argument("--stream-output")
     parser.add_argument("--stream-seconds", type=int)
+    parser.add_argument("--finalize-block-histogram", action="store_true")
     args = parser.parse_args()
     fenced = (args.rpc_url, args.node_id, args.process_initial_height)
     if args.stream_output is not None or args.stream_seconds is not None:
@@ -336,7 +436,9 @@ if __name__ == "__main__":
     elif any(value is not None for value in fenced):
         if any(value is None for value in fenced):
             parser.error("fenced capture requires RPC URL, node ID and process initial height")
-        result = capture_fenced_commit_metrics(args.url, args.chain_id, *fenced, args.timeout)
+        result = capture_fenced_commit_metrics(args.url, args.chain_id, *fenced, args.timeout,
+                                               args.finalize_block_histogram)
     else:
-        result = capture_commit_metrics(args.url, args.chain_id, args.timeout)
+        result = capture_commit_metrics(args.url, args.chain_id, args.timeout,
+                                        args.finalize_block_histogram)
     print(json.dumps(result, sort_keys=True))

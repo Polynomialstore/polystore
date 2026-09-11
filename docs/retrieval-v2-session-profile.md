@@ -167,6 +167,51 @@ provider filesystem enforcement remains in #257.
 
 ## Activation and existing state
 
+`scripts/retrieval_consensus_profile.json` is the single checked-in source for
+the devnet genesis and public healthcheck block limits. The native chain
+benchmark uses that profile by default; an explicit `--chain-max-gas` remains
+available only for bounded capacity experiments. Changing the gas value requires
+a coordinated fresh-genesis rollout because it is a consensus parameter;
+changing only a healthcheck expectation or one validator is invalid. The
+128000000 candidate failed the #326 execution-latency, validator-headroom, and
+signature gates, so the checked-in profile remains 64000000. Issue #328 owns
+the separate default-off parallel-execution feasibility spike.
+
+The bounded activation qualification is one fresh four-validator run on Linux:
+
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-chain \
+  --binary /path/to/polystorechaind \
+  --library /path/to/libpolystore_core.so \
+  --gateway-binary /path/to/polystore_gateway \
+  --cli-binary /path/to/polystore_cli \
+  --product-source "$PWD" \
+  --proof-exporter /path/to/retrieval-inventory-exporter \
+  --home /path/to/new-128m-run \
+  --chain-capacity-profile 1kib \
+  --chain-capacity-transactions 4992 \
+  --chain-max-gas 128000000 \
+  --timeout 3600
+```
+
+Only that exact candidate enables the #326 gates. The evidence records native
+CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
+reported as unknown), block-header commit-interval quantiles, canonical commit
+rounds and signatures, validator `/proc` CPU and sampled RSS during the longest
+all-validator-positive backlog, and per-node mempool depth. Reconciliation still
+fails on every rejected CheckTx or missing, duplicate, failed, retried, or
+unknown transaction. Qualification also fails if the observed mempool reaches
+the retained 5,000-transaction Comet limit, so that limit cannot be reported as
+proof-execution capacity. The run restarts every validator afterward, checks
+fixed-height state and consensus limits, waits for a proof in a new normal audit
+epoch, and verifies continued chain progress. A failed candidate still runs and
+retains this restart validation; if restart also fails, the original gate failure
+remains the reported qualification error. After coordinated deployment, run
+`scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
+from an external host; the
+local qualification does not claim public routing or TLS health.
+
 `retrieval_v2_activation_height=0` is disabled. A positive scheduled height must
 be a one-indexed epoch boundary `(height-1)%epoch_length=0`, with epoch length >=2.
 Admission rejects a past schedule. BeginBlock executes activation at exactly the

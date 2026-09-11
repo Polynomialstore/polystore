@@ -21,6 +21,7 @@ import urllib.parse
 import urllib.request
 
 from retrieval_bench_artifact import committed_tx, opened_session_id, sha256
+from retrieval_consensus_profile import load_consensus_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 FR = int("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
@@ -138,7 +139,8 @@ def main():
         run("genesis", "collect-gentxs")
         genesis_path = home / "config/genesis.json"
         genesis = json.loads(genesis_path.read_text())
-        genesis["consensus"]["params"]["block"].update({"max_bytes": "2097152", "max_gas": "64000000"})
+        genesis["consensus"]["params"]["block"].update(
+            load_consensus_profile(ROOT / "scripts/retrieval_consensus_profile.json")["block"])
         params = genesis["app_state"]["nilchain"]["params"]
         params.update(retrieval_v2_activation_height="1", retrieval_burn_bps="3333",
                       base_retrieval_fee={"denom": "stake", "amount": "3"},

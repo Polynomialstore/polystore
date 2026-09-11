@@ -40,7 +40,8 @@ class BenchmarkHomeTest(unittest.TestCase):
         root = Path(checkout.name)
         for directory in ("scripts", "polystore_core", "polystorechain/vendor"):
             (root / directory).mkdir(parents=True)
-        for name in (SCRIPT.name, "chain_go.sh", "retrieval_bench_artifact.py", "retrieval_fresh_proof.py", "retrieval_consensus_profile.json"):
+        for name in (SCRIPT.name, "chain_go.sh", "retrieval_bench_artifact.py", "retrieval_fresh_proof.py",
+                     "retrieval_consensus_profile.py", "retrieval_consensus_profile.json"):
             shutil.copy2(SCRIPT.with_name(name), root / "scripts" / name)
         for name in ("go.mod", "go.sum", "vendor/correction.go"):
             (root / "polystorechain" / name).write_text("mock dependency\n")
@@ -1671,8 +1672,8 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
         self.assertEqual(doc["profile"]["comet_mempool"], {
             "size": 5000, "max_txs_bytes": 1073741824, "max_tx_bytes": 1048576})
-        self.assertEqual(doc["profile"]["app_mempool_max_txs"], 5000)
-        self.assertIn("max-txs = 5000", (Path(doc["nodes"][0]["home"]) / "config/app.toml").read_text())
+        self.assertEqual(doc["profile"]["app_mempool_max_txs"], 0)
+        self.assertIn("max-txs = 0", (Path(doc["nodes"][0]["home"]) / "config/app.toml").read_text())
 
     def test_c6_audit_profile_is_explicit_and_frozen_before_validation(self):
         self.runner.home.mkdir(mode=0o700)

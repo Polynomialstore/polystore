@@ -127,12 +127,14 @@ sudo mkdir -p /var/lib/polystore
 sudo chown -R "$USER":"$USER" /var/lib/polystore
 
 # One-time init (hub only; no local providers; no web).
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
 POLYSTORE_HOME=/var/lib/polystore/polystorechaind PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
 If you need to re-run bootstrap later, the script will refuse to delete an existing non-`_artifacts/` home unless you explicitly opt in:
 
 ```bash
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
 POLYSTORE_HOME=/var/lib/polystore/polystorechaind POLYSTORE_REINIT_HOME=1 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
@@ -500,6 +502,7 @@ The quickest way to get a working hub is to bring up a hub-only stack once (no l
 1) Start hub-only devnet once:
 
 ```bash
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 
@@ -514,6 +517,7 @@ POLYSTORE_STORAGE_TARGET_UTILIZATION_BPS=8000 \
 POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MIN=1stake \
 POLYSTORE_RETRIEVAL_PRICE_PER_BLOB_MAX=5stake \
 POLYSTORE_RETRIEVAL_TARGET_BLOBS_PER_EPOCH=1000 \
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh start
 ```
 

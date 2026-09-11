@@ -13,7 +13,9 @@ trap cleanup EXIT
 echo "==> Starting devnet alpha multi-SP stack (providers=12)..."
 # We need enough providers to ensure cross-provider routing happens.
 export PROVIDER_COUNT=12
-"$STACK_SCRIPT" start
+# This regression intentionally exercises the quarantined legacy receipt route.
+# Disable v2 only for this isolated stack; public devnet bootstrap keeps v2 active.
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=0 "$STACK_SCRIPT" start
 
 echo "==> Waiting for stack health..."
 # Wait for router
