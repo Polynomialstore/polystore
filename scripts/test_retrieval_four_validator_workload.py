@@ -3059,24 +3059,28 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
     def test_resource_summary_reports_host_and_aggregate_validator_usage(self):
         self.assertEqual(workload.parse_host_proc_stat("cpu  1 2 3 4 5 6 7 8\n")["idle_ticks"], 9)
         self.assertEqual(workload.parse_proc_memory("VmRSS: 12 kB\n", process=True)["VmRSS"], 12288)
-        def sample(total, idle, cpu, rss):
-            return {"host_cpu": {"total_ticks": total, "idle_ticks": idle},
+        def sample(monotonic_ns, total, idle, cpu, rss):
+            return {"monotonic_ns": monotonic_ns,
+                    "host_cpu": {"total_ticks": total, "idle_ticks": idle},
                     "host_memory": {"MemTotal": 1000, "MemAvailable": 400},
                     "validators": [{"node_id": f"n{i}", "pid": i + 1, "starttime_ticks": 9,
                         "user_ticks": cpu, "system_ticks": 0, "rss_bytes": rss} for i in range(4)]}
         with patch.object(workload.os, "sysconf", return_value=100):
-            result = workload.summarize_native_v3_resources([sample(100, 60, 10, 20),
-                                                               sample(200, 80, 30, 25)], 2)
+            result = workload.summarize_native_v3_resources([sample(1_000_000_000, 100, 60, 10, 20),
+                                                               sample(3_000_000_000, 200, 80, 30, 25)])
         self.assertAlmostEqual(result["host_average_cpu_fraction"], .8)
         self.assertAlmostEqual(result["aggregate_validator_average_cpu_cores"], .4)
         self.assertEqual(result["aggregate_validator_peak_rss_bytes"], 100)
+        with self.assertRaisesRegex(ValueError, "timestamps did not advance"):
+            workload.summarize_native_v3_resources([sample(1, 100, 60, 10, 20),
+                                                      sample(1, 200, 80, 30, 25)])
 
     def test_batch_capacity_cli_passes_explicit_session_shape(self):
         argv = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
             "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
             "--cli-binary", "/native-cli", "--product-source", "/source",
-            "--proof-exporter", "/exporter", "--chain-max-gas", "192000000",
-            "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "4608",
+            "--proof-exporter", "/exporter", "--chain-max-gas", "320000000",
+            "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "6656",
             "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
             "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500",
             "--chain-validator-gomaxprocs", "4"]
@@ -3085,8 +3089,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
         run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
-            native_chain=dict(exporter="/exporter", max_block_gas=192_000_000, profile="1kib",
-                measured_transactions=None, measured_sessions=4608,
+            native_chain=dict(exporter="/exporter", max_block_gas=320_000_000, profile="1kib",
+                measured_transactions=None, measured_sessions=6656,
                 submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
         self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
         self.assertEqual(constructor.call_args.kwargs["gomaxprocs"], 4)
