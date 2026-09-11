@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,14 +51,13 @@ func resolveKeyNameForAddress(ctx context.Context, addrOrName string) (string, e
 		return "", fmt.Errorf("keys list failed: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
 
-	clean := extractJSONBody(out)
-	if len(clean) == 0 {
-		clean = out
-	}
-
+	clean := bytes.TrimSpace(out)
 	var items []keyringListItem
 	if uerr := json.Unmarshal(clean, &items); uerr != nil {
 		// Some keyring outputs wrap the list.
+		if body := extractJSONBody(out); len(body) != 0 {
+			clean = body
+		}
 		var wrapped struct {
 			Keys []keyringListItem `json:"keys"`
 		}

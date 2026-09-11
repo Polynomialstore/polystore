@@ -36,6 +36,18 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             docs,
         )
 
+    def test_legacy_gateway_retrieval_wrapper_disables_v2_only_for_startup(self):
+        wrapper = (ROOT / "scripts/ci_e2e_gateway_retrieval_multi_sp.sh").read_text()
+        self.assertIn(
+            'POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=0 "$STACK_SCRIPT" start',
+            wrapper,
+        )
+        self.assertNotIn("export POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT", wrapper)
+
+        scenario = (ROOT / "scripts/e2e_gateway_retrieval_multi_sp.sh").read_text()
+        self.assertIn('"http://localhost:$PORT/sp/retrieval/prove-retrieval"', scenario)
+        self.assertIn('if [ "$PROOF_TX_CODE" != "0" ]', scenario)
+
     def run_program(self, module_key="nilchain", activation="1", profile=None):
         genesis = {
             "app_state": {
