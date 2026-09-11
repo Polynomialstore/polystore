@@ -1747,6 +1747,45 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertFalse(result["qualified"])
         self.assertIn("mempool", " ".join(result["reasons"]))
 
+    def test_failed_128m_qualification_retains_restart_validation_and_original_failure(self):
+        original = "128M qualification gates failed: validator CPU exceeded the gate"
+        for restart_result in (
+                dict(chain_progress_verified=True, qualification=True),
+                RuntimeError("validator restart failed")):
+            with self.subTest(restart_result=type(restart_result).__name__):
+                lifecycle = SimpleNamespace(doc={"native_v3_chain": {
+                    "qualification_error": original}}, save=Mock())
+                kwargs = ({"return_value": restart_result}
+                          if isinstance(restart_result, dict) else {"side_effect": restart_result})
+                with patch.object(workload, "validate_native_v3_candidate_restart", **kwargs) as restart:
+                    with self.assertRaisesRegex(ValueError, original) as raised:
+                        workload.finalize_native_v3_candidate(lifecycle, Mock(), Mock(), 100)
+                restart.assert_called_once()
+                self.assertFalse(lifecycle.doc["native_v3_chain"]["qualification"])
+                self.assertEqual(lifecycle.doc["native_v3_chain"]["status"],
+                                 "native_v3_chain_capacity_qualification_failed")
+                if isinstance(restart_result, dict):
+                    self.assertTrue(lifecycle.doc["native_v3_chain"]
+                                    ["post_qualification_restart"]["chain_progress_verified"])
+                    self.assertIsNone(raised.exception.__cause__)
+                else:
+                    self.assertEqual(lifecycle.doc["native_v3_chain"]
+                                     ["post_qualification_restart"]["error"], str(restart_result))
+                    self.assertIs(raised.exception.__cause__, restart_result)
+
+    def test_successful_128m_qualification_requires_successful_restart(self):
+        lifecycle = SimpleNamespace(doc={"native_v3_chain": {}}, save=Mock())
+        restart_result = dict(chain_progress_verified=True, qualification=True)
+        with patch.object(workload, "validate_native_v3_candidate_restart",
+                          return_value=restart_result) as restart:
+            workload.finalize_native_v3_candidate(lifecycle, Mock(), Mock(), 100)
+        restart.assert_called_once()
+        self.assertTrue(lifecycle.doc["native_v3_chain"]["qualification"])
+        self.assertEqual(lifecycle.doc["native_v3_chain"]["status"],
+                         "native_v3_chain_capacity_passed")
+        self.assertIs(lifecycle.doc["native_v3_chain"]["post_qualification_restart"],
+                      restart_result)
+
     def test_consensus_commit_summary_requires_round_zero_and_all_signatures(self):
         def signed(height, round=0, flags=(2, 2, 2, 2)):
             return {"canonical": True, "signed_header": {

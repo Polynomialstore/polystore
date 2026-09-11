@@ -205,7 +205,9 @@ unknown transaction. Qualification also fails if the observed mempool reaches
 the retained 5,000-transaction Comet limit, so that limit cannot be reported as
 proof-execution capacity. The run restarts every validator afterward, checks
 fixed-height state and consensus limits, waits for a proof in a new normal audit
-epoch, and verifies continued chain progress. After coordinated deployment, run
+epoch, and verifies continued chain progress. A failed candidate still runs and
+retains this restart validation; if restart also fails, the original gate failure
+remains the reported qualification error. After coordinated deployment, run
 `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
 from an external host; the
 local qualification does not claim public routing or TLS health.

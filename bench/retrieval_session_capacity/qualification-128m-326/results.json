@@ -49,10 +49,11 @@
     "committed_transactions_per_second": 98.60406863761025,
     "complete_proof_sets": 4992,
     "daily_equivalent_basis": "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
+    "full_offer_to_drain_elapsed_seconds": 53.216465679,
     "logical_requested_gib_per_day": 8.124724893846059,
-    "measured_elapsed_seconds": 53.216465679,
     "offer_seconds": 2.105675741,
-    "partial_proof_sets": 0
+    "partial_proof_sets": 0,
+    "saturated_elapsed_seconds": 50.626714181
   },
   "commit_intervals_seconds": {
     "basis": "differences between consecutive canonical Comet block header timestamps",

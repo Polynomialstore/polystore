@@ -2542,10 +2542,11 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             consensus=consensus, finalize_block_histograms=finalize_blocks,
             issue_326_qualification=qualification)
         lifecycle.save()
+        doc.pop("qualification_error", None)
         if issue_326_candidate and not qualification["qualified"]:
             measurement["status"] = "qualification_failed"
-            lifecycle.save()
-            raise ValueError("128M qualification gates failed: " + "; ".join(qualification["reasons"]))
+            doc["qualification_error"] = (
+                "128M qualification gates failed: " + "; ".join(qualification["reasons"]))
     doc.update(status=("native_v3_chain_capacity_qualification_pending_restart"
                        if issue_326_candidate else "native_v3_chain_capacity_passed"),
         qualification=not issue_326_candidate,
@@ -2554,6 +2555,67 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         sampled_openings=sum(row["sample_count"] * row["sessions"] for row in profiles),
         delivery_verified=False, owner_acknowledged=False, expiration_verified=False,
         refunds_verified=False)
+    lifecycle.save()
+
+
+def validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length):
+    fixed_height = lifecycle.wait_height(1) - 1
+    before_restart = lifecycle.snapshot(fixed_height)
+    lifecycle.stop()
+    lifecycle.reserve_ports()
+    lifecycle.start("post-qualification-restart")
+    later = wait(fixed_height + 3) - 1
+    original = lifecycle.snapshot(fixed_height)
+    if original != before_restart:
+        raise ValueError("post-qualification restart changed the fixed committed state")
+    consensus = []
+    expected_block = lifecycle.doc["profile"]["consensus"]["block"]
+    for node in lifecycle.nodes:
+        params = lifecycle.query(node, "/cosmos/consensus/v1/params", later)["params"]["block"]
+        if {key: params[key] for key in ("max_bytes", "max_gas")} != expected_block:
+            raise ValueError("post-qualification consensus profile changed")
+        consensus.append(dict(node_id=node["node_id"], block=params))
+    restart_epoch = (later - 1) // epoch_length + 2
+    audit_height = wait((restart_epoch - 1) * epoch_length + 2)
+    restart_audits = None
+    for _ in range(21):
+        restart_audits = audits(audit_height, False, restart_epoch)
+        if sum(producer.uint(row["audit"].get("accepted_count", 0))
+               for row in restart_audits.values()) > 0:
+            break
+        audit_height = wait(audit_height + 1)
+    else:
+        raise ValueError("normal audit proof did not execute after validator restart")
+    return dict(fixed_height=fixed_height, later_height=later, audit_height=audit_height,
+        before=before_restart, original_after_restart=original,
+        later=lifecycle.snapshot(later), consensus=consensus, normal_audits=restart_audits,
+        nonce_ordered_admission="all 4,992 frozen per-signer sequences committed exactly once before restart",
+        chain_progress_verified=True, qualification=True)
+
+
+def finalize_native_v3_candidate(lifecycle, wait, audits, epoch_length):
+    doc = lifecycle.doc["native_v3_chain"]
+    qualification_error = doc.get("qualification_error")
+    doc["qualification"] = False
+    lifecycle.save()
+    try:
+        restart = validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length)
+    except Exception as restart_error:
+        doc["post_qualification_restart"] = dict(
+            qualification=False, error=str(restart_error)[-8192:])
+        doc["status"] = ("native_v3_chain_capacity_qualification_failed"
+                         if qualification_error else "native_v3_chain_capacity_restart_failed")
+        lifecycle.save()
+        if qualification_error:
+            raise ValueError(qualification_error) from restart_error
+        raise
+    doc["post_qualification_restart"] = restart
+    if qualification_error:
+        doc["status"] = "native_v3_chain_capacity_qualification_failed"
+        lifecycle.save()
+        raise ValueError(qualification_error)
+    doc["qualification"] = True
+    doc["status"] = "native_v3_chain_capacity_passed"
     lifecycle.save()
 
 def admit_native_v3_generation(lifecycle, *, uploaded, deal_id, providers, send, curl,
@@ -5047,44 +5109,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                                     profile_name=native_chain.get("profile"),
                                     measured_transactions=native_chain.get("measured_transactions"))
                 if lifecycle.doc["native_v3_chain"].get("issue_326_candidate"):
-                    lifecycle.doc["native_v3_chain"]["qualification"] = False
-                    lifecycle.save()
-                    fixed_height = lifecycle.wait_height(1) - 1
-                    before_restart = lifecycle.snapshot(fixed_height)
-                    lifecycle.stop()
-                    lifecycle.reserve_ports()
-                    lifecycle.start("post-qualification-restart")
-                    later = wait(fixed_height + 3) - 1
-                    original = lifecycle.snapshot(fixed_height)
-                    if original != before_restart:
-                        raise ValueError("post-qualification restart changed the fixed committed state")
-                    consensus = []
-                    expected_block = lifecycle.doc["profile"]["consensus"]["block"]
-                    for node in lifecycle.nodes:
-                        params = lifecycle.query(node, "/cosmos/consensus/v1/params", later)["params"]["block"]
-                        if {key: params[key] for key in ("max_bytes", "max_gas")} != expected_block:
-                            raise ValueError("post-qualification consensus profile changed")
-                        consensus.append(dict(node_id=node["node_id"], block=params))
-                    restart_epoch = (later - 1) // epoch_length + 2
-                    audit_height = wait((restart_epoch - 1) * epoch_length + 2)
-                    restart_audits = None
-                    for _ in range(21):
-                        restart_audits = audits(audit_height, False, restart_epoch)
-                        if sum(producer.uint(row["audit"].get("accepted_count", 0))
-                               for row in restart_audits.values()) > 0:
-                            break
-                        audit_height = wait(audit_height + 1)
-                    else:
-                        raise ValueError("normal audit proof did not execute after validator restart")
-                    doc["native_v3_chain"]["post_qualification_restart"] = dict(
-                        fixed_height=fixed_height, later_height=later, audit_height=audit_height,
-                        before=before_restart, original_after_restart=original,
-                        later=lifecycle.snapshot(later), consensus=consensus,
-                        normal_audits=restart_audits,
-                        nonce_ordered_admission="all 4,992 frozen per-signer sequences committed exactly once before restart",
-                        chain_progress_verified=True, qualification=True)
-                    doc["native_v3_chain"]["qualification"] = True
-                    lifecycle.save()
+                    finalize_native_v3_candidate(lifecycle, wait, audits, epoch_length)
                 doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
