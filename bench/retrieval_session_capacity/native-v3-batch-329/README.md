@@ -34,14 +34,14 @@ A 256M diagnostic increased throughput to **190.84 sessions/s** (16.49M/day) and
 
 | Max gas | Sessions/s | Derived sessions/day | Host avg CPU | Validator avg CPU, aggregate | Validator peak RSS, aggregate | Exact FinalizeBlock p95 | Result |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 192M | 139.10 | 12.02M | 19.74% of 16 CPUs | 2.86 cores | 1.81 GB | 526-545ms | highest passing point |
-| 256M | 190.84 | 16.49M | 27.03% of 16 CPUs | 4.01 cores | 1.97 GB | 711-738ms | stop: latency gate failed |
+| 192M | 139.10 | 12.02M | 19.74% of 16 CPUs | 2.94 cores | 1.81 GB | 526-545ms | highest passing point |
+| 256M | 190.84 | 16.49M | 27.03% of 16 CPUs | 4.08 cores | 1.97 GB | 711-738ms | stop: latency gate failed |
 
 The host remains underused in aggregate, but raising block gas lengthens the sequential work each validator must finish in FinalizeBlock. At 256M, each validator averaged about one CPU core while all four crossed the latency bound. A block-gas increase alone therefore does not approach the configured two-worker pure-verifier ceiling of 442.56 sessions/s while preserving the measured execution budget. This PR records the result and does not change activation parameters.
 
 ## Evidence and reproduction
 
-[`results.json`](results.json) contains all five direct-verifier samples for batch sizes 8, 32, and 64 at worker counts 1, 2, 4, and 8; exact chain rates; block packing; gas; bytes; commit quantiles; precise per-validator FinalizeBlock measurements; CPU/RSS; failure counters; and provenance. [`benchmark.txt`](benchmark.txt) is the raw direct-verifier output (SHA-256 `6b32a7c0250c084f164fbc06d1b160801d7333be91dc08d68ba1133ec6829b66`). Full chain evidence remains on the benchmark host because it includes large per-transaction records; `results.json` records each path and SHA-256.
+[`results.json`](results.json) contains all five direct-verifier samples for batch sizes 8, 32, and 64 at worker counts 1, 2, 4, and 8; exact chain rates; block packing; gas; bytes; commit quantiles; precise per-validator FinalizeBlock measurements; CPU/RSS; failure counters; and provenance. CPU rates were recalculated from the immutable raw evidence using each run's first and last resource-sample timestamps; the raw evidence hashes remain unchanged. [`benchmark.txt`](benchmark.txt) is the raw direct-verifier output (SHA-256 `6b32a7c0250c084f164fbc06d1b160801d7333be91dc08d68ba1133ec6829b66`). Full chain evidence remains on the benchmark host because it includes large per-transaction records; `results.json` records each path and SHA-256.
 
 Run the direct matrix from `polystorechain` with the native library built for the host:
 
