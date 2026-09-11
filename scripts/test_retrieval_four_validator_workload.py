@@ -2482,7 +2482,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 _, retry_evidence = workload.v3_generate_only_gas(life, retry_path, AUDIT_ADDRESSES[0])
             self.assertEqual((run.call_count, sleep.call_count, retry_evidence["simulation_attempts"]), (2, 1, 2))
 
-    def test_native_chain_freeze_batch_encodes_without_per_transaction_processes(self):
+    def test_native_chain_freeze_encodes_provider_transactions_in_parallel(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
@@ -2518,14 +2518,9 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                     output.write_text("\n".join(rows) + "\n")
                     sign_barrier.wait(timeout=5)
                     return ""
-                if argv[2] == "encode-batch":
-                    lines = []
-                    for source in argv[3:argv.index("--output-document")]:
-                        for row in Path(source).read_text().splitlines():
-                            slot = json.loads(row)["body"]["messages"][0]["slot"]
-                            lines.append(base64.b64encode(f"raw-{slot}".encode()).decode())
-                    Path(argv[argv.index("--output-document") + 1]).write_text("\n".join(lines) + "\n")
-                    return ""
+                if argv[2] == "encode":
+                    slot = json.loads(Path(argv[3]).read_text())["body"]["messages"][0]["slot"]
+                    return base64.b64encode(f"raw-{slot}".encode()).decode() + "\n"
                 raise AssertionError(f"unexpected per-transaction command: {argv}")
 
             sequences = {provider: {"account_number": slot + 20, "sequence": slot + 3}
@@ -2537,10 +2532,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 lifecycle, intents, {row[0]["id"]: row[2] for row in simulated}, [profile],
                 providers, sequences, command)
             self.assertEqual(sum(row[2] == "sign-batch" for row in calls), 8)
-            self.assertEqual(sum(row[2] == "encode-batch" for row in calls), 1)
-            encode_call = next(row for row in calls if row[2] == "encode-batch")
-            self.assertEqual([Path(path).name for path in encode_call[3:encode_call.index("--output-document")]],
-                             [f"provider-{slot}-1kib.signed.jsonl" for slot in range(8)])
+            self.assertEqual(sum(row[2] == "encode" for row in calls), 8)
+            self.assertEqual(sum(row[2] == "encode-batch" for row in calls), 0)
             self.assertEqual([Path(row["raw_path"]).read_bytes() for row in frozen],
                              [f"raw-{slot}".encode() for slot in range(8)])
             self.assertEqual([row["sequence"] for row in frozen], [slot + 3 for slot in range(8)])
@@ -2857,6 +2850,7 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             simulations = {}
             for index, row in enumerate(messages):
                 source = json.loads(Path(row["message_path"]).read_text())
+                source["padding"] = "x" * 70_000
                 unsigned = home / f"unsigned-{index}.json"
                 unsigned.write_text(json.dumps({"body": {"messages": [dict({"@type": workload.V3_SINGLE_PROOF_TYPE}, **source)]},
                     "auth_info": {"fee": {"gas_limit": "10"}}}, separators=(",", ":")) + "\n")
@@ -2876,13 +2870,9 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                                       "signer_infos": [{"sequence": "4"}]}, "signatures": ["signed"]}
                     Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
                     return ""
-                if argv[2] == "encode-batch":
-                    count = sum(len(Path(path).read_text().splitlines())
-                                for path in argv[3:argv.index("--output-document")])
-                    Path(argv[argv.index("--output-document") + 1]).write_text(
-                        "\n".join(base64.b64encode(f"frozen-tx-{index}".encode()).decode()
-                                  for index in range(count)) + "\n")
-                    return ""
+                if argv[2] == "encode":
+                    self.assertGreater(Path(argv[3]).stat().st_size, 64 * 1024)
+                    return base64.b64encode(b"frozen-tx-0").decode() + "\n"
                 raise AssertionError(f"unexpected command: {argv}")
             frozen = workload.freeze_native_v3_transactions(lifecycle, [intent], simulations, [profile],
                 dict(enumerate(AUDIT_ADDRESSES[:8])),

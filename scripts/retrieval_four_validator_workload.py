@@ -2192,7 +2192,7 @@ def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
 
 
 def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, providers, sequences, command):
-    """Offline sign provider-local intents in parallel, then batch-encode every TxRaw."""
+    """Offline sign and encode provider-local intents in bounded parallel lanes."""
     directory = lifecycle.home / "native-v3-chain-frozen"
     directory.mkdir(mode=0o700, exist_ok=True)
     node = lifecycle.nodes[0]
@@ -2259,7 +2259,7 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                     signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
                     pending.append(validate_frozen_signed_transaction(intent, signed_tx,
                         unsigned_tx["body"]["messages"], simulation["gas_limit"], sequence + index, signed_one))
-                encoding_sources.append(signed)
+                    encoding_sources.append(signed_one)
             sequence += len(rows)
         return pending, encoding_sources
 
@@ -2279,13 +2279,28 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
         signed_groups = list(pool.map(sign_provider, slots))
     pending = [row for group, _ in signed_groups for row in group]
     encoding_sources = [source for _, sources in signed_groups for source in sources]
+    if len(encoding_sources) != len(pending):
+        raise ValueError("signed transaction inventory differs from encoding sources")
+
+    # `tx encode-batch` scans newline-delimited JSON with the Go scanner's
+    # default token bound. A valid 64-message serial comparator transaction is
+    # larger than that bound, while the ordinary `tx encode` command reads one
+    # complete JSON document. Encode individual signed transactions in bounded
+    # parallel lanes and retain their deterministic provider/profile order.
+    def encode_signed(source):
+        output = command([str(lifecycle.binary), "tx", "encode", str(source),
+            "--home", node["home"], "--chain-id", lifecycle.chain], 300)
+        rows = output.strip().splitlines()
+        if len(rows) != 1:
+            raise ValueError("tx encode returned an incomplete transaction")
+        return rows[0]
+
+    with ThreadPoolExecutor(max_workers=min(V3_SYSTEMATIC_PROVIDERS, len(encoding_sources))) as pool:
+        encoded_rows = list(pool.map(encode_signed, encoding_sources))
     encoded_path = directory / "transactions.base64"
-    command([str(lifecycle.binary), "tx", "encode-batch", *(str(path) for path in encoding_sources),
-             "--output-document", str(encoded_path), "--home", node["home"],
-             "--chain-id", lifecycle.chain], 300)
-    encoded_rows = encoded_path.read_text().splitlines()
+    encoded_path.write_text("\n".join(encoded_rows) + "\n")
     if len(encoded_rows) != len(pending):
-        raise ValueError("tx encode-batch returned an incomplete transaction inventory")
+        raise ValueError("tx encode returned an incomplete transaction inventory")
 
     def encode(item):
         (intent, sequence, gas_limit, signed), encoded = item
