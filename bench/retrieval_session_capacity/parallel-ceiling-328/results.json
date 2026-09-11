@@ -1,0 +1,168 @@
+{
+  "schema": "polystore-retrieval-v3-parallel-verifier-ceiling-v1",
+  "issue": 328,
+  "scope": "pure one-opening retrieval-v3 chained-proof verification; excludes transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
+  "provenance": {
+    "source_commit": "ffe55b38f0d3e016753b6966c141a20aeea7f37c",
+    "host": "mikers@192.168.0.111",
+    "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+    "physical_cores": 8,
+    "logical_cpus": 16,
+    "os_arch": "linux/amd64",
+    "go_benchmark": "BenchmarkVerifyChainedProofParallel",
+    "command": "../scripts/chain_go.sh test ./x/polystorechain/keeper -run '^$' -bench '^BenchmarkVerifyChainedProofParallel$' -benchtime=2s -count=5 -cpu=1,2,4,8,16 -benchmem",
+    "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+    "raw_output": "benchmark.txt",
+    "raw_output_sha256": "821c7d15cf51d2809a8fdfacb6a47010aad58ce9b483281313da67bac45afff5"
+  },
+  "parallel_verifier": [
+    {
+      "workers": 1,
+      "samples_ns_per_session": [
+        4569130,
+        4569834,
+        4581452,
+        4569386,
+        4573933
+      ],
+      "median_ns_per_session": 4569834,
+      "median_sessions_per_second": 218.82632935900955,
+      "derived_sessions_per_day": 18906594.856618427
+    },
+    {
+      "workers": 2,
+      "samples_ns_per_session": [
+        2286201,
+        2293923,
+        2290331,
+        2290146,
+        2287571
+      ],
+      "median_ns_per_session": 2290146,
+      "median_sessions_per_second": 436.6533836707354,
+      "derived_sessions_per_day": 37726852.34915154
+    },
+    {
+      "workers": 4,
+      "samples_ns_per_session": [
+        1156514,
+        1158943,
+        1157411,
+        1157550,
+        1157811
+      ],
+      "median_ns_per_session": 1157550,
+      "median_sessions_per_second": 863.8935683123839,
+      "derived_sessions_per_day": 74640404.30218996
+    },
+    {
+      "workers": 8,
+      "samples_ns_per_session": [
+        623734,
+        625549,
+        629152,
+        626950,
+        628371
+      ],
+      "median_ns_per_session": 626950,
+      "median_sessions_per_second": 1595.0235265970173,
+      "derived_sessions_per_day": 137810032.69798228
+    },
+    {
+      "workers": 16,
+      "samples_ns_per_session": [
+        570142,
+        570235,
+        570148,
+        570061,
+        570473
+      ],
+      "median_ns_per_session": 570148,
+      "median_sessions_per_second": 1753.9305583813325,
+      "derived_sessions_per_day": 151539600.24414712
+    }
+  ],
+  "retained_chain_comparison": [
+    {
+      "max_block_gas": 64000000,
+      "committed_transactions_per_second": 49.615585940613286,
+      "committed_transactions_per_day": 4286786.625268988,
+      "mean_commit_interval_seconds": 1.3578076278947369,
+      "validator_cpu_percent_of_one_core": [
+        30.09504922861054,
+        29.159990161668667,
+        29.125358344374526,
+        29.125358344374526
+      ],
+      "validator_process_cpu_percent_of_16_core_host": 7.344109754939266
+    },
+    {
+      "max_block_gas": 128000000,
+      "committed_transactions_per_second": 95.9802893078247,
+      "committed_transactions_per_day": 8292696.996196055,
+      "mean_commit_interval_seconds": 1.4548441627272728,
+      "validator_cpu_percent_of_one_core": [
+        51.57604818002443,
+        50.86653640611934,
+        50.921114234881266,
+        50.70280291983354
+      ],
+      "validator_process_cpu_percent_of_16_core_host": 12.754156358803662
+    },
+    {
+      "max_block_gas": 256000000,
+      "committed_transactions_per_second": 141.0835804327129,
+      "committed_transactions_per_day": 12189621.349386394,
+      "mean_commit_interval_seconds": 1.9794842632727274,
+      "validator_cpu_percent_of_one_core": [
+        78.81031160033379,
+        76.9765444345936,
+        76.85151485511132,
+        77.30995664654637
+      ],
+      "validator_process_cpu_percent_of_16_core_host": 19.371770471036566
+    },
+    {
+      "max_block_gas": 448000000,
+      "committed_transactions_per_second": 155.15161202310972,
+      "committed_transactions_per_day": 13405099.27879668,
+      "mean_commit_interval_seconds": 3.1904276955,
+      "validator_cpu_percent_of_one_core": [
+        88.90964452263927,
+        84.08465270627262,
+        83.5767588308656,
+        84.11286903268412
+      ],
+      "validator_process_cpu_percent_of_16_core_host": 21.29274531827885
+    }
+  ],
+  "comparison": {
+    "raw_eight_core_sessions_per_second": 1595.0235265970173,
+    "raw_eight_core_sessions_per_day": 137810032.69798228,
+    "chain_448m_sessions_per_second": 155.15161202310972,
+    "chain_448m_sessions_per_day": 13405099.27879668,
+    "raw_eight_core_to_chain_448m_ratio": 10.280418655008495,
+    "chain_448m_fraction_of_raw_eight_core": 0.09727230315788864
+  },
+  "conclusion": "execution limited: gas-only reaches a serial FinalizeBlock plateau; the native verifier scales across eight physical cores",
+  "daily_equivalent_basis": "short benchmark rate multiplied by 86400; not a sustained 24-hour or end-to-end delivery claim",
+  "blockstm_spike": {
+    "base_commit": "9014fdf116217414484cf00ce932a12d9649231b",
+    "cosmos_sdk": "v0.54.3",
+    "cosmos_evm": "v0.7.0",
+    "cometbft": "v0.39.3",
+    "ibc_go": "v11.0.0",
+    "go": "1.25.9",
+    "modified_files": 33,
+    "insertions": 791,
+    "deletions": 246,
+    "compile_result": "blocked at three PolyStore EVM correctness patch guards",
+    "conclusion": "blocked by migration scope",
+    "artifacts": {
+      "blockstm-compile.txt": "9e3231a7386aad4832724ccb4f1346dd8ec9021d433522bd1a7ee35332be4c32",
+      "blockstm-dependency-summary.txt": "5273c84028b976fffa5d5a9a1ea63a87b0395c6f9ec14a6c282bc14d40d27627",
+      "blockstm-migration-spike.patch.gz": "af869b4c86c709236db3a88d460c35aee795bc55bbdac5376b7f820e61dd8bf4"
+    }
+  },
+  "successor_issue": 329
+}
