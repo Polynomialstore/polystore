@@ -6,6 +6,8 @@ The production browser retrieves one logical range through one paid native V3 se
 
 The small and multi-MDU correctness runs used a Linux browser with four validators and twelve provider-daemons on one host. The 1 GiB pilot used a separate Mac browser over LAN SSH forwards to the same server topology: Apple M3, 16 GiB RAM, macOS 26.2 and Chrome 152.0.7977.83, with an AMD Ryzen 7 9700X Linux server. The fixed EVM test wallet signs automatically; human MetaMask interaction is outside these timings. The synthetic payload repeats a deterministic 4 KiB nonconstant pattern; SSH compression is disabled and the gateway streaming route has no response-compression middleware. This is a controlled LAN deployment measurement, not an entropy or WAN comparison. Public activation remains disabled by default.
 
+The [retained Mac preflight](lan-preflight.json) recorded effective SSH `compression no` before the measured pilot. That executor inherited the host setting; the final harness explicitly passes `-oCompression=no` so a future machine's SSH configuration cannot silently compress this repeating payload. This hardening does not change the measured run's recorded setting.
+
 ## Correctness evidence
 
 - 1 KiB: one paid session, verified output, cached download without additional MDU requests or payment, estimation rejection and wallet cancellation before payment, and strict post-deadline refund without a second open or provider access.

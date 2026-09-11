@@ -289,7 +289,13 @@
     },
     "transport": "LAN SSH loopback forwards, SSH compression disabled",
     "wallet": "automated fixture EVM signer; no human approval delay",
-    "payload": "deterministic repeating 4 KiB nonconstant pattern; no response-compression middleware on the gateway route"
+    "payload": "deterministic repeating 4 KiB nonconstant pattern; no response-compression middleware on the gateway route",
+    "ssh_compression_evidence": {
+      "artifact": "lan-preflight.json",
+      "observation_utc": "2026-09-10 22:54 UTC",
+      "effective_setting": "no",
+      "measurement_method": "ssh -G preflight on the Mac before the pilot; the measured executor inherited this setting. The final executor explicitly disables compression for future runs."
+    }
   },
   "performance_target": {
     "metric": "main_retrieval.paid_retrieval_phase_elapsed_ms",
