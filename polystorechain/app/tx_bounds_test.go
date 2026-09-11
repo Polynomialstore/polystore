@@ -23,7 +23,7 @@ func TestRetrievalConsensusProfile(t *testing.T) {
 	params := cmttypes.DefaultConsensusParams()
 	params.Block = profile.Block
 	require.NoError(t, params.ValidateBasic())
-	require.Equal(t, int64(64_000_000), params.Block.MaxGas)
+	require.Equal(t, int64(192_000_000), params.Block.MaxGas)
 	require.Greater(t, params.Block.MaxBytes, int64(MaxTransactionBytes))
 }
 

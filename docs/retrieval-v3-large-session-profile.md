@@ -504,8 +504,9 @@ unsupported until those records are explicitly included and qualified.
 For K8/M4, one range creates at most eight systematic provider obligations and
 Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
 length. One proof message has at most 64 openings; batching changes envelope count,
-not sample count or liability. The existing proof gas precharge and 64,000,000 gas /
-2 MiB block-byte limits apply. At the measured reference cost of about 4.134M gas for eight openings,
+not sample count or liability. The existing proof gas precharge and canonical
+192,000,000 gas / 2 MiB block limits apply. The separate 64,000,000 estimated-gas
+cap for one retrieval transaction is unchanged. At the measured reference cost of about 4.134M gas for eight openings,
 132 openings require many transactions/blocks; this contract makes no throughput
 or completion-latency claim.
 
@@ -546,7 +547,7 @@ route rejects v3 before charging or consuming authority. Activation requires:
   wrong root-table cell, and truncated/extended/reindexed membership paths,
   including retries of already-accepted ordinals; no bitmap or balance mutation;
 - bounded expiry/refund/restart tests and retained-generation accounting; and
-- end-to-end K8 qualification under the production 64,000,000 gas and 2 MiB
+- end-to-end K8 qualification under the production 192,000,000 gas and 2 MiB
   block-byte limits.
 
 Vector success establishes byte-level agreement only. It does not qualify signer
