@@ -29,6 +29,7 @@ import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../l
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
@@ -43,7 +44,7 @@ import {
   writeSlabGenerationAtomically,
   writeSlabMetadata,
 } from '../lib/storage/OpfsAdapter'
-import { isGatewayMode2UploadEnabled, isGatewayTransportEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
+import { isGatewayMode2UploadEnabled, isTrustedLocalGatewayBase } from '../lib/transport/mode'
 import { createUploadEngine, type UploadTarget, type UploadTaskEvent } from '../lib/upload/engine'
 import { isMissingGatewayAppendStateError, recoverGatewayAppendState } from '../lib/upload/gatewayRecovery'
 import { createSparseHttpTransportPort } from '../lib/upload/httpTransport'
@@ -2062,14 +2063,15 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
     const output = job.output
     let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
-    const gatewayBase = localGateway.url || appConfig.gatewayBase
-    const availableProofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase, localGatewayConnected: localGateway.status === 'connected' }) ? gatewayBase : undefined
+    // Settlement may use only the base published by a qualifying /status
+    // probe. A health-only endpoint remains usable for liveness UI only.
+    const gatewayProofBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
+    const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
     const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
-      const proofBase = job.state.pending?.proofBase ?? availableProofBase
-      job.prepare(ordinal, sessions, proofBase)
+      job.prepare(ordinal, sessions)
       const outcomes = await confirmAndRequestRetrievalProofs(sessions, {
         confirm: (wave) => retrievalPayment.confirm(wave, signal, job.key), signal,
-        gatewayBase: proofBase,
+        gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase,
       })
       if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
       for (const outcome of outcomes) if (outcome.state !== 'committed') { unsettled++; firstSettlementIssue ??= outcome }
@@ -2077,8 +2079,8 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       if (job.state.cleanup) { await retrievalPayment.forget(job.state.cleanup, job.key); job.cleaned() }
     }
     try {
-      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
-        confirm: async () => {}, gatewayBase: availableProofBase ?? previousBase, signal,
+      await job.reconcile((sessions) => confirmAndRequestRetrievalProofs(sessions, {
+        confirm: async () => {}, gatewayBase: gatewayProofBase, resolveProviderBase: resolveProofBase, signal,
       }), (sessions) => retrievalPayment.forget(sessions, job.key), signal)
       unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       const readCommitments = createRecoveryCommitmentReader(pin, mdu0Bytes, {
@@ -2112,7 +2114,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
         }, signal)
         addLog(`> Verified and saved committed user MDU ${ordinal + 1n}/${pin.userMdus}.`)
       }
-      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Connect the trusted local gateway and retry before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
+      if (unsettled) throw new Error(`Append base is verified, but ${unsettled} provider payment(s) remain unsettled. Retry the same append action to settle the retained sessions using the saved bytes before replacing this generation. ${firstSettlementIssue?.message ?? ''}`)
       const file = await output.file()
       job.finish()
       await retrievalCleanup.current?.().catch(() => {}); retrievalCleanup.current = output.cleanup
@@ -2123,7 +2125,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       await job.retain()
       throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
     }
-  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;

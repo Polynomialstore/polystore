@@ -115,6 +115,9 @@ func TestDealGenerationStatusSnapshotAt_UsesConfiguredRetentionTTL(t *testing.T)
 
 func TestGatewayStatusIncludesDealGenerationSnapshot(t *testing.T) {
 	useTempUploadDir(t)
+	t.Setenv("POLYSTORE_RUNTIME_PERSONA", "user-gateway")
+	t.Setenv("POLYSTORE_PROVIDER_KEY", "")
+	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
 
 	root := mustTestManifestRoot(t, "status-endpoint")
 	writeTestDealGeneration(t, 301, root, 2, false)
@@ -139,6 +142,9 @@ func TestGatewayStatusIncludesDealGenerationSnapshot(t *testing.T) {
 	var status gatewayStatusResponse
 	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
 		t.Fatalf("decode status response: %v", err)
+	}
+	if !status.Capabilities["retrieval_session_proof_continue"] {
+		t.Fatal("expected user-gateway status to advertise public retrieval continuation")
 	}
 	if status.Extra["polyfs_generation_active"] != "1" {
 		t.Fatalf("expected polyfs_generation_active=1, got=%q", status.Extra["polyfs_generation_active"])

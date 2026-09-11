@@ -267,6 +267,7 @@ func registerGatewayDealLifecycleRoutes(r *mux.Router) {
 }
 
 func registerUserGatewayRoutes(r *mux.Router, routerMode bool) {
+	r.HandleFunc("/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof).Methods("POST", "OPTIONS")
 	if routerMode {
 		r.HandleFunc("/gateway/upload", RouterGatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/upload-status", RouterGatewayUploadStatus).Methods("GET", "OPTIONS")
@@ -317,6 +318,7 @@ func registerProviderDaemonRoutes(r *mux.Router) {
 	r.HandleFunc("/sp/receipts", SpSubmitReceipts).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/session-receipt", SpSubmitSessionReceipt).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/session-proof", SpSubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
+	r.HandleFunc("/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/generation-v3/accept", SpAcceptDealGenerationV3).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
 	r.HandleFunc("/sp/upload_shard", SpUploadShard).Methods("POST", "OPTIONS")
@@ -5667,6 +5669,15 @@ func GatewaySubmitSessionReceipt(w http.ResponseWriter, r *http.Request) {
 // GatewaySubmitRetrievalSessionProof asks the provider to submit the on-chain proof for a
 // RetrievalSession once the client has finished downloading.
 func GatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !isGatewayAuthorized(r) {
+		writeJSONError(w, http.StatusForbidden, "forbidden", "missing or invalid gateway auth")
+		return
+	}
 	forwardToProvider(w, r, "/sp/session-proof")
 }
 

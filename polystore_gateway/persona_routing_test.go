@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -95,6 +97,17 @@ func TestProviderDaemonRoutes_DoNotExposeGatewaySurface(t *testing.T) {
 			t.Fatalf("expected provider daemon to expose retrieval route %s", path)
 		}
 	}
+
+	wContinue := httptest.NewRecorder()
+	r.ServeHTTP(wContinue, httptest.NewRequest(http.MethodPost, "/sp/retrieval/session-proof/continue", nil))
+	if wContinue.Code == http.StatusNotFound {
+		t.Fatalf("expected provider daemon to expose public retrieval continuation")
+	}
+	wOldContinue := httptest.NewRecorder()
+	r.ServeHTTP(wOldContinue, httptest.NewRequest(http.MethodPost, "/sp/session-proof/continue", nil))
+	if wOldContinue.Code != http.StatusNotFound {
+		t.Fatalf("expected provider daemon to hide continuation outside /sp/retrieval/*, got %d", wOldContinue.Code)
+	}
 }
 
 func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {
@@ -115,5 +128,35 @@ func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {
 	r.ServeHTTP(wGateway, reqGateway)
 	if wGateway.Code == http.StatusNotFound {
 		t.Fatalf("expected user gateway to expose /gateway/* routes")
+	}
+
+	wContinue := httptest.NewRecorder()
+	r.ServeHTTP(wContinue, httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", nil))
+	if wContinue.Code == http.StatusNotFound || wContinue.Code == http.StatusForbidden {
+		t.Fatalf("expected browser-safe user-gateway continuation without privileged auth, got %d", wContinue.Code)
+	}
+	wPrivileged := httptest.NewRecorder()
+	r.ServeHTTP(wPrivileged, httptest.NewRequest(http.MethodPost, "/gateway/session-proof", nil))
+	if wPrivileged.Code != http.StatusForbidden {
+		t.Fatalf("expected privileged proof relay to require auth, got %d", wPrivileged.Code)
+	}
+}
+
+func TestUserGatewayModesExposePublicContinuationAndProtectOperatorRelay(t *testing.T) {
+	for _, routerMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("router=%t", routerMode), func(t *testing.T) {
+			r := mux.NewRouter()
+			registerUserGatewayRoutes(r, routerMode)
+			public := httptest.NewRecorder()
+			r.ServeHTTP(public, httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", strings.NewReader(`{}`)))
+			if public.Code == http.StatusNotFound || public.Code == http.StatusForbidden {
+				t.Fatalf("public continuation unavailable: %d", public.Code)
+			}
+			privileged := httptest.NewRecorder()
+			r.ServeHTTP(privileged, httptest.NewRequest(http.MethodPost, "/gateway/session-proof", strings.NewReader(`{}`)))
+			if privileged.Code != http.StatusForbidden {
+				t.Fatalf("operator relay did not require auth: %d", privileged.Code)
+			}
+		})
 	}
 }

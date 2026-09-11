@@ -81,6 +81,7 @@ function parsePaymentEligibleStatus(payload: unknown): LocalGatewayDetails | nul
   const details = payload as LocalGatewayDetails;
   if (details.persona !== 'user-gateway') return null;
   if (!Array.isArray(details.allowed_route_families) || !details.allowed_route_families.includes('gateway')) return null;
+  if (details.capabilities?.retrieval_session_proof_continue !== true) return null;
   return details;
 }
 

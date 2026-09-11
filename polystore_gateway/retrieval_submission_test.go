@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -101,6 +102,133 @@ func invokeSubmission(body string) *httptest.ResponseRecorder {
 	return recorder
 }
 
+func invokeContinuation(body string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest("POST", "/sp/retrieval/session-proof/continue", strings.NewReader(body))
+	recorder := httptest.NewRecorder()
+	SpContinueRetrievalSessionProof(recorder, request)
+	return recorder
+}
+
+type deadlineRecorder struct {
+	*httptest.ResponseRecorder
+	active    time.Time
+	deadlines []time.Time
+}
+
+func (w *deadlineRecorder) SetReadDeadline(deadline time.Time) error {
+	w.active = deadline
+	w.deadlines = append(w.deadlines, deadline)
+	return nil
+}
+
+type deadlineRequiredReader struct {
+	w       *deadlineRecorder
+	reader  *strings.Reader
+	checked bool
+}
+
+func (r *deadlineRequiredReader) Read(p []byte) (int, error) {
+	if r.w.active.IsZero() {
+		return 0, errors.New("request body read before deadline was installed")
+	}
+	r.checked = true
+	return r.reader.Read(p)
+}
+
+func TestPublicContinuationBoundsBodyRead(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"provider", "/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof},
+		{"gateway", "/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
+			body := &deadlineRequiredReader{w: w, reader: strings.NewReader(`{}`)}
+			request := httptest.NewRequest(http.MethodPost, tc.path, body)
+			started := time.Now()
+			tc.handler(w, request)
+			if w.Code != http.StatusBadRequest || !body.checked {
+				t.Fatalf("continuation did not read malformed body under deadline: status=%d checked=%v body=%s", w.Code, body.checked, w.Body.String())
+			}
+			if len(w.deadlines) != 2 || w.deadlines[0].Before(started) || w.deadlines[0].After(started.Add(publicContinuationBodyTimeout+time.Second)) || !w.deadlines[1].IsZero() {
+				t.Fatalf("unexpected request body deadlines: %v", w.deadlines)
+			}
+		})
+	}
+}
+
+type gatedBodyReader struct {
+	reader  *strings.Reader
+	entered chan<- struct{}
+	release <-chan struct{}
+	started bool
+}
+
+func (r *gatedBodyReader) Read(p []byte) (int, error) {
+	if !r.started {
+		r.started = true
+		r.entered <- struct{}{}
+		<-r.release
+	}
+	return r.reader.Read(p)
+}
+
+func TestPublicContinuationBodyReadsDoNotConsumeSubmissionSlots(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"provider", "/sp/retrieval/session-proof/continue", SpContinueRetrievalSessionProof},
+		{"gateway", "/gateway/retrieval/session-proof/continue", RouterGatewayContinueRetrievalSessionProof},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := len(publicRetrievalContinuations); got != 0 {
+				t.Fatalf("continuation slots already occupied: %d", got)
+			}
+			entered := make(chan struct{}, cap(publicRetrievalContinuations))
+			releaseBodies := make(chan struct{})
+			done := make(chan *httptest.ResponseRecorder, cap(publicRetrievalContinuations))
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				body := &gatedBodyReader{reader: strings.NewReader(`{}`), entered: entered, release: releaseBodies}
+				request := httptest.NewRequest(http.MethodPost, tc.path, body)
+				go func() {
+					w := httptest.NewRecorder()
+					tc.handler(w, request)
+					done <- w
+				}()
+			}
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				select {
+				case <-entered:
+				case <-time.After(time.Second):
+					t.Fatal("continuation did not start reading request body")
+				}
+			}
+			releaseSlot, err := claimPublicRetrievalContinuation()
+			if err != nil {
+				close(releaseBodies)
+				t.Fatalf("blocked request bodies consumed continuation slots: %v", err)
+			}
+			releaseSlot()
+			close(releaseBodies)
+			for i := 0; i < cap(publicRetrievalContinuations); i++ {
+				select {
+				case w := <-done:
+					if w.Code != http.StatusBadRequest {
+						t.Fatalf("malformed continuation status=%d body=%s", w.Code, w.Body.String())
+					}
+				case <-time.After(time.Second):
+					t.Fatal("continuation did not finish after body release")
+				}
+			}
+		})
+	}
+}
+
 func TestSessionProofRequestDiscriminationAndBounds(t *testing.T) {
 	id := "0x" + strings.Repeat("ab", 32)
 	for _, body := range []string{
@@ -123,6 +251,253 @@ func TestSessionProofRequestDiscriminationAndBounds(t *testing.T) {
 		if err != nil || string(raw) != body || len(ids) != 1 || ids[0] != id {
 			t.Fatal(ids, err)
 		}
+	}
+}
+
+func TestConfirmedSessionContinuationIsExactAndACKGated(t *testing.T) {
+	id := "0x" + strings.Repeat("ab", 32)
+	for _, body := range []string{
+		`{}`, `null`, fmt.Sprintf(`{"session_ids":[%q]}`, id),
+		fmt.Sprintf(`{"session_id":%q,"provider":"nil1route"}`, id),
+		fmt.Sprintf(`{"session_id":%q,"deal_id":1}`, id),
+	} {
+		if _, _, _, err := readConfirmedSessionProofRequest(strings.NewReader(body)); err == nil {
+			t.Fatalf("accepted non-exact continuation: %s", body)
+		}
+	}
+
+	submissionTestDB(t)
+	response, frozen, proofs := submissionFixture(t, 1)
+	if err := storeFrozenSessionProof(frozen, proofs); err != nil {
+		t.Fatal(err)
+	}
+	id = "0x" + hex.EncodeToString(frozen.Context.ID[:])
+	body := fmt.Sprintf(`{"session_id":%q}`, id)
+	hash := strings.Repeat("D", 64)
+	txCommands := 0
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "keys" {
+			return []byte(response.Session.AuthorizedProofProvider), nil
+		}
+		txCommands++
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, hash)), nil
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "retrieval-sessions/") {
+			w.Header().Set(committedHeightHeader, "12")
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+			return
+		}
+		fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":0}}`, hash)
+	}))
+	defer server.Close()
+	oldLCD := lcdBase
+	lcdBase = server.URL
+	defer func() { lcdBase = oldLCD }()
+
+	for _, status := range []types.RetrievalSessionStatus{
+		types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED,
+	} {
+		response.Session.Status = status
+		got := invokeContinuation(body)
+		if got.Code != http.StatusConflict || txCommands != 0 || !strings.Contains(got.Body.String(), "owner confirmation") {
+			t.Fatalf("status %s was not rejected before signing: %d %s commands=%d", status, got.Code, got.Body.String(), txCommands)
+		}
+	}
+	response.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	response.Session.ChallengeVersion = 0
+	if got := invokeContinuation(body); got.Code != http.StatusConflict || txCommands != 0 {
+		t.Fatalf("non-v2 continuation reached signing: %d %s commands=%d", got.Code, got.Body.String(), txCommands)
+	}
+	response.Session.ChallengeVersion = 2
+	got := invokeContinuation(body)
+	if got.Code != http.StatusOK || txCommands != 1 || !strings.Contains(got.Body.String(), hash) {
+		t.Fatalf("confirmed continuation failed: %d %s commands=%d", got.Code, got.Body.String(), txCommands)
+	}
+}
+
+func TestPublicContinuationBoundsKeyLookupsBeforeSessionAdmission(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	oldLCD := lcdBase
+	lcdBase = server.URL
+	defer func() { lcdBase = oldLCD }()
+
+	entered := make(chan struct{}, cap(publicRetrievalContinuations))
+	release := make(chan struct{})
+	var lookups atomic.Int32
+	var unexpectedCommands atomic.Int32
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] != "keys" {
+			unexpectedCommands.Add(1)
+			return nil, fmt.Errorf("unexpected transaction command before session admission: %v", args)
+		}
+		lookups.Add(1)
+		entered <- struct{}{}
+		<-release
+		return []byte("nil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnrql8a"), nil
+	})
+
+	done := make(chan *httptest.ResponseRecorder, cap(publicRetrievalContinuations))
+	for i := 0; i < cap(publicRetrievalContinuations); i++ {
+		body := fmt.Sprintf(`{"session_id":"0x%064x"}`, i+1)
+		go func() { done <- invokeContinuation(body) }()
+	}
+	for i := 0; i < cap(publicRetrievalContinuations); i++ {
+		select {
+		case <-entered:
+		case <-time.After(time.Second):
+			t.Fatal("key lookup admission did not fill")
+		}
+	}
+	blocked := invokeContinuation(fmt.Sprintf(`{"session_id":"0x%064x"}`, 99))
+	if blocked.Code != http.StatusTooManyRequests || lookups.Load() != int32(cap(publicRetrievalContinuations)) || unexpectedCommands.Load() != 0 {
+		t.Fatalf("excess public continuation reached key lookup: status=%d lookups=%d unexpected=%d body=%s", blocked.Code, lookups.Load(), unexpectedCommands.Load(), blocked.Body.String())
+	}
+	close(release)
+	for i := 0; i < cap(publicRetrievalContinuations); i++ {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("admitted continuation did not release")
+		}
+	}
+}
+
+func TestPublicContinuationRetainsCommittedFailureWithoutRebroadcast(t *testing.T) {
+	submissionTestDB(t)
+	failedResponse, failedFrozen, failedProofs := submissionFixture(t, 1)
+	nextResponse, nextFrozen, nextProofs := submissionFixture(t, 2)
+	failedResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	nextResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	for i, entry := range []struct {
+		f      *frozenRetrievalSession
+		proofs []types.ChainedProof
+	}{{failedFrozen, failedProofs}, {nextFrozen, nextProofs}} {
+		if err := storeFrozenSessionProof(entry.f, entry.proofs); err != nil {
+			t.Fatalf("store frozen proof %d: %v", i, err)
+		}
+	}
+	id := "0x" + hex.EncodeToString(failedFrozen.Context.ID[:])
+	nextID := "0x" + hex.EncodeToString(nextFrozen.Context.ID[:])
+	nextQueryID := base64.URLEncoding.EncodeToString(nextFrozen.Context.ID[:])
+	body := fmt.Sprintf(`{"session_id":%q}`, id)
+	hash, nextHash := strings.Repeat("E", 64), strings.Repeat("F", 64)
+	var broadcasts atomic.Int32
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "keys" {
+			return []byte(failedResponse.Session.AuthorizedProofProvider), nil
+		}
+		if broadcasts.Add(1) == 1 {
+			return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, hash)), nil
+		}
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, nextHash)), nil
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "retrieval-sessions/") {
+			w.Header().Set(committedHeightHeader, "12")
+			response := failedResponse
+			if strings.Contains(r.URL.Path, nextQueryID) {
+				response = nextResponse
+			}
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+			return
+		}
+		if strings.Contains(r.URL.Path, nextHash) {
+			fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":0}}`, nextHash)
+			return
+		}
+		fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":9,"raw_log":"proof rejected"}}`, hash)
+	}))
+	defer server.Close()
+	oldLCD := lcdBase
+	lcdBase = server.URL
+	defer func() { lcdBase = oldLCD }()
+
+	for attempt := 0; attempt < 2; attempt++ {
+		got := invokeContinuation(body)
+		if got.Code != http.StatusConflict || !strings.Contains(got.Body.String(), hash) {
+			t.Fatalf("attempt %d did not retain exact failed outcome: %d %s", attempt+1, got.Code, got.Body.String())
+		}
+	}
+	if broadcasts.Load() != 1 {
+		t.Fatalf("public retry rebroadcast committed failure: broadcasts=%d", broadcasts.Load())
+	}
+	record, err := loadFrozenSubmission(failedFrozen)
+	if err != nil || !record.record.Submitting || record.record.TxHash != hash {
+		t.Fatalf("failed submission marker was not retained: record=%+v err=%v", record, err)
+	}
+	pendingSigner, err := loadPendingSigner(failedResponse.Session.AuthorizedProofProvider)
+	if err != nil || pendingSigner != nil {
+		t.Fatalf("terminal failed transaction retained global signer quarantine: marker=%+v err=%v", pendingSigner, err)
+	}
+	next := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, nextID))
+	if next.Code != http.StatusOK || !strings.Contains(next.Body.String(), nextHash) || broadcasts.Load() != 2 {
+		t.Fatalf("terminal failure blocked unrelated session: %d %s broadcasts=%d", next.Code, next.Body.String(), broadcasts.Load())
+	}
+}
+
+func TestPublicContinuationReleasesKnownRejectionForSignerAndRetry(t *testing.T) {
+	submissionTestDB(t)
+	firstResponse, firstFrozen, firstProofs := submissionFixture(t, 1)
+	secondResponse, secondFrozen, secondProofs := submissionFixture(t, 2)
+	firstResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	secondResponse.Session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED
+	for i, entry := range []struct {
+		f      *frozenRetrievalSession
+		proofs []types.ChainedProof
+	}{{firstFrozen, firstProofs}, {secondFrozen, secondProofs}} {
+		if err := storeFrozenSessionProof(entry.f, entry.proofs); err != nil {
+			t.Fatalf("store frozen proof %d: %v", i, err)
+		}
+	}
+	firstID := "0x" + hex.EncodeToString(firstFrozen.Context.ID[:])
+	secondID := "0x" + hex.EncodeToString(secondFrozen.Context.ID[:])
+	secondQueryID := base64.URLEncoding.EncodeToString(secondFrozen.Context.ID[:])
+	rejectedHash, acceptedHash := strings.Repeat("7", 64), strings.Repeat("8", 64)
+	var submissions atomic.Int32
+	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		if args[0] == "keys" {
+			return []byte(firstResponse.Session.AuthorizedProofProvider), nil
+		}
+		if submissions.Add(1) == 1 {
+			return []byte(fmt.Sprintf(`{"txhash":%q,"code":7}`, rejectedHash)), nil
+		}
+		return []byte(fmt.Sprintf(`{"txhash":%q,"code":0}`, acceptedHash)), nil
+	})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "retrieval-sessions/") {
+			w.Header().Set(committedHeightHeader, "12")
+			response := firstResponse
+			if strings.Contains(r.URL.Path, secondQueryID) {
+				response = secondResponse
+			}
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+			return
+		}
+		fmt.Fprintf(w, `{"tx_response":{"txhash":%q,"height":"13","code":0}}`, acceptedHash)
+	}))
+	defer server.Close()
+	oldLCD := lcdBase
+	lcdBase = server.URL
+	defer func() { lcdBase = oldLCD }()
+
+	rejected := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, firstID))
+	if rejected.Code != http.StatusConflict || !strings.Contains(rejected.Body.String(), rejectedHash) {
+		t.Fatalf("known CheckTx rejection not reported: %d %s", rejected.Code, rejected.Body.String())
+	}
+	record, err := loadFrozenSubmission(firstFrozen)
+	if err != nil || record.record.Submitting || record.record.TxHash != "" {
+		t.Fatalf("known CheckTx rejection quarantined signer: record=%+v err=%v", record, err)
+	}
+	second := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, secondID))
+	if second.Code != http.StatusOK || !strings.Contains(second.Body.String(), acceptedHash) {
+		t.Fatalf("known rejection blocked another session: %d %s", second.Code, second.Body.String())
+	}
+	retry := invokeContinuation(fmt.Sprintf(`{"session_id":%q}`, firstID))
+	if retry.Code != http.StatusOK || submissions.Load() != 3 {
+		t.Fatalf("safe public retry failed: %d %s submissions=%d", retry.Code, retry.Body.String(), submissions.Load())
 	}
 }
 
@@ -696,6 +1071,7 @@ func TestDelayedCommittedSubmissionThroughBothGatewayModes(t *testing.T) {
 			providerBaseCache.Clear()
 			t.Cleanup(func() { providerBaseCache.Clear() })
 			request := httptest.NewRequest("POST", "/gateway/session-proof", strings.NewReader(body))
+			request.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 			result := httptest.NewRecorder()
 			if mode == "ordinary" {
 				GatewaySubmitRetrievalSessionProof(result, request)

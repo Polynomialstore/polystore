@@ -71,7 +71,7 @@ test('a lost proof POST preserves the pending wave; retry repeats only the same 
     prepare: async () => ({ data: '0x1234', intent: [hash] }), send: async () => { sends++; return hash },
     receipt: async () => ({ status: 'success', transactionHash: hash, blockNumber: 9n }), reconcile: async () => false,
   }) }
-  const options = { gatewayBase: 'http://localhost:8080', confirm,
+  const options = { resolveProviderBase: async () => 'https://provider.example', confirm,
     fetchFn: async (_: unknown, init?: RequestInit) => {
       posts++; assert.equal(JSON.parse(String(init?.body)).session_id, hash)
       if (posts === 1) throw new Error('response lost after broadcast')
@@ -86,6 +86,26 @@ test('a lost proof POST preserves the pending wave; retry repeats only the same 
   assert.equal(outcomes[0].state, 'committed'); assert.equal(outcomes[0].responseUnknown, undefined)
   restored.complete(0n, outcomes)
   assert.equal(sends, 1); assert.equal(posts, 2); assert.equal(restored.state.through, 0n)
+})
+
+test('committed provider cleanup remains checkpointed until reconciliation completes', async () => {
+  const { confirmAndRequestRetrievalProofs } = await import('./retrievalSettlement')
+  const storage = store(), cursor = retrievalCheckpointCursor(storage, 'file', { id: 'opfs', length: 4n, through: -1n })
+  cursor.prepare(0n, sessions)
+  let posts = 0, forgotten = 0
+  const settle = () => confirmAndRequestRetrievalProofs(sessions, {
+    confirm: async () => {}, resolveProviderBase: async () => 'https://provider.example',
+    fetchFn: async () => {
+      posts++
+      return new Response(JSON.stringify({ status: 'reconciled', session_id: hash, proof_count: 1, tx_hash: '',
+        cleanup_status: posts === 1 ? 'pending' : 'complete' }), { headers: { 'content-type': 'application/json' } })
+    },
+  })
+  cursor.complete(0n, await settle())
+  assert.equal(cursor.state.unsettled, 1); assert.ok(storage.get('file:settlement:0'))
+  await cursor.reconcile(settle, async () => { forgotten++ })
+  assert.equal(posts, 2); assert.equal(forgotten, 1); assert.equal(cursor.state.unsettled, 0)
+  assert.equal(storage.get('file:settlement:0'), undefined)
 })
 
 
@@ -172,11 +192,11 @@ test('two gateway-free MDUs survive reload and settle the same IDs without anoth
   cursor = retrievalCheckpointCursor(storage, 'file', storage.get<RetrievalCheckpointState>('file')!)
   const posted: string[] = [], forgotten: string[][] = []
   await cursor.reconcile((wave) => confirmAndRequestRetrievalProofs(wave, {
-    confirm: async () => {}, gatewayBase: 'http://localhost:8080',
+    confirm: async () => {}, resolveProviderBase: async () => 'https://provider.example',
     fetchFn: async (_, init) => {
       const id = JSON.parse(String(init?.body)).session_id
       posted.push(id)
-      return new Response(JSON.stringify({ status: 'reconciled', session_id: id, proof_count: 8, tx_hash: '' }), { headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify({ status: 'reconciled', session_id: id, proof_count: 8, tx_hash: '', cleanup_status: 'complete' }), { headers: { 'content-type': 'application/json' } })
     },
   }), async (wave) => {
     forgotten.push(wave.map((s) => s.sessionId))

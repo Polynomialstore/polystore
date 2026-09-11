@@ -19,7 +19,10 @@ import (
 	"polystorechain/x/polystorechain/types"
 )
 
-const maxSessionProofRequestBytes = 16 * 1024
+const (
+	maxSessionProofRequestBytes   = 16 * 1024
+	publicContinuationBodyTimeout = 5 * time.Second
+)
 const maxSessionProofOutcomeBytes = 64 * 1024
 const maxConcurrentRetrievalSigners = 4
 const maxPriorityRetrievalSignerWaiters = 4
@@ -76,6 +79,20 @@ func releaseRetrievalOperations(ids []string, signer string) func() {
 			delete(retrievalOperations.signers, signer)
 			admitPriorityRetrievalSignerLocked()
 		})
+	}
+}
+
+// Public continuations reach key lookup before the actual signer is known.
+// Bound that work independently so arbitrary valid-shaped IDs cannot spawn an
+// unbounded number of keyring CLI processes.
+var publicRetrievalContinuations = make(chan struct{}, 4)
+
+func claimPublicRetrievalContinuation() (func(), error) {
+	select {
+	case publicRetrievalContinuations <- struct{}{}:
+		return func() { <-publicRetrievalContinuations }, nil
+	default:
+		return nil, fmt.Errorf("public retrieval continuation capacity reached")
 	}
 }
 
@@ -163,6 +180,51 @@ type sessionProofRequest struct {
 	Provider   string   `json:"provider,omitempty"`
 }
 
+type publicSessionProofContinuationRequest struct {
+	SessionID string  `json:"session_id"`
+	Slot      *uint32 `json:"slot,omitempty"`
+}
+
+func readPublicSessionProofContinuationRequest(r io.Reader) (publicSessionProofContinuationRequest, string, error) {
+	var request publicSessionProofContinuationRequest
+	body, err := io.ReadAll(io.LimitReader(r, maxSessionProofRequestBytes+1))
+	if err != nil {
+		return request, "", err
+	}
+	if len(body) > maxSessionProofRequestBytes {
+		return request, "", fmt.Errorf("session proof request exceeds limit")
+	}
+	if err := validateJSONObject(body); err != nil {
+		return request, "", err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return request, "", err
+	}
+	for field := range fields {
+		if field != "session_id" && field != "slot" {
+			return request, "", fmt.Errorf("unknown session continuation field %q", field)
+		}
+	}
+	if fields["session_id"] == nil {
+		return request, "", fmt.Errorf("session_id is required")
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		return request, "", err
+	}
+	if fields["slot"] != nil && request.Slot == nil {
+		return request, "", fmt.Errorf("slot must be an integer")
+	}
+	id, _, err := parseSessionIDHex(request.SessionID)
+	if err != nil {
+		return request, "", err
+	}
+	if request.Slot != nil && *request.Slot >= 8 {
+		return request, "", fmt.Errorf("invalid v3 obligation slot")
+	}
+	return request, id, nil
+}
+
 func readSessionProofRequest(r io.Reader) ([]byte, sessionProofRequest, []string, error) {
 	var request sessionProofRequest
 	body, err := io.ReadAll(io.LimitReader(r, maxSessionProofRequestBytes+1))
@@ -212,6 +274,24 @@ func readSessionProofRequest(r io.Reader) ([]byte, sessionProofRequest, []string
 		}
 		seen[id] = true
 		ids[i] = id
+	}
+	return body, request, ids, nil
+}
+
+// The public continuation endpoint accepts no routing, batching or proof
+// material from the caller. The session's committed chain state and the
+// provider's frozen proof are the complete authority for submission.
+func readConfirmedSessionProofRequest(r io.Reader) ([]byte, sessionProofRequest, []string, error) {
+	body, request, ids, err := readSessionProofRequest(r)
+	if err != nil {
+		return nil, request, nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, request, nil, err
+	}
+	if len(fields) != 1 || fields["session_id"] == nil || request.SessionIDs != nil || request.Provider != "" {
+		return nil, request, nil, fmt.Errorf("expected only session_id")
 	}
 	return body, request, ids, nil
 }
@@ -560,6 +640,44 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid session proof request", err.Error())
 		return
 	}
+	submitRetrievalSessionProof(w, r, body, request, ids, false)
+}
+
+// SpContinueRetrievalSessionProof is the browser-safe continuation after an
+// owner ACK has committed. It never accepts caller-supplied proof or routing
+// authority and reuses the same durable signer/transaction state as the
+// privileged provider submission endpoint.
+func SpContinueRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(time.Now().Add(publicContinuationBodyTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeJSONError(w, http.StatusInternalServerError, "cannot bound continuation request", err.Error())
+		return
+	} else if err == nil {
+		defer controller.SetReadDeadline(time.Time{})
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
+	body, request, ids, err := readConfirmedSessionProofRequest(r.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid session continuation request", err.Error())
+		return
+	}
+	release, err := claimPublicRetrievalContinuation()
+	if err != nil {
+		writeJSONError(w, http.StatusTooManyRequests, "retrieval continuation busy", err.Error())
+		return
+	}
+	defer release()
+	submitRetrievalSessionProof(w, r, body, request, ids, true)
+}
+
+func submitRetrievalSessionProof(w http.ResponseWriter, r *http.Request, body []byte, request sessionProofRequest, ids []string, requireOwnerConfirmation bool) {
 	key, signer, err := retrievalSigner(r.Context())
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "provider signing key unavailable", err.Error())
@@ -580,14 +698,26 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		response, height, err := queryRetrievalSession(r.Context(), id)
 		if err != nil {
-			if errors.Is(err, ErrSessionNotFound) && len(ids) == 1 && request.SessionIDs == nil {
+			if !requireOwnerConfirmation && errors.Is(err, ErrSessionNotFound) && len(ids) == 1 && request.SessionIDs == nil {
 				submitRetrievalSessionProofV3(w, r.Context(), key, signer, id)
 				return
 			}
 			writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
 			return
 		}
-		if response.Session.ChallengeVersion == 0 && len(ids) == 1 && request.SessionIDs == nil {
+		if requireOwnerConfirmation {
+			if response.Session.ChallengeVersion != 2 {
+				writeJSONError(w, http.StatusConflict, "session is not an active v2 retrieval", "")
+				return
+			}
+			switch response.Session.Status {
+			case types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED:
+			default:
+				writeJSONError(w, http.StatusConflict, "owner confirmation is not committed", "")
+				return
+			}
+		}
+		if !requireOwnerConfirmation && response.Session.ChallengeVersion == 0 && len(ids) == 1 && request.SessionIDs == nil {
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			submitLegacyRetrievalSessionProof(w, r)
 			return
@@ -675,8 +805,17 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 		status := "pending"
 		if errors.Is(err, errTxFailed) {
 			status = "failed"
-			if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
-				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+			if requireOwnerConfirmation {
+				// Inclusion is terminal, so the signer sequence is no longer
+				// uncertain. Retain this session's hash to prevent a public
+				// rebroadcast, but release only its matching signer marker.
+				if clearErr := changeFrozenSubmissions(entries, func(*storedFrozenProof) {}, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
+					err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+				}
+			} else {
+				if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
+					err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+				}
 			}
 		}
 		writeSubmissionOutcome(w, request, ids, proofCount, hash, status, "retained", err)
@@ -755,13 +894,22 @@ func SpSubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	status := "pending"
 	if errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
 		status = "failed"
+		// These classifications prove that no transaction was included, so the
+		// existing frozen proof and signer may safely retry. Unknown outcomes
+		// keep the intent quarantined instead.
 		if clearErr := changeFrozenSubmissions(entries, func(r *storedFrozenProof) { r.Submitting = false }, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
 			err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
 		}
 	} else if errors.Is(err, errTxFailed) {
 		status = "failed"
-		if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
-			err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+		if requireOwnerConfirmation {
+			if clearErr := changeFrozenSubmissions(entries, func(*storedFrozenProof) {}, false, func(tx *bolt.Tx) error { return clearPendingSigner(tx, signer, "retrieval", ids) }); clearErr != nil {
+				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+			}
+		} else {
+			if clearErr := resetFailedFrozenSubmissions(entries, signer, ids, hash); clearErr != nil {
+				err = fmt.Errorf("%w; local recovery: %v", err, clearErr)
+			}
 		}
 	}
 	writeSubmissionOutcome(w, request, ids, proofCount, hash, status, "retained", err)

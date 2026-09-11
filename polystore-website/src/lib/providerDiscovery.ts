@@ -95,10 +95,11 @@ export async function resolveProviderEndpoints(
 export async function resolveProviderEndpointByAddress(
   lcdBase: string,
   providerAddr: string,
+  signal?: AbortSignal,
 ): Promise<ProviderEndpoint | null> {
   const addr = providerAddr.trim()
   if (!addr) return null
-  const providers = await lcdFetchProviders(lcdBase)
+  const providers = await lcdFetchProviders(lcdBase, (input, init) => fetch(input, { ...init, signal }))
   const entry = providers.find((p) => p.address === addr)
   if (!entry?.endpoints || entry.endpoints.length === 0) return null
   const { baseUrl, p2pTarget } = providerEndpointFromMultiaddrs(entry.endpoints)

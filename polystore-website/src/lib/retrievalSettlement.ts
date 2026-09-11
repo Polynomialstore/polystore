@@ -1,5 +1,4 @@
 import { account, readBoundedResponse, record, unhex, uint, type FrozenSession } from './retrieval'
-import { isTrustedLocalGatewayBase } from './transport/mode'
 
 const MAX_OUTCOME_BYTES = 16 * 1024
 // The provider waits up to 90 seconds before returning its durable pending state.
@@ -22,6 +21,7 @@ export type RetrievalSettlementSession = Pick<FrozenSession, 'sessionId' | 'paye
 interface SettlementOptions<S extends RetrievalSettlementSession> {
   confirm: (sessions: readonly S[]) => Promise<void>
   onConfirmed?: () => void
+  resolveProviderBase?: (provider: string, signal: AbortSignal) => Promise<string | undefined>
   gatewayBase?: string
   signal?: AbortSignal
   fetchFn?: typeof fetch
@@ -32,14 +32,34 @@ function pending(session: RetrievalSettlementSession, detail: string, txHash?: s
     message: `Provider settlement pending for session ${session.sessionId}${txHash ? ` (transaction ${txHash})` : ' (transaction outcome unknown)'}. ${detail} Reconcile this same session with the provider; do not blindly rebroadcast.` }
 }
 
-async function requestProof(session: RetrievalSettlementSession, base: string, options: Pick<SettlementOptions<RetrievalSettlementSession>, 'fetchFn' | 'signal'>): Promise<RetrievalSettlementOutcome> {
+function withSignal<T>(start: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const finish = (complete: () => void) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', abort)
+      complete()
+    }
+    const abort = () => finish(() => reject(signal.reason))
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) return abort()
+    Promise.resolve().then(start).then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    )
+  })
+}
+
+async function requestProof(session: RetrievalSettlementSession, base: string, throughGateway: boolean, options: Pick<SettlementOptions<RetrievalSettlementSession>, 'fetchFn' | 'signal'>): Promise<RetrievalSettlementOutcome> {
   const signal = AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(options.signal ? [options.signal] : [])])
   try {
     signal.throwIfAborted()
-    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}/gateway/session-proof?deal_id=${session.pin.dealId}`, {
+    const path = throughGateway ? '/gateway/retrieval/session-proof/continue' : '/sp/retrieval/session-proof/continue'
+    const response = await (options.fetchFn ?? fetch)(`${base.replace(/\/$/, '')}${path}`, {
       method: 'POST', redirect: 'error', signal,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session.sessionId, provider: session.payee }),
+      body: JSON.stringify({ session_id: session.sessionId }),
     })
     if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
       await response.body?.cancel()
@@ -61,7 +81,9 @@ async function requestProof(session: RetrievalSettlementSession, base: string, o
         (value.error !== undefined && typeof value.error !== 'string')) throw new Error('mismatched or malformed outcome')
     const txHash = value.tx_hash || undefined
     if (response.status === 200 && (value.status === 'reconciled' || (value.status === 'success' && txHash))) {
-      return { state: 'committed', sessionId: session.sessionId, txHash }
+      if (value.cleanup_status === 'complete') return { state: 'committed', sessionId: session.sessionId, txHash }
+      return { state: 'pending', sessionId: session.sessionId, txHash,
+        message: `Provider settlement is committed for session ${session.sessionId}${txHash ? ` (transaction ${txHash})` : ''}, but durable provider cleanup is pending. Reconcile this same session with the provider; do not rebroadcast.` }
     }
     if (response.status === 202 && value.status === 'pending') return pending(session, 'The provider retained the proof and submission state.', txHash)
     if (response.status === 409 && value.status === 'failed') {
@@ -82,11 +104,6 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
   for (const session of sessions) { unhex(session.sessionId, 32); account(session.payee); if (!uint(session.window.blobCount, 64)) throw new Error('empty settlement proof range') }
   await options.confirm(sessions)
   options.onConfirmed?.()
-  const base = options.gatewayBase
-  if (!base || !isTrustedLocalGatewayBase(base) || !/^https?:\/\//.test(base)) {
-    return sessions.map((session) => ({ state: 'unavailable', sessionId: session.sessionId,
-      message: `Provider settlement unavailable for session ${session.sessionId}: the trusted local gateway is unavailable. Verified output and owner confirmation are preserved; provider proof submission is still required.` }))
-  }
   const outcomes: RetrievalSettlementOutcome[] = []
   // The ACK has committed. Canceling the download cannot undo it or suppress
   // its authorized provider request. One deadline bounds the entire wave,
@@ -104,8 +121,23 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
   let nextGroup = 0
   const worker = async () => {
     while (nextGroup < groups.length) {
-      for (const index of groups[nextGroup++]) {
-        outcomes[index] = await requestProof(sessions[index], base, { ...options, signal: proofSignal })
+      const indexes = groups[nextGroup++]
+      let base: string | undefined
+      const throughGateway = Boolean(options.gatewayBase)
+      try {
+        base = options.gatewayBase || (options.resolveProviderBase
+          ? await withSignal(() => options.resolveProviderBase!(sessions[indexes[0]].payee, proofSignal), proofSignal)
+          : undefined)
+      } catch { /* unavailable below */ }
+      for (const index of indexes) {
+        const session = sessions[index]
+        if (proofSignal.aborted || !base || !/^https?:\/\//.test(base)) {
+          const reason = proofSignal.aborted ? 'the proof request deadline expired before dispatch' : 'the provider endpoint could not be resolved'
+          outcomes[index] = { state: 'unavailable', sessionId: session.sessionId,
+            message: `Provider settlement unavailable for session ${session.sessionId}: ${reason}. Verified output and owner confirmation are preserved; provider proof submission is still required. Resume this same operation to retry settlement using the saved bytes.` }
+          continue
+        }
+        outcomes[index] = await requestProof(session, base, throughGateway, { ...options, signal: proofSignal })
       }
     }
   }

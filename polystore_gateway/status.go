@@ -200,11 +200,12 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 		ListeningAddr: listenAddr,
 		ProviderBase:  strings.TrimSpace(providerBase),
 		Capabilities: map[string]bool{
-			"upload":         true,
-			"fetch":          true,
-			"list_files":     true,
-			"slab":           true,
-			"retrieval_plan": true,
+			"upload":                           true,
+			"fetch":                            true,
+			"list_files":                       true,
+			"slab":                             true,
+			"retrieval_plan":                   true,
+			"retrieval_session_proof_continue": persona == runtimePersonaUserGateway,
 			// Mode 2: gateway-side RS encoding + witness generation for new deals.
 			"mode2_rs":        !isGatewayRouterMode(),
 			"mode2_rs_append": false,

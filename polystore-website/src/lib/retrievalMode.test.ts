@@ -13,7 +13,7 @@ import {
   readLocalGatewayConnectedHint,
 } from './retrievalMode'
 
-test('connected gateway persistence binds the attestation to its trusted probed base', () => {
+test('connected gateway persistence binds settlement to its qualified probed base', () => {
   const values = new Map<string, string>()
   let observeLivenessPublication = false
   let baseAtLivenessPublication: string | undefined
@@ -41,7 +41,8 @@ test('connected gateway persistence binds the attestation to its trusted probed 
     persistLocalGatewayLiveness()
     assert.equal(baseAtLivenessPublication, undefined)
     assert.equal(readLocalGatewayConnectedHint(), true)
-    assert.equal(readLocalGatewayConnectedBase(), undefined)
+    assert.equal(readLocalGatewayConnectedBase(), undefined,
+      'health-only liveness must not authorize append or download settlement')
   } finally {
     if (descriptor) Object.defineProperty(globalThis, 'window', descriptor)
     else delete (globalThis as { window?: unknown }).window

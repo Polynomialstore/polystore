@@ -7,7 +7,7 @@ import { resolveProviderEndpointByAddress, type ProviderEndpoint } from '../lib/
 import { account, fetchActiveRetrievalGeneration, planRetrievalWindows, u64, type FrozenSession, type RetrievalWindow } from '../lib/retrieval'
 import { decodeRetrievalOutput, executeRetrievalWindows, validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
-import { readLocalGatewayConnectedBase, readLocalGatewayConnectedHint } from '../lib/retrievalMode'
+import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { isGatewayTransportEnabled } from '../lib/transport/mode'
 import type { RoutePreference } from '../lib/transport/types'
@@ -278,11 +278,10 @@ export function useFetch() {
             return next
           },
           requestProof: async (current, slot) => {
-            const payee = current.obligations.find((obligation) => obligation.slot === slot)!.payee
             const connectedProofBase = readLocalGatewayConnectedBase()
             const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: connectedProofBase || '',
               localGatewayConnected: Boolean(connectedProofBase) }) ? connectedProofBase : undefined
-            return proofBase ? requestRetrievalProofV3(proofBase, { dealId: current.authority.dealId, sessionId: current.sessionId, provider: payee }, signal) :
+            return proofBase ? requestRetrievalProofV3(proofBase, { sessionId: current.sessionId, slot }, signal) :
               { state: 'unknown', sessionId: current.sessionId, responseUnknown: true,
                 message: 'No authenticated provider or user-gateway proof route is available.' }
           },
@@ -344,10 +343,11 @@ export function useFetch() {
       let logicalBytes = 0, confirmed = checkpoint.state.confirmed ?? 0, route: string | undefined
       let unsettled = checkpoint.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = checkpoint.state.firstSettlementIssue
       const job = checkpoint, sink = job.output
-      const availableProofBase = () => isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: appConfig.gatewayBase, localGatewayConnected: readLocalGatewayConnectedHint() }) ? appConfig.gatewayBase : undefined
-      await job.reconcile((sessions, previousBase) => confirmAndRequestRetrievalProofs(sessions, {
+      const availableProofBase = () => appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
+      const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
+      await job.reconcile((sessions) => confirmAndRequestRetrievalProofs(sessions, {
         // Durable settlement rows are written only after the original ACK commits.
-        confirm: async () => {}, gatewayBase: availableProofBase() ?? previousBase, signal,
+        confirm: async () => {}, gatewayBase: availableProofBase(), resolveProviderBase: resolveProofBase, signal,
       }), (sessions) => payment.forget(sessions, job.key), signal)
       unsettled = job.state.unsettled ?? 0; firstSettlementIssue = job.state.firstSettlementIssue
       setProgress((p) => ({ ...p, receiptsSubmitted: confirmed }))
@@ -361,11 +361,11 @@ export function useFetch() {
       }
       const confirm = async (sessions: readonly FrozenSession[]) => {
         setProgress((p) => ({ ...p, phase: 'confirming_session_tx' }))
-        const gatewayBase = job.state.pending?.proofBase ?? availableProofBase()
+        const gatewayBase = availableProofBase()
         job.prepare(currentOrdinal, sessions, gatewayBase)
         const outcomes = await timeRetrieval('ack_and_provider_settlement', () => confirmAndRequestRetrievalProofs(sessions, {
           confirm: (wave) => timeRetrieval('owner_ack', () => payment.confirm(wave, signal, job.key)), signal,
-          gatewayBase,
+          gatewayBase, resolveProviderBase: resolveProofBase,
           onConfirmed: () => { retrievalDiagnostic({ phase: 'acked', sessionIds: sessions.map((s) => s.sessionId) }); confirmed += sessions.length; setProgress((p) => ({ ...p, receiptsSubmitted: confirmed, phase: 'submitting_proof_request' })) },
         }))
         if (outcomes.some((outcome) => outcome.responseUnknown)) throw new Error('Provider proof request outcome is unknown. Retry this saved retrieval to reconcile the same session; its ACK is already committed.')
@@ -454,7 +454,7 @@ export function useFetch() {
       const url = URL.createObjectURL(blob)
       // The same output is needed to retry settlement without another download.
       // A retained checkpoint owns its bytes across URL replacement and unmount.
-      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file when the trusted local gateway is available to settle the saved sessions without another payment or download.` : undefined
+      const settlementMessage = firstSettlementIssue ? `Download verified and acknowledged. ${unsettled} session(s) have unsettled provider payment. ${firstSettlementIssue.message ?? ''} Retry this same file to settle the saved sessions without another payment or download.` : undefined
       return await handoffOwnedDownload(signal, () => active.current === controller, url, async () => {
         const cleanup = await job.handoff(); checkpoint = null; return cleanup
       }, (cleanup) => {

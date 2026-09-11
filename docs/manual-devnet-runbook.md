@@ -382,7 +382,7 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 
 1. Create another striped deal, upload/commit, and request a retrieval plan with `curl http://localhost:8080/gateway/plan-retrieval-session/<manifest>?deal_id=<id>&owner=<owner>&file_path=<file>&range_start=0&range_len=<bytes>`. Capture the returned provider; this is the planned slot owner.
 2. Fetch bytes via `/gateway/fetch/...` using the owner signature. Inspect `X-PolyStore-Provider` in the response headers—if the planner routes around the busy slot, the header should show a deputy provider.
-3. Submit a deputy session proof: POST to `/gateway/session-proof` with the same `session_id` and the deputy provider address. The gateway should reply `{"status":"success"}`.
+3. Submit a deputy session proof: POST to `/gateway/session-proof` with the same `session_id`, the deputy provider address, and the stack's `X-PolyStore-Gateway-Auth` value from `_artifacts/devnet_alpha_multi_sp/sp_auth.txt`. The gateway should reply `{"status":"success"}`.
 4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `polystorechain query polystorechain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
 5. Use the planner again to ensure it now returns the pending provider, proving the healing path defers traffic away from repairing slots.
 

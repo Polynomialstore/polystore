@@ -27,6 +27,7 @@ NODE_ADDR="${NODE_ADDR:-tcp://127.0.0.1:26657}"
 RPC_STATUS="${RPC_STATUS:-http://127.0.0.1:26657/status}"
 LCD_BASE="${LCD_BASE:-http://127.0.0.1:1317}"
 GATEWAY_BASE="${GATEWAY_BASE:-http://127.0.0.1:8080}"
+GATEWAY_SP_AUTH_FILE="${GATEWAY_SP_AUTH_FILE:-$ROOT_DIR/_artifacts/devnet_alpha_multi_sp/sp_auth.txt}"
 
 POLYSTORECHAIND_BIN="${POLYSTORECHAIND_BIN:-$ROOT_DIR/polystorechain/polystorechaind}"
 CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
@@ -465,9 +466,11 @@ submit_session_proof() {
   local session_hex="$1"
   local provider="$2"
   echo "==> Asking provider to submit retrieval session proof: provider=$provider ..."
-  local proof_submit_resp status
+  local proof_submit_resp status gateway_sp_auth
+  gateway_sp_auth="$(<"$GATEWAY_SP_AUTH_FILE")"
   proof_submit_resp="$(timeout 120s curl -sS -X POST "$GATEWAY_BASE/gateway/session-proof" \
     -H "Content-Type: application/json" \
+    -H "X-PolyStore-Gateway-Auth: $gateway_sp_auth" \
     -d "{\"session_id\":\"$session_hex\",\"provider\":\"$provider\"}")"
   status="$(echo "$proof_submit_resp" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
   if [ "$status" != "success" ]; then

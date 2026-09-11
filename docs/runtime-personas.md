@@ -13,7 +13,8 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 - Responsibilities:
   - upload/retrieval orchestration
   - cache/freshness checks
-  - retrieval session and proof-related gateway workflows
+  - retrieval session and proof-related gateway workflows, including the browser-safe
+    exact-session continuation relay to the frozen provider payee
 - Must not require local provider identity to operate in user mode.
 
 ### `provider-daemon`
@@ -36,6 +37,10 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 ### Gateway mode (preferred when `user-gateway` is healthy)
 - Browser -> `user-gateway` only (`:8080`).
 - `user-gateway` -> `provider-daemon` as needed for SP operations.
+- After owner confirmation, the browser posts `session_id` and, for v3, its
+  acknowledged `slot` to `/gateway/retrieval/session-proof/continue`; the
+  user-gateway derives the frozen payee from chain state. It uses the provider's
+  public v2 continuation or an authenticated server-to-provider v3 submission.
 
 ### Fallback mode (when `user-gateway` is unavailable)
 - Browser may call `provider-daemon` retrieval endpoints directly (`/sp/retrieval/*`).

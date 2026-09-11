@@ -155,7 +155,7 @@ for (const row of [
       providers: ['provider'], metadataMdus: 2n, userMdus: 1n, totalMdus: 3n, witnessMdus: 1n }
     const session = { sessionId, authority, owner: 'owner', lockedFee: 1n,
       obligations: [{ slot: 0, payee: 'provider' }, { slot: 1, payee: 'provider' }] }
-    const proofBases: string[] = []
+    const proofRequests: Array<{ base: string; request: { sessionId: string; slot: number } }> = []
     let refIndex = 0
     const active = { current: null as AbortController | null }
     const saved = { current: null as { url: string; cleanup: () => Promise<void> } | null }
@@ -205,8 +205,8 @@ for (const row of [
         return { session: { ...session, lockedFee: 0n }, outcomes: [first, second] }
       } },
       '../lib/retrievalV3Recovery': {},
-      '../lib/retrievalV3Settlement': { requestRetrievalProofV3: async (base: string) => {
-        proofBases.push(base)
+      '../lib/retrievalV3Settlement': { requestRetrievalProofV3: async (base: string, request: { sessionId: string; slot: number }) => {
+        proofRequests.push({ base, request })
         return { state: 'accepted', sessionId }
       } },
       './useRetrievalSessions': { useRetrievalSessions: () => payment },
@@ -225,7 +225,10 @@ for (const row of [
     connectedProofBase = row.probed
     const result = await hook.fetchFile({ dealId: '1', generation: '2', manifestRoot: root, owner: 'owner', filePath: file.path })
     assert.equal(result.url, 'blob:1')
-    assert.deepEqual(proofBases, [row.probed, nextProbed])
+    assert.deepEqual(proofRequests, [
+      { base: row.probed, request: { sessionId, slot: 0 } },
+      { base: nextProbed, request: { sessionId, slot: 1 } },
+    ])
   })
 }
 
