@@ -29,6 +29,7 @@ import { resolveProviderEndpointByAddress, resolveProviderEndpoints } from '../l
 import { fetchPinnedGeneration } from '../lib/retrieval'
 import { createRecoveryCommitmentReader, recoverRetrievalMdu, recoveryWindows } from '../lib/retrievalRecovery'
 import { validateRetrievalAllocation, validateRetrievalMduPacking } from '../lib/retrievalFlow'
+import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 import { confirmAndRequestRetrievalProofs, type RetrievalSettlementOutcome } from '../lib/retrievalSettlement'
 import { parseServiceHint } from '../lib/serviceHint'
 import {
@@ -2062,7 +2063,9 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
     const job = await openRetrievalCheckpoint([retrievalPayment.scope(), 'append', pin.dealId, pin.root, pin.generation], pin.userMdus * 8388608n)
     const output = job.output
     let unsettled = job.state.unsettled ?? 0, firstSettlementIssue: RetrievalSettlementOutcome | undefined = job.state.firstSettlementIssue
-    const gatewayProofBase = localGateway.status === 'connected' && isTrustedLocalGatewayBase(localGateway.url) ? localGateway.url : undefined
+    // Settlement may use only the base published by a qualifying /status
+    // probe. A health-only endpoint remains usable for liveness UI only.
+    const gatewayProofBase = appConfig.gatewayDisabled ? undefined : readLocalGatewayConnectedBase()
     const resolveProofBase = async (provider: string, activeSignal: AbortSignal) => (await resolveProviderEndpointByAddress(appConfig.lcdBase, provider, activeSignal))?.baseUrl
     const confirm = async (ordinal: bigint, sessions: readonly FrozenSession[]) => {
       job.prepare(ordinal, sessions)
@@ -2122,7 +2125,7 @@ export function FileSharder({ dealId, onCommitSuccess, onWorkflowActiveChange }:
       await job.retain()
       throw new Error(`${error instanceof Error ? error.message : String(error)} Saved append retrieval progress is retained in this browser; retry to reconcile the same sessions.`)
     }
-  }, [addLog, baseManifestRoot, dealId, dealOwner, localGateway.status, localGateway.url, retrievalPayment, retrievalTransport, stripeParams]);
+  }, [addLog, baseManifestRoot, dealId, dealOwner, retrievalPayment, retrievalTransport, stripeParams]);
 
   useEffect(() => {
     if (!processing) return;
