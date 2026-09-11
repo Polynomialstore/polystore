@@ -506,7 +506,7 @@ def read_browser_executor_response(request_path):
             response.get("id") != request["id"] or response.get("head") != request["head"] or
             response.get("scope") != BROWSER_EXECUTOR_SCOPE or not isinstance(topology, dict) or
             not re.fullmatch(r"[A-Za-z0-9._-]+@[A-Za-z0-9.-]+", topology.get("ssh_target", "")) or
-            topology.get("forwards") != [4173, 8080, 1317, 8545]):
+            topology.get("forwards") != [4173, 8080, 1317, 8545] or topology.get("ssh_compression") != "no"):
         raise ValueError("browser executor response identity mismatch")
     returncode = integer(response.get("returncode"), "browser return code", 0, 255)
     paths = {key: request_path.parent / name for key, name in request["artifacts"].items()}
@@ -715,7 +715,8 @@ def browser_executor_main(args):
             forwards = [part for port in (4173, 8080, 1317, 8545)
                         for part in ("-L", f"127.0.0.1:{port}:127.0.0.1:{port}")]
             tunnel = subprocess.Popen(["ssh", "-oBatchMode=yes", "-oExitOnForwardFailure=yes",
-                "-oServerAliveInterval=15", "-oServerAliveCountMax=3", *forwards, options.ssh, gate],
+                "-oServerAliveInterval=15", "-oServerAliveCountMax=3", "-oCompression=no",
+                *forwards, options.ssh, gate],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             deadline = monotonic_ns() + request["timeout"] * 10**9
             while True:
@@ -740,7 +741,7 @@ def browser_executor_main(args):
                 "returncode": 0 if result.returncode == 0 else 1, "process_returncode": result.returncode,
                 "preflight": preflight, "chrome": version.stdout.strip(),
                 "scope": BROWSER_EXECUTOR_SCOPE, "topology": {"ssh_target": options.ssh,
-                    "forwards": [4173, 8080, 1317, 8545]}}
+                    "forwards": [4173, 8080, 1317, 8545], "ssh_compression": "no"}}
         except BaseException as error:
             raw_stdout, raw_stderr = Path(str(paths["memory"]) + ".stdout"), Path(str(paths["memory"]) + ".stderr")
             if raw_stdout.is_file(): shutil.copyfile(raw_stdout, paths["stdout"])
@@ -749,7 +750,8 @@ def browser_executor_main(args):
             with paths["stderr"].open("a") as stream: stream.write(str(error)[-8192:] + "\n")
             response = {"schema": BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"], "head": request["head"],
                         "returncode": 1, "observed_head": actual_head, "scope": BROWSER_EXECUTOR_SCOPE,
-                        "topology": {"ssh_target": options.ssh, "forwards": [4173, 8080, 1317, 8545]}}
+                        "topology": {"ssh_target": options.ssh, "forwards": [4173, 8080, 1317, 8545],
+                                     "ssh_compression": "no"}}
         finally:
             if tunnel is not None:
                 try: signal_owned_process_group(tunnel.pid, signal.SIGTERM); tunnel.wait(timeout=5)

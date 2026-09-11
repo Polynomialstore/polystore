@@ -315,13 +315,25 @@ class BenchmarkArtifactTest(unittest.TestCase):
                 "scope": artifact.DARWIN_BROWSER_MEMORY_SCOPE}) + "\n")
             response = {"schema": artifact.BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"],
                 "head": request["head"], "returncode": 0, "scope": artifact.BROWSER_EXECUTOR_SCOPE,
-                "topology": {"ssh_target": "runner@server", "forwards": [4173, 8080, 1317, 8545]},
+                "topology": {"ssh_target": "runner@server", "forwards": [4173, 8080, 1317, 8545],
+                             "ssh_compression": "no"},
                 "artifacts": {key: {"bytes": path.stat().st_size, "sha256": artifact.sha256(path)}
                               for key, path in paths.items()}}
             artifact.write_new_json(root / "browser-executor-response.json", response)
             result, memory, observed = artifact.read_browser_executor_response(request_path)
             self.assertEqual((result.returncode, result.stdout, memory["peak_rss_bytes"]), (0, "passed\n", 4096))
             self.assertEqual(observed["topology"]["ssh_target"], "runner@server")
+
+            for compression in (None, "yes"):
+                changed = copy.deepcopy(response)
+                if compression is None:
+                    changed["topology"].pop("ssh_compression")
+                else:
+                    changed["topology"]["ssh_compression"] = compression
+                (root / "browser-executor-response.json").write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                    artifact.read_browser_executor_response(request_path)
+            (root / "browser-executor-response.json").write_text(json.dumps(response))
 
             paths["stdout"].write_text("tampered\n")
             with self.assertRaisesRegex(ValueError, "manifest mismatch"):
@@ -345,6 +357,65 @@ class BenchmarkArtifactTest(unittest.TestCase):
             second = dict(first)
             second[30] = (20, 4096, "late-grandchild")
             self.assertEqual(artifact.darwin_owned_processes(10, second, retained)[30], "late-grandchild")
+
+    def test_browser_executor_tunnel_disables_ssh_compression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, chrome = (root / "source").resolve(), (root / "chrome").resolve()
+            (source / "polystore-website/node_modules/.bin").mkdir(parents=True)
+            playwright = source / "polystore-website/node_modules/.bin/playwright"
+            playwright.touch()
+            chrome.touch()
+            env = {key: "enabled" for key in artifact.BROWSER_EXECUTOR_ENV}
+            env.update(VITE_LCD_BASE="http://127.0.0.1:1317",
+                VITE_GATEWAY_BASE="http://127.0.0.1:8080", VITE_SP_BASE="http://127.0.0.1:19091",
+                VITE_EVM_RPC="http://127.0.0.1:8545", E2E_BASE_URL="http://127.0.0.1:4173",
+                VITE_CHAIN_ID="262144", VITE_E2E="1", E2E_NATIVE_V3_BROWSER="1",
+                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES=str(1 << 30))
+            seed = root / "seed.json"
+            request = artifact.create_browser_executor_request(seed, source=source, source_head="ab" * 20,
+                source_status="", env=env, timeout_seconds=600, browser_bytes=1 << 30, faults=False)
+            tunnel = Mock(pid=17)
+            tunnel.poll.return_value = None
+            tunnel.wait.return_value = 0
+            published, executor_errors = [], []
+
+            def command(argv, _deadline, **_options):
+                if argv[0] == "scp":
+                    Path(argv[-1]).write_text(json.dumps(request))
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                self.assertEqual(argv, [str(chrome), "--version"])
+                return subprocess.CompletedProcess(argv, 0, "Chrome 1\n", "")
+
+            def git(argv, **_options):
+                value = request["head"] + "\n" if "rev-parse" in argv else ""
+                return subprocess.CompletedProcess(argv, 0, value, "")
+
+            def publish(_target, local, _remote, _request_id, _deadline):
+                if Path(local).name == "response.json":
+                    published.append(json.loads(Path(local).read_text()))
+                elif Path(local).name == request["artifacts"]["stderr"]:
+                    executor_errors.append(Path(local).read_text())
+
+            with patch.object(artifact.platform, "system", return_value="Darwin"), \
+                 patch.object(artifact.shutil, "which", return_value="/usr/bin/tool"), \
+                 patch.object(artifact.shutil, "disk_usage", return_value=Mock(free=1 << 40)), \
+                 patch.object(artifact, "run_bounded_command", side_effect=command), \
+                 patch.object(artifact.subprocess, "run", side_effect=git), \
+                 patch.object(artifact.subprocess, "Popen", return_value=tunnel) as popen, \
+                 patch.object(artifact, "browser_executor_preflight", side_effect=OSError("unreachable")), \
+                 patch.object(artifact, "browser_executor_publish", side_effect=publish), \
+                 patch.object(artifact, "signal_owned_process_group"), \
+                 patch.object(artifact, "monotonic_ns", side_effect=[0, 0, 61 * 10**9, 0]):
+                result = artifact.browser_executor_main(["--ssh", "runner@server", "--remote-request",
+                    "/tmp/request.json", "--source", str(source), "--chrome", str(chrome)])
+
+            self.assertEqual(result, 1)
+            self.assertIsNotNone(popen.call_args, executor_errors)
+            tunnel_argv = popen.call_args.args[0]
+            self.assertIn("-oCompression=no", tunnel_argv)
+            self.assertLess(tunnel_argv.index("-oCompression=no"), tunnel_argv.index("runner@server"))
+            self.assertEqual(published[0]["topology"]["ssh_compression"], "no")
 
     def test_darwin_browser_cleanup_reaps_after_snapshot_and_permission_failures(self):
         process = Mock(pid=10)
