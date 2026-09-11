@@ -19,6 +19,7 @@ import http.client
 import json
 import math
 import os
+import platform
 import re
 from pathlib import Path
 import shutil
@@ -66,6 +67,7 @@ V3_ABORT_FREE_BYTES = 768 * 1024**2
 V3_CHAIN_CAPACITY_RANGES = (1024, 8 * V3_DATA_BLOB_PAYLOAD_BYTES, V3_PILOT_BYTES)
 V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
+V3_EXPIRY_REFS_PER_BLOCK = 128
 V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
 V3_EXPORT_BATCH_MAX = 8
@@ -82,6 +84,10 @@ V3_CROSS_AUDIT_OPEN_BATCH_GAS_CAP = (
     OPEN_SESSION_BATCH_BASE_GAS + V3_CROSS_AUDIT_OPEN_GAS * V3_CROSS_AUDIT_OPEN_BATCH_MAX)
 V3_PROVIDER_TIMING_SCHEMA = "polystore-v3-provider-timing-v1"
 V3_PROVIDER_TIMING_MAX_NS = 90 * 10**9
+
+
+def host_identity():
+    return dict(host=platform.platform(), machine=platform.machine(), logical_cpus=os.cpu_count())
 
 
 def native_v3_range_shape(range_bytes, *, range_start=0, file_bytes=V3_PILOT_BYTES):
@@ -110,6 +116,10 @@ def native_v3_chain_capacity_profiles():
         profiles.append(dict(name=name, measured_transactions=transactions,
             sessions=transactions // shape["proof_transactions"], **shape))
     return profiles
+
+
+def native_v3_capacity_deadline(opened_at, session_index):
+    return opened_at + V3_CHAIN_SESSION_TTL_BLOCKS + session_index // V3_EXPIRY_REFS_PER_BLOCK
 
 
 def native_v3_cross_audit_schedule():
@@ -2005,15 +2015,38 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     if accepted_rate < 1.5 * committed_rate:
         raise ValueError("native v3 accepted offer rate did not exceed committed rate by 1.5x")
     saturated_hashes = {txhash for row in saturated for txhash in row["txhashes"]}
-    openings = sum(len(row["ordinals"]) for row in committed if row["txhash"] in saturated_hashes)
-    proof_sets_per_day = committed_rate / profile["proof_transactions"] * 86400
+    saturated_committed = [row for row in committed if row["txhash"] in saturated_hashes]
+    openings = sum(len(row["ordinals"]) for row in saturated_committed)
+    expected_slots = {}
+    for row in committed:
+        slots = expected_slots.setdefault(row["session_index"], set())
+        if row["slot"] in slots:
+            raise ValueError("frozen proof inventory repeats a session obligation")
+        slots.add(row["slot"])
+    if (len(expected_slots) != profile["sessions"] or
+            any(len(slots) != profile["proof_transactions"] for slots in expected_slots.values())):
+        raise ValueError("frozen proof inventory differs from the profile obligation count")
+    session_slots = {}
+    for row in saturated_committed:
+        slots = session_slots.setdefault(row["session_index"], set())
+        if row["slot"] not in expected_slots[row["session_index"]] or row["slot"] in slots:
+            raise ValueError("saturated proof transaction has an invalid session obligation")
+        slots.add(row["slot"])
+    complete_proof_sets = sum(slots == expected_slots[index] for index, slots in session_slots.items())
+    if not complete_proof_sets:
+        raise ValueError("saturated consensus interval contains no complete proof set")
+    proof_sets_per_second = complete_proof_sets / commit_seconds
+    proof_sets_per_day = proof_sets_per_second * 86400
     return dict(elapsed_seconds=elapsed, offer_seconds=offer_elapsed,
         accepted_offer_transactions_per_second=accepted_rate,
         committed_transactions_per_second=committed_rate,
         committed_transactions_per_day=committed_rate * 86400,
         committed_openings_per_second=openings / commit_seconds,
         committed_openings_per_day=openings / commit_seconds * 86400,
-        proof_set_equivalents_per_day=proof_sets_per_day,
+        complete_proof_sets_per_second=proof_sets_per_second,
+        complete_proof_sets_per_day=proof_sets_per_day,
+        complete_proof_sets_in_saturated_interval=complete_proof_sets,
+        partial_proof_sets_in_saturated_interval=len(session_slots) - complete_proof_sets,
         logical_requested_bytes_per_day=proof_sets_per_day * profile["range_bytes"],
         logical_requested_gib_per_day=proof_sets_per_day * profile["range_bytes"] / 1024**3,
         saturated_commit_interval=dict(predecessor_height=predecessor["height"],
@@ -2035,8 +2068,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     owner = lifecycle.signers["owner0"]
     profiles = native_v3_chain_capacity_profiles()
     opened_at = lifecycle.wait_height(3)
-    deadline_height = opened_at + V3_CHAIN_SESSION_TTL_BLOCKS
-    if deadline_height >= producer.uint(deal["end_block"]):
+    session_count = sum(profile["sessions"] for profile in profiles)
+    max_deadline_height = native_v3_capacity_deadline(opened_at, session_count - 1)
+    if max_deadline_height >= producer.uint(deal["end_block"]):
         raise ValueError("native chain capacity sessions reach the deal end")
     root = producer.b64(deal["manifest_root"], 32).hex()
     integrity = lifecycle.doc["native_v3_generation"]["candidate"]["integrity_root"][2:]
@@ -2044,6 +2078,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     for profile in profiles:
         profile["session_start"] = len(sessions)
         for profile_session in range(profile["sessions"]):
+            deadline_height = native_v3_capacity_deadline(opened_at, len(sessions))
             range_start = (profile_session % V3_SYSTEMATIC_PROVIDERS) * V3_DATA_BLOB_PAYLOAD_BYTES \
                 if profile["name"] == "1kib" else 0
             path = lifecycle.home / f"native-chain-open-{nonce}.json"
@@ -2052,7 +2087,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                            range_start=str(range_start), range_length=str(profile["range_bytes"])), nonce=str(nonce),
                 deadline_height=str(deadline_height)), separators=(",", ":")))
             sessions.append(dict(session_index=len(sessions), nonce=nonce, profile=profile["name"], profile_session=profile_session,
-                                 range_start=range_start, open_path=str(path)))
+                                 range_start=range_start, deadline_height=deadline_height, open_path=str(path)))
             nonce += 1
         profile["session_end"] = len(sessions)
     opened_heights = []
@@ -2069,7 +2104,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         view = v3_session_query(lifecycle, row["session_id"], evidence_height)
         session, accepted = validate_v3_session(view, session_id=row["session_id"], deal_id=deal["id"],
             owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
-            chain_id=lifecycle.chain, deadline_height=deadline_height, range_start=row["range_start"],
+            chain_id=lifecycle.chain, deadline_height=row["deadline_height"], range_start=row["range_start"],
             range_length=profile["range_bytes"])
         if accepted:
             raise ValueError("native chain capacity session starts with accepted samples")
@@ -2112,9 +2147,11 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         if minimum_gas_blocks < V3_CHAIN_BACKLOG_SECONDS:
             raise ValueError("fixed inventory cannot occupy ten maximum-gas blocks")
         required_margin = minimum_gas_blocks + 10
+        profile_deadline_height = min(row["deadline_height"] for row in
+                                      sessions[profile["session_start"]:profile["session_end"]])
         while True:
             window = await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
-                                                     required_margin + 20, deadline_height)
+                                                     required_margin + 20, profile_deadline_height)
             quiescence = require_provider_quiescence(lifecycle, providers)
             frozen = freeze_native_v3_transactions(
                 lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
@@ -2205,7 +2242,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             state = v3_session_query(lifecycle, row["session_id"], final_height)
             _, accepted = validate_v3_session(state, session_id=row["session_id"], deal_id=deal["id"],
                 owner=owner, providers=providers, nonce=row["nonce"], polyfs_root=root, integrity_root=integrity,
-                chain_id=lifecycle.chain, deadline_height=deadline_height, range_start=row["range_start"],
+                chain_id=lifecycle.chain, deadline_height=row["deadline_height"], range_start=row["range_start"],
                 range_length=profile["range_bytes"])
             expected = sorted(ordinal for message in inventory["messages"]
                               if message["session_index"] == row["session_index"]
@@ -4452,7 +4489,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             reservation = artifact.reserve_loopback_port(19091 + i)
             reservations.append(reservation)
             provider_reservations.append(reservation)
-        doc["provenance"] = dict(source_checkout=command(["git", "-C", str(lifecycle.root), "rev-parse", "HEAD"]).strip(),
+        doc["provenance"] = dict(**host_identity(),
+            source_checkout=command(["git", "-C", str(lifecycle.root), "rev-parse", "HEAD"]).strip(),
             binary=str(lifecycle.binary), native_library=str(lifecycle.library),
             binary_sha256=artifact.sha256(lifecycle.binary), native_library_sha256=artifact.sha256(lifecycle.library),
             trusted_setup_sha256=artifact.sha256(lifecycle.env["POLYSTORE_TRUSTED_SETUP"]), gateway_binary=str(gateway),

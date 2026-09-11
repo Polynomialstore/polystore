@@ -1508,6 +1508,13 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "backwards"):
             workload.validator_cpu_delta(before, after)
 
+    def test_native_chain_host_identity_is_frozen(self):
+        with patch.object(workload.platform, "platform", return_value="Linux-test"), \
+             patch.object(workload.platform, "machine", return_value="x86_64"), \
+             patch.object(workload.os, "cpu_count", return_value=16):
+            self.assertEqual(workload.host_identity(), {
+                "host": "Linux-test", "machine": "x86_64", "logical_cpus": 16})
+
     def test_native_chain_capacity_profiles_cover_distinct_protocol_shapes(self):
         inspect.signature(workload.run_native_v3_chain).bind(
             SimpleNamespace(), deal={}, providers={}, wait=Mock(), audits=Mock(),
@@ -1523,6 +1530,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
+        deadlines = [workload.native_v3_capacity_deadline(10, index) for index in range(1450)]
+        self.assertEqual((deadlines[0], deadlines[127], deadlines[128], deadlines[-1],
+                          max(deadlines.count(value) for value in set(deadlines))),
+                         (4106, 4106, 4107, 4117, 128))
 
     def test_capacity_window_waits_for_next_epoch_and_complete_audits(self):
         heights = iter((95, 103, 104, 105))
@@ -1575,7 +1586,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         hashes = [f"{index + 1:064X}" for index in range(4)]
         offered = [dict(txhash=txhash, offered_unix_ns=base + 10**9) for txhash in hashes]
-        committed = [dict(txhash=txhash, committed_time=timestamp(5 * (index + 1)), ordinals=[0, 1])
+        committed = [dict(txhash=txhash, committed_time=timestamp(5 * (index + 1)),
+                          ordinals=[0, 1], session_index=index, slot=index)
                      for index, txhash in enumerate(hashes)]
         blocks = [dict(height=10, time=timestamp(0), transactions=[], gas_wanted=0, gas_used=0,
                        tx_payload_bytes=0)]
@@ -1586,18 +1598,28 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         samples = [{"monotonic_ns": second * 10**9, "unix_ns": base + second * 10**9,
                     "nodes": [{"transactions": 1, "bytes": 100}] * 4} for second in range(16)]
         metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 1, "range_bytes": 1024, "sessions": 4}, offered, committed, blocks,
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            offered, committed, blocks,
             0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(metrics["saturated_commit_interval"], {
             "predecessor_height": 10, "first_height": 11, "last_height": 13,
             "elapsed_seconds": 15.0, "transactions": 3})
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
         self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
+        self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
         with self.assertRaisesRegex(ValueError, "consensus interval"):
             workload.native_v3_capacity_metrics(
-                {"proof_transactions": 1, "range_bytes": 1024, "sessions": 4}, offered,
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4}, offered,
                 committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:11])
+
+        imbalanced = [dict(row, session_index=index // 2, slot=index % 2)
+                      for index, row in enumerate(committed)]
+        imbalanced_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8, "sessions": 2},
+            offered, imbalanced, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
+        self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
+        self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
 
     def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
         profile = workload.native_v3_cross_audit_schedule()
