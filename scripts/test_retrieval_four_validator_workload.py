@@ -2924,18 +2924,21 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 nodes=[{"home": "/node", "rpc": 1234}], signers={f"provider{i}": address
                     for i, address in enumerate(AUDIT_ADDRESSES[:8])})
             simulation_result = SimpleNamespace(returncode=0,
-                stdout=json.dumps({"gas_info": {"gas_used": "41"}}), stderr="")
+                stdout=json.dumps({"gas_info": {"gas_used": "34283602"}}), stderr="")
             with patch.object(artifact, "run_bounded_command", return_value=simulation_result) as simulate:
                 simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
-            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (41, 65))
+            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (34283602, 54853763))
             simulate_argv = simulate.call_args.args[0]
             self.assertEqual(simulate_argv[1:3], ["tx", "simulate"])
             self.assertEqual(simulate_argv[simulate_argv.index("--gas-adjustment") + 1], "1.6")
             simulated_unsigned = json.loads(Path(simulation["unsigned_path"]).read_text())
             self.assertEqual(len(simulated_unsigned["body"]["messages"]), 8)
-            self.assertEqual(simulated_unsigned["auth_info"]["fee"]["gas_limit"], "65")
+            self.assertEqual(simulated_unsigned["auth_info"]["fee"], {
+                "amount": [{"denom": "aatom", "amount": "54854"}], "gas_limit": "54853763",
+                "payer": "", "granter": ""})
             self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
-            self.assertEqual(workload.native_v3_minimum_gas_blocks(simulation["gas_limit"] * 12, 70), 12)
+            self.assertEqual(workload.native_v3_minimum_gas_blocks(
+                simulation["gas_limit"] * 12, simulation["gas_limit"]), 12)
             with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
                     returncode=0, stdout="{}", stderr="")), self.assertRaisesRegex(
                         ValueError, "returned malformed gas"):
@@ -2968,7 +2971,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 {intent["id"]: simulation}, [profile],
                 dict(enumerate(AUDIT_ADDRESSES[:8])),
                 {provider: {"account_number": 3, "sequence": 4}}, command)
-            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])), (1, 65, 8))
+            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])),
+                             (1, 54853763, 8))
             self.assertEqual(sum(argv[2] == "sign" for argv in calls), 1)
             self.assertEqual(sum(argv[2] == "sign-batch" for argv in calls), 0)
 
@@ -2981,6 +2985,20 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 workload.freeze_native_v3_transactions(lifecycle, [intent],
                     {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
                     {provider: {"account_number": 3, "sequence": 4}}, incomplete)
+
+            def missing_fee(argv, timeout):
+                if argv[2] == "sign":
+                    value = json.loads(Path(argv[3]).read_text())
+                    value["auth_info"].update(signer_infos=[{"sequence": "4"}])
+                    value["auth_info"]["fee"]["amount"] = []
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+            with self.assertRaisesRegex(ValueError, "differs from frozen intent"):
+                workload.freeze_native_v3_transactions(lifecycle, [intent],
+                    {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    {provider: {"account_number": 3, "sequence": 4}}, missing_fee)
 
     def test_batch_message_signs_large_transactions_individually_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
