@@ -37,9 +37,10 @@ If any other doc uses ambiguous terms like "router" or generic "gateway", this f
 ### Gateway mode (preferred when `user-gateway` is healthy)
 - Browser -> `user-gateway` only (`:8080`).
 - `user-gateway` -> `provider-daemon` as needed for SP operations.
-- After owner confirmation, the browser posts only `session_id` to
-  `/gateway/retrieval/session-proof/continue`; the user-gateway derives the
-  frozen payee from chain state and relays to the provider's public continuation.
+- After owner confirmation, the browser posts `session_id` and, for v3, its
+  acknowledged `slot` to `/gateway/retrieval/session-proof/continue`; the
+  user-gateway derives the frozen payee from chain state. It uses the provider's
+  public v2 continuation or an authenticated server-to-provider v3 submission.
 
 ### Fallback mode (when `user-gateway` is unavailable)
 - Browser may call `provider-daemon` retrieval endpoints directly (`/sp/retrieval/*`).

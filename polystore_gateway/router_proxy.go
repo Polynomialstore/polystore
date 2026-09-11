@@ -829,8 +829,8 @@ func forwardJSONToProviderBaseWithAuth(w http.ResponseWriter, r *http.Request, p
 
 // RouterGatewayContinueRetrievalSessionProof keeps the healthy user-gateway as
 // the browser boundary while preserving the provider continuation's narrow
-// authority. The caller supplies only a canonical session ID; committed chain
-// state selects the frozen proof payee and its registered endpoint.
+// authority. Committed chain state selects the frozen proof payee and its
+// registered endpoint; a v3 caller also identifies its acknowledged slot.
 func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {
@@ -853,12 +853,16 @@ func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 	r = r.WithContext(ctx)
-	body, _, ids, err := readConfirmedSessionProofRequest(r.Body)
+	request, sessionID, err := readPublicSessionProofContinuationRequest(r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid session continuation request", err.Error())
 		return
 	}
-	response, height, err := queryRetrievalSession(ctx, ids[0])
+	if request.Slot != nil {
+		continueRetrievalSessionProofV3(w, r, sessionID, *request.Slot)
+		return
+	}
+	response, height, err := queryRetrievalSession(ctx, sessionID)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
 		return
@@ -881,7 +885,56 @@ func RouterGatewayContinueRetrievalSessionProof(w http.ResponseWriter, r *http.R
 		writeJSONError(w, http.StatusBadGateway, "authorized retrieval provider unavailable", err.Error())
 		return
 	}
+	body, err := json.Marshal(sessionProofRequest{SessionID: sessionID})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode continuation request", err.Error())
+		return
+	}
 	forwardJSONToProviderBaseWithAuth(w, r, baseURL, "/sp/retrieval/session-proof/continue", body, false)
+}
+
+func continueRetrievalSessionProofV3(w http.ResponseWriter, r *http.Request, sessionID string, slot uint32) {
+	response, height, err := queryRetrievalSessionV3(r.Context(), sessionID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "session authority unavailable", err.Error())
+		return
+	}
+	frozen, err := freezeRetrievalSessionV3Response(response, height)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "invalid frozen session", err.Error())
+		return
+	}
+	var payee string
+	for _, obligation := range frozen.Session.Obligations {
+		if obligation.Slot == slot {
+			payee = obligation.Payee
+			break
+		}
+	}
+	if payee == "" {
+		writeJSONError(w, http.StatusConflict, "invalid v3 obligation slot", "")
+		return
+	}
+	bit := uint32(1) << slot
+	if frozen.Session.AckedSlotsMask&bit == 0 {
+		writeJSONError(w, http.StatusConflict, "owner confirmation is not committed", "")
+		return
+	}
+	if frozen.Session.RefundedSlotsMask&bit != 0 {
+		writeJSONError(w, http.StatusConflict, "v3 obligation was refunded", "")
+		return
+	}
+	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), payee)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "authorized retrieval provider unavailable", err.Error())
+		return
+	}
+	body, err := json.Marshal(sessionProofRequest{SessionID: sessionID})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to encode continuation request", err.Error())
+		return
+	}
+	forwardJSONToProviderBaseWithAuth(w, r, baseURL, "/sp/session-proof", body, true)
 }
 
 func RouterGatewaySubmitReceipt(w http.ResponseWriter, r *http.Request) {

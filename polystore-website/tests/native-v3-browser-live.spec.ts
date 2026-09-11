@@ -60,7 +60,7 @@ function failureRoute(url: string): string {
   const path = new URL(url).pathname
   if (/^\/gateway\/mdu\/[^/]+\/[^/]+$/.test(path)) return 'gateway_mdu'
   if (/^\/sp\/retrieval\/mdu\/[^/]+\/[^/]+$/.test(path)) return 'provider_mdu'
-  if (path === '/gateway/session-proof') return 'provider_proof'
+  if (path === '/gateway/retrieval/session-proof/continue') return 'provider_proof'
   if (url.startsWith(evm)) return 'evm_rpc'
   if (path.startsWith('/cosmos/') || path.startsWith('/polystorechain/')) return 'chain_rest'
   return 'other'
@@ -444,7 +444,7 @@ test.describe('native V3 browser qualification', () => {
             }).catch(() => undefined)
           }
         }
-        if (new URL(response.url()).pathname !== '/gateway/session-proof' || !response.ok()) return
+        if (new URL(response.url()).pathname !== '/gateway/retrieval/session-proof/continue' || !response.ok()) return
         void response.json().then((body: unknown) => {
           if (!body || typeof body !== 'object') return
           const outcome = body as JsonObject
@@ -955,7 +955,7 @@ test.describe('native V3 browser qualification', () => {
       scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3FaultDiagnostic(event) }
     })
     context.on('response', (response: Response) => {
-      if (new URL(response.url()).pathname !== '/gateway/session-proof' || !response.ok()) return
+      if (new URL(response.url()).pathname !== '/gateway/retrieval/session-proof/continue' || !response.ok()) return
       void response.json().then((body: unknown) => {
         if (!body || typeof body !== 'object') return
         const outcome = body as JsonObject

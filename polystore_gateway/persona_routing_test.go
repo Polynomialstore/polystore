@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -137,5 +139,24 @@ func TestUserGatewayRoutes_DoNotExposeProviderSurface(t *testing.T) {
 	r.ServeHTTP(wPrivileged, httptest.NewRequest(http.MethodPost, "/gateway/session-proof", nil))
 	if wPrivileged.Code != http.StatusForbidden {
 		t.Fatalf("expected privileged proof relay to require auth, got %d", wPrivileged.Code)
+	}
+}
+
+func TestUserGatewayModesExposePublicContinuationAndProtectOperatorRelay(t *testing.T) {
+	for _, routerMode := range []bool{false, true} {
+		t.Run(fmt.Sprintf("router=%t", routerMode), func(t *testing.T) {
+			r := mux.NewRouter()
+			registerUserGatewayRoutes(r, routerMode)
+			public := httptest.NewRecorder()
+			r.ServeHTTP(public, httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", strings.NewReader(`{}`)))
+			if public.Code == http.StatusNotFound || public.Code == http.StatusForbidden {
+				t.Fatalf("public continuation unavailable: %d", public.Code)
+			}
+			privileged := httptest.NewRecorder()
+			r.ServeHTTP(privileged, httptest.NewRequest(http.MethodPost, "/gateway/session-proof", strings.NewReader(`{}`)))
+			if privileged.Code != http.StatusForbidden {
+				t.Fatalf("operator relay did not require auth: %d", privileged.Code)
+			}
+		})
 	}
 }

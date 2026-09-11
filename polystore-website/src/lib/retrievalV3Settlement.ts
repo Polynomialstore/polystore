@@ -1,4 +1,4 @@
-import { account, readBoundedResponse, record, unhex, uint } from './retrieval'
+import { readBoundedResponse, record, unhex, uint } from './retrieval'
 
 const MAX_OUTCOME_BYTES = 16 * 1024
 const REQUEST_TIMEOUT_MS = 95_000
@@ -22,16 +22,16 @@ function exactKeys(value: Record<string, unknown>, allowed: readonly string[]): 
  * Parses the provider's bounded diagnostic response. Canonical chain state,
  * rather than this HTTP outcome, remains the payment authority.
  */
-export async function requestRetrievalProofV3(base: string, request: { dealId: bigint; sessionId: string; provider: string },
+export async function requestRetrievalProofV3(base: string, request: { sessionId: string; slot: number },
   signal?: AbortSignal, fetchFn: typeof fetch = fetch): Promise<RetrievalProofV3Outcome> {
   unhex(request.sessionId, 32)
-  account(request.provider)
+  uint(request.slot, 7)
   const deadline = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline
   try {
-    const response = await fetchFn(`${base.replace(/\/$/, '')}/gateway/session-proof?deal_id=${request.dealId}`, {
+    const response = await fetchFn(`${base.replace(/\/$/, '')}/gateway/retrieval/session-proof/continue`, {
       method: 'POST', redirect: 'error', signal: activeSignal, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: request.sessionId, provider: request.provider }),
+      body: JSON.stringify({ session_id: request.sessionId, slot: request.slot }),
     })
     if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
       await response.body?.cancel(); throw new Error('invalid v3 proof outcome content type')
@@ -39,7 +39,7 @@ export async function requestRetrievalProofV3(base: string, request: { dealId: b
     const value = record(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBoundedResponse(response, MAX_OUTCOME_BYTES, activeSignal))))
     if (response.status === 429) {
       exactKeys(value, ['error', 'hint'])
-      if (value.error !== 'retrieval submission busy' || typeof value.hint !== 'string') throw new Error('invalid busy v3 proof outcome')
+      if (!['retrieval submission busy', 'retrieval continuation busy'].includes(String(value.error)) || typeof value.hint !== 'string') throw new Error('invalid busy v3 proof outcome')
       return { state: 'busy', sessionId: request.sessionId, message: value.hint.slice(0, 256) }
     }
     if (value.recorded_session_id !== undefined || value.retry_required !== undefined) {

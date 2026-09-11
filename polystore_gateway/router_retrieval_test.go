@@ -213,6 +213,101 @@ func TestGatewayContinuationUsesFrozenPayeeWithoutPrivilegedAuth(t *testing.T) {
 	}
 }
 
+func TestGatewayContinuationV3DerivesAcknowledgedSlotPayee(t *testing.T) {
+	response, height := frozenSessionV3Fixture(t, 1, 1)
+	if len(response.Session.Obligations) != 1 {
+		t.Fatalf("expected one obligation, got %d", len(response.Session.Obligations))
+	}
+	obligation := response.Session.Obligations[0]
+	bit := uint32(1) << obligation.Slot
+	response.Session.AckedSlotsMask = bit
+	id := "0x" + hex.EncodeToString(response.Session.SessionId)
+	providerHits := 0
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		providerHits++
+		if r.URL.Path != "/sp/session-proof" || r.Header.Get(gatewayAuthHeader) != gatewayToProviderAuthToken() {
+			t.Errorf("unexpected v3 continuation forwarding: path=%s auth=%q", r.URL.Path, r.Header.Get(gatewayAuthHeader))
+		}
+		got, _ := io.ReadAll(r.Body)
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(got, &fields); err != nil || len(fields) != 1 || fields["session_id"] == nil {
+			t.Errorf("v3 continuation forwarded caller authority: %s", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"reconciled","session_id":"` + id + `","tx_hash":"","slot":0,"proof_count":0,"remaining":0,"cleanup_status":"complete"}`))
+	}))
+	defer provider.Close()
+	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/retrieval-sessions-v3/"):
+			w.Header().Set(committedHeightHeader, strconv.FormatUint(height, 10))
+			_ = (&jsonpb.Marshaler{OrigName: true}).Marshal(w, response)
+		case strings.Contains(r.URL.Path, "/providers/"):
+			if got := strings.TrimPrefix(r.URL.Path, "/polystorechain/polystorechain/v1/providers/"); got != obligation.Payee {
+				t.Errorf("resolved caller or wrong v3 payee %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"provider": map[string]any{"endpoints": []string{mustHTTPMultiaddr(t, provider.URL)}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer lcd.Close()
+	oldLCD := lcdBase
+	lcdBase = lcd.URL
+	defer func() { lcdBase = oldLCD }()
+	providerBaseCache = sync.Map{}
+
+	invoke := func(body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", strings.NewReader(body))
+		recorder := httptest.NewRecorder()
+		RouterGatewayContinueRetrievalSessionProof(recorder, request)
+		return recorder
+	}
+	body := fmt.Sprintf(`{"session_id":%q,"slot":%d}`, id, obligation.Slot)
+	if got := invoke(body); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"status":"reconciled"`) {
+		t.Fatalf("v3 continuation relay failed: %d %s", got.Code, got.Body.String())
+	}
+	response.Session.AckedSlotsMask = 0
+	if got := invoke(body); got.Code != http.StatusConflict {
+		t.Fatalf("relayed v3 proof before slot ACK: %d %s", got.Code, got.Body.String())
+	}
+	response.Session.AckedSlotsMask = bit
+	response.Session.SettledSlotsMask = bit
+	response.Session.LockedFee = response.Session.LockedFee.Sub(obligation.LockedFee)
+	if got := invoke(body); got.Code != http.StatusOK {
+		t.Fatalf("settled v3 obligation did not reconcile: %d %s", got.Code, got.Body.String())
+	}
+	response.Session.SettledSlotsMask = 0
+	response.Session.LockedFee = response.Session.LockedFee.Add(obligation.LockedFee)
+	response.Session.RefundedSlotsMask = bit
+	response.Session.LockedFee = response.Session.LockedFee.Sub(obligation.LockedFee)
+	if got := invoke(body); got.Code != http.StatusConflict {
+		t.Fatalf("relayed refunded v3 obligation: %d %s", got.Code, got.Body.String())
+	}
+	response.Session.RefundedSlotsMask = 0
+	response.Session.LockedFee = response.Session.LockedFee.Add(obligation.LockedFee)
+	missingSlot := (obligation.Slot + 1) % 8
+	if got := invoke(fmt.Sprintf(`{"session_id":%q,"slot":%d}`, id, missingSlot)); got.Code != http.StatusConflict {
+		t.Fatalf("relayed absent v3 obligation: %d %s", got.Code, got.Body.String())
+	}
+	for _, invalid := range []string{
+		fmt.Sprintf(`{"session_id":%q,"slot":%d,"provider":%q}`, id, obligation.Slot, obligation.Payee),
+		fmt.Sprintf(`{"session_id":%q,"slot":8}`, id),
+		fmt.Sprintf(`{"session_id":%q,"slot":null}`, id),
+	} {
+		if got := invoke(invalid); got.Code != http.StatusBadRequest {
+			t.Fatalf("accepted v3 caller routing authority: %d %s", got.Code, got.Body.String())
+		}
+	}
+	response.Session.Obligations[0].Payee = response.Session.Owner
+	if got := invoke(body); got.Code != http.StatusConflict {
+		t.Fatalf("relayed malformed frozen v3 session: %d %s", got.Code, got.Body.String())
+	}
+	if providerHits != 2 {
+		t.Fatalf("unexpected v3 provider continuations: %d", providerHits)
+	}
+}
+
 func TestGatewayMduPinnedMetadataRouting(t *testing.T) {
 	for _, mode := range []struct {
 		name    string

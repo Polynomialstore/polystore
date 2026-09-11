@@ -278,11 +278,10 @@ export function useFetch() {
             return next
           },
           requestProof: async (current, slot) => {
-            const payee = current.obligations.find((obligation) => obligation.slot === slot)!.payee
             const connectedProofBase = readLocalGatewayConnectedBase()
             const proofBase = isGatewayTransportEnabled({ gatewayDisabled: appConfig.gatewayDisabled, gatewayBase: connectedProofBase || '',
               localGatewayConnected: Boolean(connectedProofBase) }) ? connectedProofBase : undefined
-            return proofBase ? requestRetrievalProofV3(proofBase, { dealId: current.authority.dealId, sessionId: current.sessionId, provider: payee }, signal) :
+            return proofBase ? requestRetrievalProofV3(proofBase, { sessionId: current.sessionId, slot }, signal) :
               { state: 'unknown', sessionId: current.sessionId, responseUnknown: true,
                 message: 'No authenticated provider or user-gateway proof route is available.' }
           },

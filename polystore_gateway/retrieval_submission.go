@@ -180,6 +180,51 @@ type sessionProofRequest struct {
 	Provider   string   `json:"provider,omitempty"`
 }
 
+type publicSessionProofContinuationRequest struct {
+	SessionID string  `json:"session_id"`
+	Slot      *uint32 `json:"slot,omitempty"`
+}
+
+func readPublicSessionProofContinuationRequest(r io.Reader) (publicSessionProofContinuationRequest, string, error) {
+	var request publicSessionProofContinuationRequest
+	body, err := io.ReadAll(io.LimitReader(r, maxSessionProofRequestBytes+1))
+	if err != nil {
+		return request, "", err
+	}
+	if len(body) > maxSessionProofRequestBytes {
+		return request, "", fmt.Errorf("session proof request exceeds limit")
+	}
+	if err := validateJSONObject(body); err != nil {
+		return request, "", err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return request, "", err
+	}
+	for field := range fields {
+		if field != "session_id" && field != "slot" {
+			return request, "", fmt.Errorf("unknown session continuation field %q", field)
+		}
+	}
+	if fields["session_id"] == nil {
+		return request, "", fmt.Errorf("session_id is required")
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		return request, "", err
+	}
+	if fields["slot"] != nil && request.Slot == nil {
+		return request, "", fmt.Errorf("slot must be an integer")
+	}
+	id, _, err := parseSessionIDHex(request.SessionID)
+	if err != nil {
+		return request, "", err
+	}
+	if request.Slot != nil && *request.Slot >= 8 {
+		return request, "", fmt.Errorf("invalid v3 obligation slot")
+	}
+	return request, id, nil
+}
+
 func readSessionProofRequest(r io.Reader) ([]byte, sessionProofRequest, []string, error) {
 	var request sessionProofRequest
 	body, err := io.ReadAll(io.LimitReader(r, maxSessionProofRequestBytes+1))
