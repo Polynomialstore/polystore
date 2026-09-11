@@ -117,14 +117,15 @@ def parse_finalize_block_histogram(text, chain_id):
         raise ValueError("chain_id is required")
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_BYTES:
         raise ValueError("metrics response exceeds limit or is not text")
-    buckets, count = {}, None
+    buckets, count, total = {}, None, None
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         name = re.match(r"[a-zA-Z_:][a-zA-Z0-9_:]*", line)
         if not name or name[0] not in (
-                FINALIZE_BLOCK_METRIC + "_bucket", FINALIZE_BLOCK_METRIC + "_count"):
+                FINALIZE_BLOCK_METRIC + "_bucket", FINALIZE_BLOCK_METRIC + "_count",
+                FINALIZE_BLOCK_METRIC + "_sum"):
             continue
         match = re.fullmatch(r"([^{}\s]+)\{(.*)\}\s+(\S+)", line)
         if not match:
@@ -146,22 +147,29 @@ def parse_finalize_block_histogram(text, chain_id):
             if value is None or value != value.to_integral_value() or not 0 <= value <= _MAX_COUNT:
                 raise ValueError("FinalizeBlock bucket count must be a bounded integer")
             buckets[bound] = int(value)
-        else:
+        elif match[1].endswith("_count"):
             if labels != base or count is not None:
                 raise ValueError("FinalizeBlock histogram chain or labels mismatch")
             value = Decimal(match[3]) if _NUMBER.fullmatch(match[3]) else None
             if value is None or value != value.to_integral_value() or not 0 <= value <= _MAX_COUNT:
                 raise ValueError("FinalizeBlock count must be a bounded integer")
             count = int(value)
-    if count is None or "+Inf" not in buckets or buckets["+Inf"] != count:
+        else:
+            if labels != base or total is not None:
+                raise ValueError("FinalizeBlock histogram chain or labels mismatch")
+            _total(match[3])
+            total = match[3]
+    if count is None or total is None or "+Inf" not in buckets or buckets["+Inf"] != count:
         raise ValueError("FinalizeBlock histogram count/buckets are missing or inconsistent")
+    if count == 0 and _total(total) != 0:
+        raise ValueError("zero FinalizeBlock count has nonzero sum")
     ordered = sorted(((Decimal(key), key, value) for key, value in buckets.items() if key != "+Inf"))
     if any(current[0] <= previous[0] for previous, current in zip(ordered, ordered[1:])):
         raise ValueError("FinalizeBlock histogram bucket bounds are not strictly increasing")
     ordered.append((Decimal("Infinity"), "+Inf", buckets["+Inf"]))
     if any(current[2] < previous[2] for previous, current in zip(ordered, ordered[1:])):
         raise ValueError("FinalizeBlock histogram buckets are not cumulative")
-    return {"chain_id": chain_id, "count": count,
+    return {"chain_id": chain_id, "count": count, "sum_seconds": total,
             "buckets": [{"le": key, "count": value} for _, key, value in ordered]}
 
 
@@ -288,6 +296,76 @@ def summarize_finalize_block_histogram(before, after, expected_blocks):
                 Decimal(quantiles["p95"]["upper_bound_seconds"]) <= Decimal("0.65")}
 
 
+def summarize_finalize_block_stream(samples, expected_blocks):
+    """Recover precise per-block durations when every scrape delta is one.
+
+    Prometheus exposes only a cumulative histogram and sum. Frequent scrapes can
+    isolate one observation, but a delta containing multiple blocks cannot be
+    split without inventing individual durations and therefore fails closed.
+    """
+    expected = _integer(expected_blocks, "expected FinalizeBlock observations")
+    if len(samples) < 2 or expected == 0:
+        raise ValueError("FinalizeBlock stream requires captures and a nonempty block range")
+    intervals, reasons = [], []
+    previous = None
+    for sample in samples:
+        histogram = sample.get("finalize_block_histogram")
+        if not isinstance(histogram, dict):
+            raise ValueError("FinalizeBlock stream sample is missing its histogram")
+        count = _integer(histogram.get("count"), "FinalizeBlock count")
+        if count > _MAX_COUNT:
+            raise ValueError("FinalizeBlock count exceeds roundoff bound")
+        total = _total(histogram.get("sum_seconds"))
+        if histogram.get("chain_id") != sample.get("chain_id") or not sample.get("chain_id"):
+            raise ValueError("FinalizeBlock stream chain mismatch")
+        began = _integer(sample.get("monotonic_start_ns"), "capture start")
+        ended = _integer(sample.get("monotonic_end_ns"), "capture end")
+        if ended < began:
+            raise ValueError("FinalizeBlock stream capture timestamps are reversed")
+        lower, upper = _sum_bounds(count, total)
+        if previous is not None:
+            old_sample, old_count, old_total, old_lower, old_upper = previous
+            if sample["chain_id"] != old_sample["chain_id"]:
+                raise ValueError("FinalizeBlock stream chain changed")
+            if began < old_sample["monotonic_end_ns"]:
+                raise ValueError("FinalizeBlock stream captures overlap")
+            delta = count - old_count
+            if delta < 0 or total < old_total:
+                raise ValueError("FinalizeBlock stream counter reset")
+            if delta == 0 and total != old_total:
+                raise ValueError("FinalizeBlock sum changed without observations")
+            if delta:
+                with localcontext() as ctx:
+                    ctx.prec = 100
+                    ctx.rounding = ROUND_FLOOR
+                    interval_lower = max(Decimal(0), lower - old_upper)
+                    ctx.rounding = ROUND_CEILING
+                    interval_upper = upper - old_lower
+                intervals.append({"count": delta,
+                    "lower_bound_seconds": str(interval_lower),
+                    "upper_bound_seconds": str(interval_upper),
+                    "from_monotonic_start_ns": old_sample["monotonic_start_ns"],
+                    "to_monotonic_end_ns": ended})
+        previous = sample, count, total, lower, upper
+    observed = sum(row["count"] for row in intervals)
+    if observed != expected:
+        reasons.append("observation count differs from the fenced FinalizeBlock range")
+    if any(row["count"] != 1 for row in intervals):
+        reasons.append("one or more scrape intervals contain multiple FinalizeBlock observations")
+    singleton = [row for row in intervals if row["count"] == 1]
+    p95 = None
+    if observed == expected and len(singleton) == expected:
+        rank = (95 * expected + 99) // 100
+        p95 = sorted(singleton, key=lambda row: Decimal(row["upper_bound_seconds"]))[rank - 1][
+            "upper_bound_seconds"]
+    return {"boundary": "cumulative FinalizeBlock sum deltas isolated by frequent scrapes",
+        "chain_id": samples[0]["chain_id"], "observed_blocks": observed,
+        "isolated_blocks": len(singleton), "qualified": not reasons,
+        "qualification_reasons": reasons, "intervals": intervals,
+        "p95_upper_bound_seconds": p95,
+        "p95_within_700ms": not reasons and Decimal(p95) <= Decimal("0.7")}
+
+
 def _sum_bounds(count, total):
     """Outward bounds for Go's float64 duration conversion and cumulative sum.
 
@@ -372,29 +450,34 @@ def summarize_commit_metrics(samples, *, start_committed_height, end_committed_h
         reasons.append("observation count differs from committed block range; trailing or extra blocks are unresolved")
     if observed == 0:
         reasons.append("no completed Commit observations")
-    p95 = None
-    if observed:
-        rank = (95 * observed + 99) // 100
+    def quantile(percent):
+        if not observed:
+            return None
+        rank = (percent * observed + 99) // 100
         seen = 0
         for interval in sorted(intervals, key=lambda item: Decimal(item["upper_bound_seconds"])):
             seen += interval["count"]
             if seen >= rank:
-                p95 = interval["upper_bound_seconds"]
-                break
+                return interval["upper_bound_seconds"]
+        raise ValueError("Commit interval counts do not cover the requested quantile")
+    quantiles = {f"p{percent}_upper_bound_seconds": quantile(percent)
+                 for percent in (50, 95, 99, 100)}
+    p95 = quantiles["p95_upper_bound_seconds"]
     return {"boundary": BOUNDARY, "chain_id": samples[0]["chain_id"],
             "start_committed_height": start, "end_committed_height": end,
             "observed_blocks": observed, "qualified": not reasons,
             "qualification_reasons": reasons, "intervals": intervals,
-            "p95_upper_bound_seconds": p95,
+            **quantiles, "max_upper_bound_seconds": quantiles["p100_upper_bound_seconds"],
             "within_700ms_budget": not reasons and p95 is not None and Decimal(p95) <= Decimal("0.7"),
             "excluded": "post-persistence state-transition tail, validator-key refresh, next-round scheduling"}
 
 
-def stream_commit_metrics(url, chain_id, output, seconds, timeout=2.0):
+def stream_commit_metrics(url, chain_id, output, seconds, timeout=2.0,
+                          include_finalize_block=False):
     """Retain frequent raw samples; the driver still owns hard timeout/fences.
 
-    No per-block timing is inferred here. Missed observations remain grouped
-    upper bounds in summarize_commit_metrics rather than invented samples.
+    This capture makes no timing claim. A later summary may isolate an exact
+    FinalizeBlock sum delta only when precisely one observation advanced.
     """
     if type(seconds) is not int or not 1 <= seconds <= 1100 or not os.path.isabs(output):
         raise ValueError("stream requires absolute new output and 1..1100 seconds")
@@ -402,7 +485,7 @@ def stream_commit_metrics(url, chain_id, output, seconds, timeout=2.0):
     count = 0
     with open(output, "x", opener=lambda path, flags: os.open(path, flags, 0o600)) as target:
         while time.clock_gettime_ns(time.CLOCK_MONOTONIC) < end:
-            value = capture_commit_metrics(url, chain_id, timeout)
+            value = capture_commit_metrics(url, chain_id, timeout, include_finalize_block)
             target.write(json.dumps(value, sort_keys=True) + "\n")
             target.flush()
             count += 1
@@ -428,7 +511,8 @@ if __name__ == "__main__":
     if args.stream_output is not None or args.stream_seconds is not None:
         if args.stream_output is None or args.stream_seconds is None or any(value is not None for value in fenced):
             parser.error("stream requires output/seconds and excludes per-scrape fences")
-        result = stream_commit_metrics(args.url, args.chain_id, args.stream_output, args.stream_seconds, args.timeout)
+        result = stream_commit_metrics(args.url, args.chain_id, args.stream_output, args.stream_seconds,
+                                       args.timeout, args.finalize_block_histogram)
     elif any(value is not None for value in fenced):
         if any(value is None for value in fenced):
             parser.error("fenced capture requires RPC URL, node ID and process initial height")

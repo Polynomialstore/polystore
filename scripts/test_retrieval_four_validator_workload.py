@@ -7,6 +7,7 @@ import inspect
 import io
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -873,6 +874,14 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
     INTEGRITY = "22" * 32
     SESSION = "33" * 32
 
+    def test_payload_nonconstant_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "payload.bin"
+            for raw, expected in ((b"", False), (b"\x07" * 2048, False),
+                                  (b"\x07" * 2047 + b"\x08", True)):
+                path.write_bytes(raw)
+                self.assertEqual(workload.file_is_nonconstant(path), expected)
+
     def session(self, *, expired=False, refunded=False):
         bitmap = bytearray(17)
         for ordinal in range(132):
@@ -991,7 +1000,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             life = SimpleNamespace(binary=Path("/chain"), chain="chain", env={},
                 deadline=artifact.monotonic_ns() + 10**9, signers={"owner0": owner},
                 nodes=[{"home": str(home), "rpc": 26657}], doc={}, save=Mock())
-            paths, generated = [], []
+            paths, generated, completion_order = [], {}, []
+            release_first = threading.Event()
             for nonce in range(1, 32):
                 path = home / f"open-{nonce}.json"
                 path.write_text(json.dumps(dict(creator=owner, deal_id="7", generation="1",
@@ -1004,15 +1014,22 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 if "--generate-only" in args:
                     path = Path(args[args.index("open") + 1])
                     source = json.loads(path.read_text())
+                    nonce = int(source["nonce"])
+                    if nonce == 1:
+                        self.assertTrue(release_first.wait(timeout=1))
+                    elif nonce == 2:
+                        release_first.set()
                     source["range"] = {key: str(value) for key, value in source["range"].items()}
                     message = {"@type": "/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3", **source}
                     gas = args[args.index("--gas") + 1]
                     tx = {"body": {"messages": [message]},
                           "auth_info": {"fee": {"gas_limit": gas}}}
-                    generated.append(tx)
+                    generated[nonce] = tx
+                    completion_order.append(nonce)
                     return json.dumps(tx)
-                messages = [row["body"]["messages"][0] for row in generated]
-                gas = sum(int(row["auth_info"]["fee"]["gas_limit"]) for row in generated)
+                txs = [json.loads(line) for line in Path(args[3]).read_text().splitlines()]
+                messages = [row["body"]["messages"][0] for row in txs]
+                gas = sum(int(row["auth_info"]["fee"]["gas_limit"]) for row in txs)
                 Path(args[args.index("--output-document") + 1]).write_text(json.dumps({
                     "body": {"messages": messages}, "auth_info": {"fee": {"gas_limit": str(gas)}},
                     "signatures": ["signed"]}))
@@ -1035,8 +1052,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                         {"node_id": str(i), "bytes": 4096} for i in range(4)]):
                 ids, height = workload.open_v3_session_batch(life, paths, home / "batch", command)
             self.assertEqual((ids, height), ([value.hex() for value in session_ids], 12))
-            self.assertEqual([int(row["auth_info"]["fee"]["gas_limit"]) for row in generated],
+            self.assertNotEqual(completion_order, list(range(1, 32)))
+            self.assertEqual([int(generated[index]["auth_info"]["fee"]["gas_limit"]) for index in range(1, 32)],
                              [2_100_000] + [2_000_000] * 30)
+            signed_messages = json.loads((home / "batch/signed.json").read_text())["body"]["messages"]
+            self.assertEqual([int(message["nonce"]) for message in signed_messages], list(range(1, 32)))
             self.assertEqual(life.doc["native_v3_open_batches"][0]["signed_gas"], 62_100_000)
             self.assertEqual(life.doc["native_v3_open_batches"][0]["committed_bytes"], 4096)
             submit.assert_called_once()
@@ -1683,7 +1703,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                         "clock_ticks_per_second": 100,
                         "nodes": resource_nodes(20, 0)})
         metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
             offered, committed, blocks,
             0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(metrics["saturated_commit_interval"], {
@@ -1696,7 +1717,38 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["validator_resources_during_backlog"]["validators"][0]
                                ["cpu_percent_of_one_core"], 1.0)
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
-        self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
+        self.assertAlmostEqual(metrics["committed_sampled_chained_proofs_per_second"], .4)
+        self.assertAlmostEqual(metrics["committed_kzg_opening_verifications_per_second"], .8)
+        self.assertAlmostEqual(
+            metrics["configured_validator_v3_linearized_session_ceiling_per_second"],
+            workload.V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND / 2)
+        self.assertAlmostEqual(
+            metrics["percent_of_configured_validator_v3_verifier_capacity"],
+            .4 / workload.V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND * 100)
+        self.assertEqual(metrics["configured_validator_v3_verifier_provenance"]["artifact_path"],
+            "bench/retrieval_session_capacity/parallel-ceiling-328/results.json")
+        self.assertEqual(metrics["configured_validator_v3_verifier_provenance"]["artifact_commit"],
+            "1bf6762d2bce694917833a6f9a626769e9fd7578")
+        self.assertIn("verifyPolyFSChainedProof",
+            metrics["configured_validator_v3_verifier_provenance"]["source_statistic_semantics"])
+        self.assertIn("sample_count=1",
+            metrics["configured_validator_v3_verifier_provenance"]["linearization"])
+        gomaxprocs4_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
+            offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples,
+            validator_gomaxprocs=4)
+        self.assertAlmostEqual(
+            gomaxprocs4_metrics["configured_validator_v3_one_sample_verifier_sessions_per_second"],
+            workload.V3_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND[4])
+        self.assertEqual(gomaxprocs4_metrics["configured_validator_v3_verifier_provenance"]
+                         ["validator_gomaxprocs"], 4)
+        with self.assertRaisesRegex(ValueError, "no retained V3 verifier ceiling"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4},
+                offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples,
+                validator_gomaxprocs=8)
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
@@ -1708,23 +1760,34 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
         skewed = [dict(row, time=timestamp(-100 + index)) for index, row in enumerate(blocks)]
         skewed_metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
             offered, committed, skewed, 0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(skewed_metrics["committed_transactions_per_second"],
                          metrics["committed_transactions_per_second"])
         with self.assertRaisesRegex(ValueError, "did not observe a committed transaction height"):
             workload.native_v3_capacity_metrics(
-                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4},
                 offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples[:-1])
         with self.assertRaisesRegex(ValueError, "positive mempool backlog"):
             workload.native_v3_capacity_metrics(
-                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4}, offered,
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4}, offered,
                 committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:10])
+        wrong_sample_count = [dict(row) for row in committed]
+        wrong_sample_count[0] = dict(wrong_sample_count[0], ordinals=[0])
+        with self.assertRaisesRegex(ValueError, "differs from the profile sample count"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4}, offered,
+                wrong_sample_count, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
 
         imbalanced = [dict(row, session_index=index // 2, slot=index % 2)
                       for index, row in enumerate(committed)]
         imbalanced_metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8, "sessions": 2},
+            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8,
+             "sample_count": 4, "sessions": 2},
             offered, imbalanced, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
         self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
         self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
@@ -2316,7 +2379,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                     message_path = Path(request["output_path"])
                     message = dict(creator=provider,
                         session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
-                        slot=str(slot), proofs=[dict(ordinal=str(slot))])
+                        slot=str(slot), proofs=[dict(ordinal=str(slot), proof=dict(
+                            manifest_opening=base64.b64encode(bytes([1]) * 48).decode(),
+                            root_table_du_commitment=base64.b64encode(bytes([2]) * 48).decode(),
+                            blob_commitment=base64.b64encode(bytes([3]) * 48).decode(),
+                            kzg_opening_proof=base64.b64encode(bytes([4]) * 48).decode()))])
                     raw = json.dumps(message, separators=(",", ":")).encode()
                     message_path.write_bytes(raw)
                     rows.append(dict(session_id=request["session_id"], message_path=str(message_path),
@@ -2335,6 +2402,57 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                              [(session, slot) for session in range(9) for slot in range(8)])
             self.assertEqual([row["provider"] for row in inventory["messages"][:8]],
                              list(providers.values()))
+
+    def test_native_chain_inventory_rejects_identity_commitment_or_opening(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
+            provider = providers[0]
+            directories = {}
+            for address in providers.values():
+                directories[address] = home / address
+                directories[address].mkdir()
+            lifecycle = SimpleNamespace(home=home, chain="polystore_290-1",
+                env={"POLYSTORE_TRUSTED_SETUP": "/setup"},
+                deadline=artifact.monotonic_ns() + 30 * 10**9)
+            session = dict(session_id=f"{1:064x}", evidence_height=70,
+                before_proofs={"session": {"obligations": [{"slot": 0}]}},
+                context_hash=f"{9:064x}", seed=f"{17:064x}")
+
+            for field, identity in (("manifest_opening", bytes(48)),
+                                    ("root_table_du_commitment", b"\xc0" + bytes(47)),
+                                    ("blob_commitment", bytes(48)),
+                                    ("kzg_opening_proof", b"\xc0" + bytes(47))):
+                def export(argv, deadline, env, field=field, identity=identity):
+                    manifest_path = Path(env["POLYSTORE_RETRIEVAL_EXPORT_MANIFEST"])
+                    request = json.loads(manifest_path.read_text())["v3_sessions"][0]
+                    chained = {name: base64.b64encode(bytes([index + 1]) * 48).decode()
+                               for index, name in enumerate(("manifest_opening",
+                                   "root_table_du_commitment", "blob_commitment",
+                                   "kzg_opening_proof"))}
+                    chained[field] = base64.b64encode(identity).decode()
+                    message = dict(creator=provider,
+                        session_id=base64.b64encode(bytes.fromhex(request["session_id"])).decode(),
+                        slot="0", proofs=[dict(ordinal="0", proof=chained)])
+                    raw = json.dumps(message, separators=(",", ":")).encode()
+                    message_path = Path(request["output_path"])
+                    message_path.write_bytes(raw)
+                    result = dict(messages=[dict(session_id=request["session_id"],
+                        message_path=str(message_path),
+                        message_sha256=hashlib.sha256(raw).hexdigest(),
+                        context_hash=session["context_hash"], seed=session["seed"],
+                        slot=0, ordinals=[0], generation_ms=1.0)])
+                    Path(str(manifest_path) + ".result.json").write_text(json.dumps(result))
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+                with self.subTest(field=field), patch.object(
+                        artifact, "run_bounded_command", side_effect=export), \
+                        self.assertRaisesRegex(ValueError, "identity " + field):
+                    workload.export_native_v3_chain_inventory(lifecycle, Path("/exporter"),
+                        [session], providers, directories)
+                for path in home.glob("native-v3-chain-inventory*"):
+                    if path.is_dir():
+                        shutil.rmtree(path)
 
     def test_native_chain_exporter_identity_records_exact_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2367,7 +2485,17 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(job["submit"][job["submit"].index("--gas") + 1], "13530000")
             self.assertEqual(run.call_args.args[0][-1], "--generate-only")
             self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--from") + 1], "provider0")
+            self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--gas-adjustment") + 1], "1.6")
             self.assertEqual(job["submit"][job["submit"].index("--from") + 1], AUDIT_ADDRESSES[0])
+            adjusted_path = Path(tmp) / "adjusted.json"
+            adjusted_path.write_text(json.dumps(message))
+            with patch.object(artifact, "run_bounded_command", return_value=result) as adjusted_run:
+                workload.v3_generate_only_gas(life, adjusted_path, AUDIT_ADDRESSES[0], gas_adjustment="1.1")
+            adjusted_argv = adjusted_run.call_args.args[0]
+            self.assertEqual(adjusted_argv[adjusted_argv.index("--gas-adjustment") + 1], "1.1")
+            with self.assertRaisesRegex(ValueError, "outside the benchmark matrix"):
+                workload.v3_generate_only_gas(life, Path(tmp) / "missing.json", AUDIT_ADDRESSES[0],
+                                              gas_adjustment="1.05")
             changed = copy.deepcopy(unsigned)
             changed["body"]["messages"][0]["slot"] = 1
             changed_path = Path(tmp) / "changed.json"
@@ -2397,7 +2525,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                 _, retry_evidence = workload.v3_generate_only_gas(life, retry_path, AUDIT_ADDRESSES[0])
             self.assertEqual((run.call_count, sleep.call_count, retry_evidence["simulation_attempts"]), (2, 1, 2))
 
-    def test_native_chain_freeze_batch_encodes_without_per_transaction_processes(self):
+    def test_native_chain_freeze_encodes_provider_transactions_in_parallel(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             providers = dict(enumerate(AUDIT_ADDRESSES[:8]))
@@ -2407,11 +2535,13 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             simulated = []
             for slot, provider in providers.items():
                 unsigned = home / f"unsigned-{slot}.json"
-                unsigned.write_text(json.dumps({"body": {"messages": [{"slot": slot}]}}) + "\n")
+                unsigned.write_text(json.dumps({"body": {"messages": [{"slot": slot}]},
+                                                "auth_info": {"fee": {"gas_limit": "904801"}}}) + "\n")
                 message_path = home / f"message-{slot}.json"
                 message_path.write_text("{}")
                 simulated.append((dict(id=f"tx-{slot}", profile="1kib", session_index=slot,
-                    slot=slot, provider=provider, ordinals=[0], message_path=str(message_path)), None,
+                    slot=slot, provider=provider, ordinals=[0], message_path=str(message_path),
+                    message_sha256=artifact.sha256(message_path)), None,
                     dict(unsigned_path=str(unsigned), gas_limit=904_801)))
             calls = []
             sign_barrier = threading.Barrier(8)
@@ -2426,30 +2556,27 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                     for index, line in enumerate(source.read_text().splitlines()):
                         row = json.loads(line)
                         row.update(signatures=["signature"], auth_info={"signer_infos": [
-                            {"sequence": str(sequence + index)}]})
+                            {"sequence": str(sequence + index)}], "fee": row["auth_info"]["fee"]})
                         rows.append(json.dumps(row, separators=(",", ":")))
                     output.write_text("\n".join(rows) + "\n")
                     sign_barrier.wait(timeout=5)
                     return ""
-                if argv[2] == "encode-batch":
-                    lines = []
-                    for source in argv[3:argv.index("--output-document")]:
-                        for row in Path(source).read_text().splitlines():
-                            slot = json.loads(row)["body"]["messages"][0]["slot"]
-                            lines.append(base64.b64encode(f"raw-{slot}".encode()).decode())
-                    Path(argv[argv.index("--output-document") + 1]).write_text("\n".join(lines) + "\n")
-                    return ""
+                if argv[2] == "encode":
+                    slot = json.loads(Path(argv[3]).read_text())["body"]["messages"][0]["slot"]
+                    return base64.b64encode(f"raw-{slot}".encode()).decode() + "\n"
                 raise AssertionError(f"unexpected per-transaction command: {argv}")
 
             sequences = {provider: {"account_number": slot + 20, "sequence": slot + 3}
                          for slot, provider in providers.items()}
+            profile = {"name": "1kib", "submission_mode": "separate", "batch_size": 1}
+            messages = [row[0] for row in simulated]
+            intents = workload.build_native_v3_transaction_intents(messages, profile, home / "intents")
             frozen = workload.freeze_native_v3_transactions(
-                lifecycle, simulated, [{"name": "1kib"}], providers, sequences, command)
+                lifecycle, intents, {row[0]["id"]: row[2] for row in simulated}, [profile],
+                providers, sequences, command)
             self.assertEqual(sum(row[2] == "sign-batch" for row in calls), 8)
-            self.assertEqual(sum(row[2] == "encode-batch" for row in calls), 1)
-            encode_call = next(row for row in calls if row[2] == "encode-batch")
-            self.assertEqual([Path(path).name for path in encode_call[3:encode_call.index("--output-document")]],
-                             [f"provider-{slot}.signed.jsonl" for slot in range(8)])
+            self.assertEqual(sum(row[2] == "encode" for row in calls), 8)
+            self.assertEqual(sum(row[2] == "encode-batch" for row in calls), 0)
             self.assertEqual([Path(row["raw_path"]).read_bytes() for row in frozen],
                              [f"raw-{slot}".encode() for slot in range(8)])
             self.assertEqual([row["sequence"] for row in frozen], [slot + 3 for slot in range(8)])
@@ -2526,7 +2653,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
             constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
-                                                timeout=3600, sustained=True)
+                                                timeout=3600, gomaxprocs=2, sustained=True)
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
                                         native_chain=dict(exporter="/exporter"), audit_profile="normal")
         sweep = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "1kib",
@@ -2713,6 +2840,266 @@ class HealthyAuditViewsTest(unittest.TestCase):
                 mutate(values)
                 with self.assertRaises(ValueError):
                     self.check(values, deal, providers)
+
+
+class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
+    def _messages(self, directory, count=16):
+        provider = AUDIT_ADDRESSES[0]
+        rows = []
+        for index in range(count):
+            path = Path(directory) / f"proof-{index}.json"
+            message = {"creator": provider, "session_id": base64.b64encode(index.to_bytes(32, "big")).decode(),
+                       "slot": "0", "proofs": [{"ordinal": "0", "proof": {}}]}
+            path.write_text(json.dumps(message, separators=(",", ":")) + "\n")
+            rows.append(dict(id=f"proof-{index}", profile="1kib", session_index=index * 8,
+                slot=0, provider=provider, ordinals=[0], message_path=str(path),
+                message_sha256=artifact.sha256(path)))
+        return rows
+
+    def test_batch_profiles_require_exact_small_provider_local_groups(self):
+        for mode in ("serial-messages", "batch-message"):
+            profile = workload.native_v3_chain_capacity_profiles("1kib", measured_sessions=4608,
+                submission_mode=mode, batch_size=64)[0]
+            self.assertEqual((profile["sessions"], profile["proof_messages"],
+                              profile["measured_transactions"]), (4608, 4608, 72))
+        for kwargs in (dict(submission_mode="separate", batch_size=8),
+                       dict(submission_mode="batch-message", batch_size=1),
+                       dict(submission_mode="batch-message", batch_size=64, measured_sessions=4097)):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                workload.native_v3_chain_capacity_profiles("1kib", **kwargs)
+
+    def test_intents_keep_exact_provider_corpus_and_batch_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            messages = self._messages(tmp)
+            profile = dict(name="1kib", submission_mode="batch-message", batch_size=8)
+            intents = workload.build_native_v3_transaction_intents(messages, profile, Path(tmp) / "intents")
+            self.assertEqual([len(row["members"]) for row in intents], [8, 8])
+            value = json.loads(Path(intents[0]["message_path"]).read_text())
+            self.assertEqual(value["creator"], AUDIT_ADDRESSES[0])
+            self.assertEqual(len(value["sessions"]), 8)
+            self.assertEqual([row["session_id"] for row in value["sessions"]],
+                             [json.loads(Path(row["message_path"]).read_text())["session_id"]
+                              for row in messages[:8]])
+            messages[-1]["provider"] = AUDIT_ADDRESSES[1]
+            with self.assertRaisesRegex(ValueError, "exact local batches"):
+                workload.build_native_v3_transaction_intents(messages, profile, Path(tmp) / "bad")
+
+    def test_session_queries_are_bounded_parallel_and_ordered(self):
+        sessions = [{"session_id": str(index)} for index in range(8)]
+        barrier = threading.Barrier(8)
+        lock = threading.Lock()
+        active = peak = 0
+
+        def query(lifecycle, session_id, height):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            barrier.wait(timeout=5)
+            time.sleep((7 - int(session_id)) / 10_000)
+            with lock:
+                active -= 1
+            return {"session_id": session_id, "height": height}
+
+        with patch.object(workload, "v3_session_query", side_effect=query):
+            values = workload.v3_session_queries(object(), sessions, 42)
+        self.assertEqual(peak, 8)
+        self.assertEqual(values, [{"session_id": str(index), "height": 42} for index in range(8)])
+        self.assertEqual(workload.v3_session_queries(object(), [], 42), [])
+
+    def test_serial_comparator_simulates_and_signs_one_large_outer_transaction(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            messages = self._messages(tmp, 8)
+            profile = dict(name="1kib", submission_mode="serial-messages", batch_size=8)
+            intent = workload.build_native_v3_transaction_intents(messages, profile, home / "intents")[0]
+            for row in messages:
+                source = json.loads(Path(row["message_path"]).read_text())
+                source["padding"] = "x" * 9_000
+                Path(row["message_path"]).write_text(json.dumps(source, separators=(",", ":")) + "\n")
+                row["message_sha256"] = artifact.sha256(row["message_path"])
+            provider = AUDIT_ADDRESSES[0]
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="bench",
+                deadline=artifact.monotonic_ns() + 60 * 10**9, env={},
+                nodes=[{"home": "/node", "rpc": 1234}], signers={f"provider{i}": address
+                    for i, address in enumerate(AUDIT_ADDRESSES[:8])})
+            simulation_result = SimpleNamespace(returncode=0,
+                stdout=json.dumps({"gas_info": {"gas_used": "34283602"}}), stderr="")
+            with patch.object(artifact, "run_bounded_command", return_value=simulation_result) as simulate:
+                simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (34283602, 54853763))
+            simulate_argv = simulate.call_args.args[0]
+            self.assertEqual(simulate_argv[1:3], ["tx", "simulate"])
+            self.assertEqual(simulate_argv[simulate_argv.index("--gas-adjustment") + 1], "1.6")
+            simulated_unsigned = json.loads(Path(simulation["unsigned_path"]).read_text())
+            self.assertEqual(len(simulated_unsigned["body"]["messages"]), 8)
+            self.assertEqual(simulated_unsigned["auth_info"]["fee"], {
+                "amount": [{"denom": "aatom", "amount": "54854"}], "gas_limit": "54853763",
+                "payer": "", "granter": ""})
+            self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
+            self.assertEqual(workload.native_v3_minimum_gas_blocks(
+                simulation["gas_limit"] * 12, simulation["gas_limit"]), 12)
+            with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                    returncode=0, stdout="{}", stderr="")), self.assertRaisesRegex(
+                        ValueError, "returned malformed gas"):
+                workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            with patch.object(artifact, "run_bounded_command", return_value=simulation_result):
+                simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            original = Path(messages[0]["message_path"]).read_text()
+            Path(messages[0]["message_path"]).write_text(original + " ")
+            with patch.object(artifact, "run_bounded_command") as skipped, self.assertRaisesRegex(
+                    ValueError, "changed before outer simulation"):
+                workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            skipped.assert_not_called()
+            Path(messages[0]["message_path"]).write_text(original)
+            calls = []
+            def command(argv, timeout):
+                calls.append(argv)
+                if argv[2] == "sign":
+                    source = Path(argv[3])
+                    self.assertGreater(source.stat().st_size, 64 * 1024)
+                    value = json.loads(source.read_text())
+                    value["auth_info"].update(signer_infos=[{"sequence": "4"}])
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                if argv[2] == "encode":
+                    self.assertGreater(Path(argv[3]).stat().st_size, 64 * 1024)
+                    return base64.b64encode(b"frozen-tx-0").decode() + "\n"
+                raise AssertionError(f"unexpected command: {argv}")
+            frozen = workload.freeze_native_v3_transactions(lifecycle, [intent],
+                {intent["id"]: simulation}, [profile],
+                dict(enumerate(AUDIT_ADDRESSES[:8])),
+                {provider: {"account_number": 3, "sequence": 4}}, command)
+            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])),
+                             (1, 54853763, 8))
+            self.assertEqual(sum(argv[2] == "sign" for argv in calls), 1)
+            self.assertEqual(sum(argv[2] == "sign-batch" for argv in calls), 0)
+
+            def incomplete(argv, timeout):
+                if argv[2] == "sign":
+                    Path(argv[argv.index("--output-document") + 1]).write_text("")
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+            with self.assertRaisesRegex(ValueError, "incomplete serial transaction"):
+                workload.freeze_native_v3_transactions(lifecycle, [intent],
+                    {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    {provider: {"account_number": 3, "sequence": 4}}, incomplete)
+
+            def missing_fee(argv, timeout):
+                if argv[2] == "sign":
+                    value = json.loads(Path(argv[3]).read_text())
+                    value["auth_info"].update(signer_infos=[{"sequence": "4"}])
+                    value["auth_info"]["fee"]["amount"] = []
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+            with self.assertRaisesRegex(ValueError, "differs from frozen intent"):
+                workload.freeze_native_v3_transactions(lifecycle, [intent],
+                    {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    {provider: {"account_number": 3, "sequence": 4}}, missing_fee)
+
+    def test_batch_message_signs_large_transactions_individually_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            messages = self._messages(tmp, 16)
+            profile = dict(name="1kib", submission_mode="batch-message", batch_size=8)
+            intents = workload.build_native_v3_transaction_intents(messages, profile, home / "intents")
+            simulations = {}
+            for intent in intents:
+                message = json.loads(Path(intent["message_path"]).read_text())
+                unsigned = home / f"{intent['id']}.unsigned.json"
+                unsigned.write_text(json.dumps({
+                    "body": {"messages": [dict({"@type": workload.V3_BATCH_PROOF_TYPE}, **message)],
+                             "memo": "x" * 70_000},
+                    "auth_info": {"fee": {"gas_limit": "100"}},
+                }, separators=(",", ":")) + "\n")
+                simulations[intent["id"]] = {"unsigned_path": str(unsigned), "gas_limit": 100}
+            provider = AUDIT_ADDRESSES[0]
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="bench",
+                nodes=[{"home": "/node"}], signers={f"provider{i}": address
+                    for i, address in enumerate(AUDIT_ADDRESSES[:8])})
+            calls = []
+
+            def command(argv, timeout):
+                calls.append(argv)
+                if argv[2] == "sign":
+                    source = Path(argv[3])
+                    self.assertGreater(source.stat().st_size, 64 * 1024)
+                    value = json.loads(source.read_text())
+                    value["auth_info"].update(signer_infos=[{
+                        "sequence": argv[argv.index("--sequence") + 1]}])
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                if argv[2] == "encode":
+                    sequence = json.loads(Path(argv[3]).read_text())["auth_info"]["signer_infos"][0]["sequence"]
+                    return base64.b64encode(f"raw-{sequence}".encode()).decode() + "\n"
+                raise AssertionError(f"unexpected command: {argv}")
+
+            sequences = {provider: {"account_number": 3, "sequence": 4}}
+            frozen = workload.freeze_native_v3_transactions(lifecycle, intents, simulations, [profile],
+                dict(enumerate(AUDIT_ADDRESSES[:8])), sequences, command)
+            self.assertEqual(sum(row[2] == "sign" for row in calls), 2)
+            self.assertEqual(sum(row[2] == "sign-batch" for row in calls), 0)
+            self.assertEqual([row["sequence"] for row in frozen], [4, 5])
+            self.assertEqual([Path(row["raw_path"]).read_bytes() for row in frozen], [b"raw-4", b"raw-5"])
+
+            def incomplete(argv, timeout):
+                if argv[2] == "sign":
+                    Path(argv[argv.index("--output-document") + 1]).write_text("")
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+
+            with self.assertRaisesRegex(ValueError, "tx sign returned an incomplete transaction inventory"):
+                workload.freeze_native_v3_transactions(lifecycle, intents, simulations, [profile],
+                    dict(enumerate(AUDIT_ADDRESSES[:8])), sequences, incomplete)
+
+    def test_resource_summary_reports_host_and_aggregate_validator_usage(self):
+        self.assertEqual(workload.parse_host_proc_stat("cpu  1 2 3 4 5 6 7 8\n")["idle_ticks"], 9)
+        self.assertEqual(workload.parse_proc_memory("VmRSS: 12 kB\n", process=True)["VmRSS"], 12288)
+        def sample(monotonic_ns, total, idle, cpu, rss):
+            return {"monotonic_ns": monotonic_ns,
+                    "host_cpu": {"total_ticks": total, "idle_ticks": idle},
+                    "host_memory": {"MemTotal": 1000, "MemAvailable": 400},
+                    "validators": [{"node_id": f"n{i}", "pid": i + 1, "starttime_ticks": 9,
+                        "user_ticks": cpu, "system_ticks": 0, "rss_bytes": rss} for i in range(4)]}
+        with patch.object(workload.os, "sysconf", return_value=100):
+            result = workload.summarize_native_v3_resources([sample(1_000_000_000, 100, 60, 10, 20),
+                                                               sample(3_000_000_000, 200, 80, 30, 25)])
+        self.assertAlmostEqual(result["host_average_cpu_fraction"], .8)
+        self.assertAlmostEqual(result["aggregate_validator_average_cpu_cores"], .4)
+        self.assertEqual(result["aggregate_validator_peak_rss_bytes"], 100)
+        with self.assertRaisesRegex(ValueError, "timestamps did not advance"):
+            workload.summarize_native_v3_resources([sample(1, 100, 60, 10, 20),
+                                                      sample(1, 200, 80, 30, 25)])
+
+    def test_batch_capacity_cli_passes_explicit_session_shape(self):
+        argv = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
+            "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
+            "--cli-binary", "/native-cli", "--product-source", "/source",
+            "--proof-exporter", "/exporter", "--chain-max-gas", "320000000",
+            "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "6656",
+            "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
+            "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500",
+            "--chain-validator-gomaxprocs", "4"]
+        with patch.object(workload.sys, "argv", argv), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+             patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+            workload.main()
+        run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+            native_chain=dict(exporter="/exporter", max_block_gas=320_000_000, profile="1kib",
+                measured_transactions=None, measured_sessions=6656,
+                submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
+        self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
+        self.assertEqual(constructor.call_args.kwargs["gomaxprocs"], 4)
+
+    def test_transaction_members_reject_duplicate_session_slot(self):
+        members = [dict(session_index=1, slot=2, ordinals=[0]),
+                   dict(session_index=1, slot=2, ordinals=[1])]
+        with self.assertRaisesRegex(ValueError, "repeats"):
+            workload.native_v3_transaction_members({"members": members})
 
 
 if __name__ == "__main__":

@@ -105,6 +105,8 @@ service Msg {
   rpc OpenRetrievalSessionV3(MsgOpenRetrievalSessionV3) returns (MsgOpenRetrievalSessionV3Response);
   rpc OpenRetrievalSessionV3Sponsored(MsgOpenRetrievalSessionV3Sponsored) returns (MsgOpenRetrievalSessionV3Response);
   rpc SubmitRetrievalSessionProofV3(MsgSubmitRetrievalSessionProofV3) returns (MsgSubmitRetrievalSessionProofV3Response);
+  // SubmitRetrievalSessionProofBatchV3 verifies proofs for same-provider sessions in one transaction.
+  rpc SubmitRetrievalSessionProofBatchV3(MsgSubmitRetrievalSessionProofBatchV3) returns (MsgSubmitRetrievalSessionProofBatchV3Response);
   rpc AcknowledgeRetrievalObligationV3(MsgAcknowledgeRetrievalObligationV3) returns (MsgAcknowledgeRetrievalObligationV3Response);
   rpc RefundRetrievalSessionV3(MsgRefundRetrievalSessionV3) returns (MsgRefundRetrievalSessionV3Response);
 
@@ -829,6 +831,26 @@ message MsgSubmitRetrievalSessionProofV3 {
   repeated RetrievalSampleProofV3 proofs = 4 [(gogoproto.nullable) = false];
 }
 message MsgSubmitRetrievalSessionProofV3Response { uint32 newly_accepted = 1; bool settled = 2; }
+
+// RetrievalSessionProofBatchEntryV3 identifies one session obligation and its proofs.
+message RetrievalSessionProofBatchEntryV3 {
+  bytes session_id = 1;
+  uint32 slot = 2;
+  repeated RetrievalSampleProofV3 proofs = 3 [(gogoproto.nullable) = false];
+}
+
+// MsgSubmitRetrievalSessionProofBatchV3 batches bounded proofs from one provider.
+message MsgSubmitRetrievalSessionProofBatchV3 {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "polystorechain/x/polystorechain/MsgSubmitRetrievalSessionProofBatchV3";
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  repeated RetrievalSessionProofBatchEntryV3 sessions = 2 [(gogoproto.nullable) = false];
+}
+
+// MsgSubmitRetrievalSessionProofBatchV3Response returns results in input order.
+message MsgSubmitRetrievalSessionProofBatchV3Response {
+  repeated MsgSubmitRetrievalSessionProofV3Response results = 1 [(gogoproto.nullable) = false];
+}
 
 message MsgAcknowledgeRetrievalObligationV3 {
   option (cosmos.msg.v1.signer) = "creator";

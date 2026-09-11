@@ -1706,6 +1706,20 @@ class FourValidatorLifecycleTest(unittest.TestCase):
         self.assertFalse(rejected.home.exists())
         self.assertFalse(rejected.processes)
 
+    def test_timeout_commit_matrix_is_bounded_and_preserves_default(self):
+        self.assertEqual([artifact.consensus_timeout_commit(value) for value in (250, 500, 1000)],
+                         ["250ms", "500ms", "1s"])
+        for value in (249, 750, 1001):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                artifact.consensus_timeout_commit(value)
+        runner = artifact.FourValidatorLifecycle(
+            self.binary, self.library, self.root / "timeout-500", consensus_timeout_commit_ms=500)
+        runner.home.mkdir(mode=0o700)
+        runner.prepare()
+        self.assertEqual(runner.doc["profile"]["timeout_commit"], "500ms")
+        for node in runner.nodes:
+            self.assertIn('timeout_commit = "500ms"', (Path(node["home"]) / "config/config.toml").read_text())
+
     def test_v3_activation_is_explicit_and_default_remains_off(self):
         for enabled in (False, True):
             with self.subTest(enabled=enabled):

@@ -369,9 +369,13 @@ class SustainedTest(unittest.TestCase):
 
     def test_stream_filter_requires_four_collectors_and_uses_only_fenced_samples(self):
         with tempfile.TemporaryDirectory() as home:
-            start = dict(chain_id="chain", monotonic_start_ns=10, monotonic_end_ns=20, committed_height=1)
-            end = dict(chain_id="chain", monotonic_start_ns=50, monotonic_end_ns=60, committed_height=2)
-            inside = dict(chain_id="chain", monotonic_start_ns=21, monotonic_end_ns=49)
+            def sample(start_ns, end_ns, count, total, **fields):
+                return dict(chain_id="chain", monotonic_start_ns=start_ns, monotonic_end_ns=end_ns,
+                    finalize_block_histogram=dict(chain_id="chain", count=count,
+                        sum_seconds=total, buckets=[]), **fields)
+            start = sample(10, 20, 10, "1.0", committed_height=1)
+            end = sample(50, 60, 11, "1.5", committed_height=2)
+            inside = sample(21, 49, 10, "1.0")
             outside = dict(chain_id="chain", monotonic_start_ns=1, monotonic_end_ns=9)
             phases = {name: dict(nodes=[dict(node_id=str(i), sample=sample) for i in range(4)])
                 for name, sample in (("sustained_before", start), ("sustained_after", end))}

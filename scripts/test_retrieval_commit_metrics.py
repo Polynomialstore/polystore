@@ -16,11 +16,14 @@ def exposition(count="2", total="0.4", chain="bench", step="Commit"):
             f'{metrics.METRIC}_sum{{chain_id="{chain}",step="{step}"}} {total}\n')
 
 
-def finalize_exposition(counts=(1, 2, 3, 4), chain="bench",
+def finalize_exposition(counts=(1, 2, 3, 4), chain="bench", total=None,
                         bounds=("0.1", "0.65", "2", "+Inf")):
+    if total is None:
+        total = "0.4" if counts[-1] else "0"
     rows = [f'{metrics.FINALIZE_BLOCK_METRIC}_bucket{{method="finalize_block",type="sync",chain_id="{chain}",le="{bound}"}} {count}'
             for bound, count in zip(bounds, counts)]
     rows.append(f'{metrics.FINALIZE_BLOCK_METRIC}_count{{chain_id="{chain}",type="sync",method="finalize_block"}} {counts[-1]}')
+    rows.append(f'{metrics.FINALIZE_BLOCK_METRIC}_sum{{type="sync",method="finalize_block",chain_id="{chain}"}} {total}')
     return "\n".join(rows) + "\n"
 
 
@@ -82,6 +85,26 @@ class CommitMetricsTest(TestCase):
                 with self.assertRaises(ValueError):
                     metrics.stream_commit_metrics("http://localhost:9000/metrics", "bench", output, seconds)
 
+    def test_finalize_block_stream_requires_isolated_complete_observations(self):
+        def timed(count, total, tick):
+            value = sample(count, total, tick)
+            value["finalize_block_histogram"] = metrics.parse_finalize_block_histogram(
+                finalize_exposition((count, count, count, count), total=total), "bench")
+            return value
+
+        result = metrics.summarize_finalize_block_stream([
+            timed(10, "4.0", 1), timed(11, "4.61", 3), timed(12, "5.30", 5)], 2)
+        self.assertTrue(result["qualified"])
+        self.assertTrue(result["p95_within_700ms"])
+        self.assertLessEqual(Decimal(result["p95_upper_bound_seconds"]), Decimal("0.7"))
+        grouped = metrics.summarize_finalize_block_stream([
+            timed(10, "4.0", 1), timed(12, "5.0", 3)], 2)
+        self.assertFalse(grouped["qualified"])
+        self.assertIsNone(grouped["p95_upper_bound_seconds"])
+        incomplete = metrics.summarize_finalize_block_stream([
+            timed(10, "4.0", 1), timed(11, "4.5", 3)], 2)
+        self.assertFalse(incomplete["qualified"])
+
     def test_fenced_capture_requires_complete_stable_owned_boundary(self):
         node = "ab" * 20
         def status(height, network="bench", identity=node):
@@ -139,6 +162,8 @@ class CommitMetricsTest(TestCase):
         self.assertTrue(result["qualified"])
         self.assertTrue(result["within_700ms_budget"])
         self.assertGreaterEqual(Decimal(result["p95_upper_bound_seconds"]), Decimal("0.3"))
+        self.assertLess(Decimal(result["p50_upper_bound_seconds"]), Decimal("0.21"))
+        self.assertEqual(result["p100_upper_bound_seconds"], result["max_upper_bound_seconds"])
         grouped = summary([singles[0], singles[-1]], 2, boundaries_reconciled=True)
         self.assertEqual(grouped["intervals"][0]["count"], 2)
         self.assertGreaterEqual(Decimal(grouped["p95_upper_bound_seconds"]), Decimal("0.5"))
