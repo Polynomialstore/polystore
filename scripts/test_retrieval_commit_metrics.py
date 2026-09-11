@@ -16,6 +16,14 @@ def exposition(count="2", total="0.4", chain="bench", step="Commit"):
             f'{metrics.METRIC}_sum{{chain_id="{chain}",step="{step}"}} {total}\n')
 
 
+def finalize_exposition(counts=(1, 2, 3, 4), chain="bench",
+                        bounds=("0.1", "0.65", "2", "+Inf")):
+    rows = [f'{metrics.FINALIZE_BLOCK_METRIC}_bucket{{method="finalize_block",type="sync",chain_id="{chain}",le="{bound}"}} {count}'
+            for bound, count in zip(bounds, counts)]
+    rows.append(f'{metrics.FINALIZE_BLOCK_METRIC}_count{{chain_id="{chain}",type="sync",method="finalize_block"}} {counts[-1]}')
+    return "\n".join(rows) + "\n"
+
+
 def sample(count, total, tick, chain="bench"):
     return {"chain_id": chain, "count": count, "sum_seconds": total,
             "wall_time_ns": 1000 + tick, "monotonic_start_ns": tick,
@@ -28,6 +36,36 @@ def summary(samples, blocks, **kwargs):
 
 
 class CommitMetricsTest(TestCase):
+    def test_finalize_block_histogram_reports_only_bucket_upper_bounds(self):
+        before = metrics.parse_finalize_block_histogram(finalize_exposition((0, 0, 0, 0)), "bench")
+        after = metrics.parse_finalize_block_histogram(finalize_exposition((1, 20, 20, 20)), "bench")
+        result = metrics.summarize_finalize_block_histogram(before, after, 20)
+        self.assertEqual(result["quantiles"], {
+            "p50": {"bucket": "0.65", "upper_bound_seconds": "0.65", "known": True},
+            "p95": {"bucket": "0.65", "upper_bound_seconds": "0.65", "known": True},
+            "p99": {"bucket": "0.65", "upper_bound_seconds": "0.65", "known": True}})
+        self.assertTrue(result["p95_within_650ms"])
+        after = metrics.parse_finalize_block_histogram(finalize_exposition((0, 0, 0, 1)), "bench")
+        result = metrics.summarize_finalize_block_histogram(before, after, 1)
+        self.assertEqual(result["quantiles"]["p95"], {
+            "bucket": "+Inf", "upper_bound_seconds": None, "known": False})
+        self.assertFalse(result["p95_within_650ms"])
+
+    def test_finalize_block_histogram_rejects_ambiguous_or_unreconciled_data(self):
+        good = finalize_exposition()
+        for raw in (good + good, good.replace('chain_id="bench"', 'chain_id="other"'),
+                    good.replace('le="0.1"', 'le="bad"'),
+                    good.replace('le="0.65"', 'le="0.10"'),
+                    good.replace(' 4\n', ' 3\n', 1), "\n".join(good.splitlines()[:-1])):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                metrics.parse_finalize_block_histogram(raw, "bench")
+        before = metrics.parse_finalize_block_histogram(finalize_exposition((1, 2, 3, 4)), "bench")
+        for raw, blocks in ((finalize_exposition((2, 3, 4, 5)), 2),
+                            (finalize_exposition((1, 1, 3, 4)), 0)):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                metrics.summarize_finalize_block_histogram(
+                    before, metrics.parse_finalize_block_histogram(raw, "bench"), blocks)
+
     def test_stream_retains_raw_samples_and_refuses_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             output = str(Path(directory) / "metrics.jsonl")
@@ -171,15 +209,17 @@ class CommitMetricsTest(TestCase):
         class Opener:
             def open(self, url, timeout):
                 self.url, self.timeout = url, timeout
-                return Response(exposition().encode())
+                return Response((exposition() + finalize_exposition()).encode())
         opener = Opener()
         with patch.object(metrics.urllib.request, "build_opener", return_value=opener) as build, \
                 patch.object(metrics.time, "time_ns", return_value=123), \
                 patch.object(metrics.time, "clock_gettime_ns", side_effect=[10, 20]):
-            result = metrics.capture_commit_metrics("http://127.0.0.1:29001/metrics", "bench")
+            result = metrics.capture_commit_metrics(
+                "http://127.0.0.1:29001/metrics", "bench", include_finalize_block=True)
         self.assertEqual((result["wall_time_ns"], result["monotonic_start_ns"], result["monotonic_end_ns"]),
                          (123, 10, 20))
         self.assertEqual(opener.url, "http://127.0.0.1:29001/metrics")
+        self.assertEqual(result["finalize_block_histogram"]["count"], 4)
         handlers = build.call_args.args
         self.assertEqual(handlers[0].proxies, {})
         self.assertIsNone(handlers[1].redirect_request(None, None, 302, "", {}, "http://elsewhere"))

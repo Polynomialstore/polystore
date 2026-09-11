@@ -651,6 +651,17 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                         self.assertEqual(row["stdout"], raw)
                         self.assertEqual(row["sample"], sample)
 
+    def test_finalize_block_capture_is_an_explicit_fenced_option(self):
+        sample = dict(chain_id="polystore_260-1", count=12, sum_seconds="0.15",
+                      wall_time_ns=123, monotonic_start_ns=456, monotonic_end_ns=789)
+        life = SimpleNamespace(doc={}, chain=sample["chain_id"], env={}, deadline=10**30,
+            nodes=[dict(node_id="ab" * 20, metrics=26660, rpc=26657)])
+        result = SimpleNamespace(returncode=0, stdout=json.dumps(sample), stderr="")
+        with patch.object(artifact, "run_bounded_command", return_value=result) as command:
+            workload.capture_workload_metrics(
+                life, "candidate", fenced=True, finalize_block=True)
+        self.assertEqual(command.call_args.args[0][-1], "--finalize-block-histogram")
+
     def test_commit_capture_failure_retains_partial_evidence_and_fails_closed(self):
         good = SimpleNamespace(returncode=0, stdout=json.dumps(dict(chain_id="polystore_260-1")), stderr="")
         failures = [SimpleNamespace(returncode=1, stdout="", stderr="missing Commit metrics"),
@@ -1507,7 +1518,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 4
         fields[11], fields[12] = "101", "17"
         parsed = workload.parse_proc_stat("42 (validator worker) name) " + " ".join(fields), expected_pid=42)
-        self.assertEqual(parsed, dict(pid=42, user_ticks=101, system_ticks=17, starttime_ticks=999))
+        self.assertEqual(parsed, dict(pid=42, user_ticks=101, system_ticks=17,
+                                     starttime_ticks=999, rss_pages=0))
         with self.assertRaises(ValueError):
             workload.parse_proc_stat("42 (validator) " + " ".join(fields), expected_pid=43)
         before = dict(monotonic_ns=10, clock_ticks_per_second=100,
@@ -1655,14 +1667,21 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             blocks.append(dict(height=11 + index, time=timestamp(5 * (index + 1)),
                 transactions=[dict(txhash=txhash, gas_wanted=10, gas_used=9, bytes=100)],
                 gas_wanted=10, gas_used=9, tx_payload_bytes=100))
+        def resource_nodes(second, count):
+            return [dict(node_id=str(index), transactions=count, bytes=count * 100,
+                         pid=100 + index, starttime_ticks=99, user_ticks=second,
+                         system_ticks=0, rss_bytes=1_000_000 + index,
+                         process_monotonic_ns=second * 10**9) for index in range(4)]
         samples = [{"sample_started_monotonic_ns": second * 10**9,
                     "monotonic_ns": second * 10**9, "unix_ns": base + second * 10**9,
                     "observed_height": 10 + second // 5,
-                    "nodes": [{"transactions": 1, "bytes": 100}] * 4} for second in range(16)]
+                    "clock_ticks_per_second": 100,
+                    "nodes": resource_nodes(second, 1)} for second in range(16)]
         samples.append({"sample_started_monotonic_ns": 20 * 10**9,
                         "monotonic_ns": 20 * 10**9, "unix_ns": base + 20 * 10**9,
                         "observed_height": 14,
-                        "nodes": [{"transactions": 0, "bytes": 0}] * 4})
+                        "clock_ticks_per_second": 100,
+                        "nodes": resource_nodes(20, 0)})
         metrics = workload.native_v3_capacity_metrics(
             {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
             offered, committed, blocks,
@@ -1670,8 +1689,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(metrics["saturated_commit_interval"], {
             "predecessor_height": 10, "first_height": 11, "last_height": 13,
             "observation_start_height": 10, "observation_end_height": 13,
-            "elapsed_seconds": 15.0, "transactions": 3,
+            "elapsed_seconds": 15.0, "transactions": 3, "blocks": 3,
             "timing_basis": "monotonic all-validator-positive observation fence"})
+        self.assertEqual(metrics["commit_interval_seconds"]["p95"], 5.0)
+        self.assertEqual(metrics["peak_observed_mempool_transactions"], 1)
+        self.assertAlmostEqual(metrics["validator_resources_during_backlog"]["validators"][0]
+                               ["cpu_percent_of_one_core"], 1.0)
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
         self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
@@ -1705,6 +1728,38 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             offered, imbalanced, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
         self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
         self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
+
+    def test_128m_qualification_gates_mempool_resources_and_consensus(self):
+        metrics = dict(saturated_commit_interval={"blocks": 30}, positive_backlog_seconds=10,
+            commit_interval_seconds={"p95": 1.6}, peak_observed_mempool_transactions=4999,
+            validator_resources_during_backlog={"validators": [
+                {"cpu_percent_of_one_core": 59.9} for _ in range(4)]},
+            invalid_transactions=0, unknown_transactions=0, duplicate_transactions=0,
+            dropped_transactions=0, retried_transactions=0)
+        finalize = [{"summary": {"p95_within_650ms": True}} for _ in range(4)]
+        consensus = {"maximum_round": 0, "missed_signatures": 0}
+        result = workload.native_v3_128m_qualification(metrics, finalize, consensus,
+            4992, 4992, 5000)
+        self.assertTrue(result["qualified"])
+        metrics["peak_observed_mempool_transactions"] = 5000
+        result = workload.native_v3_128m_qualification(metrics, finalize, consensus,
+            4992, 4992, 5000)
+        self.assertFalse(result["qualified"])
+        self.assertIn("mempool", " ".join(result["reasons"]))
+
+    def test_consensus_commit_summary_requires_round_zero_and_all_signatures(self):
+        def signed(height, round=0, flags=(2, 2, 2, 2)):
+            return {"canonical": True, "signed_header": {
+                "header": {"height": str(height), "chain_id": "bench"},
+                "commit": {"height": str(height), "round": str(round),
+                           "signatures": [{"block_id_flag": flag} for flag in flags]}}}
+        rows = [workload.consensus_commit_observation(signed(10), 10, "bench"),
+                workload.consensus_commit_observation(signed(11, 1, (2, 2, 1, 2)), 11, "bench")]
+        summary = workload.summarize_consensus_commits(rows, 10, 11)
+        self.assertEqual((summary["maximum_round"], summary["blocks_above_round_zero"],
+                          summary["missed_signatures"]), (1, 1, 1))
+        with self.assertRaisesRegex(ValueError, "cover"):
+            workload.summarize_consensus_commits(rows[1:], 10, 11)
 
     def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
         profile = workload.native_v3_cross_audit_schedule()
