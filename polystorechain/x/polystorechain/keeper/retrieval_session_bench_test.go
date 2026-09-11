@@ -432,6 +432,34 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 	}
 }
 
+// BenchmarkVerifyChainedProofParallel measures the concurrency-safe, pure
+// verification ceiling beneath retrieval-v3 admission. It excludes keeper
+// reads/writes, transaction handling, and gas accounting.
+func BenchmarkVerifyChainedProofParallel(b *testing.B) {
+	env := setupBenchRetrievalEnv(b)
+	proof := env.benchBuildChainedProof(b, 0, 100)
+	rootPath := benchFlattenPath(proof.RootTableDuMerklePath)
+	blobPath := benchFlattenPath(proof.MerklePath)
+	b.ReportMetric(1, "sessions/op")
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+				env.deal.ManifestRoot, proof.MduIndex, proof.MduRootFr,
+				proof.RootTableDuCommitment, rootPath, proof.ManifestOpening)
+			if err != nil || !ok {
+				b.Fatalf("hop1 verify failed: ok=%v err=%v", ok, err)
+			}
+			ok, err = crypto_ffi.VerifyMduProof(
+				proof.MduRootFr, proof.BlobCommitment, blobPath, proof.BlobIndex,
+				env.leafCount, proof.ZValue, proof.YValue, proof.KzgOpeningProof)
+			if err != nil || !ok {
+				b.Fatalf("hop3 verify failed: ok=%v err=%v", ok, err)
+			}
+		}
+	})
+}
+
 func BenchmarkConfirmRetrievalSession(b *testing.B) {
 	env := setupBenchRetrievalEnv(b)
 
