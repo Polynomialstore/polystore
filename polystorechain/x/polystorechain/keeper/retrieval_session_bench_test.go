@@ -432,43 +432,47 @@ func BenchmarkSubmitRetrievalSessionProof(b *testing.B) {
 	}
 }
 
-// BenchmarkVerifyChainedProofParallel measures the concurrency-safe active V3
-// batch verifier beneath retrieval-v3 admission. It includes batch encoding,
-// transcript parsing, challenge-point validation, and the combined pairing,
-// but excludes keeper reads/writes, transaction handling, and gas accounting.
+// BenchmarkVerifyChainedProofParallel measures the two pure native checks that
+// verifyPolyFSChainedProof invokes for each MsgSubmitRetrievalSessionProofV3
+// sample. It excludes challenge derivation and admission, keeper reads/writes,
+// transaction handling, and gas accounting.
 func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	b.Setenv("POLYSTORE_BENCH_FIXTURE_NONCONSTANT", "1")
 	env := setupBenchRetrievalEnv(b)
-	ctx, msg, _ := env.challengedBenchSession(b, activateSessionFixture(b, env.f), 1, 1)
-	session, err := env.f.keeper.RetrievalSessions.Get(ctx, msg.SessionId)
-	require.NoError(b, err)
-	require.Equal(b, uint32(2), session.ChallengeVersion)
-	require.Len(b, msg.Proofs, 1)
-	challenge, err := types.RetrievalChallengeContext(session)
-	require.NoError(b, err)
-	contextHash, err := challenge.Hash()
-	require.NoError(b, err)
-	anchor, err := env.f.keeper.ChallengeAnchors.Get(ctx, challenge.Window.Anchor)
-	require.NoError(b, err)
-	proof := msg.Proofs[0]
+	proof := env.benchBuildChainedProof(b, 0, 100)
 	infinity := make([]byte, 48)
 	infinity[0] = 0xc0
 	require.NotEqual(b, infinity, proof.RootTableDuCommitment)
 	require.NotEqual(b, infinity, proof.ManifestOpening)
 	require.NotEqual(b, infinity, proof.BlobCommitment)
 	require.NotEqual(b, infinity, proof.KzgOpeningProof)
-	ok, err := crypto_ffi.VerifyPolyFSSessionProofBatch(
-		session.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
+	rootPath := benchFlattenPath(proof.RootTableDuMerklePath)
+	blobPath := benchFlattenPath(proof.MerklePath)
+	ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+		env.deal.ManifestRoot, proof.MduIndex, proof.MduRootFr,
+		proof.RootTableDuCommitment, rootPath, proof.ManifestOpening)
+	require.NoError(b, err)
+	require.True(b, ok)
+	ok, err = crypto_ffi.VerifyMduProof(
+		proof.MduRootFr, proof.BlobCommitment, blobPath, proof.BlobIndex,
+		env.leafCount, proof.ZValue, proof.YValue, proof.KzgOpeningProof)
 	require.NoError(b, err)
 	require.True(b, ok)
 	b.ResetTimer()
 	b.ReportMetric(1, "sessions/op")
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ok, err := crypto_ffi.VerifyPolyFSSessionProofBatch(
-				session.ManifestRoot, contextHash[:], anchor.Seed, env.leafCount, msg.Proofs)
+			ok, err := crypto_ffi.VerifyMdu0RootTableProof(
+				env.deal.ManifestRoot, proof.MduIndex, proof.MduRootFr,
+				proof.RootTableDuCommitment, rootPath, proof.ManifestOpening)
 			if err != nil || !ok {
-				b.Fatalf("active V3 batch verify failed: ok=%v err=%v", ok, err)
+				b.Fatalf("manifest verify failed: ok=%v err=%v", ok, err)
+			}
+			ok, err = crypto_ffi.VerifyMduProof(
+				proof.MduRootFr, proof.BlobCommitment, blobPath, proof.BlobIndex,
+				env.leafCount, proof.ZValue, proof.YValue, proof.KzgOpeningProof)
+			if err != nil || !ok {
+				b.Fatalf("blob verify failed: ok=%v err=%v", ok, err)
 			}
 		}
 	})
