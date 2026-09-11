@@ -1605,7 +1605,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.native_v3_backlog_duration_ns([
                 dict(sample(0, [1] * 4), sample_started_monotonic_ns=1)])
 
-    def test_capacity_metrics_use_predecessor_header_for_saturated_rate(self):
+    def test_capacity_metrics_use_monotonic_backlog_and_height_fence(self):
         base = 1_700_000_000 * 10**9
         def timestamp(seconds):
             return datetime.datetime.fromtimestamp((base + seconds * 10**9) / 10**9,
