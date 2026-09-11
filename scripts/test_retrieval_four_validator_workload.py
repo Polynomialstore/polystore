@@ -1594,6 +1594,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
         self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
+        with self.assertRaisesRegex(ValueError, "consensus interval"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "range_bytes": 1024, "sessions": 4}, offered,
+                committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:11])
 
     def test_cross_audit_profile_and_provider_scheduler_are_fixed_and_serial_per_signer(self):
         profile = workload.native_v3_cross_audit_schedule()

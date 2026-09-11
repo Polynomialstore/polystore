@@ -1985,6 +1985,8 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     saturated_transactions = sum(row["transaction_count"] for row in saturated)
     if commit_seconds <= 0 or saturated_transactions <= 0:
         raise ValueError("saturated committed interval is empty")
+    if commit_seconds < V3_CHAIN_BACKLOG_SECONDS:
+        raise ValueError("backlog-saturated consensus interval is shorter than ten seconds")
     committed_rate = saturated_transactions / commit_seconds
     if accepted_rate < 1.5 * committed_rate:
         raise ValueError("native v3 accepted offer rate did not exceed committed rate by 1.5x")
