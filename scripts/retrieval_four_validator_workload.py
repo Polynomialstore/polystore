@@ -72,7 +72,17 @@ V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
 V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
-V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND = 404.024732778
+V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND = 407.57170408990055
+V3_SHARED_HOST_VERIFIER_CEILING_PROVENANCE = {
+    "artifact_path": "bench/retrieval_session_capacity/parallel-ceiling-328/results.json",
+    "artifact_commit": "db9fe2b691935a198e35d3676f2ad71c9aff5f42",
+    "benchmark_source_commit": "ad80bfadbe378b09d2ed237fec0e33a7aa0d8d7b",
+    "raw_benchmark_sha256": "56ec69a33cc3a95b8a4727ac5fa336034cda65a178d944290e50a0c9f1c1d1b5",
+    "source_statistic": "comparison.shared_host_verifier_only_sessions_per_second",
+    "source_statistic_semantics": (
+        "complete sampled chained proofs per second on one shared eight-core host, "
+        "normalized across four validator processes"),
+}
 V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
 V3_CHAIN_BACKLOG_SECONDS = 10
@@ -2374,6 +2384,8 @@ def native_v3_transaction_members(row):
 
 def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, offer_end_ns,
                                drain_end_ns, mempool_samples):
+    sample_count = artifact.integer(profile["sample_count"], "profile sample count", 1,
+                                    V3_MAX_SAMPLES)
     offered_by_hash = {row["txhash"]: row for row in offered}
     elapsed = (drain_end_ns - start_ns) / 1e9
     offer_elapsed = (offer_end_ns - start_ns) / 1e9
@@ -2433,8 +2445,13 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         latencies.append((observed["monotonic_ns"] - offered_ns) / 1e9)
     saturated_hashes = {txhash for row in saturated for txhash in row["txhashes"]}
     saturated_committed = [row for row in committed if row["txhash"] in saturated_hashes]
-    openings = sum(len(member["ordinals"]) for row in saturated_committed
-                   for member in native_v3_transaction_members(row))
+    sampled_chained_proofs = sum(len(member["ordinals"]) for row in saturated_committed
+                                 for member in native_v3_transaction_members(row))
+    inventory_sampled_chained_proofs = sum(
+        len(member["ordinals"]) for row in committed
+        for member in native_v3_transaction_members(row))
+    if inventory_sampled_chained_proofs != profile["sessions"] * sample_count:
+        raise ValueError("frozen proof inventory differs from the profile sample count")
     expected_slots = {}
     for row in committed:
         for member in native_v3_transaction_members(row):
@@ -2457,6 +2474,10 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         raise ValueError("saturated consensus interval contains no complete proof set")
     proof_sets_per_second = complete_proof_sets / commit_seconds
     proof_sets_per_day = proof_sets_per_second * 86400
+    sampled_chained_proofs_per_second = sampled_chained_proofs / commit_seconds
+    sampled_chained_proofs_per_day = sampled_chained_proofs_per_second * 86400
+    verifier_limited_sessions_per_second = (
+        V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND / sample_count)
     resource_metrics = validator_backlog_resources(
         mempool_samples, backlog, mempool_samples[0]["clock_ticks_per_second"])
     max_mempool_transactions = max(row["transactions"] for sample in mempool_samples
@@ -2470,11 +2491,23 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         committed_transactions_per_day=committed_rate * 86400,
         committed_logical_sessions_per_second=proof_sets_per_second,
         committed_logical_sessions_per_day=proof_sets_per_day,
-        shared_host_verifier_ceiling_sessions_per_second=V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND,
-        percent_of_shared_host_verifier_ceiling=(
-            proof_sets_per_second / V3_SHARED_HOST_VERIFIER_CEILING_SESSIONS_PER_SECOND * 100),
-        committed_openings_per_second=openings / commit_seconds,
-        committed_openings_per_day=openings / commit_seconds * 86400,
+        committed_sampled_chained_proofs_per_second=sampled_chained_proofs_per_second,
+        committed_sampled_chained_proofs_per_day=sampled_chained_proofs_per_day,
+        committed_kzg_opening_verifications_per_second=2 * sampled_chained_proofs_per_second,
+        committed_kzg_opening_verifications_per_day=2 * sampled_chained_proofs_per_day,
+        shared_host_verifier_ceiling_sampled_chained_proofs_per_second=(
+            V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND),
+        shared_host_verifier_ceiling_kzg_opening_verifications_per_second=(
+            2 * V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND),
+        shared_host_verifier_limited_logical_sessions_per_second=(
+            verifier_limited_sessions_per_second),
+        shared_host_verifier_limited_logical_sessions_per_day=(
+            verifier_limited_sessions_per_second * 86400),
+        percent_of_shared_host_sampled_chained_proof_ceiling=(
+            sampled_chained_proofs_per_second /
+            V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND * 100),
+        shared_host_verifier_ceiling_provenance=dict(
+            V3_SHARED_HOST_VERIFIER_CEILING_PROVENANCE),
         complete_proof_sets_per_second=proof_sets_per_second,
         complete_proof_sets_per_day=proof_sets_per_day,
         complete_proof_sets_in_saturated_interval=complete_proof_sets,
@@ -2837,7 +2870,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         offered_proof_transactions=expected_transactions,
         committed_valid_proof_transactions=expected_transactions,
         committed_logical_proof_messages=expected_messages,
-        sampled_openings=sum(row["sample_count"] * row["sessions"] for row in profiles),
+        sampled_chained_proofs=sum(row["sample_count"] * row["sessions"] for row in profiles),
+        kzg_opening_verifications=(
+            2 * sum(row["sample_count"] * row["sessions"] for row in profiles)),
         delivery_verified=False, owner_acknowledged=False, expiration_verified=False,
         refunds_verified=False)
     lifecycle.save()

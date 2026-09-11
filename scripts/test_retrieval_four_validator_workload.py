@@ -1703,7 +1703,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                         "clock_ticks_per_second": 100,
                         "nodes": resource_nodes(20, 0)})
         metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
             offered, committed, blocks,
             0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(metrics["saturated_commit_interval"], {
@@ -1716,7 +1717,18 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["validator_resources_during_backlog"]["validators"][0]
                                ["cpu_percent_of_one_core"], 1.0)
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
-        self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
+        self.assertAlmostEqual(metrics["committed_sampled_chained_proofs_per_second"], .4)
+        self.assertAlmostEqual(metrics["committed_kzg_opening_verifications_per_second"], .8)
+        self.assertAlmostEqual(
+            metrics["shared_host_verifier_limited_logical_sessions_per_second"],
+            workload.V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND / 2)
+        self.assertAlmostEqual(
+            metrics["percent_of_shared_host_sampled_chained_proof_ceiling"],
+            .4 / workload.V3_SHARED_HOST_VERIFIER_CEILING_SAMPLED_CHAINED_PROOFS_PER_SECOND * 100)
+        self.assertEqual(metrics["shared_host_verifier_ceiling_provenance"]["artifact_path"],
+            "bench/retrieval_session_capacity/parallel-ceiling-328/results.json")
+        self.assertEqual(metrics["shared_host_verifier_ceiling_provenance"]["artifact_commit"],
+            "db9fe2b691935a198e35d3676f2ad71c9aff5f42")
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
@@ -1728,23 +1740,34 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
         skewed = [dict(row, time=timestamp(-100 + index)) for index, row in enumerate(blocks)]
         skewed_metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
             offered, committed, skewed, 0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(skewed_metrics["committed_transactions_per_second"],
                          metrics["committed_transactions_per_second"])
         with self.assertRaisesRegex(ValueError, "did not observe a committed transaction height"):
             workload.native_v3_capacity_metrics(
-                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4},
                 offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples[:-1])
         with self.assertRaisesRegex(ValueError, "positive mempool backlog"):
             workload.native_v3_capacity_metrics(
-                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4}, offered,
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4}, offered,
                 committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:10])
+        wrong_sample_count = [dict(row) for row in committed]
+        wrong_sample_count[0] = dict(wrong_sample_count[0], ordinals=[0])
+        with self.assertRaisesRegex(ValueError, "differs from the profile sample count"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4}, offered,
+                wrong_sample_count, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
 
         imbalanced = [dict(row, session_index=index // 2, slot=index % 2)
                       for index, row in enumerate(committed)]
         imbalanced_metrics = workload.native_v3_capacity_metrics(
-            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8, "sessions": 2},
+            {"proof_transactions": 2, "obligation_slots": [0, 1], "range_bytes": 8,
+             "sample_count": 4, "sessions": 2},
             offered, imbalanced, blocks, 0, 2 * 10**9, 25 * 10**9, samples)
         self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
         self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
