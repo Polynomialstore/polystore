@@ -626,10 +626,11 @@ func (k msgServer) SubmitRetrievalSessionProofV3(goCtx context.Context, msg *typ
 }
 
 type preparedRetrievalSessionProofV3 struct {
-	session         types.RetrievalSessionV3
-	obligationIndex uint32
-	challenges      []retrievalchallenge.ChallengeV3
-	proofs          []types.RetrievalSampleProofV3
+	session                 types.RetrievalSessionV3
+	obligationIndex         uint32
+	challenges              []retrievalchallenge.ChallengeV3
+	proofs                  []types.RetrievalSampleProofV3
+	samplePartitionWasEmpty bool
 }
 
 type retrievalProofVerificationV3 struct {
@@ -669,6 +670,10 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 	if err := ValidateProofCount(uint64(len(proofs))); err != nil {
 		return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 	}
+	var samplesBefore uint64
+	for i := range s.Obligations {
+		samplesBefore += s.Obligations[i].SampleCount
+	}
 	challenges, err := k.v3AnchorAndChallenges(ctx, &s)
 	if err != nil {
 		return preparedRetrievalSessionProofV3{}, err
@@ -692,7 +697,10 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 			return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
 		}
 	}
-	return preparedRetrievalSessionProofV3{session: s, obligationIndex: oi, challenges: challenges, proofs: proofs}, nil
+	return preparedRetrievalSessionProofV3{
+		session: s, obligationIndex: oi, challenges: challenges, proofs: proofs,
+		samplePartitionWasEmpty: samplesBefore == 0,
+	}, nil
 }
 
 func retrievalProofWorkerCountV3(total int) int {
@@ -742,10 +750,6 @@ func verifyRetrievalProofsV3(jobs []retrievalProofVerificationV3, workers int) [
 }
 
 func (k msgServer) applyPreparedRetrievalSessionProofV3(ctx sdk.Context, prepared preparedRetrievalSessionProofV3, session *types.RetrievalSessionV3) (*types.MsgSubmitRetrievalSessionProofV3Response, error) {
-	var samplesBefore uint64
-	for i := range session.Obligations {
-		samplesBefore += session.Obligations[i].SampleCount
-	}
 	var added uint32
 	for _, sp := range prepared.proofs {
 		if !v3BitSet(session.AcceptedSampleBitmap, sp.Ordinal) {
@@ -757,7 +761,7 @@ func (k msgServer) applyPreparedRetrievalSessionProofV3(ctx sdk.Context, prepare
 	if err != nil {
 		return nil, err
 	}
-	if samplesBefore == 0 || added != 0 || settlementChanged {
+	if prepared.samplePartitionWasEmpty || added != 0 || settlementChanged {
 		session.UpdatedHeight = ctx.BlockHeight()
 		if err := k.RetrievalSessionsV3.Set(ctx, session.SessionId, *session); err != nil {
 			return nil, err
@@ -829,6 +833,8 @@ func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg
 		session, ok := updated[key]
 		if !ok {
 			session = prepared[i].session
+		} else {
+			prepared[i].samplePartitionWasEmpty = false
 		}
 		result, err := k.applyPreparedRetrievalSessionProofV3(ctx, prepared[i], &session)
 		if err != nil {

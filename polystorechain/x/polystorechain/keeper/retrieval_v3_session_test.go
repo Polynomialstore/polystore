@@ -356,6 +356,53 @@ func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testin
 	require.GreaterOrEqual(t, batchCtx.GasMeter().GasConsumed()-replayGasBefore, uint64(len(batchSamples))*keeper.ProofCryptoGas)
 }
 
+func TestRetrievalSessionProofV3PersistsMaterializedSamplePartitionOnReplay(t *testing.T) {
+	for _, batch := range []bool{false, true} {
+		name := "single"
+		if batch {
+			name = "batch"
+		}
+		t.Run(name, func(t *testing.T) {
+			f, response, sessions, samples := openCryptoSessionV3Batch(t, 1)
+			session := sessions[0]
+			for i := range session.Obligations {
+				session.Obligations[i].SampleCount = 0
+			}
+			ordinal := samples[0].Ordinal
+			session.AcceptedSampleBitmap[ordinal/8] |= byte(1 << (ordinal % 8))
+			require.NoError(t, f.g.fixture.keeper.RetrievalSessionsV3.Set(response, session.SessionId, session))
+
+			var newlyAccepted uint32
+			var settled bool
+			creator := session.Obligations[0].AssignedProvider
+			if batch {
+				result, err := f.g.server.SubmitRetrievalSessionProofBatchV3(response,
+					batchProofMessageV3(creator, sessions, samples))
+				require.NoError(t, err)
+				require.Len(t, result.Results, 1)
+				newlyAccepted, settled = result.Results[0].NewlyAccepted, result.Results[0].Settled
+			} else {
+				result, err := f.g.server.SubmitRetrievalSessionProofV3(response, &types.MsgSubmitRetrievalSessionProofV3{
+					Creator: creator, SessionId: session.SessionId, Slot: 0,
+					Proofs: []types.RetrievalSampleProofV3{samples[0]},
+				})
+				require.NoError(t, err)
+				newlyAccepted, settled = result.NewlyAccepted, result.Settled
+			}
+			require.Zero(t, newlyAccepted)
+			require.False(t, settled)
+
+			stored, err := f.g.fixture.keeper.RetrievalSessionsV3.Get(response, session.SessionId)
+			require.NoError(t, err)
+			var materialized uint64
+			for i := range stored.Obligations {
+				materialized += stored.Obligations[i].SampleCount
+			}
+			require.Equal(t, stored.SampleCount, materialized)
+		})
+	}
+}
+
 func TestRetrievalSessionProofBatchV3AdmissionAndInvalidProofAreAtomic(t *testing.T) {
 	f, response, sessions, samples := openCryptoSessionV3Batch(t, 3)
 	creator := sessions[0].Obligations[0].AssignedProvider
