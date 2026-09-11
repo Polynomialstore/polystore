@@ -1831,23 +1831,32 @@ def native_v3_backlog_duration_ns(samples, *, max_gap_ns=2_000_000_000):
 def native_v3_backlog_interval(samples, *, max_gap_ns=2_000_000_000):
     best = dict(duration_ns=0)
     start = previous = None
+    previous_height = None
     for sample in samples:
         at = producer.uint(sample.get("monotonic_ns", ""))
+        sample_started = producer.uint(sample.get("sample_started_monotonic_ns", ""))
         unix = producer.uint(sample.get("unix_ns", ""))
+        height = producer.uint(sample.get("observed_height", ""))
+        if sample_started > at or (previous is not None and at <= previous):
+            raise ValueError("mempool samples have invalid monotonic bounds")
+        if previous_height is not None and height < previous_height:
+            raise ValueError("mempool sample height regressed")
         nodes = sample.get("nodes", [])
         positive = len(nodes) == 4 and min(producer.uint(row.get("transactions", "")) for row in nodes) > 0
         if positive and (previous is None or at - previous <= max_gap_ns):
-            start = (at, unix) if start is None else start
+            start = (sample_started, unix, height) if start is None else start
         elif positive:
-            start = (at, unix)
+            start = (sample_started, unix, height)
         else:
             start = None
         if start is not None:
             duration = at - start[0]
             if duration > best["duration_ns"]:
                 best = dict(duration_ns=duration, monotonic_start_ns=start[0], monotonic_end_ns=at,
-                            unix_start_ns=start[1], unix_end_ns=unix)
+                            unix_start_ns=start[1], unix_end_ns=unix,
+                            observed_start_height=start[2], observed_end_height=height)
         previous = at
+        previous_height = height
     return best
 
 
@@ -1884,11 +1893,21 @@ def _monitor_native_v3_mempools(lifecycle, start_event, stop_event):
     samples = []
     start_event.wait()
     while not stop_event.is_set():
+        sample_started = artifact.monotonic_ns()
         nodes = []
         for node in lifecycle.nodes:
             nodes.append(dict(node_id=node["node_id"],
                 **validate_mempool_sample(lifecycle.query(node, "/num_unconfirmed_txs"))))
-        samples.append(dict(monotonic_ns=artifact.monotonic_ns(), unix_ns=time.time_ns(), nodes=nodes))
+        status = lifecycle.query(lifecycle.nodes[0], "/status")
+        if (status.get("node_info", {}).get("id") != lifecycle.nodes[0]["node_id"] or
+                status.get("node_info", {}).get("network") != lifecycle.chain or
+                status.get("sync_info", {}).get("catching_up") is not False):
+            raise ValueError("capacity monitor RPC belongs to a different or catching-up chain")
+        samples.append(dict(sample_started_monotonic_ns=sample_started,
+                            monotonic_ns=artifact.monotonic_ns(), unix_ns=time.time_ns(),
+                            observed_height=producer.uint(
+                                status.get("sync_info", {}).get("latest_block_height", 0)),
+                            nodes=nodes))
         stop_event.wait(.1)
     return samples
 
@@ -1996,10 +2015,6 @@ def _unix_ns(value):
 def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, offer_end_ns,
                                drain_end_ns, mempool_samples):
     offered_by_hash = {row["txhash"]: row for row in offered}
-    latencies = [(_unix_ns(row["committed_time"]) - offered_by_hash[row["txhash"]]["offered_unix_ns"]) / 1e9
-                 for row in committed]
-    if any(value < 0 for value in latencies):
-        raise ValueError("committed block time precedes CheckTx offer time")
     elapsed = (drain_end_ns - start_ns) / 1e9
     offer_elapsed = (offer_end_ns - start_ns) / 1e9
     accepted_rate = len(offered) / offer_elapsed
@@ -2019,14 +2034,12 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
                 block_gas_wanted=block["gas_wanted"], block_gas_used=block["gas_used"],
                 block_transaction_bytes=block["tx_payload_bytes"], time=block["time"]))
     by_height = {row["height"]: row for row in blocks}
-    saturated = [row for row in measured_blocks
-                 if row["height"] - 1 in by_height and
-                 backlog["unix_start_ns"] <= _unix_ns(by_height[row["height"] - 1]["time"]) and
-                 _unix_ns(row["time"]) <= backlog["unix_end_ns"]]
+    start_height, end_height = backlog["observed_start_height"], backlog["observed_end_height"]
+    saturated = [row for row in measured_blocks if start_height < row["height"] <= end_height]
     if not saturated:
         raise ValueError("positive mempool evidence contains no committed workload block")
-    predecessor = by_height[saturated[0]["height"] - 1]
-    commit_seconds = (_unix_ns(saturated[-1]["time"]) - _unix_ns(predecessor["time"])) / 1e9
+    predecessor = by_height.get(saturated[0]["height"] - 1)
+    commit_seconds = backlog["duration_ns"] / 1e9
     saturated_transactions = sum(row["transaction_count"] for row in saturated)
     if commit_seconds <= 0 or saturated_transactions <= 0:
         raise ValueError("saturated committed interval is empty")
@@ -2035,6 +2048,15 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     committed_rate = saturated_transactions / commit_seconds
     if accepted_rate < 1.5 * committed_rate:
         raise ValueError("native v3 accepted offer rate did not exceed committed rate by 1.5x")
+    latencies = []
+    for row in committed:
+        offered_ns = offered_by_hash[row["txhash"]]["offered_monotonic_ns"]
+        observed = next((sample for sample in mempool_samples
+                         if sample["monotonic_ns"] >= offered_ns and
+                         producer.uint(sample.get("observed_height", 0)) >= row["height"]), None)
+        if observed is None:
+            raise ValueError("capacity monitor did not observe a committed transaction height")
+        latencies.append((observed["monotonic_ns"] - offered_ns) / 1e9)
     saturated_hashes = {txhash for row in saturated for txhash in row["txhashes"]}
     saturated_committed = [row for row in committed if row["txhash"] in saturated_hashes]
     openings = sum(len(row["ordinals"]) for row in saturated_committed)
@@ -2073,13 +2095,17 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         partial_proof_sets_in_saturated_interval=len(session_slots) - complete_proof_sets,
         logical_requested_bytes_per_day=proof_sets_per_day * profile["range_bytes"],
         logical_requested_gib_per_day=proof_sets_per_day * profile["range_bytes"] / 1024**3,
-        saturated_commit_interval=dict(predecessor_height=predecessor["height"],
+        saturated_commit_interval=dict(predecessor_height=predecessor["height"] if predecessor else None,
             first_height=saturated[0]["height"], last_height=saturated[-1]["height"],
-            elapsed_seconds=commit_seconds, transactions=saturated_transactions),
+            observation_start_height=start_height, observation_end_height=end_height,
+            elapsed_seconds=commit_seconds, transactions=saturated_transactions,
+            timing_basis="monotonic all-validator-positive observation fence"),
         positive_backlog_seconds=backlog["duration_ns"] / 1e9,
         positive_backlog_interval=backlog, mempool_samples=mempool_samples,
-        inclusion_latency_seconds=dict(min=min(latencies), p50=_nearest_rank(latencies, 50),
-                                       p95=_nearest_rank(latencies, 95), max=max(latencies)),
+        inclusion_latency_upper_bound_seconds=dict(
+            basis="offer to first local RPC observation at or above the committed height; conservative upper bound",
+            min=min(latencies), p50=_nearest_rank(latencies, 50),
+            p95=_nearest_rank(latencies, 95), max=max(latencies)),
         blocks=measured_blocks,
         average_proof_gas_wanted_per_saturated_block=sum(row["proof_gas_wanted"] for row in saturated) / len(saturated),
         average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))

@@ -1582,7 +1582,9 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
     def test_backlog_requires_all_four_validators_and_bounded_sample_gaps(self):
         def sample(second, counts):
-            return {"monotonic_ns": second * 10**9, "unix_ns": (100 + second) * 10**9,
+            return {"sample_started_monotonic_ns": second * 10**9,
+                    "monotonic_ns": second * 10**9, "unix_ns": (100 + second) * 10**9,
+                    "observed_height": 10 + second,
                     "nodes": [{"transactions": count, "bytes": count * 10} for count in counts]}
         samples = [sample(second, [1, 1, 1, 1]) for second in range(11)]
         self.assertEqual(workload.native_v3_backlog_duration_ns(samples), 10 * 10**9)
@@ -1590,6 +1592,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(workload.native_v3_backlog_duration_ns(samples), 4 * 10**9)
         sparse = [sample(0, [1] * 4), sample(3, [1] * 4)]
         self.assertEqual(workload.native_v3_backlog_duration_ns(sparse), 0)
+        with self.assertRaisesRegex(ValueError, "height regressed"):
+            workload.native_v3_backlog_duration_ns([
+                sample(0, [1] * 4), dict(sample(1, [1] * 4), observed_height=9)])
+        with self.assertRaisesRegex(ValueError, "monotonic bounds"):
+            workload.native_v3_backlog_duration_ns([
+                dict(sample(0, [1] * 4), sample_started_monotonic_ns=1)])
 
     def test_capacity_metrics_use_predecessor_header_for_saturated_rate(self):
         base = 1_700_000_000 * 10**9
@@ -1597,8 +1605,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             return datetime.datetime.fromtimestamp((base + seconds * 10**9) / 10**9,
                 datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         hashes = [f"{index + 1:064X}" for index in range(4)]
-        offered = [dict(txhash=txhash, offered_unix_ns=base + 10**9) for txhash in hashes]
-        committed = [dict(txhash=txhash, committed_time=timestamp(5 * (index + 1)),
+        offered = [dict(txhash=txhash, offered_monotonic_ns=10**9,
+                        offered_unix_ns=base + 30 * 10**9) for txhash in hashes]
+        committed = [dict(txhash=txhash, height=11 + index,
+                          committed_time=timestamp(5 * (index + 1)),
                           ordinals=[0, 1], session_index=index, slot=index)
                      for index, txhash in enumerate(hashes)]
         blocks = [dict(height=10, time=timestamp(0), transactions=[], gas_wanted=0, gas_used=0,
@@ -1607,27 +1617,48 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             blocks.append(dict(height=11 + index, time=timestamp(5 * (index + 1)),
                 transactions=[dict(txhash=txhash, gas_wanted=10, gas_used=9, bytes=100)],
                 gas_wanted=10, gas_used=9, tx_payload_bytes=100))
-        samples = [{"monotonic_ns": second * 10**9, "unix_ns": base + second * 10**9,
+        samples = [{"sample_started_monotonic_ns": second * 10**9,
+                    "monotonic_ns": second * 10**9, "unix_ns": base + second * 10**9,
+                    "observed_height": 10 + second // 5,
                     "nodes": [{"transactions": 1, "bytes": 100}] * 4} for second in range(16)]
+        samples.append({"sample_started_monotonic_ns": 20 * 10**9,
+                        "monotonic_ns": 20 * 10**9, "unix_ns": base + 20 * 10**9,
+                        "observed_height": 14,
+                        "nodes": [{"transactions": 0, "bytes": 0}] * 4})
         metrics = workload.native_v3_capacity_metrics(
             {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
             offered, committed, blocks,
             0, 2 * 10**9, 25 * 10**9, samples)
         self.assertEqual(metrics["saturated_commit_interval"], {
             "predecessor_height": 10, "first_height": 11, "last_height": 13,
-            "elapsed_seconds": 15.0, "transactions": 3})
+            "observation_start_height": 10, "observation_end_height": 13,
+            "elapsed_seconds": 15.0, "transactions": 3,
+            "timing_basis": "monotonic all-validator-positive observation fence"})
         self.assertAlmostEqual(metrics["committed_transactions_per_second"], .2)
         self.assertAlmostEqual(metrics["committed_openings_per_second"], .4)
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
+        self.assertEqual(metrics["inclusion_latency_upper_bound_seconds"], {
+            "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+            "min": 4.0, "p50": 9.0, "p95": 19.0, "max": 19.0})
         self.assertEqual([metrics[name] for name in ("invalid_transactions", "unknown_transactions",
             "duplicate_transactions", "dropped_transactions", "retried_transactions")], [0] * 5)
         self.assertAlmostEqual(metrics["logical_requested_bytes_per_day"], .2 * 86400 * 1024)
-        with self.assertRaisesRegex(ValueError, "consensus interval"):
+        skewed = [dict(row, time=timestamp(-100 + index)) for index, row in enumerate(blocks)]
+        skewed_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+            offered, committed, skewed, 0, 2 * 10**9, 25 * 10**9, samples)
+        self.assertEqual(skewed_metrics["committed_transactions_per_second"],
+                         metrics["committed_transactions_per_second"])
+        with self.assertRaisesRegex(ValueError, "did not observe a committed transaction height"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4},
+                offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples[:-1])
+        with self.assertRaisesRegex(ValueError, "positive mempool backlog"):
             workload.native_v3_capacity_metrics(
                 {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024, "sessions": 4}, offered,
-                committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:11])
+                committed, blocks[:2], 0, 2 * 10**9, 25 * 10**9, samples[:10])
 
         imbalanced = [dict(row, session_index=index // 2, slot=index % 2)
                       for index, row in enumerate(committed)]
