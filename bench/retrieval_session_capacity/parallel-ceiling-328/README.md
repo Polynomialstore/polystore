@@ -1,16 +1,16 @@
 # Retrieval V3 parallel-verifier ceiling (#328)
 
-This short diagnostic measures one sampled retrieval V3 chained proof for one session per benchmark operation. Each chained proof performs two KZG opening verifications: one for the manifest and one for the blob. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, the verifier scales from **223.73 chained proofs/s on one core** to **1,630.29 chained proofs/s on eight physical cores**. The eight-core rate extrapolates to **140.86 million chained proofs/day**, equivalent to **3,260.57 KZG opening verifications/s** or **281.71 million/day**, if verification were the only work.
+This short diagnostic measures one sampled retrieval V3 chained proof for one session per benchmark operation. It invokes the exact active `VerifyPolyFSSessionProofBatch` path with a valid challenge-version-2 context and seed, including Go batch encoding, native parsing, transcript and challenge-point validation, and one combined pairing that checks the manifest and blob KZG opening equations. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, the verifier scales from **370.80 chained proofs/s on one core** to **2,730.65 chained proofs/s on eight physical cores**. The eight-core rate extrapolates to **235.93 million chained proofs/day**, checking **5,461.30 KZG opening equations/s** or **471.86 million/day**, if verification were the only work.
 
 | Workers | Median ms/chained proof | Chained proofs/s | Derived chained proofs/day |
 |---:|---:|---:|---:|
-| 1 | 4.470 | 223.73 | 19.33M |
-| 2 | 2.237 | 447.07 | 38.63M |
-| 4 | 1.133 | 882.62 | 76.26M |
-| 8 | 0.613 | 1,630.29 | 140.86M |
-| 16 | 0.568 | 1,760.83 | 152.14M |
+| 1 | 2.697 | 370.80 | 32.04M |
+| 2 | 1.351 | 740.11 | 63.95M |
+| 4 | 0.682 | 1,466.38 | 126.70M |
+| 8 | 0.366 | 2,730.65 | 235.93M |
+| 16 | 0.329 | 3,042.85 | 262.90M |
 
-The retained [gas sweep](../gas-sweep-324/) reached **155.15 committed proof transactions/s** and **13.41 million/day** at 448M gas. Each transaction carries one sampled chained proof for one retrieval session. That is 9.5% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **407.57 chained-proof sessions/s** (1,630.29 / 4), equivalent to **815.14 KZG opening verifications/s**; the measured chain reaches **38.1%** of that shared-host chained-proof ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
+The retained [gas sweep](../gas-sweep-324/) reached **155.15 committed proof transactions/s** and **13.41 million/day** at 448M gas. Each transaction carries one sampled chained proof for one retrieval session. That is 5.7% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **682.66 chained-proof sessions/s** (2,730.65 / 4), checking **1,365.33 KZG opening equations/s**; the measured chain reaches **22.7%** of that shared-host chained-proof ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
 
 ## BlockSTM stop result
 
