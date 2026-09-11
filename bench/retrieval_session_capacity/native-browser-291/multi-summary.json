@@ -1,0 +1,486 @@
+{
+  "schema": "polystore-native-v3-multi-public-summary-v1",
+  "evidence": {
+    "harness_head": "b9b68a3e86464f86e829c3fe2059ff963d8d1ae3",
+    "runtime_source_head": "071b2a9fa7f482dcd188c44c85c0d678ac5f3d96",
+    "runtime_component_trees": {
+      "polystore_core": "52e6c75c3c67a2811c3f7d85df0f77cd61ece7fc",
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystorechain": "9c7741a5ae7beebe05fefb58d6ebabce46ba1b99",
+      "polystore_gateway": "00afcf23970b77ce8f85391148a2f35ecf1bfe2f"
+    },
+    "raw_evidence_file_count": 10,
+    "raw_evidence_manifest_sha256": "9f109033b810001a8534b1ac538dd6a6a3f3eed8af0a96f2a9429742838bfa45",
+    "run_return_code": 0,
+    "total_elapsed_seconds": 378.027,
+    "measurement_class": "retained premerge production-browser fault and reload correctness qualification with phase and memory observations; no aggregate latency or clean throughput baseline"
+  },
+  "geometry": {
+    "validator_count": 4,
+    "provider_slot_count": 12,
+    "redundancy": {
+      "k": 8,
+      "m": 4
+    },
+    "file_bytes": 16777217,
+    "requested_range_bytes": 16777217,
+    "metadata_mdu_count": 2,
+    "user_mdu_count": 3,
+    "total_mdu_count": 5,
+    "first_blob_index": 0,
+    "last_blob_index": 132,
+    "sample_population_u": 133,
+    "sample_count_q": 132,
+    "unsampled_count": 1,
+    "obligation_count": 8,
+    "transport_chunk_count": 21
+  },
+  "retrieval_and_recovery": {
+    "success": true,
+    "final_stage": "settled-cache",
+    "downloaded_bytes": 16777217,
+    "output_matches_expected_sha256": true,
+    "open_session_count": 1,
+    "raw_transaction_attempt_count": 9,
+    "unique_raw_transaction_count": 9,
+    "unknown_open_stage_persisted": true,
+    "unknown_open_reconciled_without_second_open": true,
+    "final_session": {
+      "accepted_sample_count": 132,
+      "acked_slots_mask": 255,
+      "settled_slots_mask": 255,
+      "refunded_slots_mask": 0,
+      "locked_fee_stake": 0,
+      "expired": false
+    },
+    "mdu_network_requests": {
+      "gatewayMetadata": 7,
+      "gatewayData": 27,
+      "directMetadata": 0,
+      "directData": 2
+    },
+    "data_request_count": 29,
+    "target_chunk_request_count": 6,
+    "final_phase_guards": {
+      "opened_sessions": 1,
+      "acknowledged_obligations": 8,
+      "target_verified_chunks": 1
+    }
+  },
+  "faults": {
+    "unsampled_corruption_target": {
+      "blob_index": 5,
+      "confirmed_unsampled": true,
+      "population_coordinate_t": 40
+    },
+    "snapshots_after_rejection": {
+      "corrupt": {
+        "delivery_count": 1,
+        "failure_observed": true,
+        "cursor_count": 0,
+        "acked_slots_mask": 0,
+        "settled_slots_mask": 0,
+        "locked_fee_stake": 133
+      },
+      "multipart-order": {
+        "delivery_count": 2,
+        "failure_observed": true,
+        "cursor_count": 0,
+        "acked_slots_mask": 0,
+        "settled_slots_mask": 0,
+        "locked_fee_stake": 133
+      },
+      "truncate": {
+        "delivery_count": 2,
+        "failure_observed": true,
+        "cursor_count": 0,
+        "acked_slots_mask": 0,
+        "settled_slots_mask": 0,
+        "locked_fee_stake": 133
+      }
+    },
+    "rejected_fault_types": [
+      "unsampled-corruption",
+      "multipart-order",
+      "truncation"
+    ],
+    "rejected_faults_preserved_unadvanced_session": true
+  },
+  "durable_resume": {
+    "atomic_result_replace": true,
+    "verified_result_stages": [
+      "unknown-open",
+      "corrupt",
+      "multipart-order",
+      "truncate",
+      "durable-before-reopen",
+      "settled-cache"
+    ],
+    "checkpoint_cursor_count_before_reopen": 1,
+    "verified_chunk_count_before_reopen": 3,
+    "verified_write_event_count_before_reopen": 17,
+    "verified_chunk_count_after_reopen": 18,
+    "verified_write_event_count_after_reopen": 116,
+    "data_requests_before_reopen": 11,
+    "target_requests_before_reopen": 6,
+    "checkpoint_count_final": 1,
+    "unbound_checkpoint_count_final": 0,
+    "journal_count_final": 0
+  },
+  "cache": {
+    "success": true,
+    "downloaded_bytes": 16777217,
+    "mdu_network_requests_before": {
+      "gatewayMetadata": 7,
+      "gatewayData": 27,
+      "directMetadata": 0,
+      "directData": 2
+    },
+    "mdu_network_requests_after": {
+      "gatewayMetadata": 7,
+      "gatewayData": 27,
+      "directMetadata": 0,
+      "directData": 2
+    },
+    "mdu_network_request_delta": {
+      "gatewayMetadata": 0,
+      "gatewayData": 0,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "raw_transaction_count_before": 9,
+    "raw_transaction_count_after": 9,
+    "additional_raw_transaction_count": 0,
+    "additional_stake_charged": 0
+  },
+  "chain_transactions": {
+    "sampled_proof": {
+      "sample_count_q": 132,
+      "accepted_sample_count": 132,
+      "transaction_count": 8,
+      "successful_transaction_count": 8,
+      "samples_per_transaction": {
+        "min": 16,
+        "max": 17
+      },
+      "gas_used": 68019728,
+      "gas_wanted": 108622640,
+      "serialized_bytes": 102450,
+      "serialized_bytes_per_transaction": {
+        "min": 12428,
+        "max": 13185
+      },
+      "serialized_bytes_scope": "Each serialized proof transaction is counted once after identical observation on four validators."
+    },
+    "control": {
+      "transaction_count": 9,
+      "successful_transaction_count": 9,
+      "gas_used": 2816974,
+      "gas_wanted": 3470381,
+      "serialized_bytes": 4446
+    }
+  },
+  "accounting": {
+    "denominations": {
+      "retrieval": "stake",
+      "gas": "aatom"
+    },
+    "charged_stake": 134,
+    "burned_stake": 9,
+    "provider_payout_stake": 125,
+    "payer_gas_aatom": 2816974,
+    "completed_session_count": 1,
+    "concurrent_chain_issuance_stake": 5247011
+  },
+  "provider_phases": {
+    "transaction_count": 8,
+    "sequence_retry_attempts": 0,
+    "phases": {
+      "authority_ns": {
+        "count": 8,
+        "total_ns": 9669603,
+        "min_ns": 1109151,
+        "max_ns": 1308202
+      },
+      "proof_preparation_ns": {
+        "count": 8,
+        "total_ns": 6917722300,
+        "min_ns": 714909554,
+        "max_ns": 953403756
+      },
+      "pre_broadcast_ns": {
+        "count": 8,
+        "total_ns": 718466428,
+        "min_ns": 84698707,
+        "max_ns": 96223457
+      },
+      "broadcast_tx_sync_ns": {
+        "count": 8,
+        "total_ns": 13799421,
+        "min_ns": 1092651,
+        "max_ns": 5227450
+      },
+      "commit_observation_ns": {
+        "count": 8,
+        "total_ns": 12048164332,
+        "min_ns": 1004336502,
+        "max_ns": 2007918616
+      },
+      "provider_total_ns": {
+        "count": 8,
+        "total_ns": 20383281003,
+        "min_ns": 2105480656,
+        "max_ns": 3128858000
+      },
+      "unattributed_ns": {
+        "count": 8,
+        "total_ns": 675458919,
+        "min_ns": 77295776,
+        "max_ns": 88341422
+      }
+    },
+    "scope": "same-process monotonic durations; provider total starts at V3 dispatch after route selection and signer admission; pre-broadcast starts at CLI RunE, not process start; unattributed includes process startup, journal work, retry backoff and other local overhead; consensus header times remain separate inter-block wall time"
+  },
+  "browser_phase_segments": {
+    "segment_count": 6,
+    "segments": {
+      "corrupt": {
+        "phase_category_count": 6,
+        "phases": {
+          "open_transaction": {
+            "count": 1,
+            "summed_work_ms": 3.1899999380111694,
+            "occupied_elapsed_ms": 3.1899999380111694
+          },
+          "session_observation": {
+            "count": 4,
+            "summed_work_ms": 24.37999999523163,
+            "occupied_elapsed_ms": 24.37999999523163
+          },
+          "challenge_ready": {
+            "count": 3,
+            "summed_work_ms": 2265.869999885559,
+            "occupied_elapsed_ms": 2265.869999885559
+          },
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 86.5349999666214,
+            "occupied_elapsed_ms": 86.5349999666214
+          },
+          "chunk_transport": {
+            "count": 2,
+            "summed_work_ms": 212.4999998807907,
+            "occupied_elapsed_ms": 111.4449999332428
+          },
+          "browser_verify": {
+            "count": 2,
+            "summed_work_ms": 12.809999942779541,
+            "occupied_elapsed_ms": 12.809999942779541
+          }
+        }
+      },
+      "durable-before-reopen": {
+        "phase_category_count": 7,
+        "phases": {
+          "session_observation": {
+            "count": 2,
+            "summed_work_ms": 10.514999985694885,
+            "occupied_elapsed_ms": 10.514999985694885
+          },
+          "challenge_ready": {
+            "count": 3,
+            "summed_work_ms": 0.039999961853027344,
+            "occupied_elapsed_ms": 0.039999961853027344
+          },
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 86.12000000476837,
+            "occupied_elapsed_ms": 86.12000000476837
+          },
+          "chunk_transport": {
+            "count": 3,
+            "summed_work_ms": 298.57999992370605,
+            "occupied_elapsed_ms": 192.42499995231628
+          },
+          "browser_verify": {
+            "count": 3,
+            "summed_work_ms": 6.314999938011169,
+            "occupied_elapsed_ms": 5.239999890327454
+          },
+          "decode_write": {
+            "count": 3,
+            "summed_work_ms": 17.03499984741211,
+            "occupied_elapsed_ms": 17.03499984741211
+          },
+          "flush": {
+            "count": 3,
+            "summed_work_ms": 0.7000000476837158,
+            "occupied_elapsed_ms": 0.7000000476837158
+          }
+        }
+      },
+      "initial": {
+        "phase_category_count": 3,
+        "phases": {
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 96.36000001430511,
+            "occupied_elapsed_ms": 96.36000001430511
+          },
+          "open_send": {
+            "count": 1,
+            "summed_work_ms": 15.304999947547913,
+            "occupied_elapsed_ms": 15.304999947547913
+          },
+          "open_transaction": {
+            "count": 1,
+            "summed_work_ms": 39.02499997615814,
+            "occupied_elapsed_ms": 39.02499997615814
+          }
+        }
+      },
+      "multipart-order": {
+        "phase_category_count": 5,
+        "phases": {
+          "session_observation": {
+            "count": 2,
+            "summed_work_ms": 9.770000100135803,
+            "occupied_elapsed_ms": 9.770000100135803
+          },
+          "challenge_ready": {
+            "count": 3,
+            "summed_work_ms": 0.05500006675720215,
+            "occupied_elapsed_ms": 0.05500006675720215
+          },
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 95.52999997138977,
+            "occupied_elapsed_ms": 95.52999997138977
+          },
+          "chunk_transport": {
+            "count": 2,
+            "summed_work_ms": 308.8000000715256,
+            "occupied_elapsed_ms": 206.32500004768372
+          },
+          "browser_verify": {
+            "count": 1,
+            "summed_work_ms": 7.715000033378601,
+            "occupied_elapsed_ms": 7.715000033378601
+          }
+        }
+      },
+      "reopened": {
+        "phase_category_count": 10,
+        "phases": {
+          "session_observation": {
+            "count": 18,
+            "summed_work_ms": 79.95499992370605,
+            "occupied_elapsed_ms": 79.95499992370605
+          },
+          "challenge_ready": {
+            "count": 11,
+            "summed_work_ms": 0.2050001621246338,
+            "occupied_elapsed_ms": 0.2050001621246338
+          },
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 94.87000000476837,
+            "occupied_elapsed_ms": 94.87000000476837
+          },
+          "ack_send": {
+            "count": 8,
+            "summed_work_ms": 87.45999991893768,
+            "occupied_elapsed_ms": 87.45999991893768
+          },
+          "ack_inclusion": {
+            "count": 8,
+            "summed_work_ms": 10052.509999990463,
+            "occupied_elapsed_ms": 10052.509999990463
+          },
+          "provider_settlement": {
+            "count": 8,
+            "summed_work_ms": 20987.995000481606,
+            "occupied_elapsed_ms": 20987.995000481606
+          },
+          "chunk_transport": {
+            "count": 18,
+            "summed_work_ms": 1770.6449999809265,
+            "occupied_elapsed_ms": 1091.5150001049042
+          },
+          "browser_verify": {
+            "count": 18,
+            "summed_work_ms": 73.41999995708466,
+            "occupied_elapsed_ms": 71.12999987602234
+          },
+          "decode_write": {
+            "count": 18,
+            "summed_work_ms": 84.91999983787537,
+            "occupied_elapsed_ms": 84.91999983787537
+          },
+          "flush": {
+            "count": 18,
+            "summed_work_ms": 2.1900001764297485,
+            "occupied_elapsed_ms": 2.1900001764297485
+          }
+        }
+      },
+      "truncate": {
+        "phase_category_count": 5,
+        "phases": {
+          "session_observation": {
+            "count": 2,
+            "summed_work_ms": 13.830000042915344,
+            "occupied_elapsed_ms": 13.830000042915344
+          },
+          "challenge_ready": {
+            "count": 3,
+            "summed_work_ms": 0.0549999475479126,
+            "occupied_elapsed_ms": 0.0549999475479126
+          },
+          "metadata_authentication": {
+            "count": 1,
+            "summed_work_ms": 85.80999994277954,
+            "occupied_elapsed_ms": 85.80999994277954
+          },
+          "chunk_transport": {
+            "count": 2,
+            "summed_work_ms": 291.53000009059906,
+            "occupied_elapsed_ms": 197.01499998569489
+          },
+          "browser_verify": {
+            "count": 1,
+            "summed_work_ms": 9.274999976158142,
+            "occupied_elapsed_ms": 9.274999976158142
+          }
+        }
+      }
+    },
+    "scope": "Each named segment is summarized only within one page monotonic clock. Values are never combined across reloads; phase categories within a segment may overlap and must not be added into an end-to-end duration."
+  },
+  "memory": {
+    "source": "Linux cgroup v2 memory.peak",
+    "scope": "aggregate charged memory for the Playwright worker and owned Chromium process tree The peak spans the full fault, reload, recovery, settlement, and cache Playwright case.",
+    "peak_bytes": 706629632
+  },
+  "limitations": [
+    "retained premerge production-browser fault and reload correctness qualification with phase and memory observations; no aggregate latency or clean throughput baseline",
+    "Browser phase clocks reset across reloads, so no aggregate browser latency is reported.",
+    "Browser phase categories within a segment may overlap and must not be summed into an end-to-end duration.",
+    "HTTP wire bytes were not measured; MDU request counts and payload correctness are reported instead.",
+    "Memory is aggregate Linux cgroup v2 charged memory for the Playwright worker and its owned Chromium process tree, not browser heap or whole-system memory.",
+    "Concurrent chain issuance is retained as observed interval accounting and is not attributed to retrieval."
+  ],
+  "redaction": {
+    "excluded": [
+      "account addresses",
+      "session identifiers",
+      "host names and addresses",
+      "absolute paths",
+      "transaction hashes",
+      "raw transaction bytes",
+      "signatures",
+      "proof material",
+      "private keys"
+    ]
+  }
+}

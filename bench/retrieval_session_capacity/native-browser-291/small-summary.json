@@ -1,0 +1,362 @@
+{
+  "schema": "polystore-native-v3-small-public-summary-v1",
+  "evidence": {
+    "harness_head": "36692ac6fbfcf6505920467e000909b3172bcc02",
+    "runtime_source_head": "071b2a9fa7f482dcd188c44c85c0d678ac5f3d96",
+    "runtime_component_trees": {
+      "polystore_core": "52e6c75c3c67a2811c3f7d85df0f77cd61ece7fc",
+      "polystore_cli": "4303dc86c58cbbb7f1076f1916f1de691bf7694c",
+      "polystorechain": "9c7741a5ae7beebe05fefb58d6ebabce46ba1b99",
+      "polystore_gateway": "00afcf23970b77ce8f85391148a2f35ecf1bfe2f"
+    },
+    "raw_evidence_file_count": 12,
+    "raw_evidence_manifest_sha256": "d070fa7f4db44a564d1b8bebb66ee1e8b5c1b4a3d521461e37314d032c0a8c4c",
+    "run_return_code": 0,
+    "total_elapsed_seconds": 688.065,
+    "measurement_class": "retained premerge production-browser correctness qualification with phase and memory observations; not a clean throughput baseline"
+  },
+  "geometry": {
+    "validator_count": 4,
+    "provider_slot_count": 12,
+    "redundancy": {
+      "k": 8,
+      "m": 4
+    },
+    "file_bytes": 1024,
+    "requested_range_bytes": 1024,
+    "metadata_mdu_count": 2,
+    "user_mdu_count": 1,
+    "total_mdu_count": 3,
+    "sample_population_u": 1,
+    "sample_count_q": 1,
+    "obligation_count": 1,
+    "transport_chunk_count": 1
+  },
+  "main_retrieval": {
+    "success": true,
+    "downloaded_bytes": 1024,
+    "output_matches_expected_sha256": true,
+    "verified_logical_bytes_written": 1024,
+    "flushed_logical_bytes": 1024,
+    "verified_chunk_count": 1,
+    "acknowledged_obligation_count": 1,
+    "chain_confirmed_completed_session_count": 1,
+    "session_final": {
+      "accepted_sample_count": 1,
+      "acked_slots_mask": 1,
+      "settled_slots_mask": 1,
+      "refunded_slots_mask": 0,
+      "locked_fee_stake": 0,
+      "expired": false
+    },
+    "mdu_network_requests": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "canceled_metadata_response_count": 2,
+    "wire_bytes_measured": false,
+    "paid_snapshot_elapsed_ms_since_progress_tracker_start": 32022.583,
+    "paid_retrieval_phase_elapsed_ms": 8243.766767000001,
+    "first_verified_byte_elapsed_ms_since_progress_tracker_start": 28187.681472,
+    "first_verified_byte_elapsed_ms_since_retrieval_phase_start": 4408.8652390000025,
+    "final_snapshot_elapsed_ms_since_progress_tracker_start_including_cache": 32097.175861,
+    "final_retrieval_phase_elapsed_ms_including_cache": 8318.351898,
+    "timing_scope": "Harness monotonic clock. The progress tracker starts before page mount. The retrieval phase starts before opening the download controls and includes locating and clicking Download. The paid snapshot follows download hashing, final session/accounting and receipt/proof checks, and precedes the cache retrieval. The final snapshot also includes cache download hashing and cache invariants."
+  },
+  "cache": {
+    "success": true,
+    "downloaded_bytes": 1024,
+    "mdu_network_requests_before": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "mdu_network_requests_after": {
+      "gatewayMetadata": 2,
+      "gatewayData": 1,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "mdu_network_request_delta": {
+      "gatewayMetadata": 0,
+      "gatewayData": 0,
+      "directMetadata": 0,
+      "directData": 0
+    },
+    "additional_raw_transaction_count": 0,
+    "additional_stake_charged": 0
+  },
+  "prepayment_failures": {
+    "estimate_rejected": {
+      "verified": true,
+      "estimate_attempts": 1,
+      "raw_transaction_count": 0,
+      "stake_unchanged": true,
+      "gas_balance_unchanged": true,
+      "nonce_unchanged": true,
+      "checkpoint_survived_reopen": true,
+      "unbound_checkpoint_count_before_discard": 1,
+      "journal_states_before_discard": [],
+      "checkpoint_count_after_discard": 0,
+      "journal_count_after_discard": 0
+    },
+    "wallet_rejected_4001": {
+      "verified": true,
+      "estimate_attempts": 1,
+      "raw_transaction_count": 0,
+      "stake_unchanged": true,
+      "gas_balance_unchanged": true,
+      "nonce_unchanged": true,
+      "checkpoint_survived_reopen": true,
+      "unbound_checkpoint_count_before_discard": 1,
+      "journal_states_before_discard": [
+        "prepared"
+      ],
+      "checkpoint_count_after_discard": 0,
+      "journal_count_after_discard": 0
+    }
+  },
+  "expiry_recovery": {
+    "success": true,
+    "final_stage": "refunded",
+    "file_bytes": 1024,
+    "remaining_blocks_at_open": 150,
+    "strict_expiry_observed": true,
+    "aborted_data_request_count": 1,
+    "retry_mdu_request_count_before_refund": 0,
+    "retry_mdu_request_count_total": 0,
+    "phase_guards": {
+      "openedSessions": 1,
+      "verifiedWrites": 0,
+      "flushedChunks": 0,
+      "verifiedChunks": 0,
+      "acknowledgedObligations": 0
+    },
+    "checkpoint_count_before_refund": 1,
+    "journal_states_before_refund": [
+      "committed"
+    ],
+    "atomic_result_replace": true,
+    "verified_result_stages": [
+      "interrupted",
+      "refunded"
+    ],
+    "session_final": {
+      "sample_population_u": 1,
+      "session_sample_count_q": 1,
+      "obligation_sample_counts": [
+        0
+      ],
+      "acked_slots_mask": 0,
+      "settled_slots_mask": 0,
+      "refunded_slots_mask": 1,
+      "locked_fee_stake": 0,
+      "expired": true
+    }
+  },
+  "chain_transactions": {
+    "sampled_proof": {
+      "sample_count_q": 1,
+      "accepted_sample_count": 1,
+      "transaction_count": 1,
+      "successful_transaction_count": 1,
+      "gas_used": 594846,
+      "gas_wanted": 925782,
+      "serialized_bytes": 1080,
+      "serialized_bytes_scope": "one serialized proof transaction, observed identically by four validators"
+    },
+    "main_control": {
+      "transaction_count": 2,
+      "successful_transaction_count": 2,
+      "gas_used": 797854,
+      "gas_wanted": 977433,
+      "serialized_bytes": 1562
+    },
+    "expiry_control": {
+      "transaction_count": 2,
+      "successful_transaction_count": 2,
+      "gas_used": 804380,
+      "gas_wanted": 985257,
+      "serialized_bytes": 1432
+    },
+    "all_control": {
+      "transaction_count": 4,
+      "successful_transaction_count": 4,
+      "gas_used": 1602234,
+      "gas_wanted": 1962690,
+      "serialized_bytes": 2994
+    }
+  },
+  "accounting": {
+    "denominations": {
+      "retrieval": "stake",
+      "gas": "aatom"
+    },
+    "main_retrieval": {
+      "charged_stake": 2,
+      "burned_stake": 2,
+      "provider_payout_stake": 0,
+      "payer_gas_aatom": 797854,
+      "completed_session_count": 1,
+      "concurrent_chain_issuance_stake": 7439803
+    },
+    "expiry_recovery": {
+      "retained_base_fee_stake": 1,
+      "refunded_variable_fee_stake": 1,
+      "payer_gas_aatom": 804380,
+      "refunded_session_count": 1,
+      "concurrent_chain_issuance_stake": 14880033
+    }
+  },
+  "provider_phases": {
+    "transaction_count": 1,
+    "sequence_retry_attempts": 0,
+    "phases": {
+      "authority_ns": {
+        "count": 1,
+        "total_ns": 861638,
+        "min_ns": 861638,
+        "max_ns": 861638
+      },
+      "proof_preparation_ns": {
+        "count": 1,
+        "total_ns": 30628982,
+        "min_ns": 30628982,
+        "max_ns": 30628982
+      },
+      "pre_broadcast_ns": {
+        "count": 1,
+        "total_ns": 15724140,
+        "min_ns": 15724140,
+        "max_ns": 15724140
+      },
+      "broadcast_tx_sync_ns": {
+        "count": 1,
+        "total_ns": 775558,
+        "min_ns": 775558,
+        "max_ns": 775558
+      },
+      "commit_observation_ns": {
+        "count": 1,
+        "total_ns": 2005007029,
+        "min_ns": 2005007029,
+        "max_ns": 2005007029
+      },
+      "provider_total_ns": {
+        "count": 1,
+        "total_ns": 2142071105,
+        "min_ns": 2142071105,
+        "max_ns": 2142071105
+      },
+      "unattributed_ns": {
+        "count": 1,
+        "total_ns": 89073758,
+        "min_ns": 89073758,
+        "max_ns": 89073758
+      }
+    },
+    "scope": "same-process monotonic durations; provider total starts at V3 dispatch after route selection and signer admission; pre-broadcast starts at CLI RunE, not process start; unattributed includes process startup, journal work, retry backoff and other local overhead; consensus header times remain separate inter-block wall time"
+  },
+  "browser_phases": {
+    "phase_category_count": 13,
+    "phases": {
+      "metadata_authentication": {
+        "count": 1,
+        "summed_work_ms": 82.92499995231628,
+        "occupied_elapsed_ms": 82.92499995231628
+      },
+      "open_send": {
+        "count": 1,
+        "summed_work_ms": 8.884999990463257,
+        "occupied_elapsed_ms": 8.884999990463257
+      },
+      "open_inclusion": {
+        "count": 1,
+        "summed_work_ms": 755.6750000715256,
+        "occupied_elapsed_ms": 755.6750000715256
+      },
+      "open_transaction": {
+        "count": 1,
+        "summed_work_ms": 787.6599999666214,
+        "occupied_elapsed_ms": 787.6599999666214
+      },
+      "session_observation": {
+        "count": 7,
+        "summed_work_ms": 21.05500018596649,
+        "occupied_elapsed_ms": 21.05500018596649
+      },
+      "challenge_ready": {
+        "count": 3,
+        "summed_work_ms": 3013.289999961853,
+        "occupied_elapsed_ms": 3013.289999961853
+      },
+      "chunk_transport": {
+        "count": 1,
+        "summed_work_ms": 79.6599999666214,
+        "occupied_elapsed_ms": 79.6599999666214
+      },
+      "browser_verify": {
+        "count": 1,
+        "summed_work_ms": 1.590000033378601,
+        "occupied_elapsed_ms": 1.590000033378601
+      },
+      "decode_write": {
+        "count": 1,
+        "summed_work_ms": 0.9900000095367432,
+        "occupied_elapsed_ms": 0.9900000095367432
+      },
+      "flush": {
+        "count": 1,
+        "summed_work_ms": 0.09500002861022949,
+        "occupied_elapsed_ms": 0.09500002861022949
+      },
+      "ack_send": {
+        "count": 1,
+        "summed_work_ms": 5.100000023841858,
+        "occupied_elapsed_ms": 5.100000023841858
+      },
+      "ack_inclusion": {
+        "count": 1,
+        "summed_work_ms": 1556.4950000047684,
+        "occupied_elapsed_ms": 1556.4950000047684
+      },
+      "provider_settlement": {
+        "count": 1,
+        "summed_work_ms": 2216.1749999523163,
+        "occupied_elapsed_ms": 2216.1749999523163
+      }
+    },
+    "scope": "one browser page monotonic clock; summed work may overlap; phase elapsed unions must not be added together"
+  },
+  "memory": {
+    "source": "Linux cgroup v2 memory.peak",
+    "scope": "aggregate charged memory for the Playwright worker and owned Chromium process tree The main-run peak spans the paid retrieval, cache retrieval, and two prepayment-failure cases in one Playwright worker.",
+    "main_retrieval_peak_bytes": 620912640,
+    "expiry_recovery_peak_bytes": 592576512,
+    "maximum_observed_peak_bytes": 620912640
+  },
+  "limitations": [
+    "retained premerge production-browser correctness qualification with phase and memory observations; not a clean throughput baseline",
+    "HTTP wire bytes were not measured; MDU request counts and payload correctness are reported instead.",
+    "Browser phase categories overlap and must not be summed into an end-to-end duration.",
+    "Memory is aggregate Linux cgroup v2 charged memory for the Playwright worker and its owned Chromium process tree, not browser heap or whole-system memory.",
+    "Concurrent chain issuance is retained as observed interval accounting and is not attributed to retrieval.",
+    "No expiry browser phase aggregate was present in the retained evidence, so none is reported."
+  ],
+  "redaction": {
+    "excluded": [
+      "account addresses",
+      "session identifiers",
+      "host names and addresses",
+      "absolute paths",
+      "transaction hashes",
+      "raw transaction bytes",
+      "signatures",
+      "proof material",
+      "private keys"
+    ]
+  }
+}

@@ -227,7 +227,7 @@ export function useFetch() {
         if (transport.allowsV3Direct(input.routePreference)) for (const provider of activeV3.providers) {
           const e = await endpoint(provider).catch(() => null); if (e?.baseUrl) metadataBases.add(e.baseUrl); if (metadataBases.size >= 4) break
         }
-        const metadata = await transport.fetchV3Metadata({ authority: activeV3, directBases: [...metadataBases], preference: input.routePreference, signal })
+        const metadata = await timeRetrieval('metadata_authentication', () => transport.fetchV3Metadata({ authority: activeV3, directBases: [...metadataBases], preference: input.routePreference, signal }))
         const records = metadata.data
         validateRetrievalAllocation(pinV3, records)
         const recordIndex = records.findIndex((record) => record.path === (savedV3?.file.path ?? input.filePath) && record.path !== '')

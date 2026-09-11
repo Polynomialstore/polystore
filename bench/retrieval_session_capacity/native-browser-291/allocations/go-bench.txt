@@ -1,0 +1,66 @@
+goos: linux
+goarch: amd64
+pkg: polystorechain/pkg/retrievalchallenge
+cpu: AMD Ryzen 7 9700X 8-Core Processor             
+BenchmarkV3PlanOneKiB           	30857546	        36.93 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	31830585	        36.99 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32292531	        36.97 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32443759	        36.99 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32383836	        37.11 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32221464	        37.11 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32329002	        37.13 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32240786	        37.07 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32350617	        37.10 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneKiB           	32390059	        37.09 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26153557	        45.95 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26104572	        45.94 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26021799	        45.92 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26087779	        45.93 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26132359	        45.93 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26132109	        45.91 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26103408	        45.89 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26183455	        45.94 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26140904	        45.97 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanThreeBlobs       	26131101	        45.98 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18211599	        65.93 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18202171	        66.03 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18189835	        65.95 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18219740	        65.92 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18206076	        65.89 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18138430	        65.90 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18158805	        65.96 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18220725	        65.93 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18207730	        65.91 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3PlanOneGiB           	18203328	        65.88 ns/op	     448 B/op	       1 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423350	      2808 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423844	      2802 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423595	      2804 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423699	      2805 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  422583	      2806 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  422440	      2808 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423141	      2810 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423506	      2810 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423294	      2811 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesOneKiB     	  423153	      2813 ns/op	    2248 B/op	      24 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179898	      6631 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179930	      6637 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  180393	      6638 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179390	      6647 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179257	      6658 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179637	      6652 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179881	      6657 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179433	      6659 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179346	      6665 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesThreeBlobs 	  179466	      6666 ns/op	    4560 B/op	      55 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4500	    264979 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4537	    264787 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4543	    264696 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4488	    264944 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4532	    264967 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4519	    265308 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4514	    267077 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4526	    264966 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4492	    265032 ns/op	  169984 B/op	    2289 allocs/op
+BenchmarkV3ChallengesOneGiB     	    4530	    264672 ns/op	  169984 B/op	    2289 allocs/op
+PASS
+ok  	polystorechain/pkg/retrievalchallenge	74.509s

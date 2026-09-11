@@ -94,6 +94,317 @@ class FourValidatorWorkloadTest(unittest.TestCase):
         lifecycle.remaining = Mock(return_value=30)
         return lifecycle
 
+    def test_native_v3_browser_geometry_covers_retained_fixture_sizes(self):
+        self.assertEqual(workload.v3_file_geometry(1024), dict(size=1024, metadata_mdus=2,
+            user_mdus=1, total_mdus=3, witness_mdus=1, integrity_leaf_count=96))
+        self.assertEqual(workload.v3_file_geometry(1_073_741_824), dict(size=1_073_741_824,
+            metadata_mdus=2, user_mdus=133, total_mdus=135, witness_mdus=1,
+            integrity_leaf_count=12_768))
+        multi = 16_777_217
+        self.assertIn(multi, workload.V3_BROWSER_SIZES)
+        self.assertNotEqual(multi % 126_976, 0)
+        self.assertEqual((multi + 126_975) // 126_976, 133)
+        self.assertEqual(workload.v3_file_geometry(multi)["user_mdus"], 3)
+
+    def test_browser_profile_enables_bounded_app_mempool_without_changing_existing_profile(self):
+        generated = '[api]\naddress = "tcp://localhost:1317"\nenabled-unsafe-cors = false\n[mempool]\nmax-txs = -1\n'
+        existing = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317")
+        browser = artifact.configure_four_validator_app(generated, "tcp://127.0.0.1:1317", browser_evm=True)
+        self.assertIn('[mempool]\nmax-txs = -1\n', existing)
+        self.assertIn(f'[mempool]\nmax-txs = {artifact.BROWSER_EVM_MEMPOOL_MAX_TXS}\n', browser)
+        self.assertEqual(artifact.BROWSER_EVM_MEMPOOL_MAX_TXS, 5000)
+        self.assertIn('enabled-unsafe-cors = false', existing)
+        self.assertIn('enabled-unsafe-cors = true', browser)
+
+    def test_browser_http_preflight_rejects_missing_cors_or_wrong_chain(self):
+        life = SimpleNamespace(nodes=[dict(api=1317, evm_rpc=8545)], remaining=lambda: 30)
+        def responses():
+            rows = [self.query_response(dict(params={})), self.query_response(dict(params={
+                        "active_static_precompiles": ["0x0000000000000000000000000000000000000900"]})),
+                    self.query_response({}),
+                    self.query_response(dict(result="0x40000"))]
+            for row in rows:
+                row.headers.update({"Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "Content-Type"})
+            return rows
+        with patch.object(workload.urllib.request, "urlopen", side_effect=responses()) as get:
+            evidence = workload.browser_http_preflight(life, "http://127.0.0.1:4173")
+            self.assertEqual([row["method"] for row in evidence["checks"]], ["GET", "GET", "OPTIONS", "POST"])
+            self.assertTrue(all(call.args[0].get_header("Origin") == evidence["origin"] for call in get.call_args_list))
+        for change in ("cors", "precompile", "content-type", "chain"):
+            rows = responses()
+            if change == "cors":
+                rows[0].headers.pop("Access-Control-Allow-Origin")
+            elif change == "content-type":
+                rows[2].headers["Access-Control-Allow-Headers"] = "unrelated"
+            elif change == "precompile":
+                rows[1] = self.query_response(dict(params={"active_static_precompiles": []}))
+                rows[1].headers["Access-Control-Allow-Origin"] = "*"
+            else:
+                rows[3] = self.query_response(dict(result="0x1"))
+                rows[3].headers["Access-Control-Allow-Origin"] = "*"
+            with self.subTest(change=change), patch.object(workload.urllib.request, "urlopen", side_effect=rows):
+                with self.assertRaises(ValueError):
+                    workload.browser_http_preflight(life, "http://127.0.0.1:4173")
+
+    def test_browser_native_transactions_pay_the_global_evm_fee_floor(self):
+        life = SimpleNamespace(binary=Path("/chain"), chain="polystore_290-1", deadline=10**18,
+            nodes=[dict(home="/home", rpc=26657)], env={"GOMAXPROCS": "2"})
+        for browser in (False, True):
+            life.browser_evm = browser
+            job = workload.transaction_job(life, AUDIT_ADDRESSES[0], ["create-deal", "100", "1", "1"])
+            self.assertEqual(job["submit"][job["submit"].index("--gas-prices") + 1],
+                             artifact.BROWSER_EVM_NATIVE_GAS_PRICES if browser else "0.001aatom")
+
+    def test_public_policy_uses_one_signed_owner_message_and_committed_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            owner = ADDRESSES[0]
+            intended = {"@type": "/polystorechain.polystorechain.v1.MsgUpdateDealRetrievalPolicy",
+                "creator": owner, "deal_id": "7", "policy": {"mode": "RETRIEVAL_POLICY_MODE_PUBLIC",
+                    "allowlist_root": None, "voucher_signer": ""}}
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_291-1",
+                nodes=[dict(home="/node", rpc=26657)], signers={"owner0": owner}, doc={}, save=Mock(),
+                wait_height=Mock(), cli=Mock(return_value=json.dumps({"tx": {"body": {"messages": [intended]}}})))
+
+            def command(argv):
+                if "--generate-only" in argv:
+                    return json.dumps({"body": {"messages": [{"@type": "template"}]}, "signatures": []})
+                output = Path(argv[argv.index("--output-document") + 1])
+                unsigned = json.loads((home / "browser-public-policy/unsigned.jsonl").read_text())
+                unsigned["signatures"] = ["signed"]
+                output.write_text(json.dumps(unsigned))
+                return ""
+
+            committed = dict(outcome="committed_success", txhash="A" * 64, height=12)
+            lifecycle.query = Mock(return_value={"deal": {"retrieval_policy": {
+                "mode": "RETRIEVAL_POLICY_MODE_PUBLIC", "allowlist_root": "", "voucher_signer": ""}}})
+            with patch.object(workload, "transaction_job", return_value={"submit": ["/chain", "tx", "nilchain",
+                    "create-deal"], "signer": owner}), \
+                 patch.object(artifact, "scheduled_transaction", return_value=committed) as broadcast, \
+                 patch.object(workload, "verify_transaction_nodes", return_value=["four-node-proof"]):
+                evidence = workload.set_public_retrieval_policy(lifecycle, deal_id="7", command=command)
+            self.assertEqual(evidence["message"], intended)
+            self.assertEqual(broadcast.call_count, 1)
+            lifecycle.wait_height.assert_called_once_with(13)
+            lifecycle.save.assert_called_once()
+
+    def test_browser_launcher_pins_canonical_gateway_and_real_e2e_wallet_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            website = root / "polystore-website"
+            for relative in ("node_modules/.bin/vite", "node_modules/.bin/playwright",
+                             "public/wasm/polystore_core_bg.wasm"):
+                path = website / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"fixture")
+            home = root / "run"
+            home.mkdir()
+            lifecycle = SimpleNamespace(home=home, binary=Path("/chain"), chain="polystore_291-1",
+                deadline=10**18, env={"POLYSTORE_TRUSTED_SETUP": "/setup", "GOMAXPROCS": "2"},
+                nodes=[dict(home="/node", rpc=26657, api=1317, evm_rpc=8545)],
+                doc={"provenance": {"cli_binary": "/native-cli", "curl_binary": "/curl"},
+                     "payload": {"bytes": 1024, "sha256": "ab" * 32}},
+                remaining=Mock(return_value=30), wait_height=Mock(side_effect=[20, 21, 22]),
+                signers={}, save=Mock())
+            process_ids = iter((101, 102))
+            launched = []
+            def popen(argv, **kwargs):
+                launched.append((argv, kwargs))
+                return SimpleNamespace(pid=next(process_ids), returncode=None)
+            def command(argv, timeout=60):
+                if argv[-1].endswith("/status"):
+                    return json.dumps({"persona": "user-gateway", "allowed_route_families": ["gateway"]})
+                return "ready"
+            memory = {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 123456,
+                "source": artifact.BROWSER_MEMORY_SOURCE, "measurement_scope": artifact.BROWSER_MEMORY_SCOPE}
+            def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps({"success": True,
+                    "session": {"session_id": base64.b64encode(bytes(32)).decode()},
+                    "evmReceipts": [], "evmTransactions": [], "providerProofOutcomes": [], "paidDiagnosticCount": 2,
+                    "cacheMduRequests": {"before": {"gatewayMetadata": 1, "gatewayData": 1,
+                        "directMetadata": 0, "directData": 0}, "after": {"gatewayMetadata": 1,
+                        "gatewayData": 1, "directMetadata": 0, "directData": 0}},
+                    "diagnostics": [dict(phase="transport", edge="start", atMs=1), dict(phase="transport", edge="end", atMs=2)]}))
+                self.assertEqual(cwd, website)
+                self.assertEqual(memory_output, home / "browser-memory.json")
+                self.assertEqual((env["VITE_E2E"], env["VITE_CHAIN_ID"], env["E2E_NATIVE_V3_PAYER"]),
+                    ("1", "262144", workload.V3_BROWSER_PAYER))
+                self.assertEqual((env["E2E_NATIVE_V3_EXPIRY"], env["E2E_NATIVE_V3_FAULTS"]), ("0", "0"))
+                return SimpleNamespace(returncode=0, stdout="passed", stderr=""), memory
+            ports = {"gateway": 18080, "website": 4173,
+                     "gateway_reservation": Mock(), "website_reservation": Mock()}
+            processes = []
+            with patch.object(workload.subprocess, "Popen", side_effect=popen), \
+                 patch.object(artifact, "run_bounded_browser_command", side_effect=playwright), \
+                 patch.object(workload, "collect_issuance", return_value=17), \
+                 patch.object(workload, "browser_v3_snapshot", return_value={"bank": {"height": 19}, "retrieval": {"sessions": {"00" * 32: {"sample_count": 0}}}}), \
+                 patch.object(workload, "browser_v3_committed_receipts", return_value=[]), \
+                 patch.object(workload, "validate_v3_provider_phase_timings", return_value={"qualification": True}), \
+                 patch.object(workload, "verify_browser_v3_economics", return_value={"issued_stake": 17}):
+                result = workload.run_native_v3_browser(lifecycle, gateway=Path("/gateway"), source=root,
+                    deal={"id": "7"}, browser_ports=ports, command=command, processes=processes,
+                    check_providers=Mock())
+            self.assertEqual([row[0][0] for row in launched], ["/gateway", str(website / "node_modules/.bin/vite")])
+            self.assertEqual(result["gateway"]["status"]["persona"], "user-gateway")
+            self.assertEqual(result["economics"]["issued_stake"], 17)
+            self.assertEqual(result["playwright"]["memory"], memory)
+            ports["gateway_reservation"].close.assert_called_once()
+            ports["website_reservation"].close.assert_called_once()
+
+    def test_browser_executor_handoff_publishes_fixed_request_and_retains_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            response_path = home / "browser-executor-response.json"
+            response_path.write_text("{}")
+            lifecycle = SimpleNamespace(home=home, doc={"provenance": {
+                "product_source_commit": "ab" * 20, "product_source_status": ""},
+                "payload": {"bytes": 1 << 30}}, remaining=Mock(return_value=5),
+                deadline=600_000_001_000, save=Mock())
+            completed = subprocess.CompletedProcess(["playwright", "test"], 0, "passed", "")
+            with patch.object(artifact, "monotonic_ns", return_value=1_000), \
+                 patch.object(artifact, "create_browser_executor_request",
+                    return_value={"id": "cd" * 16, "head": "ab" * 20}) as create, \
+                 patch.object(artifact, "read_browser_executor_response",
+                    return_value=(completed, {"peak_rss_bytes": 4096}, {"returncode": 0})):
+                result, memory = workload.run_browser_executor_handoff(lifecycle, source=Path("/source"),
+                    browser_env={"fixed": "environment"}, faults=False, check_providers=Mock())
+            self.assertIs(result, completed)
+            self.assertEqual(memory["peak_rss_bytes"], 4096)
+            self.assertNotIn("mac_source", lifecycle.doc["browser_executor"])
+            self.assertEqual(create.call_args.kwargs["source_head"], "ab" * 20)
+            self.assertEqual(create.call_args.kwargs["timeout_seconds"], 600)
+            lifecycle.remaining.assert_called_once_with()
+
+    def test_browser_fault_result_is_one_durable_paid_session(self):
+        sid = "12" * 32
+        encoded = base64.b64encode(bytes.fromhex(sid)).decode()
+        obligations = [dict(slot=str(slot)) for slot in (0, 1)]
+        session = dict(session_id=encoded, obligations=obligations)
+        chunks = [dict(id=str(index), slot=index % 2, entries=[str(index)]) for index in range(21)]
+        chunks[0]["entries"] = ["132"]
+        planned = dict(sessionId="0x" + sid, nonce="7", population="133", sampleCount="132",
+                       chunks=chunks, unsampled=["132"])
+        checkpoints = {key: dict(planned) for key in ("corrupt", "multipart-order", "truncate")}
+        hashes = ["0x" + str(index) * 64 for index in (1, 2, 3)]
+        outcome = dict(success=True, stage="settled-cache", session=session, planned=planned,
+            targetT="132", targetChunk=chunks[0], targetBlob=0,
+            faultDeliveries={key: 1 for key in checkpoints},
+            faultSnapshots=checkpoints, durableCheckpoint=dict(planned),
+            evmReceipts=[{"transactionHash": value} for value in hashes],
+            evmTransactions=[{"hash": value} for value in hashes], rawTransactions=3,
+            rawTransactionAttempts=4, phaseGuards={"openedSessions": 1, "acknowledgedObligations": 2,
+                                                   "targetVerifiedChunks": 1},
+            before={"nonce": {"found": True, "nonce": "4"}},
+            afterUnknown={"nonce": {"found": True, "nonce": "5"}},
+            after={"nonce": {"found": True, "nonce": "5"}}, dataRequests=24, targetRequests=4,
+            requestsBeforeReopen={"data": 16, "target": 4},
+            requestsBeforeCache={"data": 24, "target": 4, "raw": 3},
+            downloaded={"bytes": 16_777_217, "sha256": "ab" * 32},
+            cached={"bytes": 16_777_217, "sha256": "ab" * 32},
+            cacheMduRequests={"before": {"gatewayMetadata": 2, "gatewayData": 21,
+                "directMetadata": 0, "directData": 0}, "after": {"gatewayMetadata": 2,
+                "gatewayData": 21, "directMetadata": 0, "directData": 0}},
+            localState={"checkpoints": 1, "unbound": 0, "journals": []},
+            resultDurability={"atomicReplace": True, "verifiedStages": ["unknown-open", "corrupt",
+                "multipart-order", "truncate", "durable-before-reopen", "settled-cache"]})
+        workload.validate_native_v3_browser_fault_outcome(
+            outcome, session, {"bytes": 16_777_217, "sha256": "ab" * 32})
+        outcome["rawTransactions"] = 4
+        with self.assertRaisesRegex(ValueError, "canonical open"):
+            workload.validate_native_v3_browser_fault_outcome(
+                outcome, session, {"bytes": 16_777_217, "sha256": "ab" * 32})
+
+    def test_browser_cache_requires_equal_nonnegative_exact_transport_counters(self):
+        counters = {"gatewayMetadata": 1, "gatewayData": 2, "directMetadata": 0, "directData": 0}
+        self.assertEqual(workload.validate_browser_cache_mdu_requests(
+            {"cacheMduRequests": {"before": counters, "after": dict(counters)}})["before"], counters)
+        for after in (dict(counters, gatewayData=3), dict(counters, directData=True),
+                      dict(counters, unexpected=0)):
+            with self.subTest(after=after), self.assertRaisesRegex(ValueError, "additional MDU"):
+                workload.validate_browser_cache_mdu_requests(
+                    {"cacheMduRequests": {"before": counters, "after": after}})
+
+    def test_browser_expiry_launcher_reuses_stack_with_separate_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            website = root / "polystore-website"
+            (website / "node_modules/.bin").mkdir(parents=True)
+            (website / "node_modules/.bin/playwright").write_bytes(b"fixture")
+            home = root / "run"
+            home.mkdir()
+            sid = "00" * 32
+            final = {"session_id": base64.b64encode(bytes(32)).decode()}
+            before = {"bank": {"height": 19}, "retrieval": {"deals": {"8": {"end_block": "150"}}}}
+            after = {"bank": {"height": 30}, "retrieval": {"sessions": {sid: final}}}
+            lifecycle = SimpleNamespace(home=home, chain="polystore_291-1", deadline=10**18,
+                nodes=[dict(api=1317, evm_rpc=8545)], signers={}, doc={}, save=Mock(),
+                wait_height=Mock(side_effect=[20, 31]))
+            hashes = ["0x" + byte * 64 for byte in ("1", "2")]
+            outcome = dict(success=True, stage="refunded", strictExpiryObserved=True, rawTransactions=2,
+                retryMduRequests=0, retryMduRequestsBeforeRefund=0, requestedSessionId="0x" + sid,
+                afterRefund={"height": "30"}, session=final,
+                evmReceipts=[{"transactionHash": value} for value in hashes],
+                evmTransactions=[{"hash": value} for value in hashes])
+            memory = {"memory_peak_bytes": 123}
+            def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps(outcome))
+                self.assertEqual((env["E2E_NATIVE_V3_EXPIRY"], env["E2E_NATIVE_V3_DEAL_ID"],
+                                  env["E2E_NATIVE_V3_BYTES"]), ("1", "8", "1024"))
+                self.assertEqual(memory_output, home / "browser-expiry-memory.json")
+                self.assertEqual(cwd, website)
+                return SimpleNamespace(returncode=0, stdout="passed", stderr=""), memory
+            committed = [dict(receipt={"transactionHash": value}) for value in hashes]
+            with patch.object(artifact, "run_bounded_browser_command", side_effect=playwright), \
+                 patch.object(workload, "browser_v3_snapshot", side_effect=[before, after]), \
+                 patch.object(workload, "collect_issuance", return_value=17), \
+                 patch.object(workload, "browser_v3_committed_receipts", return_value=committed), \
+                 patch.object(workload, "verify_browser_v3_refund_economics", return_value={"issued_stake": 17}):
+                evidence = workload.run_native_v3_browser_expiry(lifecycle, source=root, deal={"id": "8"},
+                    browser_ports={"gateway": 18080, "website": 4173},
+                    payload={"bytes": 1024, "sha256": "ab" * 32}, check_providers=Mock())
+            self.assertEqual(evidence["economics"]["issued_stake"], 17)
+            self.assertEqual(evidence["playwright"]["memory"], memory)
+            self.assertEqual(lifecycle.doc["native_v3_browser_expiry"], evidence)
+
+    def test_short_browser_fixture_has_unique_admission_and_policy_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            main_payload = home / "main.bin"
+            main_payload.write_bytes(bytes(range(256)) * 8)
+            owner = ADDRESSES[0]
+            providers = dict(enumerate(AUDIT_ADDRESSES))
+            assigned = {slot: AUDIT_ADDRESSES[(slot + 1) % len(AUDIT_ADDRESSES)] for slot in providers}
+            slots = [dict(slot=str(slot), provider=provider, status="SLOT_STATUS_ACTIVE", pending_provider="")
+                     for slot, provider in assigned.items()]
+            initial = {"mode2_slots": slots}
+            final = dict(initial, manifest_root=base64.b64encode(bytes.fromhex("ab" * 32)).decode(),
+                         size="1024", total_mdus="3", witness_mdus="1", current_gen="1")
+            lifecycle = SimpleNamespace(home=home, nodes=[{}], signers={"owner0": owner},
+                doc={"payload": {"path": str(main_payload)},
+                     "providers": [dict(address=provider, port=19091 + slot)
+                                   for slot, provider in providers.items()]}, save=Mock())
+            lifecycle.query = Mock(side_effect=[{"deals": [{"id": "7", "owner": owner}, {"id": "8", "owner": owner}]},
+                                                {"deal": initial}, {"deal": final}])
+            send = Mock(return_value={"height": 10})
+            wait = Mock()
+            command = Mock(return_value=json.dumps({"upload": "ok"}))
+            candidate = {"polyfs_root": "0x" + "ab" * 32}
+            with patch.object(workload, "admit_native_v3_generation", return_value=(candidate, 20)) as admit, \
+                 patch.object(workload, "set_public_retrieval_policy", return_value={"public": True}) as policy:
+                fixture = workload.prepare_native_v3_browser_expiry(lifecycle, main_deal={"id": "7"},
+                    providers=providers, send=send, wait=wait, command=command, curl="/curl")
+            self.assertEqual(send.call_args.args[1], ["create-deal", "180", "100000000", "10000000",
+                "--service-hint", "General:rs=8+4"])
+            self.assertEqual(fixture["payload"]["bytes"], 1024)
+            self.assertTrue(command.call_args.args[0][-1].startswith(
+                "http://127.0.0.1:19092/sp/retrieval/upload?deal_id=8&"))
+            self.assertEqual(admit.call_args.kwargs["providers"], assigned)
+            self.assertEqual(admit.call_args.kwargs["evidence_key"], "native_v3_browser_expiry_generation")
+            self.assertEqual(admit.call_args.kwargs["http_phase"], "browser-expiry-generation-acceptance")
+            self.assertEqual(policy.call_args.kwargs["directory_name"], "browser-expiry-public-policy")
+            self.assertEqual(lifecycle.doc["native_v3_browser_expiry_fixture"], fixture)
+
     def test_fixed_height_query_retries_only_future_height_error(self):
         lifecycle = self.query_lifecycle()
         delayed = [self.query_error(), self.query_response({"session": {"id": "ready"}})]
@@ -109,6 +420,165 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "node query HTTP 500"):
                     lifecycle.query({"api": 1317, "rpc": 26657}, "/query", 7)
                 opened.assert_called_once()
+
+    def test_browser_economics_checks_real_blob_fees_rounding_payer_and_conservation(self):
+        sid = "ab" * 32
+        signers = {"owner0": ADDRESSES[0], "provider0": ADDRESSES[1], "provider1": ADDRESSES[2]}
+        before = dict(bank=dict(height=10, balances={name + ":stake": "1000" for name in signers},
+                               supply={"stake": "10000"}),
+                      payer=dict(address=workload.V3_BROWSER_PAYER, stake="1000", aatom="1000"),
+                      retrieval=dict(module_stake="1000", deals={"0": {"escrow_balance": "1000"}}, sessions={}))
+        after = copy.deepcopy(before)
+        after["bank"].update(height=20, supply={"stake": "10073"})  # 100 mint - 27 burn
+        after["bank"]["balances"].update({"provider0:stake": "1022", "provider1:stake": "1022"})
+        after["payer"].update(stake="929", aatom="970")
+        session = dict(payer=workload.V3_BROWSER_PAYER, owner=workload.V3_BROWSER_PAYER,
+            funding="RETRIEVAL_SESSION_FUNDING_REQUESTER", price_denom="stake", base_fee="3",
+            price_per_blob="17", completion_burn_bps=3333, acked_slots_mask=3, settled_slots_mask=3,
+            refunded_slots_mask=0, locked_fee="0", sample_count=2,
+            accepted_sample_bitmap=base64.b64encode(bytes([3]) + bytes(16)).decode(),
+            obligations=[dict(slot=i, payee=ADDRESSES[i+1], assigned_provider=ADDRESSES[i+1],
+                blob_count=2, locked_fee="34") for i in range(2)])
+        after["retrieval"]["sessions"][sid] = session
+        receipts = [dict(height=15, receipt={"from": "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255",
+            "to": "0x0000000000000000000000000000000000000900", "gasUsed": "0xa", "effectiveGasPrice": "0x3"})]
+        def verify(candidate=after, observed=receipts):
+            return workload.verify_browser_v3_economics(before, candidate, session_id=sid,
+                receipts=observed, issued_stake=100, signers=signers)
+        self.assertEqual(verify(), dict(charged_stake=71, provider_payouts={ADDRESSES[1]: 22, ADDRESSES[2]: 22},
+            burned_stake=27, issued_stake=100, payer_gas_aatom=30, completed_sessions=1))
+        mutations = [
+            lambda d: d["payer"].update(stake="894"),
+            lambda d: d["payer"].update(aatom="969"),
+            lambda d: d["bank"]["balances"].update({"provider0:stake": "1034"}),
+            lambda d: d["bank"]["supply"].update(stake="10062"),
+            lambda d: d["retrieval"].update(module_stake="1001"),
+            lambda d: d["retrieval"]["deals"]["0"].update(escrow_balance="999"),
+            lambda d: d["retrieval"]["sessions"][sid].update(payer=ADDRESSES[0]),
+            lambda d: d["retrieval"]["sessions"][sid].update(settled_slots_mask=1),
+            lambda d: d["retrieval"]["sessions"][sid].update(accepted_sample_bitmap=base64.b64encode(bytes(17)).decode()),
+            lambda d: d["retrieval"]["sessions"][sid]["obligations"][0].update(blob_count=3),
+        ]
+        for mutate in mutations:
+            candidate = copy.deepcopy(after)
+            mutate(candidate)
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                verify(candidate)
+        for field, value in (("from", "0x" + "11" * 20), ("to", "0x" + "00" * 20)):
+            candidate = copy.deepcopy(receipts)
+            candidate[0]["receipt"][field] = value
+            with self.assertRaises(ValueError):
+                verify(observed=candidate)
+
+    def test_browser_expiry_economics_refunds_variable_fee_and_retains_base_and_gas(self):
+        sid = "ab" * 32
+        signers = {"owner0": ADDRESSES[0], "provider0": ADDRESSES[1]}
+        before = dict(bank=dict(height=10, balances={name + ":stake": "1000" for name in signers},
+                               supply={"stake": "10000"}),
+                      payer=dict(address=workload.V3_BROWSER_PAYER, stake="1000", aatom="1000"),
+                      retrieval=dict(params={"fixed": "prices"}, module_stake="1000",
+                                     deals={"8": {"escrow_balance": "1000"}}, sessions={}))
+        after = copy.deepcopy(before)
+        after["bank"].update(height=20, supply={"stake": "10097"})
+        after["payer"].update(stake="997", aatom="970")
+        pending = dict(session_id=base64.b64encode(bytes.fromhex(sid)).decode(), deadline_height="19",
+            payer=workload.V3_BROWSER_PAYER, owner=workload.V3_BROWSER_PAYER,
+            funding="RETRIEVAL_SESSION_FUNDING_REQUESTER", price_denom="stake", base_fee="3",
+            price_per_blob="17", locked_fee="17", acked_slots_mask="0", settled_slots_mask="0",
+            refunded_slots_mask="0", sample_count="1", accepted_sample_bitmap=base64.b64encode(bytes(17)).decode(),
+            obligations=[dict(slot="0", payee=ADDRESSES[1], assigned_provider=ADDRESSES[1],
+                              blob_count="1", locked_fee="17")])
+        final = dict(pending, expired=True, locked_fee="0", refunded_slots_mask="1")
+        after["retrieval"]["sessions"][sid] = final
+        receipts = [dict(height=height, receipt={"from": "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255",
+            "to": "0x0000000000000000000000000000000000000900", "gasUsed": "0x5",
+            "effectiveGasPrice": "0x3"}) for height in (12, 15)]
+        outcome = dict(sessionBeforeRefund=pending, afterRefund={"height": "20"},
+            localStateBeforeRefund={"checkpoints": 1, "unbound": 0,
+                "journals": [{"state": "committed", "hasHash": True}]},
+            phaseGuards={"openedSessions": 1, "verifiedWrites": 0, "flushedChunks": 0,
+                         "verifiedChunks": 0, "acknowledgedObligations": 0},
+            resultDurability={"verifiedStages": ["interrupted", "refunded"]})
+        def verify(candidate=after, result=outcome):
+            return workload.verify_browser_v3_refund_economics(before, candidate, session_id=sid,
+                receipts=receipts, issued_stake=100, signers=signers, outcome=result)
+        self.assertEqual(verify(), dict(retained_base_fee_stake=3, refunded_variable_fee_stake=17,
+            issued_stake=100, payer_gas_aatom=30, refunded_sessions=1))
+        mutations = [
+            lambda d: d["payer"].update(stake="980"),
+            lambda d: d["payer"].update(aatom="969"),
+            lambda d: d["bank"]["balances"].update({"provider0:stake": "1001"}),
+            lambda d: d["bank"]["supply"].update(stake="10114"),
+            lambda d: d["retrieval"]["sessions"][sid].update(refunded_slots_mask="0"),
+        ]
+        for mutate in mutations:
+            candidate = copy.deepcopy(after)
+            mutate(candidate)
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                verify(candidate)
+        incomplete = copy.deepcopy(outcome)
+        incomplete["resultDurability"]["verifiedStages"] = ["interrupted"]
+        with self.assertRaises(ValueError):
+            verify(result=incomplete)
+
+    def test_browser_phase_report_does_not_add_overlapping_chunks_as_elapsed_time(self):
+        events = [dict(phase="transport", chunkId=chunk, edge=edge, atMs=at)
+                  for chunk, edge, at in (("a", "start", 0), ("b", "start", 1), ("a", "end", 3), ("b", "end", 4))]
+        phase = workload.browser_phase_intervals(events)["phases"]["transport"]
+        self.assertEqual(phase["summed_work_ms"], 6)
+        self.assertEqual(phase["occupied_elapsed_ms"], 4)
+        self.assertEqual(phase["count"], 2)
+        for invalid in (events[:-1], events[1:], [dict(events[0], atMs=float("nan"))],
+                        [events[0], events[0], *events[1:]], [events[0], dict(events[2], atMs=-1)]):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                workload.browser_phase_intervals(invalid)
+
+    def test_browser_evm_receipts_join_committed_bytes_and_reject_disagreement(self):
+        raw = b"actual signed transaction"
+        txhash = "0x" + "ab" * 32
+        nodes = [dict(node_id=str(i)) for i in range(4)]
+        block = dict(block_id={"hash": "CD" * 32}, block={"header": {
+            "height": "15", "chain_id": "chain", "app_hash": "EF" * 32, "time": "now"},
+            "data": {"txs": [base64.b64encode(raw).decode()]}})
+        response = dict(height="15", txs_results=[dict(code=0, gas_wanted="100", gas_used="90",
+            events=[dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash)]),
+                    dict(type="ethereum_tx", attributes=[dict(key="ethereumTxHash", value=txhash.upper())])])])
+        receipt = dict(transactionHash=txhash, status="0x1", blockNumber="0xf", blockHash="0x" + "cd" * 32)
+        life = SimpleNamespace(nodes=nodes, chain="chain", wait_height=Mock(),
+            query=Mock(side_effect=lambda node, route: block if route.startswith("/block?") else response))
+        result = workload.browser_v3_committed_receipts(life, [receipt])
+        self.assertEqual(result[0]["txhash"], hashlib.sha256(raw).hexdigest().upper())
+        self.assertEqual(result[0]["validators"], [str(i) for i in range(4)])
+        for candidate in ([receipt, receipt], [dict(receipt, status="0x0")],
+                          [dict(receipt, blockHash="0x" + "00" * 32)], [dict(receipt, transactionHash="0x" + "11" * 32)]):
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                workload.browser_v3_committed_receipts(life, candidate)
+        distinct = copy.deepcopy(response)
+        distinct["txs_results"][0]["events"].append(dict(type="ethereum_tx",
+            attributes=[dict(key="ethereumTxHash", value="0x" + "11" * 32)]))
+        life.query = lambda node, route: block if route.startswith("/block?") else distinct
+        with self.assertRaisesRegex(ValueError, "one successful Ethereum transaction"):
+            workload.browser_v3_committed_receipts(life, [receipt])
+        failed = copy.deepcopy(response)
+        failed["txs_results"][0]["code"] = 1
+        life.query = lambda node, route: block if route.startswith("/block?") else failed
+        with self.assertRaisesRegex(ValueError, "one successful Ethereum transaction"):
+            workload.browser_v3_committed_receipts(life, [receipt])
+        duplicate_block = copy.deepcopy(block)
+        duplicate_block["block"]["data"]["txs"].append(base64.b64encode(b"second transaction").decode())
+        duplicate_response = copy.deepcopy(response)
+        duplicate_response["txs_results"].append(copy.deepcopy(response["txs_results"][0]))
+        life.query = lambda node, route: duplicate_block if route.startswith("/block?") else duplicate_response
+        with self.assertRaisesRegex(ValueError, "lacks a unique"):
+            workload.browser_v3_committed_receipts(life, [receipt])
+        def disagree(node, route):
+            value = copy.deepcopy(block if route.startswith("/block?") else response)
+            if node["node_id"] == "3" and "txs_results" in value:
+                value["txs_results"][0]["gas_used"] = "89"
+            return value
+        life.query = disagree
+        with self.assertRaisesRegex(ValueError, "four validators disagree"):
+            workload.browser_v3_committed_receipts(life, [receipt])
 
     def test_fixed_height_query_future_height_retry_is_bounded(self):
         lifecycle = self.query_lifecycle()
@@ -855,6 +1325,77 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertLessEqual(retained[1]["request_started_ns"],
                                  retained[1]["request_finished_ns"])
 
+    def test_generation_acceptance_retries_only_exact_prebroadcast_signer_busy(self):
+        hint = "retrieval submission capacity or signer busy"
+
+        def run_case(tmp, route, response):
+            lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
+                deadline=artifact.monotonic_ns() + 30 * 10**9, save=Mock(), remaining=Mock(return_value=1))
+            requests = [dict(provider="provider-a", url="http://provider" + route,
+                             body={"deal_id": 7, "provider": "provider-a"})]
+            calls = 0
+            def run(argv, deadline, env):
+                nonlocal calls
+                calls += 1
+                body, status = response(calls)
+                Path(argv[argv.index("--output") + 1]).write_text(json.dumps(body))
+                return SimpleNamespace(stdout=str(status), stderr="", returncode=0)
+            with patch.object(artifact, "run_bounded_command", side_effect=run), \
+                 patch.object(workload, "require_free_disk", return_value=workload.V3_ABORT_FREE_BYTES), \
+                 patch.object(workload.time, "sleep"):
+                outcomes = workload.run_v3_http_phase(lifecycle, "/curl", requests,
+                    "generation-busy", max_in_flight=1, retry_pre_admission_busy=True)
+            return calls, lifecycle.doc["v3_http_phases"]["generation-busy"], outcomes
+
+        for error in ("provider signer busy", "provider signer busy after generation verification"):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as tmp:
+                def busy_then_success(attempt, error=error):
+                    if attempt == 1:
+                        return {"error": error, "hint": hint}, 429
+                    return {"status": "success"}, 200
+                calls, retained, outcomes = run_case(tmp, "/sp/generation-v3/accept", busy_then_success)
+                self.assertEqual((calls, len(retained), outcomes[0]["status"]), (2, 2, "success"))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            calls, retained, outcomes = run_case(tmp, "/sp/generation-v3/accept",
+                lambda attempt: ({"error": "provider signer busy", "hint": hint}, 429))
+            self.assertEqual((calls, len(retained), outcomes[0]["http_status"], outcomes[0]["attempt"]),
+                             (workload.V3_BUSY_MAX_ATTEMPTS, workload.V3_BUSY_MAX_ATTEMPTS, 429,
+                              workload.V3_BUSY_MAX_ATTEMPTS))
+
+        rejected = [
+            ("/sp/session-proof", {"error": "provider signer busy", "hint": hint}),
+            ("/sp/generation-v3/accept",
+             {"error": "provider signer busy", "hint": hint, "tx_hash": "A" * 64}),
+        ]
+        for route, body in rejected:
+            with self.subTest(route=route, keys=sorted(body)), tempfile.TemporaryDirectory() as tmp:
+                calls, retained, outcomes = run_case(tmp, route, lambda attempt, body=body: (body, 429))
+                self.assertEqual((calls, len(retained), outcomes[0]["http_status"]), (1, 1, 429))
+
+    def test_generation_admission_enables_busy_retry_and_reports_terminal_outcome(self):
+        candidate = dict(deal_id="7", expected_current_generation="0",
+            previous_polyfs_root="", polyfs_root="0x" + self.ROOT,
+            integrity_root="0x" + self.INTEGRITY, size_bytes=str(workload.V3_PILOT_BYTES),
+            total_mdus="5", witness_mdus="1", integrity_leaf_count="288",
+            commit_action="propose-deal-generation-v3", required_acceptances="12")
+        providers = dict(enumerate(AUDIT_ADDRESSES))
+        lifecycle = SimpleNamespace(signers={"owner0": AUDIT_ADDRESSES[8]}, nodes=[{}],
+            wait_height=Mock(), doc={"providers": [
+                {"address": provider, "port": 19091 + slot}
+                for slot, provider in providers.items()]})
+        terminal = dict(provider=providers[0], http_status=429, status=None,
+                        error="provider signer busy", hint="retrieval submission capacity or signer busy")
+        phase = Mock(return_value=[terminal])
+        with patch.object(workload, "verify_transaction_nodes", return_value=[]), \
+             patch.object(workload, "run_v3_http_phase", phase), \
+             self.assertRaisesRegex(ValueError,
+                 "provider=.*http_status='429'.*status='None'.*provider signer busy"):
+            workload.admit_native_v3_generation(lifecycle,
+                uploaded={"generation_candidate": candidate}, deal_id="7", providers=providers,
+                send=Mock(return_value={"height": 10}), curl="/curl")
+        self.assertTrue(phase.call_args.kwargs["retry_pre_admission_busy"])
+
     def test_native_v3_provider_routes_use_gateway_auth_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             lifecycle = SimpleNamespace(home=Path(tmp), doc={}, env={},
@@ -1540,6 +2081,39 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
 
 
 class HealthyAuditViewsTest(unittest.TestCase):
+    def test_native_v3_browser_cli_is_explicit_and_keeps_other_modes_unchanged(self):
+        common = ["diagnostic", "--mode", "native-v3-browser", "--binary", "/chain",
+                  "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
+                  "--cli-binary", "/native-cli", "--product-source", "/source"]
+        for extra, expected_browser in (([], {"file_bytes": 1024}),
+                (["--browser-bytes", "1073741824"], {"file_bytes": 1_073_741_824}),
+                (["--browser-bytes", "1073741824", "--browser-executor-handoff"],
+                 {"file_bytes": 1_073_741_824, "executor_handoff": True})):
+            with self.subTest(expected_browser=expected_browser), patch.object(workload.sys, "argv", common + extra), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
+                workload.main()
+                constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
+                    timeout=600, browser_evm=True)
+                run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
+                    native_browser=expected_browser, audit_profile="normal")
+        invalid = ["diagnostic", "--mode", "native-v3-providers", "--binary", "/chain",
+                   "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
+                   "--cli-binary", "/native-cli", "--product-source", "/source",
+                   "--browser-bytes", "1024"]
+        with patch.object(workload.sys, "argv", invalid), patch.object(workload.sys, "stderr"), \
+             patch.object(artifact, "FourValidatorLifecycle") as constructor, self.assertRaises(SystemExit):
+            workload.main()
+        constructor.assert_not_called()
+        for size in ("1024", "16777217"):
+            with self.subTest(handoff_size=size), patch.object(workload.sys, "argv",
+                    common + ["--browser-bytes", size, "--browser-executor-handoff"]), \
+                 patch.object(workload.sys, "stderr"), \
+                 patch.object(artifact, "FourValidatorLifecycle") as constructor, \
+                 self.assertRaises(SystemExit):
+                workload.main()
+            constructor.assert_not_called()
+
     def test_native_v3_cross_audit_cli_is_fixed_bounded_and_normal_audit_only(self):
         common = ["diagnostic", "--mode", "native-v3-providers-cross-audit", "--binary", "/chain",
                   "--library", "/lib", "--home", "/new-home"]
@@ -1630,7 +2204,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
                     sustained=dict(exporter="/exporter", step_seconds=4, proof_gas=20000000, k=k,
                                    rate_scale=rate_scale, deputy_count=deputies), audit_profile="normal")
 
-    def fixture(self, *, complete=True, counts=None, k=2):
+    def fixture(self, *, complete=True, counts=None, k=2, user_mdus=1):
         layout = workload.mode2_layout(k)
         counts = (1, 9, 32) if counts is None and k == 2 else counts or (1,) * layout["assignments"]
         deal = dict(id="7", manifest_root=base64.b64encode(bytes([7]) * 32).decode(),
@@ -1640,12 +2214,12 @@ class HealthyAuditViewsTest(unittest.TestCase):
         for slot, count in enumerate(counts):
             accepted = count if complete else 0
             snapshot = dict(chain_id="polystore_260-1", generation="1", layout=2, k=k, m=layout["m"],
-                            slot=slot, metadata_mdus="2", user_mdus="1", deal_end="1000",
+                            slot=slot, metadata_mdus="2", user_mdus=str(user_mdus), deal_end="1000",
                             setup_digest=base64.b64encode(bytes.fromhex(producer.SETUP_DIGEST)).decode())
             context = dict(version=2, chain_id="polystore_260-1", setup_digest=producer.SETUP_DIGEST,
                 kind=2, context_id="00"*32, deal_id=7, generation=1, root="07"*32,
                 assigned=producer.account(providers[slot]).hex(), payee=producer.account(providers[slot]).hex(),
-                layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2, user_mdus=1, start_mdu=0, start_leaf=0,
+                layout=2, k=k, m=layout["m"], slot=slot, metadata_mdus=2, user_mdus=user_mdus, start_mdu=0, start_leaf=0,
                 blob_count=0, epoch_id=2, epoch_length=100, sample_count=count, snapshot_height=100,
                 anchor_height=101, first_response_height=102, deadline_height=200, deal_end=1000)
             values.append(dict(audit=dict(epoch_id="2", sample_count=str(count), accepted_count=str(accepted),
@@ -1666,6 +2240,18 @@ class HealthyAuditViewsTest(unittest.TestCase):
         values, deal, providers = self.fixture()
         with self.assertRaisesRegex(ValueError, "sample count"):
             workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1", finalized=True, expected_samples=32)
+
+    def test_general_fixture_freezes_cold_quota_when_hot_and_cold_differ(self):
+        params = dict(quota_min_blobs="1", quota_max_blobs="64",
+                      quota_bps_per_epoch_hot="100", quota_bps_per_epoch_cold="50")
+        self.assertEqual(workload.frozen_audit_quota(params, 1064, params["quota_bps_per_epoch_cold"]), 6)
+        self.assertEqual(workload.frozen_audit_quota(params, 1064, params["quota_bps_per_epoch_hot"]), 11)
+        values, deal, providers = self.fixture(k=8, counts=(6,) * 12, user_mdus=133)
+        workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1",
+                                     finalized=True, expected_samples=6, k=8, user_mdus=133)
+        with self.assertRaisesRegex(ValueError, "sample count"):
+            workload.healthy_audit_views(values, deal, providers, 2, 100, "polystore_260-1",
+                                         finalized=True, expected_samples=11, k=8, user_mdus=133)
 
     def test_k8_audit_uses_twelve_assignments_and_eight_row_population(self):
         values, deal, providers = self.fixture(k=8, counts=(8,) * 12)

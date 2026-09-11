@@ -22,7 +22,7 @@ import textwrap
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
 
@@ -205,6 +205,235 @@ exec(compile(code, "<benchmark home>", "exec"))
 
 
 class BenchmarkArtifactTest(unittest.TestCase):
+    def test_reusable_loopback_reservation_excludes_a_live_listener(self):
+        reservation = artifact.reserve_loopback_port(0)
+        self.addCleanup(reservation.close)
+        port = reservation.getsockname()[1]
+        self.assertNotEqual(reservation.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
+        with self.assertRaises(OSError):
+            artifact.reserve_loopback_port(port)
+        reservation.close()
+        replacement = artifact.reserve_loopback_port(port)
+        replacement.close()
+
+    def test_browser_memory_wrapper_retains_kernel_peak_and_child_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "cgroup"
+            proc.write_text("0::/user.slice/browser.scope\n")
+            cgroup = root / "sys" / "user.slice" / "browser.scope"
+            cgroup.mkdir(parents=True)
+            (cgroup / "memory.peak").write_text("33554432\n")
+            output = root / "memory.json"
+            with patch.object(artifact, "PROC_SELF_CGROUP", proc), \
+                 patch.object(artifact, "CGROUP_ROOT", root / "sys"), \
+                 patch.object(artifact.subprocess, "run",
+                              return_value=subprocess.CompletedProcess(["playwright"], 7)) as run:
+                self.assertEqual(artifact.browser_memory_wrapper(output, ["playwright", "test"]), 7)
+            run.assert_called_once_with(["playwright", "test"])
+            self.assertEqual(artifact.read_browser_memory(output), {
+                "schema": artifact.BROWSER_MEMORY_SCHEMA,
+                "memory_peak_bytes": 33554432,
+                "source": artifact.BROWSER_MEMORY_SOURCE,
+                "measurement_scope": artifact.BROWSER_MEMORY_SCOPE,
+            })
+            self.assertEqual(list(root.glob(".*.tmp")), [])
+            with patch.object(artifact.subprocess, "run") as rerun, self.assertRaisesRegex(ValueError, "already exist"):
+                artifact.browser_memory_wrapper(output, ["playwright"])
+            rerun.assert_not_called()
+
+    def test_bounded_browser_command_uses_native_scope_and_requires_success_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            systemd_run = root / "systemd-run"
+            systemd_run.write_text("#!/bin/sh\n")
+            systemd_run.chmod(0o755)
+            output = root / "memory.json"
+            expected = {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 4096,
+                        "source": artifact.BROWSER_MEMORY_SOURCE,
+                        "measurement_scope": artifact.BROWSER_MEMORY_SCOPE}
+            def command(argv, deadline, **options):
+                self.assertEqual(deadline, 123)
+                self.assertEqual(options, {"env": {"ONLY": "this"}, "cwd": root})
+                self.assertEqual(argv[:4], [str(systemd_run), "--user", "--scope", "--quiet"])
+                self.assertIn("--property=MemoryAccounting=yes", argv)
+                self.assertEqual(argv[-2:], ["playwright", "test"])
+                output.write_text(json.dumps(expected))
+                return subprocess.CompletedProcess(argv, 0, "ok", "")
+            with patch.object(artifact.platform, "system", return_value="Linux"), \
+                 patch.object(artifact, "SYSTEMD_RUN", systemd_run), \
+                 patch.object(artifact, "run_bounded_command", side_effect=command):
+                result, measurement = artifact.run_bounded_browser_command(
+                    ["playwright", "test"], 123, output, env={"ONLY": "this"}, cwd=root)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(measurement, expected)
+
+            output.unlink()
+            with patch.object(artifact.platform, "system", return_value="Linux"), \
+                 patch.object(artifact, "SYSTEMD_RUN", systemd_run), \
+                 patch.object(artifact, "run_bounded_command",
+                              return_value=subprocess.CompletedProcess([], 0, "", "")), \
+                 self.assertRaisesRegex(ValueError, "did not retain"):
+                artifact.run_bounded_browser_command(["playwright"], 123, output)
+
+    def test_browser_memory_evidence_rejects_wrong_scope_or_peak(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.json"
+            for value in (
+                None,
+                {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 0,
+                 "source": artifact.BROWSER_MEMORY_SOURCE, "measurement_scope": artifact.BROWSER_MEMORY_SCOPE},
+                {"schema": artifact.BROWSER_MEMORY_SCHEMA, "memory_peak_bytes": 1,
+                 "source": "JS heap", "measurement_scope": artifact.BROWSER_MEMORY_SCOPE},
+            ):
+                with self.subTest(value=value):
+                    path.write_text(json.dumps(value))
+                    with self.assertRaises(ValueError):
+                        artifact.read_browser_memory(path)
+
+    def test_browser_executor_handoff_validates_artifacts_and_late_descendants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            env = {key: "enabled" for key in artifact.BROWSER_EXECUTOR_ENV}
+            env.update(VITE_LCD_BASE="http://127.0.0.1:1317",
+                VITE_GATEWAY_BASE="http://127.0.0.1:8080", VITE_SP_BASE="http://127.0.0.1:19091",
+                VITE_EVM_RPC="http://127.0.0.1:8545", E2E_BASE_URL="http://127.0.0.1:4173",
+                VITE_CHAIN_ID="262144", VITE_E2E="1", E2E_NATIVE_V3_BROWSER="1",
+                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES=str(1 << 30))
+            request_path = root / "browser-executor-request.json"
+            request = artifact.create_browser_executor_request(request_path, source=source,
+                source_head="ab" * 20, source_status="", env=env, timeout_seconds=600,
+                browser_bytes=1 << 30, faults=False)
+            paths = {key: root / name for key, name in request["artifacts"].items()}
+            paths["result"].write_text('{"success":true}\n')
+            paths["stdout"].write_text("passed\n")
+            paths["stderr"].write_text("")
+            paths["memory"].write_text(json.dumps({"schema": artifact.DARWIN_BROWSER_MEMORY_SCHEMA,
+                "peak_rss_bytes": 4096, "samples": 3, "interval_ms": 250,
+                "scope": artifact.DARWIN_BROWSER_MEMORY_SCOPE}) + "\n")
+            response = {"schema": artifact.BROWSER_EXECUTOR_RESPONSE_SCHEMA, "id": request["id"],
+                "head": request["head"], "returncode": 0, "scope": artifact.BROWSER_EXECUTOR_SCOPE,
+                "topology": {"ssh_target": "runner@server", "forwards": [4173, 8080, 1317, 8545],
+                             "ssh_compression": "no"},
+                "artifacts": {key: {"bytes": path.stat().st_size, "sha256": artifact.sha256(path)}
+                              for key, path in paths.items()}}
+            artifact.write_new_json(root / "browser-executor-response.json", response)
+            result, memory, observed = artifact.read_browser_executor_response(request_path)
+            self.assertEqual((result.returncode, result.stdout, memory["peak_rss_bytes"]), (0, "passed\n", 4096))
+            self.assertEqual(observed["topology"]["ssh_target"], "runner@server")
+
+            for compression in (None, "yes"):
+                changed = copy.deepcopy(response)
+                if compression is None:
+                    changed["topology"].pop("ssh_compression")
+                else:
+                    changed["topology"]["ssh_compression"] = compression
+                (root / "browser-executor-response.json").write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                    artifact.read_browser_executor_response(request_path)
+            (root / "browser-executor-response.json").write_text(json.dumps(response))
+
+            paths["stdout"].write_text("tampered\n")
+            with self.assertRaisesRegex(ValueError, "manifest mismatch"):
+                artifact.read_browser_executor_response(request_path)
+            paths["stdout"].write_text("passed\n")
+            response["head"] = "cd" * 20
+            (root / "browser-executor-response.json").write_text(json.dumps(response))
+            with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                artifact.read_browser_executor_response(request_path)
+            changed = dict(request, env=dict(request["env"], UNKNOWN="value"))
+            with self.assertRaisesRegex(ValueError, "fixed browser executor contract"):
+                artifact.validate_browser_executor_request(changed)
+            for changed in (dict(request, bytes=1024),
+                    dict(request, bytes=16_777_217, faults=True,
+                         artifacts=artifact.browser_executor_artifacts(True))):
+                with self.assertRaisesRegex(ValueError, "clean 1 GiB"):
+                    artifact.validate_browser_executor_request(changed)
+
+            first = {10: (1, 1024, "root-start"), 20: (10, 2048, "child-start")}
+            retained = artifact.darwin_owned_processes(10, first)
+            second = dict(first)
+            second[30] = (20, 4096, "late-grandchild")
+            self.assertEqual(artifact.darwin_owned_processes(10, second, retained)[30], "late-grandchild")
+
+    def test_browser_executor_tunnel_disables_ssh_compression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, chrome = (root / "source").resolve(), (root / "chrome").resolve()
+            (source / "polystore-website/node_modules/.bin").mkdir(parents=True)
+            playwright = source / "polystore-website/node_modules/.bin/playwright"
+            playwright.touch()
+            chrome.touch()
+            env = {key: "enabled" for key in artifact.BROWSER_EXECUTOR_ENV}
+            env.update(VITE_LCD_BASE="http://127.0.0.1:1317",
+                VITE_GATEWAY_BASE="http://127.0.0.1:8080", VITE_SP_BASE="http://127.0.0.1:19091",
+                VITE_EVM_RPC="http://127.0.0.1:8545", E2E_BASE_URL="http://127.0.0.1:4173",
+                VITE_CHAIN_ID="262144", VITE_E2E="1", E2E_NATIVE_V3_BROWSER="1",
+                E2E_NATIVE_V3_EXPIRY="0", E2E_NATIVE_V3_FAULTS="0", E2E_NATIVE_V3_BYTES=str(1 << 30))
+            seed = root / "seed.json"
+            request = artifact.create_browser_executor_request(seed, source=source, source_head="ab" * 20,
+                source_status="", env=env, timeout_seconds=600, browser_bytes=1 << 30, faults=False)
+            tunnel = Mock(pid=17)
+            tunnel.poll.return_value = None
+            tunnel.wait.return_value = 0
+            published, executor_errors = [], []
+
+            def command(argv, _deadline, **_options):
+                if argv[0] == "scp":
+                    Path(argv[-1]).write_text(json.dumps(request))
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                self.assertEqual(argv, [str(chrome), "--version"])
+                return subprocess.CompletedProcess(argv, 0, "Chrome 1\n", "")
+
+            def git(argv, **_options):
+                value = request["head"] + "\n" if "rev-parse" in argv else ""
+                return subprocess.CompletedProcess(argv, 0, value, "")
+
+            def publish(_target, local, _remote, _request_id, _deadline):
+                if Path(local).name == "response.json":
+                    published.append(json.loads(Path(local).read_text()))
+                elif Path(local).name == request["artifacts"]["stderr"]:
+                    executor_errors.append(Path(local).read_text())
+
+            with patch.object(artifact.platform, "system", return_value="Darwin"), \
+                 patch.object(artifact.shutil, "which", return_value="/usr/bin/tool"), \
+                 patch.object(artifact.shutil, "disk_usage", return_value=Mock(free=1 << 40)), \
+                 patch.object(artifact, "run_bounded_command", side_effect=command), \
+                 patch.object(artifact.subprocess, "run", side_effect=git), \
+                 patch.object(artifact.subprocess, "Popen", return_value=tunnel) as popen, \
+                 patch.object(artifact, "browser_executor_preflight", side_effect=OSError("unreachable")), \
+                 patch.object(artifact, "browser_executor_publish", side_effect=publish), \
+                 patch.object(artifact, "signal_owned_process_group"), \
+                 patch.object(artifact, "monotonic_ns", side_effect=[0, 0, 61 * 10**9, 0]):
+                result = artifact.browser_executor_main(["--ssh", "runner@server", "--remote-request",
+                    "/tmp/request.json", "--source", str(source), "--chrome", str(chrome)])
+
+            self.assertEqual(result, 1)
+            self.assertIsNotNone(popen.call_args, executor_errors)
+            tunnel_argv = popen.call_args.args[0]
+            self.assertIn("-oCompression=no", tunnel_argv)
+            self.assertLess(tunnel_argv.index("-oCompression=no"), tunnel_argv.index("runner@server"))
+            self.assertEqual(published[0]["topology"]["ssh_compression"], "no")
+
+    def test_darwin_browser_cleanup_reaps_after_snapshot_and_permission_failures(self):
+        process = Mock(pid=10)
+        table = {10: (1, 1024, "root"), 20: (10, 2048, "child")}
+        for snapshots, kill_error, expected in (
+                ([OSError("snapshot failed"), table], None, "snapshot failed"),
+                ([table, table], PermissionError("signal denied"), "signal denied")):
+            process.reset_mock()
+            with self.subTest(expected=expected), \
+                 patch.object(artifact, "darwin_process_table", side_effect=snapshots), \
+                 patch.object(artifact.os, "kill", side_effect=kill_error), \
+                 patch.object(artifact, "signal_owned_process_group") as group, \
+                 patch.object(artifact.time, "sleep"), \
+                 self.assertRaisesRegex(OSError, expected):
+                artifact.cleanup_darwin_browser(process, {20: "child"})
+            self.assertEqual(group.call_count, 2)
+            process.wait.assert_called_once_with(timeout=5)
+
     def test_committed_block_pairs_real_payload_hash_with_ordered_results(self):
         block = dict(block_id=dict(hash="ab" * 32), block=dict(header=dict(height="7", chain_id="bench", app_hash="cd" * 32, time="2026-09-08T00:00:00Z"), data=dict(txs=[base64.b64encode(b"transaction").decode()])))
         results = dict(height="7", txs_results=[dict(code=1, gas_wanted="100", gas_used="90")])
@@ -1304,10 +1533,11 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                     genesis = {"consensus": {"params": {"block": {}}}, "app_state": {
                         "bank": {"denom_metadata": []}, "nilchain": {"params": {
                             "retrieval_v2_activation_height": "0", "retrieval_v3_activation_height": "0",
-                            "unchanged_fee": "17"}}}}
+                            "unchanged_fee": "17"}}, "evm": {"params": {"active_static_precompiles": []}},
+                        "feemarket": {"params": {"min_gas_price": "0.000000000000000000"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
                     (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
-                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\n')
+                    (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\nenabled-unsafe-cors = false\\n[mempool]\\nmax-txs = -1\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
                         "priv_key": "NEVER RETAIN THIS SECRET"}))
@@ -1458,6 +1688,37 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                 genesis = json.loads((Path(runner.nodes[0]["home"]) / "config/genesis.json").read_text())
                 self.assertEqual(genesis["app_state"]["nilchain"]["params"]["retrieval_v3_activation_height"],
                                  "1" if enabled else "0")
+
+    def test_browser_evm_genesis_enables_precompile_and_nonzero_gas_floor_only_when_requested(self):
+        for browser_evm in (False, True):
+            with self.subTest(browser_evm=browser_evm):
+                runner = artifact.FourValidatorLifecycle(self.binary, self.library,
+                    self.root / ("browser-evm" if browser_evm else "native"), browser_evm=browser_evm)
+                runner.home.mkdir(mode=0o700)
+                runner.prepare(browser_payer="nil1" + "z" * 35 if browser_evm else None)
+                genesis = json.loads((Path(runner.nodes[0]["home"]) / "config/genesis.json").read_text())
+                self.assertEqual(genesis["app_state"]["evm"]["params"]["active_static_precompiles"],
+                                 [artifact.BROWSER_EVM_PRECOMPILE] if browser_evm else [])
+                self.assertEqual(genesis["app_state"]["feemarket"]["params"]["min_gas_price"],
+                                 artifact.BROWSER_EVM_MIN_GAS_PRICE if browser_evm else "0.000000000000000000")
+                if browser_evm:
+                    self.assertEqual(runner.doc["profile"]["browser_evm_fee_policy"], {
+                        "native_minimum_gas_prices": artifact.BROWSER_EVM_NATIVE_GAS_PRICES,
+                        "evm_min_gas_price_aatom": artifact.BROWSER_EVM_MIN_GAS_PRICE,
+                    })
+                else:
+                    self.assertNotIn("browser_evm_fee_policy", runner.doc["profile"])
+                runner.doc["provenance"] = {
+                    "binary_sha256": artifact.sha256(self.binary),
+                    "native_library_sha256": artifact.sha256(self.library),
+                    "trusted_setup_sha256": artifact.sha256(runner.env["POLYSTORE_TRUSTED_SETUP"]),
+                }
+                with patch.object(artifact.subprocess, "Popen") as popen:
+                    runner.start("gas-policy")
+                for call in popen.call_args_list:
+                    argv = call.args[0]
+                    self.assertEqual(argv[argv.index("--minimum-gas-prices") + 1],
+                                     artifact.BROWSER_EVM_NATIVE_GAS_PRICES if browser_evm else "0.001aatom")
 
     def test_prepare_provisions_bounded_high_load_signer_population(self):
         self.runner.home.mkdir(mode=0o700)
