@@ -73,6 +73,10 @@ V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
 V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND = 442.56266798019266
+V3_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND = {
+    2: V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND,
+    4: 873.7485736055276,
+}
 V3_CONFIGURED_VALIDATOR_V3_VERIFIER_PROVENANCE = {
     "artifact_path": "bench/retrieval_session_capacity/parallel-ceiling-328/results.json",
     "artifact_commit": "1bf6762d2bce694917833a6f9a626769e9fd7578",
@@ -2416,7 +2420,7 @@ def native_v3_transaction_members(row):
 
 
 def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, offer_end_ns,
-                               drain_end_ns, mempool_samples):
+                               drain_end_ns, mempool_samples, validator_gomaxprocs=2):
     sample_count = artifact.integer(profile["sample_count"], "profile sample count", 1,
                                     V3_MAX_SAMPLES)
     offered_by_hash = {row["txhash"]: row for row in offered}
@@ -2509,8 +2513,22 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
     proof_sets_per_day = proof_sets_per_second * 86400
     sampled_chained_proofs_per_second = sampled_chained_proofs / commit_seconds
     sampled_chained_proofs_per_day = sampled_chained_proofs_per_second * 86400
-    verifier_sessions_per_second = (
-        V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND / sample_count)
+    try:
+        one_sample_verifier_sessions_per_second = (
+            V3_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND[validator_gomaxprocs])
+    except KeyError as error:
+        raise ValueError("no retained V3 verifier ceiling for validator GOMAXPROCS") from error
+    verifier_sessions_per_second = one_sample_verifier_sessions_per_second / sample_count
+    verifier_provenance = dict(V3_CONFIGURED_VALIDATOR_V3_VERIFIER_PROVENANCE)
+    verifier_provenance.update(
+        validator_gomaxprocs=validator_gomaxprocs,
+        source_statistic=(
+            ".parallel_verifier[] | select(.workers == "
+            f"{validator_gomaxprocs}) | .median_sessions_per_second"),
+        source_statistic_semantics=(
+            "exact pure verifyPolyFSChainedProof throughput for one sampled chained proof per "
+            f"session at GOMAXPROCS={validator_gomaxprocs}; each configured validator repeats "
+            "the same transaction stream"))
     resource_metrics = validator_backlog_resources(
         mempool_samples, backlog, mempool_samples[0]["clock_ticks_per_second"])
     max_mempool_transactions = max(row["transactions"] for sample in mempool_samples
@@ -2529,16 +2547,15 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         committed_kzg_opening_verifications_per_second=2 * sampled_chained_proofs_per_second,
         committed_kzg_opening_verifications_per_day=2 * sampled_chained_proofs_per_day,
         configured_validator_v3_one_sample_verifier_sessions_per_second=(
-            V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND),
+            one_sample_verifier_sessions_per_second),
         configured_validator_v3_linearized_session_ceiling_per_second=(
             verifier_sessions_per_second),
         configured_validator_v3_linearized_session_ceiling_per_day=(
             verifier_sessions_per_second * 86400),
         percent_of_configured_validator_v3_verifier_capacity=(
             sampled_chained_proofs_per_second /
-            V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND * 100),
-        configured_validator_v3_verifier_provenance=dict(
-            V3_CONFIGURED_VALIDATOR_V3_VERIFIER_PROVENANCE),
+            one_sample_verifier_sessions_per_second * 100),
+        configured_validator_v3_verifier_provenance=verifier_provenance,
         complete_proof_sets_per_second=proof_sets_per_second,
         complete_proof_sets_per_day=proof_sets_per_day,
         complete_proof_sets_in_saturated_interval=complete_proof_sets,
@@ -2851,7 +2868,8 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 raise ValueError("four-validator session bitmap differs from the frozen proof set")
             row["accepted_sample_ordinals"] = accepted
         metrics = native_v3_capacity_metrics(profile, offered, committed, blocks,
-            started_ns, offer_end_ns, drain_end_ns, mempool_samples)
+            started_ns, offer_end_ns, drain_end_ns, mempool_samples,
+            validator_gomaxprocs=int(lifecycle.env["GOMAXPROCS"]))
         metrics["resource_utilization"] = summarize_native_v3_resources(
             [row["resources"] for row in mempool_samples if row["resources"] is not None],
             (drain_end_ns - started_ns) / 1e9)
@@ -5567,6 +5585,8 @@ def main():
                         help="Benchmark-only proof simulation gas multiplier; defaults to the historical 1.6")
     parser.add_argument("--chain-timeout-commit-ms", type=int, choices=(250, 500, 1000), default=1000,
                         help="Benchmark-only CometBFT timeout_commit; defaults to the historical 1000ms")
+    parser.add_argument("--chain-validator-gomaxprocs", type=int, choices=(2, 4), default=2,
+                        help="Benchmark-only Go worker ceiling per validator; defaults to 2")
     parser.add_argument("--browser-bytes", type=int, choices=V3_BROWSER_SIZES,
                         help="Retained browser fixture size; only used by native-v3-browser")
     parser.add_argument("--browser-executor-handoff", action="store_true",
@@ -5594,12 +5614,15 @@ def main():
     chain_batch_size = options.pop("chain_proof_batch_size")
     chain_gas_adjustment = options.pop("chain_proof_gas_adjustment")
     chain_timeout_commit_ms = options.pop("chain_timeout_commit_ms")
+    chain_validator_gomaxprocs = options.pop("chain_validator_gomaxprocs")
     if mode != "native-v3-chain" and any(value is not None for value in
             (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)):
         parser.error("chain capacity controls require native-v3-chain")
     if mode != "native-v3-chain" and (chain_submission_mode != "separate" or chain_batch_size != 1):
         parser.error("chain proof submission controls require native-v3-chain")
-    if mode != "native-v3-chain" and (chain_gas_adjustment != "1.6" or chain_timeout_commit_ms != 1000):
+    if mode != "native-v3-chain" and (chain_gas_adjustment != "1.6" or
+                                      chain_timeout_commit_ms != 1000 or
+                                      chain_validator_gomaxprocs != 2):
         parser.error("chain timing and gas controls require native-v3-chain")
     if browser_executor_handoff and (mode != "native-v3-browser" or
             (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
@@ -5625,6 +5648,7 @@ def main():
         native_chain = dict(exporter=exporter)
         if chain_timeout_commit_ms != 1000:
             options["consensus_timeout_commit_ms"] = chain_timeout_commit_ms
+        options["gomaxprocs"] = chain_validator_gomaxprocs
         if selected_chain_profile:
             try:
                 profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions,

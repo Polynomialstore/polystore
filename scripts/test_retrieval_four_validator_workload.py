@@ -1733,6 +1733,22 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             metrics["configured_validator_v3_verifier_provenance"]["source_statistic_semantics"])
         self.assertIn("sample_count=1",
             metrics["configured_validator_v3_verifier_provenance"]["linearization"])
+        gomaxprocs4_metrics = workload.native_v3_capacity_metrics(
+            {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+             "sample_count": 2, "sessions": 4},
+            offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples,
+            validator_gomaxprocs=4)
+        self.assertAlmostEqual(
+            gomaxprocs4_metrics["configured_validator_v3_one_sample_verifier_sessions_per_second"],
+            workload.V3_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND[4])
+        self.assertEqual(gomaxprocs4_metrics["configured_validator_v3_verifier_provenance"]
+                         ["validator_gomaxprocs"], 4)
+        with self.assertRaisesRegex(ValueError, "no retained V3 verifier ceiling"):
+            workload.native_v3_capacity_metrics(
+                {"proof_transactions": 1, "obligation_slots": [0], "range_bytes": 1024,
+                 "sample_count": 2, "sessions": 4},
+                offered, committed, blocks, 0, 2 * 10**9, 25 * 10**9, samples,
+                validator_gomaxprocs=8)
         self.assertAlmostEqual(metrics["complete_proof_sets_per_second"], .2)
         self.assertEqual(metrics["daily_equivalent_basis"],
             "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim")
@@ -2637,7 +2653,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
             constructor.assert_called_once_with(binary="/chain", library="/lib", home="/new-home",
-                                                timeout=3600, sustained=True)
+                                                timeout=3600, gomaxprocs=2, sustained=True)
             run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
                                         native_chain=dict(exporter="/exporter"), audit_profile="normal")
         sweep = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "1kib",
@@ -3009,7 +3025,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             "--proof-exporter", "/exporter", "--chain-max-gas", "192000000",
             "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "4608",
             "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
-            "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500"]
+            "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500",
+            "--chain-validator-gomaxprocs", "4"]
         with patch.object(workload.sys, "argv", argv), \
              patch.object(artifact, "FourValidatorLifecycle") as constructor, \
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
@@ -3019,6 +3036,7 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 measured_transactions=None, measured_sessions=4608,
                 submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
         self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
+        self.assertEqual(constructor.call_args.kwargs["gomaxprocs"], 4)
 
     def test_transaction_members_reject_duplicate_session_slot(self):
         members = [dict(session_index=1, slot=2, ordinals=[0]),
