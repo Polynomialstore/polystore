@@ -168,6 +168,7 @@ POLYSTORE_BACKUP_DIR="/var/backups/polystore/fresh-genesis-${POLYSTORE_RESET_STA
 POLYSTORE_BACKUP_ARCHIVE="${POLYSTORE_BACKUP_DIR}/hub-state.tar.gz"
 
 sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
+grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env
 sudo test -d /var/lib/polystore/polystorechaind
 sudo test -d /var/lib/polystore/polystore_gateway/router
 sudo install -d -m 0700 "$POLYSTORE_BACKUP_DIR"
@@ -200,6 +201,9 @@ PROVIDER_COUNT=0 START_WEB=0 \
 ./scripts/run_devnet_alpha_multi_sp.sh start
 PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 sudo systemctl start polystorechaind
+POLYSTORECHAIND_PID="$(systemctl show --property MainPID --value polystorechaind)"
+test "$POLYSTORECHAIND_PID" -gt 0
+sudo cat "/proc/${POLYSTORECHAIND_PID}/environ" | tr '\0' '\n' | grep -Fxq 'GOMAXPROCS=4'
 sudo systemctl start polystore-faucet polystore-gateway-router
 POLYSTORE_CONSENSUS_PARAMS="$(mktemp)"
 trap 'rm -f "$POLYSTORE_CONSENSUS_PARAMS"' EXIT
@@ -209,7 +213,7 @@ for _ in {1..60}; do
   sleep 1
 done
 jq -e \
-  '.params.block.max_gas == "192000000" and .params.block.max_bytes == "2097152"' \
+  '.params.block.max_gas == "160000000" and .params.block.max_bytes == "2097152"' \
   "$POLYSTORE_CONSENSUS_PARAMS"
 rm -f "$POLYSTORE_CONSENSUS_PARAMS"
 trap - EXIT
@@ -227,7 +231,7 @@ scripts/run_public_devnet_healthcheck.sh \
 ```
 
 The public healthcheck intentionally comes last because it requires the complete
-on-chain provider inventory and each configured provider endpoint. The 192M
+on-chain provider inventory and each configured provider endpoint. The 160M
 profile retains CometBFT's existing 1-second `timeout_commit`; do not edit
 validator `config.toml` during this rollout. Keep provider data intact until the
 new chain is qualified so the snapshot remains usable for rollback.

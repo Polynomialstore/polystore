@@ -142,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
                 "active_static_precompiles": [] if self.inactive_precompile else [PRECOMPILE],
             }})
         elif self.path == "/cosmos/consensus/v1/params":
-            self.send_json({"params": {"block": {"max_gas": "192000000", "max_bytes": "2097152"}}})
+            self.send_json({"params": {"block": {"max_gas": "160000000", "max_bytes": "2097152"}}})
         elif self.path == "/cosmos/bank/v1beta1/denoms_metadata/aatom":
             self.send_json({"metadata": {"base": "aatom"}})
         elif self.path == f"/polystorechain/polystorechain/v1/providers/{ADDRESS}":

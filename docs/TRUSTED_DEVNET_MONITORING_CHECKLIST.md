@@ -6,7 +6,7 @@ This is a **minimal** checklist for keeping the Feb 2026 trusted devnet healthy.
 
 - Run the complete public gate from an external host. The checked-in deployment
   config pins the public chain IDs and identities, while
-  `scripts/retrieval_consensus_profile.json` pins the 192M/2MiB consensus
+  `scripts/retrieval_consensus_profile.json` pins the 160M/2MiB consensus
   limits. The gate also checks retrieval-v2 activation, EVM precompile,
   denomination metadata, active provider identities,
   placement eligibility, first-advertised public endpoint routing, TLS lifetime,
