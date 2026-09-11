@@ -447,8 +447,8 @@ func BenchmarkVerifyChainedProofParallel(b *testing.B) {
 	require.NotEqual(b, infinity, proof.KzgOpeningProof)
 	rootPath := benchFlattenPath(proof.RootTableDuMerklePath)
 	blobPath := benchFlattenPath(proof.MerklePath)
-	b.ReportMetric(1, "sessions/op")
 	b.ResetTimer()
+	b.ReportMetric(1, "sessions/op")
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ok, err := crypto_ffi.VerifyMdu0RootTableProof(
