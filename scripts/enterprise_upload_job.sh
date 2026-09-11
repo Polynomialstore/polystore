@@ -16,6 +16,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/load_testnet_public_env.sh"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/chain_cli_helpers.sh"
 
 FILE_PATH="${1:-}"
 DEAL_ID="${2:-}"
@@ -52,6 +54,7 @@ POLYSTORE_TX_SENDER_MNEMONIC="${POLYSTORE_TX_SENDER_MNEMONIC:-${POLYSTORE_TESTNE
 CREATE_NONCE="${CREATE_NONCE:-1}"
 UPDATE_NONCE="${UPDATE_NONCE:-}"
 EVM_NONCE_RETRY_ATTEMPTS="${EVM_NONCE_RETRY_ATTEMPTS:-8}"
+CHAIN_MODULE_CLI_NAME="${POLYSTORE_CHAIN_MODULE_CLI_NAME:-}"
 
 if [[ -z "${EVM_PRIVKEY:-}" ]]; then
   echo "error: EVM_PRIVKEY env var required" >&2
@@ -104,6 +107,13 @@ ensure_tx_sender_key() {
     --home "$POLYSTORE_TX_SENDER_HOME" >/dev/null
 }
 
+chain_module_cli_name() {
+  if [[ -z "$CHAIN_MODULE_CLI_NAME" ]]; then
+    CHAIN_MODULE_CLI_NAME="$(detect_chain_module_cli_name "$POLYSTORECHAIND_BIN")"
+  fi
+  printf '%s\n' "$CHAIN_MODULE_CLI_NAME"
+}
+
 poll_tx_body() {
   local tx_hash="$1"
   local attempt
@@ -127,9 +137,10 @@ poll_tx_body() {
 
 direct_create_deal() {
   local payload_json payload_file create_out tx_json tx_hash tx_code tx_body deal_id list_out max_id
-  local current_nonce raw_log cmd_status attempt
+  local current_nonce raw_log cmd_status attempt module_cli
 
   ensure_tx_sender_key
+  module_cli="$(chain_module_cli_name)"
   current_nonce="$CREATE_NONCE"
 
   for attempt in $(seq 1 "$EVM_NONCE_RETRY_ATTEMPTS"); do
@@ -143,7 +154,7 @@ direct_create_deal() {
     printf '%s\n' "$payload_json" >"$payload_file"
 
     cmd_status=0
-    create_out="$("$POLYSTORECHAIND_BIN" tx polystorechain create-deal-from-evm "$payload_file" \
+    create_out="$("$POLYSTORECHAIND_BIN" tx "$module_cli" create-deal-from-evm "$payload_file" \
       --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$POLYSTORE_TX_SENDER_KEY" \
@@ -220,7 +231,7 @@ direct_create_deal() {
     ' 2>/dev/null || true)"
 
     if [[ -z "$deal_id" ]]; then
-      list_out="$("$POLYSTORECHAIND_BIN" query polystorechain list-deals \
+      list_out="$("$POLYSTORECHAIND_BIN" query "$module_cli" list-deals \
         --node "$POLYSTORE_NODE" \
         --output json 2>/dev/null || true)"
       max_id="$(printf '%s' "$list_out" | jq -r '[.deals[]?.id | tonumber] | max // empty' 2>/dev/null || true)"
@@ -246,9 +257,10 @@ direct_create_deal() {
 
 direct_update_deal_content() {
   local update_json update_file update_out tx_json tx_hash tx_code tx_body
-  local current_nonce raw_log cmd_status attempt
+  local current_nonce raw_log cmd_status attempt module_cli
 
   ensure_tx_sender_key
+  module_cli="$(chain_module_cli_name)"
   current_nonce="${UPDATE_NONCE:-$CREATE_NONCE}"
 
   for attempt in $(seq 1 "$EVM_NONCE_RETRY_ATTEMPTS"); do
@@ -270,7 +282,7 @@ direct_update_deal_content() {
     printf '%s\n' "$update_json" >"$update_file"
 
     cmd_status=0
-    update_out="$("$POLYSTORECHAIND_BIN" tx polystorechain update-deal-content-from-evm "$update_file" \
+    update_out="$("$POLYSTORECHAIND_BIN" tx "$module_cli" update-deal-content-from-evm "$update_file" \
       --node "$POLYSTORE_NODE" \
       --chain-id "$CHAIN_ID" \
       --from "$POLYSTORE_TX_SENDER_KEY" \
