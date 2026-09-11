@@ -1,0 +1,1123 @@
+{
+  "chain_comparator_192m": {
+    "derived": {
+      "native_bytes_reduction_vs_separate_fraction": 0.2626985159174,
+      "native_bytes_reduction_vs_serial_fraction": 0.12419108433321313,
+      "native_gas_used_reduction_vs_separate_fraction": 0.08542836138770049,
+      "native_gas_used_reduction_vs_serial_fraction": 0.008065614843843716,
+      "native_over_separate_sessions_per_second": 1.1089990206167513,
+      "native_over_serial_sessions_per_second": 1.0181823364038962,
+      "note": "chain rates primarily expose packing and cadence; the issue speedup gate is the direct verifier result above"
+    },
+    "logical_sessions_per_shape": 4096,
+    "runs": {
+      "native_batch_message_64": {
+        "blocks": 22,
+        "bytes_per_block": 148427.63636363635,
+        "bytes_per_session": 797.21875,
+        "commit_seconds": {
+          "basis": "differences between consecutive canonical Comet block header timestamps",
+          "observations": 22,
+          "p50": 1.361594416,
+          "p95": 1.449004229,
+          "p99": 1.474494911
+        },
+        "committed_block_reconciliation_sha256": "1a50b70ff2830fdc365178fa4875df554550d4f69d9c3e957ded713b8858c81c",
+        "consensus": {
+          "blocks_above_round_zero": 0,
+          "maximum_round": 0,
+          "missed_signatures": 0
+        },
+        "correctness_reconciliation_passed": true,
+        "failures": {
+          "dropped_transactions": 0,
+          "duplicate_transactions": 0,
+          "invalid_transactions": 0,
+          "retried_transactions": 0,
+          "unknown_transactions": 0
+        },
+        "finalize_block_p95_gate_passed": true,
+        "finalize_block_p95_gate_seconds": 0.7,
+        "finalize_block_precise": [
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.53810062800167700305264700508715066655010840243318399404316938423234025278362994886309067075102809",
+            "p95_within_700ms": true,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.543123175000865987882438106704409696334568494895643305108662581189562814993471623264350039781304192",
+            "p95_within_700ms": true,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.54538591700132232558658944319079593597770730450216634910206083954802860419243815680156900380033506",
+            "p95_within_700ms": true,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.525899792000558970586397551064990161803573423747232541413505759602330184656483266565883007387946263",
+            "p95_within_700ms": true,
+            "qualified": true
+          }
+        ],
+        "gas_used_per_block": 99048683.72727273,
+        "gas_used_per_session": 531999.7661132812,
+        "gas_wanted_per_block": 158402337.3181818,
+        "gas_wanted_per_session": 850793.8039550781,
+        "per_validator_verifier_only_ceiling_sessions_per_second": 442.56266798019266,
+        "percent_of_per_validator_verifier_only_ceiling": 31.431617455644833,
+        "positive_backlog_seconds": 29.445466639,
+        "profile": {
+          "batch_size": 64,
+          "first_blob": 0,
+          "last_blob": 0,
+          "measured_transactions": 64,
+          "name": "1kib",
+          "obligation_slots": [
+            0
+          ],
+          "population": 1,
+          "proof_messages": 4096,
+          "proof_transactions": 1,
+          "range_bytes": 1024,
+          "range_start": 0,
+          "sample_count": 1,
+          "sessions": 4096,
+          "submission_mode": "batch-message"
+        },
+        "resources": {
+          "aggregate_validator_average_cpu_cores": 2.8631962782555864,
+          "aggregate_validator_peak_rss_bytes": 1808203776,
+          "host_average_cpu_fraction": 0.19737733668141416,
+          "validators": [
+            {
+              "average_cpu_cores": 0.7425275908318772,
+              "node_id": "0311bc1f1f6a58a5a7dbe078e4dc66472673409e",
+              "peak_rss_bytes": 497102848,
+              "pid": 158712
+            },
+            {
+              "average_cpu_cores": 0.7113185659987438,
+              "node_id": "e3e8bef526f002b50e3508f2b9a61250eba89053",
+              "peak_rss_bytes": 452259840,
+              "pid": 158713
+            },
+            {
+              "average_cpu_cores": 0.706374562064782,
+              "node_id": "04c45a012dd663863f7fcbbe5b1bde909c70dcd5",
+              "peak_rss_bytes": 442617856,
+              "pid": 158714
+            },
+            {
+              "average_cpu_cores": 0.7029755593601833,
+              "node_id": "d2afc4b00e3c4b93c5352c5ae652341c941ce84b",
+              "peak_rss_bytes": 440819712,
+              "pid": 158715
+            }
+          ]
+        },
+        "saturated_seconds": 29.445466639,
+        "selection": "highest measured native-batch gas point passing correctness, round, missed-signature, and exact FinalizeBlock p95 gates",
+        "sessions": 4096,
+        "sessions_per_day": 12018637.854808968,
+        "sessions_per_second": 139.10460480102972,
+        "source": {
+          "binary_sha256": "91a5be1a9569904d240406a9aa42cfaab4fe212d9e7ff51b8f16e3c63f10643e",
+          "driver_sha256": "097dc5354502d9989d7b623bee41e2c8d62cc63b39fdd265673e2324fe597a25",
+          "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+          "product_source_commit": "7d17e8b58644fa804a2dd90563ed33c01f65b183",
+          "source_checkout": "7d17e8b58644fa804a2dd90563ed33c01f65b183"
+        },
+        "source_evidence_path": "/home/mikers/polystore-bench-329-e805/runs/7d17e8b5-batch64-4096-192m-1s-a16-gmp2-final/evidence.json",
+        "source_evidence_sha256": "01b7c251440dbf552fe1e7dbbc7e11bf90ee6e6ea430f5788c43b928ed3551e0",
+        "status": "native_v3_chain_capacity_passed",
+        "transactions": 64,
+        "transactions_per_block": [
+          1,
+          3
+        ],
+        "transactions_per_second": 2.1735094500160894
+      },
+      "separate_transactions": {
+        "blocks": 20,
+        "bytes_per_block": 221443.2,
+        "bytes_per_session": 1081.265625,
+        "commit_seconds": {
+          "basis": "differences between consecutive canonical Comet block header timestamps",
+          "observations": 19,
+          "p50": 1.657084039,
+          "p95": 1.90677995,
+          "p99": 1.90677995
+        },
+        "committed_block_reconciliation_sha256": "6ade99af73430d81501655aeab3223c1207aa0916c12848ccba31c55f2ff50f5",
+        "consensus": {
+          "blocks_above_round_zero": 0,
+          "maximum_round": 0,
+          "missed_signatures": 6
+        },
+        "correctness_reconciliation_passed": true,
+        "failures": {
+          "dropped_transactions": 0,
+          "duplicate_transactions": 0,
+          "invalid_transactions": 0,
+          "retried_transactions": 0,
+          "unknown_transactions": 0
+        },
+        "finalize_block_p95_gate_passed": false,
+        "finalize_block_p95_gate_seconds": 0.7,
+        "finalize_block_precise": [
+          {
+            "isolated_blocks": 22,
+            "observed_blocks": 22,
+            "p95_upper_bound_seconds": "1.03505137800284342489491095953754614236703727122438909935478326478174820116271146238210644361022986",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 22,
+            "observed_blocks": 22,
+            "p95_upper_bound_seconds": "1.03632739100283465545926320026844491898963866691876350720110327692423145286013506873924086449453584",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 22,
+            "observed_blocks": 22,
+            "p95_upper_bound_seconds": "1.033528844000381747777031166247780792024526502674773996029132596865680453716012152874434448580101303",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 22,
+            "observed_blocks": 22,
+            "p95_upper_bound_seconds": "1.031122391000384728747951496012942248989856045221247383045366499046392269091711228131747013311439230",
+            "p95_within_700ms": false,
+            "qualified": true
+          }
+        ],
+        "gas_used_per_block": 119130691.9,
+        "gas_used_per_session": 581692.8315429688,
+        "gas_wanted_per_block": 185285080.35,
+        "gas_wanted_per_session": 904712.3063964844,
+        "per_validator_verifier_only_ceiling_sessions_per_second": 442.56266798019266,
+        "percent_of_per_validator_verifier_only_ceiling": 28.342331121414936,
+        "positive_backlog_seconds": 32.112869746,
+        "profile": {
+          "batch_size": 1,
+          "first_blob": 0,
+          "last_blob": 0,
+          "measured_transactions": 4096,
+          "name": "1kib",
+          "obligation_slots": [
+            0
+          ],
+          "population": 1,
+          "proof_messages": 4096,
+          "proof_transactions": 1,
+          "range_bytes": 1024,
+          "range_start": 0,
+          "sample_count": 1,
+          "sessions": 4096,
+          "submission_mode": "separate"
+        },
+        "resources": {
+          "aggregate_validator_average_cpu_cores": 3.035558786118535,
+          "aggregate_validator_peak_rss_bytes": 2248577024,
+          "host_average_cpu_fraction": 0.20723986797251231,
+          "validators": [
+            {
+              "average_cpu_cores": 0.7896468956343008,
+              "node_id": "e8615f655fa0c369522a6db7df0e252a112aad66",
+              "peak_rss_bytes": 604958720,
+              "pid": 50406
+            },
+            {
+              "average_cpu_cores": 0.7534453187570835,
+              "node_id": "48b5ca8c4ab3a48a3c2d6f0e8269eeb686c9ee89",
+              "peak_rss_bytes": 557473792,
+              "pid": 50407
+            },
+            {
+              "average_cpu_cores": 0.7469403479119585,
+              "node_id": "d5dac68314ea4d3b284ace2962420abe0174eb70",
+              "peak_rss_bytes": 555577344,
+              "pid": 50408
+            },
+            {
+              "average_cpu_cores": 0.7455262238151923,
+              "node_id": "5850a697c9c2608d5c7d7fe537f18f10e0b82f5e",
+              "peak_rss_bytes": 552271872,
+              "pid": 50409
+            }
+          ]
+        },
+        "saturated_seconds": 32.112869746,
+        "sessions": 4096,
+        "sessions_per_day": 10837374.633680925,
+        "sessions_per_second": 125.4325767787144,
+        "source": {
+          "binary_sha256": "91a5be1a9569904d240406a9aa42cfaab4fe212d9e7ff51b8f16e3c63f10643e",
+          "driver_sha256": "097dc5354502d9989d7b623bee41e2c8d62cc63b39fdd265673e2324fe597a25",
+          "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+          "product_source_commit": "7d17e8b58644fa804a2dd90563ed33c01f65b183",
+          "source_checkout": "7d17e8b58644fa804a2dd90563ed33c01f65b183"
+        },
+        "source_evidence_path": "/home/mikers/polystore-bench-329-e805/runs/7d17e8b5-separate-4096-192m-1s-a16-gmp2/evidence.json",
+        "source_evidence_sha256": "99fa11e1d0396987cc6bdfe0090f6e763e651a33931114fb43de82dd372e377b",
+        "status": "native_v3_chain_capacity_passed",
+        "transactions": 4096,
+        "transactions_per_block": [
+          68,
+          212
+        ],
+        "transactions_per_second": 125.4325767787144
+      },
+      "serial_messages_one_transaction": {
+        "blocks": 22,
+        "bytes_per_block": 169474.9090909091,
+        "bytes_per_session": 910.265625,
+        "commit_seconds": {
+          "basis": "differences between consecutive canonical Comet block header timestamps",
+          "observations": 22,
+          "p50": 1.354984418,
+          "p95": 1.480591176,
+          "p99": 1.492303148
+        },
+        "committed_block_reconciliation_sha256": "e79eb03f5af490bce63ff7148a37f9235b8b13cb0420eb6118c144cac681e40d",
+        "consensus": {
+          "blocks_above_round_zero": 0,
+          "maximum_round": 0,
+          "missed_signatures": 1
+        },
+        "correctness_reconciliation_passed": true,
+        "failures": {
+          "dropped_transactions": 0,
+          "duplicate_transactions": 0,
+          "invalid_transactions": 0,
+          "retried_transactions": 0,
+          "unknown_transactions": 0
+        },
+        "finalize_block_p95_gate_passed": false,
+        "finalize_block_p95_gate_seconds": 0.7,
+        "finalize_block_precise": [
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.90526620100267340485491671038364233868566494000760943240910983569174514743723151027805358709769533",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.89303079500135553342947418543008060380168020819548552785254890796875698576218428939237051566501257",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.90484981700146576770880018277634052992694495316997490137477738586479671259286672765196789736662079",
+            "p95_within_700ms": false,
+            "qualified": true
+          },
+          {
+            "isolated_blocks": 24,
+            "observed_blocks": 24,
+            "p95_upper_bound_seconds": "0.89494085300213632459395347665312422140002963341911708104546041937379342322246036616341866879032897",
+            "p95_within_700ms": false,
+            "qualified": true
+          }
+        ],
+        "gas_used_per_block": 99854068.18181819,
+        "gas_used_per_session": 536325.5615234375,
+        "gas_wanted_per_block": 159690394.36363637,
+        "gas_wanted_per_session": 857712.0791015625,
+        "per_validator_verifier_only_ceiling_sessions_per_second": 442.56266798019266,
+        "percent_of_per_validator_verifier_only_ceiling": 30.870322860498366,
+        "positive_backlog_seconds": 29.980854019,
+        "profile": {
+          "batch_size": 64,
+          "first_blob": 0,
+          "last_blob": 0,
+          "measured_transactions": 64,
+          "name": "1kib",
+          "obligation_slots": [
+            0
+          ],
+          "population": 1,
+          "proof_messages": 4096,
+          "proof_transactions": 1,
+          "range_bytes": 1024,
+          "range_start": 0,
+          "sample_count": 1,
+          "sessions": 4096,
+          "submission_mode": "serial-messages"
+        },
+        "resources": {
+          "aggregate_validator_average_cpu_cores": 2.551547543862067,
+          "aggregate_validator_peak_rss_bytes": 1878646784,
+          "host_average_cpu_fraction": 0.17376467639630608,
+          "validators": [
+            {
+              "average_cpu_cores": 0.6598829854815691,
+              "node_id": "8ac549db144f54adb7059841216c347554e739d7",
+              "peak_rss_bytes": 546467840,
+              "pid": 4186199
+            },
+            {
+              "average_cpu_cores": 0.6290273458826624,
+              "node_id": "c47a738208495fc38c4f6368d48a952bc801d2ba",
+              "peak_rss_bytes": 458731520,
+              "pid": 4186200
+            },
+            {
+              "average_cpu_cores": 0.6317768583221689,
+              "node_id": "b176824a8800fb80fc9ec6f31be2daca5e94a869",
+              "peak_rss_bytes": 466391040,
+              "pid": 4186201
+            },
+            {
+              "average_cpu_cores": 0.6308603541756667,
+              "node_id": "4d8ea35720b1bf1387bc0b698185b365d13e73ba",
+              "peak_rss_bytes": 473460736,
+              "pid": 4186202
+            }
+          ]
+        },
+        "saturated_seconds": 29.980854019,
+        "sessions": 4096,
+        "sessions_per_day": 11804013.313821007,
+        "sessions_per_second": 136.6205244655209,
+        "source": {
+          "binary_sha256": "91a5be1a9569904d240406a9aa42cfaab4fe212d9e7ff51b8f16e3c63f10643e",
+          "driver_sha256": "097dc5354502d9989d7b623bee41e2c8d62cc63b39fdd265673e2324fe597a25",
+          "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+          "product_source_commit": "51383dd04a120e41162d5330e78f28d8469d6e81",
+          "source_checkout": "51383dd04a120e41162d5330e78f28d8469d6e81"
+        },
+        "source_evidence_path": "/home/mikers/polystore-bench-329-e805/runs/51383dd0-serial64-4096-192m-1s-a16-gmp2/evidence.json",
+        "source_evidence_sha256": "1029ffc7fef50fcffa79da4356d87d0a1fd1310e57ca7b3c7d2a0c3ca3eaeda3",
+        "status": "native_v3_chain_capacity_passed",
+        "transactions": 64,
+        "transactions_per_block": [
+          1,
+          3
+        ],
+        "transactions_per_second": 2.134695694773764
+      }
+    },
+    "serial_provenance_note": "serial source checkout was 51383dd0, but its benchmark driver SHA, product binary SHA, and native-library SHA equal the 7d17 exact-head runs; the only 51383dd0..7d17 change after its run that affects repository scripts is test-only scripts/test_retrieval_sustained.py"
+  },
+  "chain_configuration": {
+    "fresh_chain_per_run": true,
+    "gas_adjustment": 1.6,
+    "max_block_bytes": 2097152,
+    "measurement": "all transactions prebuilt and signed before a positive-backlog interval; setup, signing, and proof generation excluded",
+    "normal_audits_enabled": true,
+    "retries": 0,
+    "timeout_commit_ms": 1000,
+    "validator_gomaxprocs": 2,
+    "validators": 4
+  },
+  "direct_verifier": {
+    "acceptance_gate": {
+      "baseline_sessions_per_second": 222.93026810531046,
+      "baseline_workers": 1,
+      "batch_size": 64,
+      "note": "direct verifier gate; distinct from consensus throughput, block packing, and commit cadence",
+      "parallel_sessions_per_second": 1458.134088233653,
+      "parallel_workers": 8,
+      "passed": true,
+      "required_speedup": 1.5,
+      "speedup": 6.540763175078776
+    },
+    "benchmark": "BenchmarkRetrievalV3ProofBatchVerify",
+    "fixture": "nonconstant, nonidentity one-sample chained proofs",
+    "matrix": [
+      {
+        "batch_size": 8,
+        "derived_sessions_per_day": 19240861.711122233,
+        "median_allocs_per_batch": 22,
+        "median_bytes_per_batch": 4112,
+        "median_ns_per_batch": 35923547,
+        "median_sessions_per_second": 222.69515869354439,
+        "samples": [
+          {
+            "allocs_per_batch": 22,
+            "bytes_per_batch": 4112,
+            "ns_per_batch": 36039181,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 22,
+            "bytes_per_batch": 4112,
+            "ns_per_batch": 35958718,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 22,
+            "bytes_per_batch": 4112,
+            "ns_per_batch": 35880282,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 22,
+            "bytes_per_batch": 4112,
+            "ns_per_batch": 35909589,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 22,
+            "bytes_per_batch": 4112,
+            "ns_per_batch": 35923547,
+            "proofs_per_batch": 8.0
+          }
+        ],
+        "workers": 1
+      },
+      {
+        "batch_size": 8,
+        "derived_sessions_per_day": 38056449.62946441,
+        "median_allocs_per_batch": 23,
+        "median_bytes_per_batch": 4199,
+        "median_ns_per_batch": 18162493,
+        "median_sessions_per_second": 440.46816700768994,
+        "samples": [
+          {
+            "allocs_per_batch": 23,
+            "bytes_per_batch": 4199,
+            "ns_per_batch": 18256746,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 23,
+            "bytes_per_batch": 4192,
+            "ns_per_batch": 18162493,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 23,
+            "bytes_per_batch": 4199,
+            "ns_per_batch": 18076009,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 23,
+            "bytes_per_batch": 4213,
+            "ns_per_batch": 18129970,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 23,
+            "bytes_per_batch": 4220,
+            "ns_per_batch": 18174543,
+            "proofs_per_batch": 8.0
+          }
+        ],
+        "workers": 2
+      },
+      {
+        "batch_size": 8,
+        "derived_sessions_per_day": 73874717.15826878,
+        "median_allocs_per_batch": 25,
+        "median_bytes_per_batch": 4405,
+        "median_ns_per_batch": 9356381,
+        "median_sessions_per_second": 855.0314485910739,
+        "samples": [
+          {
+            "allocs_per_batch": 25,
+            "bytes_per_batch": 4405,
+            "ns_per_batch": 9536974,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 25,
+            "bytes_per_batch": 4437,
+            "ns_per_batch": 9453403,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 25,
+            "bytes_per_batch": 4484,
+            "ns_per_batch": 9315764,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 25,
+            "bytes_per_batch": 4384,
+            "ns_per_batch": 9332672,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 25,
+            "bytes_per_batch": 4392,
+            "ns_per_batch": 9356381,
+            "proofs_per_batch": 8.0
+          }
+        ],
+        "workers": 4
+      },
+      {
+        "batch_size": 8,
+        "derived_sessions_per_day": 121111280.09997287,
+        "median_allocs_per_batch": 29,
+        "median_bytes_per_batch": 4698,
+        "median_ns_per_batch": 5707148,
+        "median_sessions_per_second": 1401.7509270830194,
+        "samples": [
+          {
+            "allocs_per_batch": 29,
+            "bytes_per_batch": 4723,
+            "ns_per_batch": 5687133,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 29,
+            "bytes_per_batch": 4697,
+            "ns_per_batch": 5954189,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 29,
+            "bytes_per_batch": 4698,
+            "ns_per_batch": 5707148,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 29,
+            "bytes_per_batch": 4724,
+            "ns_per_batch": 5623193,
+            "proofs_per_batch": 8.0
+          },
+          {
+            "allocs_per_batch": 29,
+            "bytes_per_batch": 4672,
+            "ns_per_batch": 6113320,
+            "proofs_per_batch": 8.0
+          }
+        ],
+        "workers": 8
+      },
+      {
+        "batch_size": 32,
+        "derived_sessions_per_day": 19251112.907965206,
+        "median_allocs_per_batch": 70,
+        "median_bytes_per_batch": 16080,
+        "median_ns_per_batch": 143617671,
+        "median_sessions_per_second": 222.81380680515284,
+        "samples": [
+          {
+            "allocs_per_batch": 70,
+            "bytes_per_batch": 16080,
+            "ns_per_batch": 143564240,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 70,
+            "bytes_per_batch": 16080,
+            "ns_per_batch": 143617671,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 70,
+            "bytes_per_batch": 16080,
+            "ns_per_batch": 143985830,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 70,
+            "bytes_per_batch": 16080,
+            "ns_per_batch": 143715953,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 70,
+            "bytes_per_batch": 16080,
+            "ns_per_batch": 143594263,
+            "proofs_per_batch": 32.0
+          }
+        ],
+        "workers": 1
+      },
+      {
+        "batch_size": 32,
+        "derived_sessions_per_day": 38136535.33466279,
+        "median_allocs_per_batch": 71,
+        "median_bytes_per_batch": 16160,
+        "median_ns_per_batch": 72497409,
+        "median_sessions_per_second": 441.3950848919304,
+        "samples": [
+          {
+            "allocs_per_batch": 71,
+            "bytes_per_batch": 16160,
+            "ns_per_batch": 72497409,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 71,
+            "bytes_per_batch": 16160,
+            "ns_per_batch": 72445441,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 71,
+            "bytes_per_batch": 16160,
+            "ns_per_batch": 72515125,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 71,
+            "bytes_per_batch": 16160,
+            "ns_per_batch": 72564055,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 71,
+            "bytes_per_batch": 16160,
+            "ns_per_batch": 71969978,
+            "proofs_per_batch": 32.0
+          }
+        ],
+        "workers": 2
+      },
+      {
+        "batch_size": 32,
+        "derived_sessions_per_day": 74850054.20862487,
+        "median_allocs_per_batch": 73,
+        "median_bytes_per_batch": 16320,
+        "median_ns_per_batch": 36937849,
+        "median_sessions_per_second": 866.3200718590841,
+        "samples": [
+          {
+            "allocs_per_batch": 73,
+            "bytes_per_batch": 16320,
+            "ns_per_batch": 37166947,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 73,
+            "bytes_per_batch": 16320,
+            "ns_per_batch": 36728468,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 73,
+            "bytes_per_batch": 16320,
+            "ns_per_batch": 36765309,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 73,
+            "bytes_per_batch": 16320,
+            "ns_per_batch": 36937849,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 73,
+            "bytes_per_batch": 16323,
+            "ns_per_batch": 37313973,
+            "proofs_per_batch": 32.0
+          }
+        ],
+        "workers": 4
+      },
+      {
+        "batch_size": 32,
+        "derived_sessions_per_day": 119698980.96111684,
+        "median_allocs_per_batch": 77,
+        "median_bytes_per_batch": 16649,
+        "median_ns_per_batch": 23097941,
+        "median_sessions_per_second": 1385.4048722351486,
+        "samples": [
+          {
+            "allocs_per_batch": 77,
+            "bytes_per_batch": 17136,
+            "ns_per_batch": 22474559,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 77,
+            "bytes_per_batch": 16649,
+            "ns_per_batch": 23097941,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 77,
+            "bytes_per_batch": 16668,
+            "ns_per_batch": 23174219,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 77,
+            "bytes_per_batch": 16641,
+            "ns_per_batch": 22836517,
+            "proofs_per_batch": 32.0
+          },
+          {
+            "allocs_per_batch": 77,
+            "bytes_per_batch": 16640,
+            "ns_per_batch": 23481792,
+            "proofs_per_batch": 32.0
+          }
+        ],
+        "workers": 8
+      },
+      {
+        "batch_size": 64,
+        "derived_sessions_per_day": 19261175.164298825,
+        "median_allocs_per_batch": 134,
+        "median_bytes_per_batch": 32080,
+        "median_ns_per_batch": 287085287,
+        "median_sessions_per_second": 222.93026810531046,
+        "samples": [
+          {
+            "allocs_per_batch": 134,
+            "bytes_per_batch": 32080,
+            "ns_per_batch": 286885498,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 134,
+            "bytes_per_batch": 32080,
+            "ns_per_batch": 288212303,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 134,
+            "bytes_per_batch": 32080,
+            "ns_per_batch": 287085287,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 134,
+            "bytes_per_batch": 32080,
+            "ns_per_batch": 287083817,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 134,
+            "bytes_per_batch": 32080,
+            "ns_per_batch": 287143075,
+            "proofs_per_batch": 64.0
+          }
+        ],
+        "workers": 1
+      },
+      {
+        "batch_size": 64,
+        "derived_sessions_per_day": 38413212.2777146,
+        "median_allocs_per_batch": 135,
+        "median_bytes_per_batch": 32160,
+        "median_ns_per_batch": 143950471,
+        "median_sessions_per_second": 444.5973643254005,
+        "samples": [
+          {
+            "allocs_per_batch": 135,
+            "bytes_per_batch": 32160,
+            "ns_per_batch": 143661232,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 135,
+            "bytes_per_batch": 32160,
+            "ns_per_batch": 143950471,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 135,
+            "bytes_per_batch": 32160,
+            "ns_per_batch": 144270348,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 135,
+            "bytes_per_batch": 32160,
+            "ns_per_batch": 143883203,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 135,
+            "bytes_per_batch": 32160,
+            "ns_per_batch": 144027659,
+            "proofs_per_batch": 64.0
+          }
+        ],
+        "workers": 2
+      },
+      {
+        "batch_size": 64,
+        "derived_sessions_per_day": 74763610.58104654,
+        "median_allocs_per_batch": 137,
+        "median_bytes_per_batch": 32320,
+        "median_ns_per_batch": 73961115,
+        "median_sessions_per_second": 865.3195669102608,
+        "samples": [
+          {
+            "allocs_per_batch": 137,
+            "bytes_per_batch": 32320,
+            "ns_per_batch": 73961115,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 137,
+            "bytes_per_batch": 32320,
+            "ns_per_batch": 74471710,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 137,
+            "bytes_per_batch": 32320,
+            "ns_per_batch": 74112963,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 137,
+            "bytes_per_batch": 32320,
+            "ns_per_batch": 73837941,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 137,
+            "bytes_per_batch": 32326,
+            "ns_per_batch": 73782066,
+            "proofs_per_batch": 64.0
+          }
+        ],
+        "workers": 4
+      },
+      {
+        "batch_size": 64,
+        "derived_sessions_per_day": 125982785.22338763,
+        "median_allocs_per_batch": 141,
+        "median_bytes_per_batch": 32640,
+        "median_ns_per_batch": 43891711,
+        "median_sessions_per_second": 1458.134088233653,
+        "samples": [
+          {
+            "allocs_per_batch": 141,
+            "bytes_per_batch": 32688,
+            "ns_per_batch": 44068148,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 141,
+            "bytes_per_batch": 32640,
+            "ns_per_batch": 43021708,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 141,
+            "bytes_per_batch": 32640,
+            "ns_per_batch": 43125542,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 141,
+            "bytes_per_batch": 32640,
+            "ns_per_batch": 44261972,
+            "proofs_per_batch": 64.0
+          },
+          {
+            "allocs_per_batch": 141,
+            "bytes_per_batch": 32640,
+            "ns_per_batch": 43891711,
+            "proofs_per_batch": 64.0
+          }
+        ],
+        "workers": 8
+      }
+    ],
+    "raw_sha256": "6b32a7c0250c084f164fbc06d1b160801d7333be91dc08d68ba1133ec6829b66",
+    "source_checkout": "dd648eaf078be2389e4ae928e55d2ed8a358bbfc"
+  },
+  "frozen_profile": {
+    "challenge_note": "fresh chains produce fresh session IDs and challenge seeds; every run uses the same deterministic payload and one-opening workload parameters",
+    "correctness": "nonidentity commitments/openings; strict signed-byte, provider-sequence, session-bitmap, header/result, duplicate, retry, drop, and final-state reconciliation",
+    "obligation_slots": [
+      0
+    ],
+    "payload_bytes": 16777216,
+    "payload_sha256": "06ed396081a4eab36e7b500bf8d2d1a74cfb8dcd2890d4ee24d62d7d47c455a5",
+    "population": 1,
+    "range_bytes": 1024,
+    "sample_count": 1
+  },
+  "gas_stop_diagnostic_256m": {
+    "blocks": 20,
+    "bytes_per_block": 204088.0,
+    "bytes_per_session": 797.21875,
+    "commit_seconds": {
+      "basis": "differences between consecutive canonical Comet block header timestamps",
+      "observations": 20,
+      "p50": 1.324695205,
+      "p95": 1.36399238,
+      "p99": 1.476793853
+    },
+    "committed_block_reconciliation_sha256": "64ca79d5bc30cd9592b73f8d0fbcd319fd00407c4f07711072204f8e2475d867",
+    "consensus": {
+      "blocks_above_round_zero": 0,
+      "maximum_round": 0,
+      "missed_signatures": 0
+    },
+    "correctness_reconciliation_passed": true,
+    "failures": {
+      "dropped_transactions": 0,
+      "duplicate_transactions": 0,
+      "invalid_transactions": 0,
+      "retried_transactions": 0,
+      "unknown_transactions": 0
+    },
+    "finalize_block_p95_gate_passed": false,
+    "finalize_block_p95_gate_seconds": 0.7,
+    "finalize_block_precise": [
+      {
+        "isolated_blocks": 22,
+        "observed_blocks": 22,
+        "p95_upper_bound_seconds": "0.73342854400267540919378804401319931589728566125005525938298185774880480660436560470332740094095805",
+        "p95_within_700ms": false,
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 22,
+        "observed_blocks": 22,
+        "p95_upper_bound_seconds": "0.737526283001404443236367731175634944577615777701576170665915139499042126561289945090249302599191092",
+        "p95_within_700ms": false,
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 22,
+        "observed_blocks": 22,
+        "p95_upper_bound_seconds": "0.73642877300170029807714506334778462486008945563197321218894648063648206557650832174988053580868165",
+        "p95_within_700ms": false,
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 22,
+        "observed_blocks": 22,
+        "p95_upper_bound_seconds": "0.710677598001112790153081340192891073133293410086999442115947290546739896768628885311390558412779261",
+        "p95_within_700ms": false,
+        "qualified": true
+      }
+    ],
+    "gas_used_per_block": 136192011.45,
+    "gas_used_per_session": 532000.0447265625,
+    "gas_wanted_per_block": 217803312.7,
+    "gas_wanted_per_session": 850794.190234375,
+    "per_validator_verifier_only_ceiling_sessions_per_second": 442.56266798019266,
+    "percent_of_per_validator_verifier_only_ceiling": 43.12241323512623,
+    "positive_backlog_seconds": 26.828236576,
+    "profile": {
+      "batch_size": 64,
+      "first_blob": 0,
+      "last_blob": 0,
+      "measured_transactions": 80,
+      "name": "1kib",
+      "obligation_slots": [
+        0
+      ],
+      "population": 1,
+      "proof_messages": 5120,
+      "proof_transactions": 1,
+      "range_bytes": 1024,
+      "range_start": 0,
+      "sample_count": 1,
+      "sessions": 5120,
+      "submission_mode": "batch-message"
+    },
+    "resources": {
+      "aggregate_validator_average_cpu_cores": 4.010718845962651,
+      "aggregate_validator_peak_rss_bytes": 1974587392,
+      "host_average_cpu_fraction": 0.2702774050201289,
+      "validators": [
+        {
+          "average_cpu_cores": 1.033690424217178,
+          "node_id": "a0acb346ec111f56d1b0234dab32227b1d59288b",
+          "peak_rss_bytes": 553021440,
+          "pid": 216181
+        },
+        {
+          "average_cpu_cores": 0.9957884419958813,
+          "node_id": "aa85ed275dc882787cc3a1f09af0148628d92a08",
+          "peak_rss_bytes": 494063616,
+          "pid": 216182
+        },
+        {
+          "average_cpu_cores": 0.9950993150464033,
+          "node_id": "acf5cdbbc5eabb5f8c79e71a7558e208895840f8",
+          "peak_rss_bytes": 487665664,
+          "pid": 216183
+        },
+        {
+          "average_cpu_cores": 0.9861406647031878,
+          "node_id": "46707382ffbaf5c845dbe66680fb54a4d10df92f",
+          "peak_rss_bytes": 491577344,
+          "pid": 216184
+        }
+      ]
+    },
+    "saturated_seconds": 26.828236576,
+    "selection": "diagnostic_stop: exact FinalizeBlock p95 exceeded 700ms on all four validators",
+    "sessions": 5120,
+    "sessions_per_day": 16488895.896934707,
+    "sessions_per_second": 190.84370251081836,
+    "source": {
+      "binary_sha256": "91a5be1a9569904d240406a9aa42cfaab4fe212d9e7ff51b8f16e3c63f10643e",
+      "driver_sha256": "097dc5354502d9989d7b623bee41e2c8d62cc63b39fdd265673e2324fe597a25",
+      "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+      "product_source_commit": "7d17e8b58644fa804a2dd90563ed33c01f65b183",
+      "source_checkout": "7d17e8b58644fa804a2dd90563ed33c01f65b183"
+    },
+    "source_evidence_path": "/home/mikers/polystore-bench-329-e805/runs/7d17e8b5-batch64-5120-256m-1s-a16-gmp2-precise/evidence.json",
+    "source_evidence_sha256": "0c5c3a9da7ceda367ef76f5d28b30952e4729932b313113b96f44bda86af206c",
+    "status": "native_v3_chain_capacity_passed",
+    "transactions": 80,
+    "transactions_per_block": [
+      4
+    ],
+    "transactions_per_second": 2.981932851731537
+  },
+  "generated_from_head": "7d17e8b58644fa804a2dd90563ed33c01f65b183",
+  "hardware": {
+    "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+    "logical_cpus": 16,
+    "topology": "four validator processes on one otherwise quiet host"
+  },
+  "issue": 329,
+  "limitations": [
+    "Daily values are saturated short-run rates multiplied by 86,400, not 24-hour qualifications.",
+    "This measures proof confirmation only; file transport, proof preparation, opening sessions, signing, owner ACK, settlement, expiry, and refunds are outside the interval.",
+    "Fresh chains necessarily use different session IDs and challenge seeds across transaction-shape runs.",
+    "Average whole-host CPU does not establish spare per-validator execution capacity; exact FinalizeBlock duration is the safety gate."
+  ],
+  "recommendation": {
+    "activation": "not changed by this benchmark PR",
+    "batch_size": 64,
+    "derived_sessions_per_day": 12018637.854808968,
+    "highest_healthy_measured_max_block_gas": 192000000,
+    "reason": "192M passed exact FinalizeBlock p95 <=700ms on all four validators with zero misses, rounds, retries, duplicates, drops, or reconciliation failures; 256M exceeded 700ms on all four",
+    "sessions_per_second": 139.10460480102972,
+    "timeout_commit_ms": 1000,
+    "validator_gomaxprocs": 2
+  },
+  "schema": "polystore-retrieval-v3-batch-329-v1",
+  "scope": "one-opening 1 KiB retrieval V3 proof verification and four-validator proof-confirmation capacity",
+  "verifier_ceiling_reference": {
+    "artifact": "../parallel-ceiling-328/results.json",
+    "artifact_commit": "1bf6762d2bce694917833a6f9a626769e9fd7578",
+    "benchmark_source_commit": "53c197a860cbd88e46709d2e6cf3996d685f7902",
+    "field": "comparison.configured_per_validator_verifier_only_sessions_per_second",
+    "gomaxprocs": 2,
+    "note": "one validator repeats the whole transaction stream; this per-validator rate is the comparable pure-verifier ceiling",
+    "raw_sha256": "be001f7961def5e5da94d165e0bd484e1dcf6d9cf966bffb51efdd8b0f900f71",
+    "sessions_per_second": 442.56266798019266
+  }
+}

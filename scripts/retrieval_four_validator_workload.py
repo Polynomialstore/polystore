@@ -335,14 +335,19 @@ def native_v3_resource_sample(lifecycle):
         memory = parse_proc_memory(Path(f"/proc/{pid}/status").read_text(), process=True)
         validators.append(dict(node_id=node["node_id"], **stat, rss_bytes=memory["VmRSS"]))
     memory = parse_proc_memory(Path("/proc/meminfo").read_text())
-    return dict(host_cpu=parse_host_proc_stat(Path("/proc/stat").read_text()),
+    return dict(monotonic_ns=artifact.monotonic_ns(),
+                host_cpu=parse_host_proc_stat(Path("/proc/stat").read_text()),
                 host_memory=memory, validators=validators)
 
 
-def summarize_native_v3_resources(samples, elapsed_seconds):
-    if len(samples) < 2 or elapsed_seconds <= 0:
-        raise ValueError("resource utilization requires two samples and positive elapsed time")
+def summarize_native_v3_resources(samples):
+    if len(samples) < 2:
+        raise ValueError("resource utilization requires two samples")
     first, last = samples[0], samples[-1]
+    elapsed_seconds = (producer.uint(last["monotonic_ns"]) -
+                       producer.uint(first["monotonic_ns"])) / 1e9
+    if elapsed_seconds <= 0:
+        raise ValueError("resource sample timestamps did not advance")
     total = last["host_cpu"]["total_ticks"] - first["host_cpu"]["total_ticks"]
     idle = last["host_cpu"]["idle_ticks"] - first["host_cpu"]["idle_ticks"]
     if total <= 0 or idle < 0 or idle > total:
@@ -2953,8 +2958,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             started_ns, offer_end_ns, drain_end_ns, mempool_samples,
             validator_gomaxprocs=int(lifecycle.env["GOMAXPROCS"]))
         metrics["resource_utilization"] = summarize_native_v3_resources(
-            [row["resources"] for row in mempool_samples if row["resources"] is not None],
-            (drain_end_ns - started_ns) / 1e9)
+            [row["resources"] for row in mempool_samples if row["resources"] is not None])
         saturated = metrics["saturated_commit_interval"]
         consensus = summarize_consensus_commits(consensus_observations,
             saturated["first_height"], saturated["last_height"])
@@ -5654,7 +5658,8 @@ def main():
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--chain-max-gas", type=int,
-                        choices=(64_000_000, 128_000_000, 192_000_000, 256_000_000, 448_000_000),
+                        choices=(64_000_000, 128_000_000, 192_000_000, 256_000_000,
+                                 320_000_000, 384_000_000, 448_000_000),
                         help="Experimental native-v3-chain maximum block gas")
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
                         help="Run one native-v3-chain range shape")
