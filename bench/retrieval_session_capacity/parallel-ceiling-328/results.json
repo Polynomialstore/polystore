@@ -13,7 +13,7 @@
     "command": "../scripts/chain_go.sh test ./x/polystorechain/keeper -run '^$' -bench '^BenchmarkVerifyChainedProofParallel$' -benchtime=2s -count=5 -cpu=1,2,4,8,16 -benchmem",
     "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
     "raw_output": "benchmark.txt",
-    "raw_output_sha256": "821c7d15cf51d2809a8fdfacb6a47010aad58ce9b483281313da67bac45afff5"
+    "raw_output_sha256": "c5432651af184da6410c230616202d9e746f067152fd80a817554bbf7871bf22"
   },
   "parallel_verifier": [
     {

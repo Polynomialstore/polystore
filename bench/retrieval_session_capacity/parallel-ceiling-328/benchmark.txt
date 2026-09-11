@@ -2,7 +2,7 @@ Initializing KZG with path: ../../../trusted_setup.txt
 goos: linux
 goarch: amd64
 pkg: polystorechain/x/polystorechain/keeper
-cpu: AMD Ryzen 7 9700X 8-Core Processor             
+cpu: AMD Ryzen 7 9700X 8-Core Processor
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
      524	   4569130 ns/op	       0 B/op	       0 allocs/op
