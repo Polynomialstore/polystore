@@ -2924,18 +2924,21 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 nodes=[{"home": "/node", "rpc": 1234}], signers={f"provider{i}": address
                     for i, address in enumerate(AUDIT_ADDRESSES[:8])})
             simulation_result = SimpleNamespace(returncode=0,
-                stdout=json.dumps({"gas_info": {"gas_used": "41"}}), stderr="")
+                stdout=json.dumps({"gas_info": {"gas_used": "34283602"}}), stderr="")
             with patch.object(artifact, "run_bounded_command", return_value=simulation_result) as simulate:
                 simulation = workload.v3_simulate_serial_outer_gas(lifecycle, intent)
-            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (41, 65))
+            self.assertEqual((simulation["gas_used"], simulation["gas_limit"]), (34283602, 54853763))
             simulate_argv = simulate.call_args.args[0]
             self.assertEqual(simulate_argv[1:3], ["tx", "simulate"])
             self.assertEqual(simulate_argv[simulate_argv.index("--gas-adjustment") + 1], "1.6")
             simulated_unsigned = json.loads(Path(simulation["unsigned_path"]).read_text())
             self.assertEqual(len(simulated_unsigned["body"]["messages"]), 8)
-            self.assertEqual(simulated_unsigned["auth_info"]["fee"]["gas_limit"], "65")
+            self.assertEqual(simulated_unsigned["auth_info"]["fee"], {
+                "amount": [{"denom": "aatom", "amount": "54854"}], "gas_limit": "54853763",
+                "payer": "", "granter": ""})
             self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
-            self.assertEqual(workload.native_v3_minimum_gas_blocks(simulation["gas_limit"] * 12, 70), 12)
+            self.assertEqual(workload.native_v3_minimum_gas_blocks(
+                simulation["gas_limit"] * 12, simulation["gas_limit"]), 12)
             with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
                     returncode=0, stdout="{}", stderr="")), self.assertRaisesRegex(
                         ValueError, "returned malformed gas"):
@@ -2968,7 +2971,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 {intent["id"]: simulation}, [profile],
                 dict(enumerate(AUDIT_ADDRESSES[:8])),
                 {provider: {"account_number": 3, "sequence": 4}}, command)
-            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])), (1, 65, 8))
+            self.assertEqual((len(frozen), frozen[0]["gas_limit"], len(frozen[0]["members"])),
+                             (1, 54853763, 8))
             self.assertEqual(sum(argv[2] == "sign" for argv in calls), 1)
             self.assertEqual(sum(argv[2] == "sign-batch" for argv in calls), 0)
 
@@ -2981,6 +2985,20 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
                 workload.freeze_native_v3_transactions(lifecycle, [intent],
                     {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
                     {provider: {"account_number": 3, "sequence": 4}}, incomplete)
+
+            def missing_fee(argv, timeout):
+                if argv[2] == "sign":
+                    value = json.loads(Path(argv[3]).read_text())
+                    value["auth_info"].update(signer_infos=[{"sequence": "4"}])
+                    value["auth_info"]["fee"]["amount"] = []
+                    value["signatures"] = ["signed"]
+                    Path(argv[argv.index("--output-document") + 1]).write_text(json.dumps(value))
+                    return ""
+                raise AssertionError(f"unexpected command: {argv}")
+            with self.assertRaisesRegex(ValueError, "differs from frozen intent"):
+                workload.freeze_native_v3_transactions(lifecycle, [intent],
+                    {intent["id"]: simulation}, [profile], dict(enumerate(AUDIT_ADDRESSES[:8])),
+                    {provider: {"account_number": 3, "sequence": 4}}, missing_fee)
 
     def test_batch_message_signs_large_transactions_individually_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3041,24 +3059,28 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
     def test_resource_summary_reports_host_and_aggregate_validator_usage(self):
         self.assertEqual(workload.parse_host_proc_stat("cpu  1 2 3 4 5 6 7 8\n")["idle_ticks"], 9)
         self.assertEqual(workload.parse_proc_memory("VmRSS: 12 kB\n", process=True)["VmRSS"], 12288)
-        def sample(total, idle, cpu, rss):
-            return {"host_cpu": {"total_ticks": total, "idle_ticks": idle},
+        def sample(monotonic_ns, total, idle, cpu, rss):
+            return {"monotonic_ns": monotonic_ns,
+                    "host_cpu": {"total_ticks": total, "idle_ticks": idle},
                     "host_memory": {"MemTotal": 1000, "MemAvailable": 400},
                     "validators": [{"node_id": f"n{i}", "pid": i + 1, "starttime_ticks": 9,
                         "user_ticks": cpu, "system_ticks": 0, "rss_bytes": rss} for i in range(4)]}
         with patch.object(workload.os, "sysconf", return_value=100):
-            result = workload.summarize_native_v3_resources([sample(100, 60, 10, 20),
-                                                               sample(200, 80, 30, 25)], 2)
+            result = workload.summarize_native_v3_resources([sample(1_000_000_000, 100, 60, 10, 20),
+                                                               sample(3_000_000_000, 200, 80, 30, 25)])
         self.assertAlmostEqual(result["host_average_cpu_fraction"], .8)
         self.assertAlmostEqual(result["aggregate_validator_average_cpu_cores"], .4)
         self.assertEqual(result["aggregate_validator_peak_rss_bytes"], 100)
+        with self.assertRaisesRegex(ValueError, "timestamps did not advance"):
+            workload.summarize_native_v3_resources([sample(1, 100, 60, 10, 20),
+                                                      sample(1, 200, 80, 30, 25)])
 
     def test_batch_capacity_cli_passes_explicit_session_shape(self):
         argv = ["diagnostic", "--mode", "native-v3-chain", "--binary", "/chain",
             "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
             "--cli-binary", "/native-cli", "--product-source", "/source",
-            "--proof-exporter", "/exporter", "--chain-max-gas", "192000000",
-            "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "4608",
+            "--proof-exporter", "/exporter", "--chain-max-gas", "320000000",
+            "--chain-capacity-profile", "1kib", "--chain-capacity-sessions", "6656",
             "--chain-proof-submission-mode", "batch-message", "--chain-proof-batch-size", "64",
             "--chain-proof-gas-adjustment", "1.1", "--chain-timeout-commit-ms", "500",
             "--chain-validator-gomaxprocs", "4"]
@@ -3067,8 +3089,8 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
              patch.object(workload, "run_healthy", return_value="evidence") as run, patch("builtins.print"):
             workload.main()
         run.assert_called_once_with(constructor.return_value, "/gateway", "/native-cli", "/source",
-            native_chain=dict(exporter="/exporter", max_block_gas=192_000_000, profile="1kib",
-                measured_transactions=None, measured_sessions=4608,
+            native_chain=dict(exporter="/exporter", max_block_gas=320_000_000, profile="1kib",
+                measured_transactions=None, measured_sessions=6656,
                 submission_mode="batch-message", batch_size=64, gas_adjustment="1.1"), audit_profile="normal")
         self.assertEqual(constructor.call_args.kwargs["consensus_timeout_commit_ms"], 500)
         self.assertEqual(constructor.call_args.kwargs["gomaxprocs"], 4)

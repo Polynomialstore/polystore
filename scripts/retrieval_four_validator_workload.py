@@ -335,14 +335,19 @@ def native_v3_resource_sample(lifecycle):
         memory = parse_proc_memory(Path(f"/proc/{pid}/status").read_text(), process=True)
         validators.append(dict(node_id=node["node_id"], **stat, rss_bytes=memory["VmRSS"]))
     memory = parse_proc_memory(Path("/proc/meminfo").read_text())
-    return dict(host_cpu=parse_host_proc_stat(Path("/proc/stat").read_text()),
+    return dict(monotonic_ns=artifact.monotonic_ns(),
+                host_cpu=parse_host_proc_stat(Path("/proc/stat").read_text()),
                 host_memory=memory, validators=validators)
 
 
-def summarize_native_v3_resources(samples, elapsed_seconds):
-    if len(samples) < 2 or elapsed_seconds <= 0:
-        raise ValueError("resource utilization requires two samples and positive elapsed time")
+def summarize_native_v3_resources(samples):
+    if len(samples) < 2:
+        raise ValueError("resource utilization requires two samples")
     first, last = samples[0], samples[-1]
+    elapsed_seconds = (producer.uint(last["monotonic_ns"]) -
+                       producer.uint(first["monotonic_ns"])) / 1e9
+    if elapsed_seconds <= 0:
+        raise ValueError("resource sample timestamps did not advance")
     total = last["host_cpu"]["total_ticks"] - first["host_cpu"]["total_ticks"]
     idle = last["host_cpu"]["idle_ticks"] - first["host_cpu"]["idle_ticks"]
     if total <= 0 or idle < 0 or idle > total:
@@ -1446,7 +1451,8 @@ def wait_for_crossed_audit_signal(lifecycle, providers, deal_id, expected_counts
 
 def open_cross_audit_measurement(lifecycle, target_height):
     """Capture the expensive metric boundary before the exact schedule-start fence."""
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_before", fenced=True,
+                             finalize_block=True)
     lifecycle.wait_height(target_height)
     before_cpu = validator_cpu_snapshot(lifecycle)
     scheduled_start_height = lifecycle.wait_height(1)
@@ -1518,7 +1524,8 @@ def close_cross_audit_measurement(lifecycle, audits, providers, deal_id, expecte
                 raise ValueError("crossed audit state is incomplete after its event signal")
         signal["audits"] = views
         audit_views[epoch] = views
-    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True)
+    capture_workload_metrics(lifecycle, "native_v3_cross_audit_after", fenced=True,
+                             finalize_block=True)
     lifecycle.doc["native_v3_cross_audit"]["measured_window"] = dict(
         monotonic_start_ns=before_cpu["monotonic_ns"],
         monotonic_end_ns=after_cpu["monotonic_ns"],
@@ -1957,7 +1964,9 @@ def v3_simulate_serial_outer_gas(lifecycle, intent, gas_adjustment="1.6"):
     gas_limit = int(float(gas_adjustment) * gas_used)
     if not 1 <= gas_limit <= 64_000_000:
         raise ValueError("simulated serial outer-transaction gas exceeds chain diagnostic bound")
-    unsigned["auth_info"]["fee"]["gas_limit"] = str(gas_limit)
+    unsigned["auth_info"]["fee"].update(
+        gas_limit=str(gas_limit),
+        amount=[{"denom": "aatom", "amount": str((gas_limit + 999) // 1000)}])
     unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
     return dict(member_message_sha256=member_sha256, gas_limit=gas_limit, simulation_attempts=1,
                 simulation_stdout_sha256=hashlib.sha256(stdout).hexdigest(),
@@ -2330,7 +2339,9 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                     except (OSError, json.JSONDecodeError) as error:
                         raise ValueError("tx sign returned an incomplete serial transaction") from error
                     pending.append(validate_frozen_signed_transaction(
-                        intent, signed_values[0], expected_messages, gas_limit, sequence + index, signed))
+                        intent, signed_values[0], expected_messages,
+                        unsigned_value["auth_info"]["fee"].get("amount"),
+                        gas_limit, sequence + index, signed))
                     encoding_sources.append(signed)
             else:
                 unsigned = prefix.with_suffix(".unsigned.jsonl")
@@ -2369,16 +2380,20 @@ def freeze_native_v3_transactions(lifecycle, intents, simulations, profiles, pro
                     if rows[0]["submission_mode"] != "batch-message":
                         signed_one.write_text(json.dumps(signed_tx, separators=(",", ":")))
                     pending.append(validate_frozen_signed_transaction(intent, signed_tx,
-                        unsigned_tx["body"]["messages"], simulation["gas_limit"], sequence + index, signed_one))
+                        unsigned_tx["body"]["messages"],
+                        unsigned_tx["auth_info"]["fee"].get("amount"),
+                        simulation["gas_limit"], sequence + index, signed_one))
                     encoding_sources.append(signed_one)
             sequence += len(rows)
         return pending, encoding_sources
 
-    def validate_frozen_signed_transaction(intent, signed_tx, expected_messages, gas_limit,
-                                           sequence, signed_path):
+    def validate_frozen_signed_transaction(intent, signed_tx, expected_messages, expected_fee,
+                                           gas_limit, sequence, signed_path):
         signer_infos = signed_tx.get("auth_info", {}).get("signer_infos", [])
-        signed_gas = producer.uint(signed_tx.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
+        signed_fee = signed_tx.get("auth_info", {}).get("fee", {})
+        signed_gas = producer.uint(signed_fee.get("gas_limit", ""))
         if (signed_tx.get("body", {}).get("messages") != expected_messages or signed_gas != gas_limit or
+                signed_fee.get("amount") != expected_fee or
                 len(signed_tx.get("signatures", [])) != 1 or len(signer_infos) != 1 or
                 producer.uint(signer_infos[0].get("sequence", "")) != sequence):
             raise ValueError("offline signed transaction differs from frozen intent, gas, or sequence")
@@ -2943,8 +2958,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             started_ns, offer_end_ns, drain_end_ns, mempool_samples,
             validator_gomaxprocs=int(lifecycle.env["GOMAXPROCS"]))
         metrics["resource_utilization"] = summarize_native_v3_resources(
-            [row["resources"] for row in mempool_samples if row["resources"] is not None],
-            (drain_end_ns - started_ns) / 1e9)
+            [row["resources"] for row in mempool_samples if row["resources"] is not None])
         saturated = metrics["saturated_commit_interval"]
         consensus = summarize_consensus_commits(consensus_observations,
             saturated["first_height"], saturated["last_height"])
@@ -4798,7 +4812,8 @@ def start_commit_streams(lifecycle, seconds, processes, *, stream_key="commit_st
         path = lifecycle.home / f'{filename_prefix}-{node["node_id"]}.jsonl'
         log = path.with_suffix(".log")
         argv = [sys.executable, commit_metrics.__file__, f'http://127.0.0.1:{node["metrics"]}/metrics',
-                lifecycle.chain, "--stream-output", str(path), "--stream-seconds", str(seconds)]
+                lifecycle.chain, "--stream-output", str(path), "--stream-seconds", str(seconds),
+                "--finalize-block-histogram"]
         with log.open("xb") as output:
             process = subprocess.Popen(argv, env=lifecycle.env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
         processes.append(process)
@@ -4941,7 +4956,9 @@ def summarize_commit_streams(lifecycle, processes, *, stream_key="commit_streams
         row.update(sha256=artifact.sha256(path), raw_samples=count, fenced_samples=len(samples),
             summary=commit_metrics.summarize_commit_metrics(samples,
                 start_committed_height=start["committed_height"], end_committed_height=end["committed_height"],
-                boundaries_reconciled=True))
+                boundaries_reconciled=True),
+            finalize_block_precise=commit_metrics.summarize_finalize_block_stream(
+                samples, end["committed_height"] - start["committed_height"]))
         if row["summary"]["qualified"] is not True:
             raise ValueError("Commit samples do not cover the fenced workload blocks")
 
@@ -5641,7 +5658,8 @@ def main():
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--chain-max-gas", type=int,
-                        choices=(64_000_000, 128_000_000, 192_000_000, 256_000_000, 448_000_000),
+                        choices=(64_000_000, 128_000_000, 192_000_000, 256_000_000,
+                                 320_000_000, 384_000_000, 448_000_000),
                         help="Experimental native-v3-chain maximum block gas")
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
                         help="Run one native-v3-chain range shape")
