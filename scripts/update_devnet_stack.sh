@@ -962,6 +962,8 @@ preflight_artifacts() {
     "$SOURCE_ROOT/polystorechain/trusted_setup.txt"
     "$SOURCE_ROOT/scripts/devnet_healthcheck.sh"
     "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$SOURCE_ROOT/scripts/retrieval_consensus_profile.py"
+    "$SOURCE_ROOT/scripts/retrieval_consensus_profile.json"
     "$SOURCE_ROOT/scripts/chain_cli_helpers.sh"
     "$SOURCE_ROOT/scripts/renew_provider_certificates.sh"
   )
@@ -1017,6 +1019,8 @@ preflight_install_plan() {
     "$TARGET_ROOT/polystorechain/trusted_setup.txt"
     "$TARGET_ROOT/scripts/devnet_healthcheck.sh"
     "$TARGET_ROOT/scripts/run_public_devnet_healthcheck.sh"
+    "$TARGET_ROOT/scripts/retrieval_consensus_profile.py"
+    "$TARGET_ROOT/scripts/retrieval_consensus_profile.json"
     "$TARGET_ROOT/scripts/chain_cli_helpers.sh"
     "$TARGET_ROOT/scripts/renew_provider_certificates.sh"
   )
@@ -1202,6 +1206,8 @@ install_with_backup "$SOURCE_ROOT/polystore_cli/target/release/polystore_cli" "$
 install_with_backup "$SOURCE_ROOT/polystorechain/trusted_setup.txt" "$TARGET_ROOT/polystorechain/trusted_setup.txt" 644
 install_with_backup "$SOURCE_ROOT/scripts/devnet_healthcheck.sh" "$TARGET_ROOT/scripts/devnet_healthcheck.sh" 755
 install_with_backup "$SOURCE_ROOT/scripts/run_public_devnet_healthcheck.sh" "$TARGET_ROOT/scripts/run_public_devnet_healthcheck.sh" 755
+install_with_backup "$SOURCE_ROOT/scripts/retrieval_consensus_profile.py" "$TARGET_ROOT/scripts/retrieval_consensus_profile.py" 755
+install_with_backup "$SOURCE_ROOT/scripts/retrieval_consensus_profile.json" "$TARGET_ROOT/scripts/retrieval_consensus_profile.json" 644
 install_with_backup "$SOURCE_ROOT/scripts/chain_cli_helpers.sh" "$TARGET_ROOT/scripts/chain_cli_helpers.sh" 755
 install_with_backup "$SOURCE_ROOT/scripts/renew_provider_certificates.sh" "$TARGET_ROOT/scripts/renew_provider_certificates.sh" 755
 

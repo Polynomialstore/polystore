@@ -142,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
                 "active_static_precompiles": [] if self.inactive_precompile else [PRECOMPILE],
             }})
         elif self.path == "/cosmos/consensus/v1/params":
-            self.send_json({"params": {"block": {"max_gas": "64000000", "max_bytes": "2097152"}}})
+            self.send_json({"params": {"block": {"max_gas": "128000000", "max_bytes": "2097152"}}})
         elif self.path == "/cosmos/bank/v1beta1/denoms_metadata/aatom":
             self.send_json({"metadata": {"base": "aatom"}})
         elif self.path == f"/polystorechain/polystorechain/v1/providers/{ADDRESS}":
@@ -295,7 +295,7 @@ exit 1
         Handler.extra_draining_provider = False
         Handler.duplicate_origin = False
 
-    def run_check(self, chain_cli=False):
+    def run_check(self, chain_cli=False, consensus_profile=None):
         base = Handler.public_base
         env = os.environ.copy()
         env.update(
@@ -309,8 +309,8 @@ exit 1
             "--browser-origin", "https://web.example",
             "--expected-cosmos-chain-id", "20260211", "--expected-evm-chain-id", "20260211",
             "--expected-eip712-chain-id", "20260211", "--polystore-precompile", PRECOMPILE,
-            "--expected-evm-denom", "aatom", "--expected-consensus-max-gas", "64000000",
-            "--expected-consensus-max-bytes", "2097152",
+            "--expected-evm-denom", "aatom", "--consensus-profile",
+            str(consensus_profile or ROOT / "scripts/retrieval_consensus_profile.json"),
             "--expected-min-provider-bond", "150stake",
             "--expected-provider", f"{ADDRESS}|{base}|/dns4/localhost/tcp/{443 if Handler.wrong_endpoint_port else self.server.server_port}/https",
             "--block-wait", "1", "--tls-min-valid-days", "0",
@@ -318,6 +318,13 @@ exit 1
         if chain_cli:
             command += ["--chain-cli", str(self.chain_cli)]
         return subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    def test_public_check_rejects_malformed_consensus_profile_before_network(self):
+        profile = Path(self.temp.name) / "bad-profile.json"
+        profile.write_text('{"block":{"max_gas":128000000,"max_bytes":"2097152"}}')
+        result = self.run_check(consensus_profile=profile)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("canonical decimal string", result.stdout)
 
     def test_public_check_accepts_lowercase_cors_and_false_catching_up(self):
         result = self.run_check()

@@ -4637,7 +4637,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
                           enable_retrieval_v3=native_v3,
                           browser_payer=V3_BROWSER_PAYER if native_browser is not None else None,
-                          max_block_gas=native_chain.get("max_block_gas", 64_000_000)
+                          max_block_gas=native_chain.get("max_block_gas")
                           if native_chain is not None else 64_000_000)
         # Normal mint is retained for both explicit audit profiles.
         population = layout["openings_per_bundle"] * (v3_geometry["user_mdus"] if native_v3 else 1)
