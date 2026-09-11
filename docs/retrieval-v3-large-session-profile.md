@@ -923,7 +923,9 @@ After a matching run, require both full qualification and the measured target:
 
 ```sh
 jq -e '.qualification == true and
-  (.native_v3_browser.playwright.outcome.progressAfterPaid.phaseMs <= 840000)' \
+  (.native_v3_browser.playwright.outcome |
+    .downloaded.bytes == 1073741824 and
+    (.progressAfterPaid.phaseMs | type == "number" and . > 0 and . <= 840000))' \
   "$RUN_DIR/evidence.json"
 ```
 
