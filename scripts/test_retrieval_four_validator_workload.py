@@ -1580,6 +1580,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         selected = workload.native_v3_chain_capacity_profiles("1kib", 4992)
         self.assertEqual([(row["name"], row["sessions"], row["measured_transactions"])
                           for row in selected], [("1kib", 4992, 4992)])
+        workload.native_v3_chain_capacity_profiles(
+            "1kib", measured_sessions=7680, submission_mode="batch-message", batch_size=64)
+        with self.assertRaisesRegex(ValueError, "must be 1..7680"):
+            workload.native_v3_chain_capacity_profiles(
+                "1kib", measured_sessions=8192, submission_mode="batch-message", batch_size=64)
         with self.assertRaisesRegex(ValueError, "transaction count"):
             workload.native_v3_chain_capacity_profiles("1kib")
         with self.assertRaisesRegex(ValueError, "balance provider lanes"):

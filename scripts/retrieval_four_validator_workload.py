@@ -69,7 +69,9 @@ V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
 V3_CHAIN_SUBMISSION_MODES = ("separate", "serial-messages", "batch-message")
 V3_CHAIN_BATCH_SIZES = (8, 32, 64)
 V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
-V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
+# Leave one provider-balanced batch of headroom below the protocol's 8,192
+# live-context limit for the normal audits retained by this workload.
+V3_CHAIN_MAX_BATCH_SESSIONS = 7_680
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
 V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND = 442.56266798019266
