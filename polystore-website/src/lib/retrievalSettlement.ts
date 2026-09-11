@@ -134,7 +134,7 @@ export async function confirmAndRequestRetrievalProofs<S extends RetrievalSettle
         if (proofSignal.aborted || !base || !/^https?:\/\//.test(base)) {
           const reason = proofSignal.aborted ? 'the proof request deadline expired before dispatch' : 'the provider endpoint could not be resolved'
           outcomes[index] = { state: 'unavailable', sessionId: session.sessionId,
-            message: `Provider settlement unavailable for session ${session.sessionId}: ${reason}. Verified output and owner confirmation are preserved; provider proof submission is still required. Use the file menu's provider download action to retry settlement using the saved bytes.` }
+            message: `Provider settlement unavailable for session ${session.sessionId}: ${reason}. Verified output and owner confirmation are preserved; provider proof submission is still required. Resume this same operation to retry settlement using the saved bytes.` }
           continue
         }
         outcomes[index] = await requestProof(session, base, throughGateway, { ...options, signal: proofSignal })

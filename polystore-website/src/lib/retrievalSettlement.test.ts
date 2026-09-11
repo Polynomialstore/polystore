@@ -138,6 +138,17 @@ test('healthy user-gateway is the only continuation route and direct provider is
   assert.equal(resolutions, 1)
 })
 
+test('unavailable settlement recovery stays with the operation that owns the checkpoint', async () => {
+  const s = session()
+  const [outcome] = await confirmAndRequestRetrievalProofs([s], {
+    confirm,
+    resolveProviderBase: async () => undefined,
+  })
+  assert.equal(outcome.state, 'unavailable')
+  assert.match(outcome.message ?? '', /Resume this same operation to retry settlement using the saved bytes\./)
+  assert.doesNotMatch(outcome.message ?? '', /file menu|download action/i)
+})
+
 test('failed ACK never submits a proof request', async () => {
   let posts = 0
   await assert.rejects(confirmAndRequestRetrievalProofs([session()], {
