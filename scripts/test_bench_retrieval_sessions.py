@@ -1696,6 +1696,15 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"),
                              self.runner.doc["genesis_sha256"])
 
+        rejected = artifact.FourValidatorLifecycle(
+            self.binary, self.library, self.root / "above-activation-gas")
+        with patch.object(rejected, "cli") as cli, \
+             self.assertRaisesRegex(ValueError, "max block gas must be 1..448000000"):
+            rejected.prepare(max_block_gas=448_000_001)
+        cli.assert_not_called()
+        self.assertFalse(rejected.home.exists())
+        self.assertFalse(rejected.processes)
+
     def test_v3_activation_is_explicit_and_default_remains_off(self):
         for enabled in (False, True):
             with self.subTest(enabled=enabled):
