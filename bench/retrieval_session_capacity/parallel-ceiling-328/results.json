@@ -3,7 +3,7 @@
   "issue": 328,
   "scope": "pure one-opening retrieval-v3 chained-proof verification; excludes transactions, keeper/state access, gas, consensus, networking, proof generation, and transfer",
   "provenance": {
-    "source_commit": "b51e2606efd9b70dfcb03b7b0ea5aa366825adf0",
+    "source_commit": "ad80bfadbe378b09d2ed237fec0e33a7aa0d8d7b",
     "host": "mikers@192.168.0.111",
     "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
     "physical_cores": 8,
@@ -13,73 +13,73 @@
     "command": "../scripts/chain_go.sh test ./x/polystorechain/keeper -run '^$' -bench '^BenchmarkVerifyChainedProofParallel$' -benchtime=2s -count=5 -cpu=1,2,4,8,16 -benchmem",
     "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
     "raw_output": "benchmark.txt",
-    "raw_output_sha256": "b0e82bc5e1821e66b2aa1d25bf7c29da1919e7d3776d216b925b59511c0b16d7"
+    "raw_output_sha256": "56ec69a33cc3a95b8a4727ac5fa336034cda65a178d944290e50a0c9f1c1d1b5"
   },
   "parallel_verifier": [
     {
       "workers": 1,
       "samples_ns_per_session": [
-        4509217,
-        4506676,
-        4505393,
-        4515152,
-        4508040
+        4471038,
+        4470019,
+        4462673,
+        4464026,
+        4469670
       ],
-      "median_ns_per_session": 4508040,
-      "median_sessions_per_second": 221.82589329287228,
-      "derived_sessions_per_day": 19165757.180504166
+      "median_ns_per_session": 4469670,
+      "median_sessions_per_second": 223.7301635243765,
+      "derived_sessions_per_day": 19330286.12850613
     },
     {
       "workers": 2,
       "samples_ns_per_session": [
-        2255837,
-        2258349,
-        2255237,
-        2254016,
-        2255976
+        2236794,
+        2239625,
+        2233987,
+        2239818,
+        2235470
       ],
-      "median_ns_per_session": 2255837,
-      "median_sessions_per_second": 443.2944401568021,
-      "derived_sessions_per_day": 38300639.6295477
+      "median_ns_per_session": 2236794,
+      "median_sessions_per_second": 447.0684381306459,
+      "derived_sessions_per_day": 38626713.05448781
     },
     {
       "workers": 4,
       "samples_ns_per_session": [
-        1145153,
-        1142941,
-        1143410,
-        1143192,
-        1145421
+        1135485,
+        1132481,
+        1132833,
+        1133292,
+        1132992
       ],
-      "median_ns_per_session": 1143410,
-      "median_sessions_per_second": 874.5769234132988,
-      "derived_sessions_per_day": 75563446.18290901
+      "median_ns_per_session": 1132992,
+      "median_sessions_per_second": 882.6187651810428,
+      "derived_sessions_per_day": 76258261.3116421
     },
     {
       "workers": 8,
       "samples_ns_per_session": [
-        618774,
-        618262,
-        618853,
-        618820,
-        618585
+        614364,
+        613282,
+        612225,
+        613389,
+        614758
       ],
-      "median_ns_per_session": 618774,
-      "median_sessions_per_second": 1616.098931112167,
-      "derived_sessions_per_day": 139630947.64809123
+      "median_ns_per_session": 613389,
+      "median_sessions_per_second": 1630.2868163596022,
+      "derived_sessions_per_day": 140856780.93346962
     },
     {
       "workers": 16,
       "samples_ns_per_session": [
-        567697,
-        567627,
-        566889,
-        567808,
-        568124
+        567942,
+        567914,
+        567602,
+        567707,
+        568307
       ],
-      "median_ns_per_session": 567697,
-      "median_sessions_per_second": 1761.5030553270494,
-      "derived_sessions_per_day": 152193863.98025706
+      "median_ns_per_session": 567914,
+      "median_sessions_per_second": 1760.8299848216454,
+      "derived_sessions_per_day": 152135710.68859017
     }
   ],
   "retained_chain_comparison": [
@@ -137,17 +137,17 @@
     }
   ],
   "comparison": {
-    "raw_eight_core_sessions_per_second": 1616.098931112167,
-    "raw_eight_core_sessions_per_day": 139630947.64809123,
+    "raw_eight_core_sessions_per_second": 1630.2868163596022,
+    "raw_eight_core_sessions_per_day": 140856780.93346962,
     "co_located_validator_count": 4,
-    "shared_host_verifier_only_sessions_per_second": 404.02473277804177,
-    "shared_host_verifier_only_sessions_per_day": 34907736.91202281,
+    "shared_host_verifier_only_sessions_per_second": 407.57170408990055,
+    "shared_host_verifier_only_sessions_per_day": 35214195.233367406,
     "chain_448m_sessions_per_second": 155.15161202310972,
     "chain_448m_sessions_per_day": 13405099.27879668,
-    "raw_eight_core_to_chain_448m_ratio": 10.416256138360009,
-    "chain_448m_fraction_of_raw_eight_core": 0.0960037835779877,
-    "shared_host_verifier_only_to_chain_448m_ratio": 2.604064034590002,
-    "chain_448m_fraction_of_shared_host_verifier_only": 0.3840151343119508
+    "raw_eight_core_to_chain_448m_ratio": 10.507701435398378,
+    "chain_448m_fraction_of_raw_eight_core": 0.09516829214724325,
+    "shared_host_verifier_only_to_chain_448m_ratio": 2.6269253588495944,
+    "chain_448m_fraction_of_shared_host_verifier_only": 0.380673168588973
   },
   "conclusion": "execution limited: gas-only reaches a serial FinalizeBlock plateau; the native verifier scales across eight physical cores",
   "daily_equivalent_basis": "short benchmark rate multiplied by 86400; not a sustained 24-hour or end-to-end delivery claim",

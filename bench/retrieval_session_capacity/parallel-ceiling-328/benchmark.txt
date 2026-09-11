@@ -5,102 +5,102 @@ pkg: polystorechain/x/polystorechain/keeper
 cpu: AMD Ryzen 7 9700X 8-Core Processor             
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-     530	   4509217 ns/op	       0 B/op	       0 allocs/op
+     536	   4471038 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-     526	   4506676 ns/op	       0 B/op	       0 allocs/op
+     535	   4470019 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-     531	   4505393 ns/op	       0 B/op	       0 allocs/op
+     536	   4462673 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-     531	   4515152 ns/op	       0 B/op	       0 allocs/op
+     536	   4464026 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel       	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-     531	   4508040 ns/op	       0 B/op	       0 allocs/op
+     534	   4469670 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-2     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    1056	   2255837 ns/op	       0 B/op	       0 allocs/op
+    1059	   2236794 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-2     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    1057	   2258349 ns/op	       0 B/op	       0 allocs/op
+    1068	   2239625 ns/op	         1.000 sessions/op	       1 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-2     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    1059	   2255237 ns/op	       0 B/op	       0 allocs/op
+    1066	   2233987 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-2     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    1046	   2254016 ns/op	       0 B/op	       0 allocs/op
+    1071	   2239818 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-2     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    1060	   2255976 ns/op	       0 B/op	       0 allocs/op
+    1070	   2235470 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-4     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    2091	   1145153 ns/op	       0 B/op	       0 allocs/op
+    2112	   1135485 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-4     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    2055	   1142941 ns/op	       0 B/op	       0 allocs/op
+    2103	   1132481 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-4     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    2084	   1143410 ns/op	       0 B/op	       0 allocs/op
+    2037	   1132833 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-4     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    2090	   1143192 ns/op	       0 B/op	       0 allocs/op
+    2113	   1133292 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-4     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    2090	   1145421 ns/op	       0 B/op	       0 allocs/op
+    2110	   1132992 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-8     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    3771	    618774 ns/op	       1 B/op	       0 allocs/op
+    3574	    614364 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-8     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    3306	    618262 ns/op	       1 B/op	       0 allocs/op
+    3529	    613282 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-8     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    3739	    618853 ns/op	       0 B/op	       0 allocs/op
+    3798	    612225 ns/op	         1.000 sessions/op	       1 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-8     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    3482	    618820 ns/op	       0 B/op	       0 allocs/op
+    3583	    613389 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-8     	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    3428	    618585 ns/op	       0 B/op	       0 allocs/op
+    3589	    614758 ns/op	         1.000 sessions/op	       1 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-16    	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    4099	    567697 ns/op	       3 B/op	       0 allocs/op
+    4057	    567942 ns/op	         1.000 sessions/op	       4 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-16    	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    4080	    567627 ns/op	       1 B/op	       0 allocs/op
+    4050	    567914 ns/op	         1.000 sessions/op	       2 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-16    	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    4082	    566889 ns/op	       2 B/op	       0 allocs/op
+    4063	    567602 ns/op	         1.000 sessions/op	       3 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-16    	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    4075	    567808 ns/op	       1 B/op	       0 allocs/op
+    3918	    567707 ns/op	         1.000 sessions/op	       0 B/op	       0 allocs/op
 BenchmarkVerifyChainedProofParallel-16    	Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
 Initializing KZG with path: ../../../trusted_setup.txt
-    4098	    568124 ns/op	       1 B/op	       0 allocs/op
+    3925	    568307 ns/op	         1.000 sessions/op	       2 B/op	       0 allocs/op
 PASS
-ok  	polystorechain/x/polystorechain/keeper	76.096s
+ok  	polystorechain/x/polystorechain/keeper	76.095s

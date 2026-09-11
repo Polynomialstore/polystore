@@ -1,16 +1,16 @@
 # Retrieval V3 parallel-verifier ceiling (#328)
 
-This short diagnostic isolates the two native verification calls used by one-opening retrieval V3 proofs. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, the verifier scales from **221.83 sessions/s on one core** to **1,616.10 sessions/s on eight physical cores**. The eight-core rate extrapolates to **139.63 million sessions/day** if verification were the only work.
+This short diagnostic isolates the two native verification calls used by one-opening retrieval V3 proofs. The fixture forces nonconstant polynomials and rejects identity commitments and openings before timing. On the Ryzen 7 9700X benchmark host, the verifier scales from **223.73 sessions/s on one core** to **1,630.29 sessions/s on eight physical cores**. The eight-core rate extrapolates to **140.86 million sessions/day** if verification were the only work.
 
 | Workers | Median ms/session | Sessions/s | Derived sessions/day |
 |---:|---:|---:|---:|
-| 1 | 4.508 | 221.83 | 19.17M |
-| 2 | 2.256 | 443.29 | 38.30M |
-| 4 | 1.143 | 874.58 | 75.56M |
-| 8 | 0.619 | 1,616.10 | 139.63M |
-| 16 | 0.568 | 1,761.50 | 152.19M |
+| 1 | 4.470 | 223.73 | 19.33M |
+| 2 | 2.237 | 447.07 | 38.63M |
+| 4 | 1.133 | 882.62 | 76.26M |
+| 8 | 0.613 | 1,630.29 | 140.86M |
+| 16 | 0.568 | 1,760.83 | 152.14M |
 
-The retained [gas sweep](../gas-sweep-324/) reached **155.15 sessions/s** and **13.41 million/day** at 448M gas. That is 9.6% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **404.02 sessions/s** (1,616.10 / 4); the measured chain reaches **38.4%** of that shared-host ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
+The retained [gas sweep](../gas-sweep-324/) reached **155.15 sessions/s** and **13.41 million/day** at 448M gas. That is 9.5% of one verifier process using all eight cores. Because the benchmark runs four validators on one host and every validator verifies every proof, its comparable verifier-only hardware ceiling is about **407.57 sessions/s** (1,630.29 / 4); the measured chain reaches **38.1%** of that shared-host ceiling. Increasing gas from 256M to 448M raised throughput only 10% while mean commit time rose from 1.98s to 3.19s and each validator approached one busy core. Block bytes remained below the 2 MiB limit. Gas therefore admits work until serial `FinalizeBlock` saturates; it cannot make proof transactions use the other cores. The later [128M qualification](../qualification-128m-326/) failed its validator-health gates, so canonical max block gas remains 64M.
 
 ## BlockSTM stop result
 
