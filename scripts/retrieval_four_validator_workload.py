@@ -498,33 +498,44 @@ def _encode_varint(value):
     return bytes(out)
 
 
-def opened_v3_sessions(result, count, *, logical_bytes=V3_PILOT_BYTES):
+def opened_v3_sessions(result, count, *, logical_bytes=V3_PILOT_BYTES, shapes=None):
     """Decode exact ordered native v3 open responses retained in one committed tx."""
     artifact.integer(count, "v3 open response count", 1, V3_CROSS_AUDIT_OPEN_BATCH_MAX)
     expected_type = b"/polystorechain.polystorechain.v1.MsgOpenRetrievalSessionV3Response"
-    suffix = (b"\x10" + _encode_varint(logical_bytes) +
-              b"\x18" + _encode_varint(133 * artifact.ENCODED_BLOB_BYTES) +
-              b"\x20" + _encode_varint(V3_MAX_SAMPLES))
-    response = b"\x0a\x20" + bytes(32) + suffix
-    any_value = (b"\x0a" + _encode_varint(len(expected_type)) + expected_type +
-                 b"\x12" + _encode_varint(len(response)) + response)
-    frame = b"\x12" + _encode_varint(len(any_value)) + any_value
+    if shapes is None:
+        shapes = [dict(range_start=0, range_length=logical_bytes,
+                       file_length=logical_bytes)] * count
+    if not isinstance(shapes, list) or len(shapes) != count:
+        raise ValueError("v3 open response shapes differ from the batch")
+    frames = []
+    for expected in shapes:
+        shape = native_v3_range_shape(
+            producer.uint(expected.get("range_length", "")),
+            range_start=producer.uint(expected.get("range_start", "")),
+            file_bytes=producer.uint(expected.get("file_length", "")))
+        suffix = (b"\x10" + _encode_varint(shape["range_bytes"]) +
+                  b"\x18" + _encode_varint(shape["population"] * artifact.ENCODED_BLOB_BYTES) +
+                  b"\x20" + _encode_varint(shape["sample_count"]))
+        response = b"\x0a\x20" + bytes(32) + suffix
+        any_value = (b"\x0a" + _encode_varint(len(expected_type)) + expected_type +
+                     b"\x12" + _encode_varint(len(response)) + response)
+        frames.append((b"\x12" + _encode_varint(len(any_value)) + any_value, len(suffix)))
     data = result.get("data", "")
     if (result.get("outcome") != "committed_success" or not isinstance(data, str) or
-            len(data) != len(frame) * count * 2 or not re.fullmatch(r"[0-9a-fA-F]+", data)):
+            len(data) != sum(len(frame) for frame, _ in frames) * 2 or
+            not re.fullmatch(r"[0-9a-fA-F]+", data)):
         raise ValueError("invalid committed v3 open response")
     raw = bytes.fromhex(data)
-    sid_offset = len(frame) - len(suffix) - 32
-    if len(raw) != len(frame) * count:
-        raise ValueError("v3 open response differs from the fixed pilot geometry")
-    sessions = []
-    for index in range(count):
-        value = raw[index * len(frame):(index + 1) * len(frame)]
+    sessions, offset = [], 0
+    for frame, suffix_length in frames:
+        value = raw[offset:offset + len(frame)]
+        sid_offset = len(frame) - suffix_length - 32
         session = value[sid_offset:sid_offset + 32]
         if (value[:sid_offset] != frame[:sid_offset] or
                 value[sid_offset + 32:] != frame[sid_offset + 32:] or not any(session)):
             raise ValueError("v3 open response differs from the fixed pilot geometry")
         sessions.append(session.hex())
+        offset += len(frame)
     if len(set(sessions)) != count:
         raise ValueError("v3 open response repeats a session id")
     return sessions
@@ -3987,7 +3998,7 @@ def open_v3_session_batch(lifecycle, paths, directory, command):
         raise ValueError("committed native v3 batch differs from signed gas or byte bounds")
     evidence["committed_bytes"] = next(iter(validator_bytes))
     lifecycle.save()
-    return opened_v3_sessions(result, len(paths)), result["height"]
+    return opened_v3_sessions(result, len(paths), shapes=[row["range"] for row in expected]), result["height"]
 
 
 def start_commit_streams(lifecycle, seconds, processes, *, stream_key="commit_streams",

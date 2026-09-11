@@ -951,6 +951,18 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             [(bytes([index]) * 32).hex() for index in range(1, 32)])
         self.assertEqual(len(workload.opened_v3_sessions(
             dict(outcome="committed_success", data=b"".join(ordered[:15]).hex()), 15)), 15)
+        small_suffix = (b"\x10" + workload._encode_varint(1024) +
+                        b"\x18" + workload._encode_varint(artifact.ENCODED_BLOB_BYTES) + b"\x20\x01")
+        small_response = b"\x0a\x20" + bytes.fromhex("44" * 32) + small_suffix
+        small_any = (b"\x0a" + workload._encode_varint(len(kind)) + kind +
+                     b"\x12" + workload._encode_varint(len(small_response)) + small_response)
+        small = b"\x12" + workload._encode_varint(len(small_any)) + small_any
+        self.assertEqual(workload.opened_v3_sessions(
+            dict(outcome="committed_success", data=(small + raw).hex()), 2, shapes=[
+                dict(range_start="0", range_length="1024", file_length=str(workload.V3_PILOT_BYTES)),
+                dict(range_start="0", range_length=str(workload.V3_PILOT_BYTES),
+                     file_length=str(workload.V3_PILOT_BYTES)),
+            ]), ["44" * 32, self.SESSION])
         with self.assertRaisesRegex(ValueError, "repeats"):
             workload.opened_v3_sessions(
                 dict(outcome="committed_success", data=(raw + raw).hex()), 2)
