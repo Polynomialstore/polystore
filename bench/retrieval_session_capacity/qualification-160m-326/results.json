@@ -1,0 +1,115 @@
+{
+  "schema": "polystore-retrieval-v3-chain-qualification-v1",
+  "issue": 326,
+  "scope": "proof confirmation only; file transport, proof generation, session opening, signing, acknowledgement, and refund excluded",
+  "provenance": {
+    "source_commit": "76d7ce549b422d9991011afbf567225e0454c034",
+    "host": "mikers@192.168.0.111",
+    "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+    "physical_cores": 8,
+    "logical_cpus": 16,
+    "os_arch": "linux/amd64",
+    "validator_gomaxprocs": 4,
+    "binary_sha256": "871bb9625e6f3e117ce2a2dc2514dd26fd674c843cd3fe09ca28ec5116ab85ff",
+    "native_library_sha256": "1a7ffa34ae16a1f8188bac98e4e0c8f6fbc7dc2532938d32045d2ddf361088bb",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "candidate": {
+    "max_block_gas": 160000000,
+    "max_block_bytes": 2097152,
+    "timeout_commit_ms": 1000,
+    "gas_adjustment": 1.1,
+    "range_bytes": 1024,
+    "sampled_chained_proofs_per_session": 1,
+    "kzg_openings_per_session": 2,
+    "batch_size": 64,
+    "offered_batch_transactions": 104,
+    "committed_batch_transactions": 104,
+    "committed_sessions": 6656,
+    "saturated_blocks": 26,
+    "sessions_per_full_block": 256,
+    "average_proof_gas_wanted_per_full_block": 149739819.65384614,
+    "average_proof_transaction_bytes_per_full_block": 204088.0,
+    "positive_backlog_seconds": 35.337692696,
+    "measurement_elapsed_seconds": 37.862969763,
+    "committed_batch_transactions_per_second": 2.9430331203194866,
+    "committed_sessions_per_second": 188.35411970044714,
+    "committed_sessions_per_day": 16273795.942118634,
+    "committed_kzg_openings_per_second": 376.7082394008943,
+    "committed_kzg_openings_per_day": 32547591.884237267,
+    "commit_interval_seconds": {
+      "p50": 1.373084249,
+      "p95": 1.433646695,
+      "p99": 1.435101839
+    },
+    "finalize_block_p95_seconds": [
+      0.6077405300018802,
+      0.6022347080026245,
+      0.6146405460015411,
+      0.6207667140008027
+    ],
+    "maximum_consensus_round": 0,
+    "missed_validator_signatures": 0,
+    "invalid_transactions": 0,
+    "unknown_transactions": 0,
+    "duplicate_transactions": 0,
+    "dropped_transactions": 0,
+    "retried_transactions": 0,
+    "host_average_cpu_fraction": 0.4089474755700326,
+    "aggregate_validator_average_cpu_cores": 6.273761369252665,
+    "validator_average_cpu_cores": [
+      1.5707403065863763,
+      1.5750696511006541,
+      1.5596463612685398,
+      1.5683050502970952
+    ],
+    "validator_peak_rss_bytes": [
+      593932288,
+      566349824,
+      561754112,
+      560660480
+    ],
+    "post_qualification_restart": true,
+    "qualification": true,
+    "source_evidence_path": "/home/mikers/polystore-bench-332-76d7ce54/runs/76d7ce54-batch64-6656-160m-1s-a11-gmp4-formal/evidence.json",
+    "source_evidence_sha256": "4013cfe020da7caed5da8cde6542441090b0004bda230a00ea5d7b6fabbcb061"
+  },
+  "cadence_diagnostic": {
+    "max_block_gas": 160000000,
+    "timeout_commit_ms": 500,
+    "committed_batch_transactions": 104,
+    "committed_sessions": 6656,
+    "saturated_blocks": 26,
+    "positive_backlog_seconds": 27.044405896,
+    "measurement_elapsed_seconds": 28.767292022,
+    "committed_sessions_per_second": 246.1137443948974,
+    "committed_sessions_per_day": 21264227.515719134,
+    "commit_interval_seconds": {
+      "p50": 1.02087996,
+      "p95": 1.180249453,
+      "p99": 1.207187401
+    },
+    "finalize_block_p95_seconds": [
+      0.628341026,
+      0.608489958,
+      0.619561393,
+      0.620482732
+    ],
+    "maximum_consensus_round": 0,
+    "missed_validator_signatures": 6,
+    "host_average_cpu_fraction": 0.54075270264,
+    "aggregate_validator_average_cpu_cores": 8.308578,
+    "qualification": false,
+    "failure": "six missed validator signatures",
+    "source_evidence_path": "/home/mikers/polystore-bench-332-76d7ce54/runs/76d7ce54-batch64-6656-160m-500ms-a11-gmp4-diagnostic-r2/evidence.json",
+    "source_evidence_sha256": "e23203a0d6398aeaeaaa511ee4db26c8f38a0640d6c33687d1603d03b48f3d93"
+  },
+  "verifier_comparison": {
+    "artifact": "../parallel-ceiling-328/results.json",
+    "artifact_commit": "1bf6762d2bce694917833a6f9a626769e9fd7578",
+    "four_worker_pure_verifier_sessions_per_second": 873.7485736054535,
+    "four_worker_pure_verifier_sessions_per_day": 75491876.75951119,
+    "full_chain_percent_of_pure_verifier_ceiling": 21.55701598724436
+  },
+  "daily_equivalent_basis": "short saturated rate multiplied by 86400; not a sustained 24-hour or end-to-end delivery claim"
+}

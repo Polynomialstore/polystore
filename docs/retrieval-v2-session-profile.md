@@ -180,20 +180,27 @@ gas admitted for one retrieval transaction. The failed 128000000
 separate-transaction qualification remains historical evidence; it did not
 exercise the batch route.
 
-The activation evidence comes from a fresh four-validator Linux run at the
-exact #329 implementation head. It records native
-CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
-reported as unknown), block-header commit-interval quantiles, canonical commit
-rounds and signatures, validator `/proc` CPU and sampled RSS during the longest
-all-validator-positive backlog, and per-node mempool depth. Reconciliation still
-fails on every rejected CheckTx or missing, duplicate, failed, retried, or
-unknown transaction. Qualification also fails if the observed mempool reaches
-the retained 5,000-transaction Comet limit, so that limit cannot be reported as
-proof-execution capacity. The run restarts every validator afterward, checks
-fixed-height state and consensus limits, waits for a proof in a new normal audit
-epoch, and verifies continued chain progress. A failed candidate still runs and
-retains this restart validation; if restart also fails, the original gate failure
-remains the reported qualification error. After coordinated deployment, run
+The activation evidence comes from a fresh four-validator Linux run at exact
+commit `76d7ce549b422d9991011afbf567225e0454c034`. With 160M gas, one-second
+`timeout_commit`, four workers per validator, and 104 batches of 64 one-opening
+1 KiB sessions, it committed all 6,656 sessions once at 188.35 sessions/s
+(16.27 million/day extrapolated). All 26 measured blocks were saturated;
+all commits stayed in round zero with no missed signatures; and exact
+per-validator `FinalizeBlock` p95 was 602-621ms. The evidence is retained in
+[`bench/retrieval_session_capacity/qualification-160m-326/`](../bench/retrieval_session_capacity/qualification-160m-326/).
+
+The benchmark records precise per-block `FinalizeBlock` observations,
+block-header commit-interval quantiles, canonical commit rounds and signatures,
+validator `/proc` CPU and sampled RSS during the longest all-validator-positive
+backlog, and per-node mempool depth. Reconciliation fails on every rejected
+CheckTx or missing, duplicate, failed, retried, or unknown transaction.
+Qualification also fails if the observed mempool reaches the retained
+5,000-transaction Comet limit, so that limit cannot be reported as proof-execution
+capacity. The run restarts every validator afterward, checks fixed-height state
+and consensus limits, waits for a proof in a new normal audit epoch, and verifies
+continued chain progress. A failed candidate still runs and retains this restart
+validation; if restart also fails, the original gate failure remains the reported
+qualification error. After coordinated deployment, run
 `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
 from an external host; the
 local qualification does not claim public routing or TLS health.
