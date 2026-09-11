@@ -1,0 +1,11 @@
+worktree=/Users/michaelseiler/dev/polynomialstore/polystore-blockstm-feasibility-328
+head=9014fdf116217414484cf00ce932a12d9649231b
+branch=
+go=go version go1.25.9 darwin/arm64
+command=go test -mod=mod ./app -run ^$ -count=1
+# polystorechain/precompiles/polystore
+precompiles/polystore/polystore.go:27:33: undefined: cmn.PolyStoreNativeGasFixVersion
+precompiles/polystore/polystore.go:28:37: undefined: cmn.PolyStoreNativeBalanceFixVersion
+precompiles/polystore/polystore.go:29:41: undefined: statedb.PolyStoreNativeJournalFixVersion
+FAIL	polystorechain/app [build failed]
+FAIL

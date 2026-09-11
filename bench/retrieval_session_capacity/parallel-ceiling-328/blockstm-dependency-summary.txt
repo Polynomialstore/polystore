@@ -1,0 +1,139 @@
+=== git status ===
+ M app/app.go
+ M app/app_config.go
+ M app/evm_mempool.go
+ M app/export.go
+ M app/ibc.go
+ M app/precompile_native_test.go
+ M app/precompile_retrieval_v3_test.go
+ M app/precompile_transaction_test.go
+ M app/retrieval_ack_height_gas_test.go
+ M app/retrieval_challenge_test.go
+ M app/retrieval_multisession_test.go
+ M app/retrieval_transaction_test.go
+ M app/sim_test.go
+ M cmd/polystorechaind/cmd/commands.go
+ M cmd/polystorechaind/cmd/root.go
+ M cmd/polystorechaind/cmd/testnet.go
+ M go.mod
+ M go.sum
+ M precompiles/polystore/polystore.go
+ M precompiles/polystore/polystore_test.go
+ M vendor/github.com/cosmos/cosmos-sdk/server/api/server.go
+ M vendor/github.com/cosmos/evm/precompiles/common/precompile.go
+ M vendor/github.com/cosmos/evm/x/vm/statedb/statedb.go
+ M x/polystorechain/keeper/economics_gamma4_test.go
+ M x/polystorechain/keeper/keeper_test.go
+ M x/polystorechain/keeper/proof_admission_routes_test.go
+ M x/polystorechain/keeper/proof_admission_test.go
+ M x/polystorechain/keeper/retrieval_challenge_completion_test.go
+ M x/polystorechain/keeper/retrieval_challenge_test.go
+ M x/polystorechain/keeper/retrieval_session_bench_test.go
+ M x/polystorechain/keeper/retrieval_v2_bench_test.go
+ M x/polystorechain/keeper/retrieval_v3_generation_test.go
+ M x/polystorechain/keeper/storage_audit_state_test.go
+
+=== diff stat ===
+ polystorechain/app/app.go                          |  26 +-
+ polystorechain/app/app_config.go                   |  44 +-
+ polystorechain/app/evm_mempool.go                  |   6 +-
+ polystorechain/app/export.go                       |   2 +-
+ polystorechain/app/ibc.go                          |  44 +-
+ polystorechain/app/precompile_native_test.go       |   4 +-
+ polystorechain/app/precompile_retrieval_v3_test.go |   4 +-
+ polystorechain/app/precompile_transaction_test.go  |   2 +-
+ .../app/retrieval_ack_height_gas_test.go           |   2 +-
+ polystorechain/app/retrieval_challenge_test.go     |   4 +-
+ polystorechain/app/retrieval_multisession_test.go  |   4 +-
+ polystorechain/app/retrieval_transaction_test.go   |   2 +-
+ polystorechain/app/sim_test.go                     |  10 +-
+ polystorechain/cmd/polystorechaind/cmd/commands.go |   2 +-
+ polystorechain/cmd/polystorechaind/cmd/root.go     |   2 +-
+ polystorechain/cmd/polystorechaind/cmd/testnet.go  |   4 +-
+ polystorechain/go.mod                              | 362 ++++++++++------
+ polystorechain/go.sum                              | 469 +++++++++++++++++++++
+ polystorechain/precompiles/polystore/polystore.go  |   2 +-
+ .../precompiles/polystore/polystore_test.go        |   2 +-
+ .../cosmos/cosmos-sdk/server/api/server.go         |   2 +-
+ .../cosmos/evm/precompiles/common/precompile.go    |   2 +-
+ .../github.com/cosmos/evm/x/vm/statedb/statedb.go  |   2 +-
+ .../polystorechain/keeper/economics_gamma4_test.go |   2 +-
+ .../x/polystorechain/keeper/keeper_test.go         |   4 +-
+ .../keeper/proof_admission_routes_test.go          |   2 +-
+ .../polystorechain/keeper/proof_admission_test.go  |   2 +-
+ .../keeper/retrieval_challenge_completion_test.go  |   2 +-
+ .../keeper/retrieval_challenge_test.go             |   2 +-
+ .../keeper/retrieval_session_bench_test.go         |   2 +-
+ .../keeper/retrieval_v2_bench_test.go              |   2 +-
+ .../keeper/retrieval_v3_generation_test.go         |   8 +-
+ .../keeper/storage_audit_state_test.go             |   8 +-
+ 33 files changed, 791 insertions(+), 246 deletions(-)
+
+=== compatibility dependency selections ===
+github.com/cosmos/cosmos-sdk v0.54.3
+github.com/cosmos/evm v0.7.0
+github.com/cometbft/cometbft v0.39.3
+github.com/cosmos/ibc-go/v11 v11.0.0
+github.com/ethereum/go-ethereum v1.16.8 => github.com/cosmos/go-ethereum v1.17.2-cosmos-0
+cosmossdk.io/log/v2 v2.1.0
+github.com/cosmos/cosmos-sdk/store/v2 v2.0.0
+cosmossdk.io/client/v2 v2.11.0
+
+=== go.mod relevant diff ===
+-go 1.25
++go 1.25.9
+-	github.com/ethereum/go-ethereum => github.com/cosmos/go-ethereum v1.16.2-cosmos-1
++	github.com/ethereum/go-ethereum => github.com/cosmos/go-ethereum v1.17.2-cosmos-0
+-	cosmossdk.io/client/v2 v2.0.0-beta.11
++	cosmossdk.io/client/v2 v2.11.0
+-	cosmossdk.io/log v1.6.1
++	cosmossdk.io/log/v2 v2.1.0
+-	cosmossdk.io/store v1.1.2
+-	github.com/cometbft/cometbft v0.38.19
++	github.com/cometbft/cometbft v0.39.3
+-	github.com/cosmos/cosmos-sdk v0.53.5-0.20251030204916-768cb210885c
+-	github.com/cosmos/evm v0.5.1
++	github.com/cosmos/cosmos-sdk v0.54.3
++	github.com/cosmos/cosmos-sdk/store/v2 v2.0.0
++	github.com/cosmos/evm v0.7.0
+-	github.com/cosmos/ibc-go/v10 v10.4.0
+-	github.com/ethereum/go-ethereum v1.15.11
++	github.com/cosmos/ibc-go/v11 v11.0.0
++	github.com/ethereum/go-ethereum v1.16.8
+-	github.com/cometbft/cometbft-db v0.14.1 // indirect
++	github.com/cometbft/cometbft-db v1.0.4 // indirect
+
+=== source migration files ===
+polystorechain/app/app.go
+polystorechain/app/app_config.go
+polystorechain/app/evm_mempool.go
+polystorechain/app/export.go
+polystorechain/app/ibc.go
+polystorechain/app/precompile_native_test.go
+polystorechain/app/precompile_retrieval_v3_test.go
+polystorechain/app/precompile_transaction_test.go
+polystorechain/app/retrieval_ack_height_gas_test.go
+polystorechain/app/retrieval_challenge_test.go
+polystorechain/app/retrieval_multisession_test.go
+polystorechain/app/retrieval_transaction_test.go
+polystorechain/app/sim_test.go
+polystorechain/cmd/polystorechaind/cmd/commands.go
+polystorechain/cmd/polystorechaind/cmd/root.go
+polystorechain/cmd/polystorechaind/cmd/testnet.go
+polystorechain/go.mod
+polystorechain/go.sum
+polystorechain/precompiles/polystore/polystore.go
+polystorechain/precompiles/polystore/polystore_test.go
+polystorechain/vendor/github.com/cosmos/cosmos-sdk/server/api/server.go
+polystorechain/vendor/github.com/cosmos/evm/precompiles/common/precompile.go
+polystorechain/vendor/github.com/cosmos/evm/x/vm/statedb/statedb.go
+polystorechain/x/polystorechain/keeper/economics_gamma4_test.go
+polystorechain/x/polystorechain/keeper/keeper_test.go
+polystorechain/x/polystorechain/keeper/proof_admission_routes_test.go
+polystorechain/x/polystorechain/keeper/proof_admission_test.go
+polystorechain/x/polystorechain/keeper/retrieval_challenge_completion_test.go
+polystorechain/x/polystorechain/keeper/retrieval_challenge_test.go
+polystorechain/x/polystorechain/keeper/retrieval_session_bench_test.go
+polystorechain/x/polystorechain/keeper/retrieval_v2_bench_test.go
+polystorechain/x/polystorechain/keeper/retrieval_v3_generation_test.go
+polystorechain/x/polystorechain/keeper/storage_audit_state_test.go
