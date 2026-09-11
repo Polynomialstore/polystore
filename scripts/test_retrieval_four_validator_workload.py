@@ -1559,6 +1559,11 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(workload.native_v3_minimum_gas_blocks(
             10 * 64_000_000 + 1, 64_000_000), 11)
         workload.validate_native_v3_capacity_epoch(selected[0], 448_000_000)
+        with self.assertRaisesRegex(ValueError, "more than ten"):
+            workload.validate_native_v3_capacity_epoch(
+                workload.native_v3_chain_capacity_profiles("1kib", 4952)[0], 448_000_000)
+        workload.validate_native_v3_capacity_epoch(
+            workload.native_v3_chain_capacity_profiles("1kib", 4960)[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
             workload.native_v3_chain_capacity_profiles("1kib", 4608)[0], 64_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
@@ -2393,9 +2398,11 @@ class HealthyAuditViewsTest(unittest.TestCase):
             constructor.assert_not_called()
         impossible = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "sample-cap",
                                  "--chain-capacity-transactions", "4992"]
+        undersized = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "1kib",
+                                 "--chain-capacity-transactions", "4944"]
         overhead = required + ["--chain-max-gas", "64000000", "--chain-capacity-profile", "1kib",
                                "--chain-capacity-transactions", "4992"]
-        for rejected in (impossible, overhead):
+        for rejected in (impossible, undersized, overhead):
             with patch.object(workload.sys, "argv", common + rejected), \
                  patch.object(workload.sys, "stderr"), \
                  patch.object(artifact, "FourValidatorLifecycle") as constructor, \

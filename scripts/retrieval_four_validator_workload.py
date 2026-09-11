@@ -75,6 +75,7 @@ V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
 V3_PROOF_CRYPTO_GAS = 500_000
 V3_PROOF_OPENING_OVERHEAD_GAS = 313_000
 V3_PROOF_TRANSACTION_OVERHEAD_GAS = 130_000
+V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS = 404_000
 V3_EXPORT_BATCH_MAX = 8
 V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
@@ -148,13 +149,19 @@ def native_v3_minimum_gas_blocks(total_gas, max_block_gas):
 
 
 def validate_native_v3_capacity_epoch(profile, max_block_gas):
-    """Reject inventories whose conservative gas estimate cannot fit the fixed epoch."""
+    """Reject inventories too small for backlog or too large for the fixed epoch."""
     # ProofCryptoGas is the protocol floor. The retained native-v3-chain-322 and
     # gas-sweep-324 maxima give a conservative 813k/opening + 130k/transaction envelope.
+    # The retained gas-sweep-324 one-opening minimum is 904,051 gas, so 404k of
+    # per-transaction overhead is a rounded-down floor for this fixed workload.
+    proof_count = profile["sessions"] * profile["sample_count"]
+    minimum_gas = (proof_count * V3_PROOF_CRYPTO_GAS +
+                   profile["measured_transactions"] * V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS)
     proof_gas = V3_PROOF_CRYPTO_GAS + V3_PROOF_OPENING_OVERHEAD_GAS
-    estimated_gas = (profile["sessions"] * profile["sample_count"] * proof_gas +
+    estimated_gas = (proof_count * proof_gas +
                      profile["measured_transactions"] * V3_PROOF_TRANSACTION_OVERHEAD_GAS)
     max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
+    native_v3_minimum_gas_blocks(minimum_gas, max_block_gas)
     minimum_blocks = (estimated_gas + max_block_gas - 1) // max_block_gas
     if minimum_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS > V3_CHAIN_AUDIT_EPOCH_BLOCKS - 2:
         raise ValueError("native chain capacity inventory cannot fit within one audit epoch")
