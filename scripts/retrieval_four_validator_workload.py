@@ -2012,7 +2012,7 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))
 
 
-def run_native_v3_chain(lifecycle, *, deal, providers, wait, exporter, command, epoch_length):
+def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length):
     """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
         scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")

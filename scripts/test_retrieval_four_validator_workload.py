@@ -3,6 +3,7 @@ import base64
 import copy
 import datetime
 import hashlib
+import inspect
 import io
 import json
 from pathlib import Path
@@ -1508,6 +1509,9 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             workload.validator_cpu_delta(before, after)
 
     def test_native_chain_capacity_profiles_cover_distinct_protocol_shapes(self):
+        inspect.signature(workload.run_native_v3_chain).bind(
+            SimpleNamespace(), deal={}, providers={}, wait=Mock(), audits=Mock(),
+            exporter=Path("/exporter"), command=Mock(), epoch_length=100)
         profiles = workload.native_v3_chain_capacity_profiles()
         self.assertEqual([(row["name"], row["range_bytes"], row["population"],
                            row["sample_count"], row["proof_transactions"], row["sessions"],
