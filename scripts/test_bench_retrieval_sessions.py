@@ -1536,7 +1536,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                             "unchanged_fee": "17"}}, "evm": {"params": {"active_static_precompiles": []}},
                         "feemarket": {"params": {"min_gas_price": "0.000000000000000000"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
-                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
+                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[mempool]\\nsize = 5000\\nmax_txs_bytes = 1073741824\\nmax_tx_bytes = 1048576\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
                     (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\nenabled-unsafe-cors = false\\n[mempool]\\nmax-txs = -1\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
@@ -1664,10 +1664,15 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertEqual(artifact.sha256(home / "config/genesis.json"), doc["genesis_sha256"])
             self.assertIn('timeout_commit = "1s"', (home / "config/config.toml").read_text())
             self.assertIn("prometheus = true", (home / "config/config.toml").read_text())
+            self.assertIn("max_txs_bytes = 1073741824", (home / "config/config.toml").read_text())
             self.assertTrue((home / "initial.log").exists())
             self.assertTrue((home / "restart.log").exists())
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
         self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
+        self.assertEqual(doc["profile"]["comet_mempool"], {
+            "size": 5000, "max_txs_bytes": 1073741824, "max_tx_bytes": 1048576})
+        self.assertEqual(doc["profile"]["app_mempool_max_txs"], 5000)
+        self.assertIn("max-txs = 5000", (Path(doc["nodes"][0]["home"]) / "config/app.toml").read_text())
 
     def test_c6_audit_profile_is_explicit_and_frozen_before_validation(self):
         self.runner.home.mkdir(mode=0o700)
@@ -1678,6 +1683,27 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             params = genesis["app_state"]["nilchain"]["params"]
             self.assertEqual((params["quota_min_blobs"], params["quota_max_blobs"]), ("132", "132"))
             self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"), self.runner.doc["genesis_sha256"])
+
+    def test_block_gas_override_is_shared_and_recorded(self):
+        self.runner.home.mkdir(mode=0o700)
+        self.runner.prepare(max_block_gas=448_000_000)
+        self.assertEqual(self.runner.doc["profile"]["consensus"]["block"],
+                         {"max_bytes": "2097152", "max_gas": "448000000"})
+        for node in self.runner.nodes:
+            genesis = json.loads((Path(node["home"]) / "config/genesis.json").read_text())
+            self.assertEqual(genesis["consensus"]["params"]["block"],
+                             {"max_bytes": "2097152", "max_gas": "448000000"})
+            self.assertEqual(artifact.sha256(Path(node["home"]) / "config/genesis.json"),
+                             self.runner.doc["genesis_sha256"])
+
+        rejected = artifact.FourValidatorLifecycle(
+            self.binary, self.library, self.root / "above-activation-gas")
+        with patch.object(rejected, "cli") as cli, \
+             self.assertRaisesRegex(ValueError, "max block gas must be 1..448000000"):
+            rejected.prepare(max_block_gas=448_000_001)
+        cli.assert_not_called()
+        self.assertFalse(rejected.home.exists())
+        self.assertFalse(rejected.processes)
 
     def test_v3_activation_is_explicit_and_default_remains_off(self):
         for enabled in (False, True):

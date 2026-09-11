@@ -251,6 +251,9 @@ the all-opened-blob challenge session contract in #254.
 `scripts/retrieval_consensus_profile.json` supplies positive finite **2 MiB block
 bytes / 64,000,000 block gas** to the benchmark's newly created isolated genesis.
 The result records these values; ordinary node genesis defaults are unchanged.
+Fresh benchmark genesis may override gas up to the compiled 448,000,000 activation
+ceiling while retaining the 2 MiB byte limit; this does not change the checked-in
+64,000,000 default.
 The candidate gas rate and block limits are preliminary bounds, not a throughput
 or permissionless-security claim. #260 must measure honest generation/admission
 and admitted-state maxima, including the separate fixed audit demand, before

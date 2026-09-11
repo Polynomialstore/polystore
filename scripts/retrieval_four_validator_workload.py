@@ -70,6 +70,12 @@ V3_CHAIN_SESSION_TTL_BLOCKS = 4096
 V3_EXPIRY_REFS_PER_BLOCK = 128
 V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
+V3_CHAIN_AUDIT_EPOCH_BLOCKS = 100
+V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
+V3_PROOF_CRYPTO_GAS = 500_000
+V3_PROOF_OPENING_OVERHEAD_GAS = 313_000
+V3_PROOF_TRANSACTION_OVERHEAD_GAS = 130_000
+V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS = 404_000
 V3_EXPORT_BATCH_MAX = 8
 V3_CROSS_AUDIT_SESSIONS = 46
 V3_CROSS_AUDIT_WARMUPS = 8
@@ -104,7 +110,7 @@ def native_v3_range_shape(range_bytes, *, range_start=0, file_bytes=V3_PILOT_BYT
                 obligation_slots=slots, proof_transactions=len(slots))
 
 
-def native_v3_chain_capacity_profiles():
+def native_v3_chain_capacity_profiles(profile_name=None, measured_transactions=None):
     """The three distinct range shapes needed for a chain-only capacity result."""
     names = ("1kib", "eight-blobs", "sample-cap")
     profiles = []
@@ -115,7 +121,50 @@ def native_v3_chain_capacity_profiles():
             raise ValueError("native v3 capacity inventory must contain complete proof sets")
         profiles.append(dict(name=name, measured_transactions=transactions,
             sessions=transactions // shape["proof_transactions"], **shape))
+    if profile_name is not None:
+        selected = [profile for profile in profiles if profile["name"] == profile_name]
+        if len(selected) != 1 or measured_transactions is None:
+            raise ValueError("selected native v3 capacity profile requires a transaction count")
+        profile = selected[0]
+        transactions = artifact.integer(measured_transactions, "measured transactions", 1, 4999)
+        if transactions % profile["proof_transactions"]:
+            raise ValueError("native v3 capacity inventory must contain complete proof sets")
+        if transactions % V3_SYSTEMATIC_PROVIDERS:
+            raise ValueError("native v3 capacity inventory must balance provider lanes")
+        profile.update(measured_transactions=transactions,
+                       sessions=transactions // profile["proof_transactions"])
+        return selected
+    if measured_transactions is not None:
+        raise ValueError("measured transactions require a selected capacity profile")
     return profiles
+
+
+def native_v3_minimum_gas_blocks(total_gas, max_block_gas):
+    total_gas = artifact.integer(total_gas, "inventory gas", 1)
+    max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
+    blocks = (total_gas + max_block_gas - 1) // max_block_gas
+    if blocks <= V3_CHAIN_BACKLOG_SECONDS:
+        raise ValueError("fixed inventory must require more than ten maximum-gas blocks")
+    return blocks
+
+
+def validate_native_v3_capacity_epoch(profile, max_block_gas):
+    """Reject inventories too small for backlog or too large for the fixed epoch."""
+    # ProofCryptoGas is the protocol floor. The retained native-v3-chain-322 and
+    # gas-sweep-324 maxima give a conservative 813k/opening + 130k/transaction envelope.
+    # The retained gas-sweep-324 one-opening minimum is 904,051 gas, so 404k of
+    # per-transaction overhead is a rounded-down floor for this fixed workload.
+    proof_count = profile["sessions"] * profile["sample_count"]
+    minimum_gas = (proof_count * V3_PROOF_CRYPTO_GAS +
+                   profile["measured_transactions"] * V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS)
+    proof_gas = V3_PROOF_CRYPTO_GAS + V3_PROOF_OPENING_OVERHEAD_GAS
+    estimated_gas = (proof_count * proof_gas +
+                     profile["measured_transactions"] * V3_PROOF_TRANSACTION_OVERHEAD_GAS)
+    max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
+    native_v3_minimum_gas_blocks(minimum_gas, max_block_gas)
+    minimum_blocks = (estimated_gas + max_block_gas - 1) // max_block_gas
+    if minimum_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS > V3_CHAIN_AUDIT_EPOCH_BLOCKS - 2:
+        raise ValueError("native chain capacity inventory cannot fit within one audit epoch")
 
 
 def native_v3_capacity_deadline(opened_at, session_index):
@@ -1586,6 +1635,8 @@ def require_provider_quiescence(lifecycle, providers):
 def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
                                     required_margin, deadline_height):
     """Wait for complete normal audits with enough blocks left in the epoch."""
+    if required_margin > epoch_length - 2:
+        raise ValueError("native chain capacity margin cannot fit within one audit epoch")
     while True:
         height = lifecycle.wait_height(1)
         epoch = (height - 1) // epoch_length + 1
@@ -2113,12 +2164,15 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))
 
 
-def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length):
+def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, command, epoch_length,
+                        profile_name=None, measured_transactions=None):
     """Measure saturated proof-only chain capacity from frozen native-v3 TxRaw bytes."""
+    if epoch_length != V3_CHAIN_AUDIT_EPOCH_BLOCKS:
+        raise ValueError("native chain capacity requires the fixed 100-block audit epoch")
     doc = lifecycle.doc["native_v3_chain"] = dict(qualification=False,
         scope="proof confirmation only; transport, proof preparation, session opens, ACK and refund excluded")
     owner = lifecycle.signers["owner0"]
-    profiles = native_v3_chain_capacity_profiles()
+    profiles = native_v3_chain_capacity_profiles(profile_name, measured_transactions)
     opened_at = lifecycle.wait_height(3)
     session_count = sum(profile["sessions"] for profile in profiles)
     max_deadline_height = native_v3_capacity_deadline(opened_at, session_count - 1)
@@ -2195,22 +2249,26 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     lifecycle.save()
     for profile in profiles:
         profile_simulated = [row for row in simulated if row[0]["profile"] == profile["name"]]
-        minimum_gas_blocks = math.ceil(sum(row[2]["gas_limit"] for row in profile_simulated) / 64_000_000)
-        if minimum_gas_blocks < V3_CHAIN_BACKLOG_SECONDS:
-            raise ValueError("fixed inventory cannot occupy ten maximum-gas blocks")
+        max_block_gas = artifact.integer(
+            lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
+        total_gas = sum(row[2]["gas_limit"] for row in profile_simulated)
+        minimum_gas_blocks = native_v3_minimum_gas_blocks(total_gas, max_block_gas)
         required_margin = minimum_gas_blocks + 10
         profile_deadline_height = min(row["deadline_height"] for row in
                                       sessions[profile["session_start"]:profile["session_end"]])
         while True:
-            window = await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
-                                                     required_margin + 20, profile_deadline_height)
+            window = await_native_v3_capacity_window(
+                lifecycle, wait, audits, epoch_length,
+                minimum_gas_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS, profile_deadline_height)
             quiescence = require_provider_quiescence(lifecycle, providers)
             frozen = freeze_native_v3_transactions(
                 lifecycle, profile_simulated, [profile], providers, quiescence["sequences"], command)
             if len(frozen) != profile["measured_transactions"]:
                 raise ValueError("frozen profile transaction count differs from the fixed inventory")
-            if len(frozen) >= 5000 or sum(row["bytes"] for row in frozen) >= 1024**3:
-                raise ValueError("frozen profile reaches the default Comet mempool transaction/byte cap")
+            mempool = lifecycle.doc["profile"]["comet_mempool"]
+            if (len(frozen) >= mempool["size"] or
+                    sum(row["bytes"] for row in frozen) >= mempool["max_txs_bytes"]):
+                raise ValueError("frozen profile reaches the frozen Comet mempool transaction/byte cap")
             post_freeze = require_provider_quiescence(lifecycle, providers)
             ready_height = post_freeze["second_height"]
             ready_epoch = (ready_height - 1) // epoch_length + 1
@@ -4441,7 +4499,10 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         setup_transactions=[], providers=[],
         workload=(f"one {v3_bytes}-byte FAT v3 K8 PUBLIC deal; production DealDetail sponsored browser retrieval"
                   if native_browser is not None else
-                  "one 16 MiB FAT v3 K8 deal; 1 KiB, 992 KiB, and 16 MiB ranges; 2,640 frozen native proof transactions"
+                  (f"one 16 MiB FAT v3 K8 deal; {native_chain['profile']} range; "
+                   f"{native_chain['measured_transactions']:,} frozen native proof transactions"
+                   if native_chain.get("profile") else
+                   "one 16 MiB FAT v3 K8 deal; 1 KiB, 992 KiB, and 16 MiB ranges; 2,640 frozen native proof transactions")
                   if native_chain is not None else
                   "one 16 MiB FAT v3 K8 deal; 46 sessions; 368 production-route proof transactions across two normal audit anchors"
                   if native_cross_audit else
@@ -4575,7 +4636,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             raise ValueError("diagnostic requires the maintained trusted setup")
         lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
                           enable_retrieval_v3=native_v3,
-                          browser_payer=V3_BROWSER_PAYER if native_browser is not None else None)
+                          browser_payer=V3_BROWSER_PAYER if native_browser is not None else None,
+                          max_block_gas=native_chain.get("max_block_gas", 64_000_000)
+                          if native_chain is not None else 64_000_000)
         # Normal mint is retained for both explicit audit profiles.
         population = layout["openings_per_bundle"] * (v3_geometry["user_mdus"] if native_v3 else 1)
         expected_samples = frozen_audit_quota(doc["frozen_module_params"], population,
@@ -4758,7 +4821,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             if native_chain is not None:
                 run_native_v3_chain(lifecycle, deal=deal, providers=providers, wait=wait,
                                     audits=audits, exporter=export_binary, command=command,
-                                    epoch_length=epoch_length)
+                                    epoch_length=epoch_length,
+                                    profile_name=native_chain.get("profile"),
+                                    measured_transactions=native_chain.get("measured_transactions"))
                 doc["status"] = "native_v3_chain_capacity_passed"
             elif native_cross_audit:
                 run_native_v3_cross_audit(lifecycle, deal=deal, providers=providers, send=send, wait=wait,
@@ -4828,6 +4893,13 @@ def main():
     parser.add_argument("--sustained-deputies", type=int, choices=SUSTAINED_DEPUTY_COUNTS, default=8,
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
+    parser.add_argument("--chain-max-gas", type=int,
+                        choices=(64_000_000, 128_000_000, 256_000_000, 448_000_000),
+                        help="Experimental native-v3-chain maximum block gas")
+    parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
+                        help="Run one native-v3-chain range shape")
+    parser.add_argument("--chain-capacity-transactions", type=int,
+                        help="Frozen transaction inventory for a selected native-v3-chain profile")
     parser.add_argument("--browser-bytes", type=int, choices=V3_BROWSER_SIZES,
                         help="Retained browser fixture size; only used by native-v3-browser")
     parser.add_argument("--browser-executor-handoff", action="store_true",
@@ -4847,6 +4919,12 @@ def main():
     sustained_deputies = options.pop("sustained_deputies")
     browser_bytes = options.pop("browser_bytes")
     browser_executor_handoff = options.pop("browser_executor_handoff")
+    chain_max_gas = options.pop("chain_max_gas")
+    chain_capacity_profile = options.pop("chain_capacity_profile")
+    chain_capacity_transactions = options.pop("chain_capacity_transactions")
+    if mode != "native-v3-chain" and any(value is not None for value in
+            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions)):
+        parser.error("chain capacity controls require native-v3-chain")
     if browser_executor_handoff and (mode != "native-v3-browser" or
             (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
         parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
@@ -4857,13 +4935,26 @@ def main():
             sustained=dict(exporter=exporter, step_seconds=step_seconds, proof_gas=proof_gas, k=sustained_k,
                            rate_scale=sustained_rate_scale, deputy_count=sustained_deputies), audit_profile=audit_profile))
     elif mode == "native-v3-chain":
+        selected_chain_profile = any(value is not None for value in
+            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions))
         if (not gateway or not cli or not source or not exporter or k8 or k2 or proof_only or
                 proof_gas is not None or step_seconds != 180 or sustained_k != 2 or
                 sustained_rate_scale != 1 or sustained_deputies != 8 or
-                options["timeout"] > 3600 or audit_profile != "normal"):
+                options["timeout"] > 3600 or audit_profile != "normal" or
+                (selected_chain_profile and None in
+                 (chain_max_gas, chain_capacity_profile, chain_capacity_transactions))):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
+        native_chain = dict(exporter=exporter)
+        if selected_chain_profile:
+            try:
+                profiles = native_v3_chain_capacity_profiles(chain_capacity_profile, chain_capacity_transactions)
+                validate_native_v3_capacity_epoch(profiles[0], chain_max_gas)
+            except ValueError as error:
+                parser.error(str(error))
+            native_chain.update(max_block_gas=chain_max_gas, profile=chain_capacity_profile,
+                                measured_transactions=chain_capacity_transactions)
         print(run_healthy(artifact.FourValidatorLifecycle(**options, sustained=True), gateway, cli, source,
-                          native_chain=dict(exporter=exporter), audit_profile="normal"))
+                          native_chain=native_chain, audit_profile="normal"))
     elif mode == "native-v3-browser":
         if (not gateway or not cli or not source or k8 or k2 or proof_only or
                 options["timeout"] > 3600 or audit_profile != "normal"):

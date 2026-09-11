@@ -1709,7 +1709,10 @@ def set_toml_value(text, section, key, value):
     return "".join(lines)
 
 
-BROWSER_EVM_MEMPOOL_MAX_TXS = 5000
+APP_MEMPOOL_MAX_TXS = 5000
+COMET_MEMPOOL_SIZE = 5000
+COMET_MEMPOOL_MAX_TXS_BYTES = 1024**3
+COMET_MEMPOOL_MAX_TX_BYTES = 1024**2
 BROWSER_EVM_PRECOMPILE = "0x0000000000000000000000000000000000000900"
 BROWSER_EVM_MIN_GAS_PRICE = "1.000000000000000000"
 BROWSER_EVM_NATIVE_GAS_PRICES = "1aatom"
@@ -1717,9 +1720,9 @@ BROWSER_EVM_NATIVE_GAS_PRICES = "1aatom"
 
 def configure_four_validator_app(text, api_address, *, browser_evm=False):
     text = set_toml_value(text, "api", "address", f'"{api_address}"')
+    text = set_toml_value(text, "mempool", "max-txs", str(APP_MEMPOOL_MAX_TXS))
     if browser_evm:
         text = set_toml_value(text, "api", "enabled-unsafe-cors", "true")
-        text = set_toml_value(text, "mempool", "max-txs", str(BROWSER_EVM_MEMPOOL_MAX_TXS))
     return text
 
 
@@ -1795,7 +1798,8 @@ class FourValidatorLifecycle:
                 reservation.listen(1)
 
     def prepare(self, *, audit_profile="normal", provider_count=12, enable_retrieval_v3=False,
-                browser_payer=None):
+                browser_payer=None, max_block_gas=64_000_000):
+        max_block_gas = integer(max_block_gas, "max block gas", 1, 448_000_000)
         if audit_profile not in ("normal", "c6"):
             raise ValueError("unknown benchmark audit profile")
         provider_count = integer(provider_count, "provider signer count", 12, 44)
@@ -1830,6 +1834,7 @@ class FourValidatorLifecycle:
         consensus = json.loads((self.root / "scripts/retrieval_consensus_profile.json").read_text())
         if consensus["block"] != {"max_bytes": "2097152", "max_gas": "64000000"}:
             raise ValueError("four-validator frozen consensus profile changed")
+        consensus["block"]["max_gas"] = str(max_block_gas)
         genesis["consensus"]["params"]["block"].update(consensus["block"])
         params = genesis["app_state"]["nilchain"]["params"]
         if "retrieval_v2_activation_height" not in params:
@@ -1868,6 +1873,9 @@ class FourValidatorLifecycle:
             config = path.read_text()
             for section, key, value in (("consensus", "timeout_commit", '"1s"'),
                                         ("p2p", "addr_book_strict", "false"),
+                                        ("mempool", "size", str(COMET_MEMPOOL_SIZE)),
+                                        ("mempool", "max_txs_bytes", str(COMET_MEMPOOL_MAX_TXS_BYTES)),
+                                        ("mempool", "max_tx_bytes", str(COMET_MEMPOOL_MAX_TX_BYTES)),
                                         ("instrumentation", "prometheus", "true"),
                                         ("instrumentation", "prometheus_listen_addr", f'"127.0.0.1:{node["metrics"]}"')):
                 config = set_toml_value(config, section, key, value)
@@ -1891,7 +1899,10 @@ class FourValidatorLifecycle:
                         profile={"consensus": consensus, "audit_profile": audit_profile, "timeout_commit": "1s", "execution_budget_ms": 700,
                                  "memory_ceiling_per_validator_bytes": 2147483648, "budgets_measured": False,
                                  "GOMAXPROCS": self.env["GOMAXPROCS"],
-                                 "app_mempool_max_txs": BROWSER_EVM_MEMPOOL_MAX_TXS if self.browser_evm else -1,
+                                 "app_mempool_max_txs": APP_MEMPOOL_MAX_TXS,
+                                 "comet_mempool": {"size": COMET_MEMPOOL_SIZE,
+                                                     "max_txs_bytes": COMET_MEMPOOL_MAX_TXS_BYTES,
+                                                     "max_tx_bytes": COMET_MEMPOOL_MAX_TX_BYTES},
                                  **({"browser_evm_fee_policy": {
                                      "native_minimum_gas_prices": BROWSER_EVM_NATIVE_GAS_PRICES,
                                      "evm_min_gas_price_aatom": BROWSER_EVM_MIN_GAS_PRICE,

@@ -30,6 +30,47 @@ func activateSessionFixture(t *testing.T, f *fixture) sdk.Context {
 	return ctx.WithBlockHeight(2)
 }
 
+func TestRetrievalV2ActivationConsensusBounds(t *testing.T) {
+	tests := []struct {
+		name     string
+		maxGas   int64
+		maxBytes int64
+		wantErr  bool
+	}{
+		{"64M gas", 64_000_000, types.MaxRetrievalV2BlockBytes, false},
+		{"128M gas", 128_000_000, types.MaxRetrievalV2BlockBytes, false},
+		{"256M gas", 256_000_000, types.MaxRetrievalV2BlockBytes, false},
+		{"448M gas", types.MaxRetrievalActivationBlockGas, types.MaxRetrievalV2BlockBytes, false},
+		{"gas above ceiling", types.MaxRetrievalActivationBlockGas + 1, types.MaxRetrievalV2BlockBytes, true},
+		{"zero gas", 0, types.MaxRetrievalV2BlockBytes, true},
+		{"unlimited gas", -1, types.MaxRetrievalV2BlockBytes, true},
+		{"bytes above ceiling", 64_000_000, types.MaxRetrievalV2BlockBytes + 1, true},
+		{"zero bytes", 64_000_000, 0, true},
+		{"unlimited bytes", 64_000_000, -1, true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			f := initFixture(t)
+			ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1).WithConsensusParams(cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: test.maxGas, MaxBytes: test.maxBytes}})
+			params, err := f.keeper.Params.Get(ctx)
+			require.NoError(t, err)
+			params.RetrievalV2ActivationHeight = 1
+			require.NoError(t, f.keeper.Params.Set(ctx, params))
+			err = f.keeper.BeginBlock(ctx)
+			if test.wantErr {
+				require.ErrorContains(t, err, "requires bounded consensus gas and bytes")
+				_, err = f.keeper.RetrievalV2ActivatedHeight.Get(ctx)
+				require.ErrorIs(t, err, collections.ErrNotFound)
+				return
+			}
+			require.NoError(t, err)
+			activated, err := f.keeper.RetrievalV2ActivatedHeight.Get(ctx)
+			require.NoError(t, err)
+			require.Equal(t, uint64(1), activated)
+		})
+	}
+}
+
 func TestRetrievalV2RejectsCopiedProofBeforePayeePin(t *testing.T) {
 	f, bank, server, owner, created, _ := setupRetrievalExpiryDeal(t)
 	params, err := f.keeper.Params.Get(f.ctx)
