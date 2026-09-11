@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
+	"sync"
 
 	"cosmossdk.io/collections"
 	cosmosmath "cosmossdk.io/math"
@@ -604,81 +606,238 @@ func (k msgServer) SubmitRetrievalSessionProofV3(goCtx context.Context, msg *typ
 	if err := k.requireRetrievalV3(ctx); err != nil {
 		return nil, err
 	}
-	if msg == nil || len(msg.SessionId) != 32 {
+	if msg == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
 	}
-	creator, err := requireCanonicalProviderCreator(msg.Creator)
+	prepared, err := k.prepareRetrievalSessionProofV3(ctx, msg.Creator, msg.SessionId, msg.Slot, msg.Proofs)
 	if err != nil {
 		return nil, err
-	}
-	s, err := k.retrievalSessionV3(ctx, msg.SessionId)
-	if err != nil {
-		return nil, err
-	}
-	o, oi, err := sessionObligationV3(&s, msg.Slot)
-	if err != nil {
-		return nil, err
-	}
-	if creator != o.AssignedProvider {
-		return nil, sdkerrors.ErrUnauthorized.Wrap("creator is not the frozen provider for this obligation")
-	}
-	if err := ValidateProofCount(uint64(len(msg.Proofs))); err != nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
-	}
-	var samplesBefore uint64
-	for i := range s.Obligations {
-		samplesBefore += s.Obligations[i].SampleCount
-	}
-	challenges, err := k.v3AnchorAndChallenges(ctx, &s)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[uint64]struct{}, len(msg.Proofs))
-	for i := range msg.Proofs {
-		sp := &msg.Proofs[i]
-		if sp.Ordinal >= uint64(len(challenges)) {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("sample ordinal out of range")
-		}
-		if _, ok := seen[sp.Ordinal]; ok {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("sample ordinal repeated within message")
-		}
-		seen[sp.Ordinal] = struct{}{}
-		ch := challenges[sp.Ordinal]
-		p := &sp.Proof
-		if ch.Slot != msg.Slot || p.MduIndex != ch.MDUIndex || p.BlobIndex != ch.LeafIndex || !bytes.Equal(p.ZValue, ch.Z[:]) {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof does not match selected v3 sample")
-		}
-		if err := ValidateChainedProofShape(s.PolyfsRoot, p, v3IntegrityLeavesPerMDU); err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
-		}
 	}
 	if err := PrepayProofCrypto(ctx, uint64(len(msg.Proofs))); err != nil {
 		return nil, err
 	}
 	for i := range msg.Proofs {
-		ok, err := verifyPolyFSChainedProof(s.PolyfsRoot, &msg.Proofs[i].Proof, v3IntegrityLeavesPerMDU)
+		ok, err := verifyPolyFSChainedProof(prepared.session.PolyfsRoot, &msg.Proofs[i].Proof, v3IntegrityLeavesPerMDU)
 		if err != nil || !ok {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid v3 chained proof")
 		}
 	}
+	return k.applyPreparedRetrievalSessionProofV3(ctx, prepared, &prepared.session)
+}
+
+type preparedRetrievalSessionProofV3 struct {
+	session         types.RetrievalSessionV3
+	obligationIndex uint32
+	challenges      []retrievalchallenge.ChallengeV3
+	proofs          []types.RetrievalSampleProofV3
+}
+
+type retrievalProofVerificationV3 struct {
+	root  []byte
+	proof *types.ChainedProof
+}
+
+type retrievalProofVerificationResultV3 struct {
+	ok  bool
+	err error
+}
+
+type retrievalSessionProofKeyV3 struct {
+	sessionID string
+	slot      uint32
+}
+
+func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator string, sessionID []byte, slot uint32, proofs []types.RetrievalSampleProofV3) (preparedRetrievalSessionProofV3, error) {
+	if len(sessionID) != 32 {
+		return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+	}
+	canonicalCreator, err := requireCanonicalProviderCreator(creator)
+	if err != nil {
+		return preparedRetrievalSessionProofV3{}, err
+	}
+	s, err := k.retrievalSessionV3(ctx, sessionID)
+	if err != nil {
+		return preparedRetrievalSessionProofV3{}, err
+	}
+	o, oi, err := sessionObligationV3(&s, slot)
+	if err != nil {
+		return preparedRetrievalSessionProofV3{}, err
+	}
+	if canonicalCreator != o.AssignedProvider {
+		return preparedRetrievalSessionProofV3{}, sdkerrors.ErrUnauthorized.Wrap("creator is not the frozen provider for this obligation")
+	}
+	if err := ValidateProofCount(uint64(len(proofs))); err != nil {
+		return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+	}
+	challenges, err := k.v3AnchorAndChallenges(ctx, &s)
+	if err != nil {
+		return preparedRetrievalSessionProofV3{}, err
+	}
+	seen := make(map[uint64]struct{}, len(proofs))
+	for i := range proofs {
+		sp := &proofs[i]
+		if sp.Ordinal >= uint64(len(challenges)) {
+			return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap("sample ordinal out of range")
+		}
+		if _, ok := seen[sp.Ordinal]; ok {
+			return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap("sample ordinal repeated within message")
+		}
+		seen[sp.Ordinal] = struct{}{}
+		ch := challenges[sp.Ordinal]
+		p := &sp.Proof
+		if ch.Slot != slot || p.MduIndex != ch.MDUIndex || p.BlobIndex != ch.LeafIndex || !bytes.Equal(p.ZValue, ch.Z[:]) {
+			return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap("proof does not match selected v3 sample")
+		}
+		if err := ValidateChainedProofShape(s.PolyfsRoot, p, v3IntegrityLeavesPerMDU); err != nil {
+			return preparedRetrievalSessionProofV3{}, sdkerrors.ErrInvalidRequest.Wrap(err.Error())
+		}
+	}
+	return preparedRetrievalSessionProofV3{session: s, obligationIndex: oi, challenges: challenges, proofs: proofs}, nil
+}
+
+func retrievalProofWorkerCountV3(total int) int {
+	workers := runtime.GOMAXPROCS(0)
+	if workers > 8 {
+		workers = 8
+	}
+	if workers > total {
+		workers = total
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	return workers
+}
+
+// verifyRetrievalProofsV3 performs only the pure native proof check in workers.
+// Results retain input order; no keeper, bank, gas-meter or event access occurs here.
+func verifyRetrievalProofsV3(jobs []retrievalProofVerificationV3, workers int) []retrievalProofVerificationResultV3 {
+	results := make([]retrievalProofVerificationResultV3, len(jobs))
+	if len(jobs) == 0 {
+		return results
+	}
+	if workers > len(jobs) {
+		workers = len(jobs)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	indices := make(chan int)
+	var group sync.WaitGroup
+	group.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer group.Done()
+			for index := range indices {
+				results[index].ok, results[index].err = verifyPolyFSChainedProof(jobs[index].root, jobs[index].proof, v3IntegrityLeavesPerMDU)
+			}
+		}()
+	}
+	for i := range jobs {
+		indices <- i
+	}
+	close(indices)
+	group.Wait()
+	return results
+}
+
+func (k msgServer) applyPreparedRetrievalSessionProofV3(ctx sdk.Context, prepared preparedRetrievalSessionProofV3, session *types.RetrievalSessionV3) (*types.MsgSubmitRetrievalSessionProofV3Response, error) {
+	var samplesBefore uint64
+	for i := range session.Obligations {
+		samplesBefore += session.Obligations[i].SampleCount
+	}
 	var added uint32
-	for _, sp := range msg.Proofs {
-		if !v3BitSet(s.AcceptedSampleBitmap, sp.Ordinal) {
-			v3SetBit(s.AcceptedSampleBitmap, sp.Ordinal)
+	for _, sp := range prepared.proofs {
+		if !v3BitSet(session.AcceptedSampleBitmap, sp.Ordinal) {
+			v3SetBit(session.AcceptedSampleBitmap, sp.Ordinal)
 			added++
 		}
 	}
-	settled, settlementChanged, err := k.settleRetrievalObligationV3(ctx, &s, oi, challenges)
+	settled, settlementChanged, err := k.settleRetrievalObligationV3(ctx, session, prepared.obligationIndex, prepared.challenges)
 	if err != nil {
 		return nil, err
 	}
 	if samplesBefore == 0 || added != 0 || settlementChanged {
-		s.UpdatedHeight = ctx.BlockHeight()
-		if err := k.RetrievalSessionsV3.Set(ctx, s.SessionId, s); err != nil {
+		session.UpdatedHeight = ctx.BlockHeight()
+		if err := k.RetrievalSessionsV3.Set(ctx, session.SessionId, *session); err != nil {
 			return nil, err
 		}
 	}
 	return &types.MsgSubmitRetrievalSessionProofV3Response{NewlyAccepted: added, Settled: settled}, nil
+}
+
+// SubmitRetrievalSessionProofBatchV3 verifies bounded, same-provider session
+// proofs concurrently, then applies every state transition in input order.
+func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProofBatchV3) (*types.MsgSubmitRetrievalSessionProofBatchV3Response, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if err := k.requireRetrievalV3(ctx); err != nil {
+		return nil, err
+	}
+	if msg == nil || len(msg.Sessions) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("batch must contain at least one session")
+	}
+	if msg.Size() > MaxProofEnvelopeBytes {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("proof envelope exceeds %d bytes", MaxProofEnvelopeBytes)
+	}
+	totalProofs := 0
+	seen := make(map[retrievalSessionProofKeyV3]struct{}, len(msg.Sessions))
+	for i := range msg.Sessions {
+		entry := &msg.Sessions[i]
+		if len(entry.SessionId) != 32 {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("session_id must be 32 bytes")
+		}
+		key := retrievalSessionProofKeyV3{sessionID: string(entry.SessionId), slot: entry.Slot}
+		if _, ok := seen[key]; ok {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("duplicate session_id and slot in batch")
+		}
+		seen[key] = struct{}{}
+		if len(entry.Proofs) == 0 || totalProofs > MaxProofsPerMessage-len(entry.Proofs) {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("proof count must be 1..%d", MaxProofsPerMessage)
+		}
+		totalProofs += len(entry.Proofs)
+	}
+
+	prepared := make([]preparedRetrievalSessionProofV3, len(msg.Sessions))
+	jobs := make([]retrievalProofVerificationV3, 0, totalProofs)
+	jobPositions := make([][2]int, 0, totalProofs)
+	for i := range msg.Sessions {
+		entry := &msg.Sessions[i]
+		entryPrepared, err := k.prepareRetrievalSessionProofV3(ctx, msg.Creator, entry.SessionId, entry.Slot, entry.Proofs)
+		if err != nil {
+			return nil, err
+		}
+		prepared[i] = entryPrepared
+		for j := range entry.Proofs {
+			jobs = append(jobs, retrievalProofVerificationV3{root: prepared[i].session.PolyfsRoot, proof: &entry.Proofs[j].Proof})
+			jobPositions = append(jobPositions, [2]int{i, j})
+		}
+	}
+	if err := PrepayProofCrypto(ctx, uint64(totalProofs)); err != nil {
+		return nil, err
+	}
+	verification := verifyRetrievalProofsV3(jobs, retrievalProofWorkerCountV3(totalProofs))
+	for i := range verification {
+		if verification[i].err != nil || !verification[i].ok {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("batch entry %d proof %d: invalid v3 chained proof", jobPositions[i][0], jobPositions[i][1])
+		}
+	}
+
+	response := &types.MsgSubmitRetrievalSessionProofBatchV3Response{Results: make([]types.MsgSubmitRetrievalSessionProofV3Response, len(prepared))}
+	updated := make(map[string]types.RetrievalSessionV3, len(prepared))
+	for i := range prepared {
+		key := string(prepared[i].session.SessionId)
+		session, ok := updated[key]
+		if !ok {
+			session = prepared[i].session
+		}
+		result, err := k.applyPreparedRetrievalSessionProofV3(ctx, prepared[i], &session)
+		if err != nil {
+			return nil, err
+		}
+		updated[key] = session
+		response.Results[i] = *result
+	}
+	return response, nil
 }
 
 func (k msgServer) AcknowledgeRetrievalObligationV3(goCtx context.Context, msg *types.MsgAcknowledgeRetrievalObligationV3) (*types.MsgAcknowledgeRetrievalObligationV3Response, error) {

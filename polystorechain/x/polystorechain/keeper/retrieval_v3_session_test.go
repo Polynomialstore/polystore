@@ -2,8 +2,10 @@ package keeper_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -239,6 +241,222 @@ func (f cryptoSessionV3Fixture) proof(t *testing.T, challenge retrievalchallenge
 		MerklePath: benchMerklePathFromWitnessFlat(t, f.witnessFlat, leaf), BlobIndex: challenge.LeafIndex,
 		ZValue: append([]byte(nil), challenge.Z[:]...), YValue: y, KzgOpeningProof: proof,
 	}}
+}
+
+func openCryptoSessionV3Batch(t *testing.T, count int) (cryptoSessionV3Fixture, sdk.Context, []types.RetrievalSessionV3, []types.RetrievalSampleProofV3) {
+	t.Helper()
+	require.Positive(t, count)
+	f := openCryptoSessionV3(t, 1024)
+	sessions := []types.RetrievalSessionV3{f.session}
+	for i := 1; i < count; i++ {
+		opened, err := f.g.server.OpenRetrievalSessionV3(f.g.ctx, &types.MsgOpenRetrievalSessionV3{
+			Creator: f.g.owner, DealId: f.g.deal.Id, Generation: f.g.deal.CurrentGen,
+			Range: types.RetrievalRangeV3{FileRecordIndex: 1, FileLength: 1024, RangeLength: 1024},
+			Nonce: uint64(i + 1), DeadlineHeight: 20,
+		})
+		require.NoError(t, err)
+		session, err := f.g.fixture.keeper.RetrievalSessionsV3.Get(f.g.ctx, opened.SessionId)
+		require.NoError(t, err)
+		sessions = append(sessions, session)
+	}
+	anchorHash := sha256.Sum256([]byte("v3-batch-proof-anchor"))
+	anchor := f.g.ctx.WithBlockHeight(3).WithHeaderHash(anchorHash[:])
+	require.NoError(t, f.g.fixture.keeper.BeginBlock(anchor))
+	response := anchor.WithBlockHeight(4)
+	samples := make([]types.RetrievalSampleProofV3, count)
+	for i := range sessions {
+		stored, err := f.g.fixture.keeper.RetrievalSessionsV3.Get(response, sessions[i].SessionId)
+		require.NoError(t, err)
+		sessions[i] = stored
+		storedAnchor, err := f.g.fixture.keeper.ChallengeAnchors.Get(response, stored.AnchorHeight)
+		require.NoError(t, err)
+		seed, err := challengeContextV3(t, stored).Seed(storedAnchor.Seed)
+		require.NoError(t, err)
+		challenges, err := challengeContextV3(t, stored).Challenges(seed[:])
+		require.NoError(t, err)
+		require.Len(t, challenges, 1)
+		require.Equal(t, uint32(0), challenges[0].Slot)
+		require.Equal(t, sessions[0].Obligations[0].AssignedProvider, stored.Obligations[0].AssignedProvider)
+		samples[i] = f.proof(t, challenges[0])
+	}
+	return f, response, sessions, samples
+}
+
+func batchProofMessageV3(creator string, sessions []types.RetrievalSessionV3, samples []types.RetrievalSampleProofV3) *types.MsgSubmitRetrievalSessionProofBatchV3 {
+	entries := make([]types.RetrievalSessionProofBatchEntryV3, len(sessions))
+	for i := range sessions {
+		entries[i] = types.RetrievalSessionProofBatchEntryV3{
+			SessionId: append([]byte(nil), sessions[i].SessionId...), Slot: 0,
+			Proofs: []types.RetrievalSampleProofV3{samples[i]},
+		}
+	}
+	return &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: creator, Sessions: entries}
+}
+
+func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testing.T) {
+	batchFixture, batchCtx, batchSessions, batchSamples := openCryptoSessionV3Batch(t, 3)
+	serialFixture, serialCtx, serialSessions, serialSamples := openCryptoSessionV3Batch(t, 3)
+	creator := batchSessions[0].Obligations[0].AssignedProvider
+	require.Equal(t, creator, serialSessions[0].Obligations[0].AssignedProvider)
+	for _, index := range []int{0, 2} {
+		_, err := batchFixture.g.server.AcknowledgeRetrievalObligationV3(batchCtx, &types.MsgAcknowledgeRetrievalObligationV3{
+			Creator: batchFixture.g.owner, SessionId: batchSessions[index].SessionId, Slot: 0,
+			AckDigest: ackDigestV3(t, batchSessions[index], 0),
+		})
+		require.NoError(t, err)
+		_, err = serialFixture.g.server.AcknowledgeRetrievalObligationV3(serialCtx, &types.MsgAcknowledgeRetrievalObligationV3{
+			Creator: serialFixture.g.owner, SessionId: serialSessions[index].SessionId, Slot: 0,
+			AckDigest: ackDigestV3(t, serialSessions[index], 0),
+		})
+		require.NoError(t, err)
+	}
+
+	batchGasBefore := batchCtx.GasMeter().GasConsumed()
+	batchResult, err := batchFixture.g.server.SubmitRetrievalSessionProofBatchV3(batchCtx, batchProofMessageV3(creator, batchSessions, batchSamples))
+	require.NoError(t, err)
+	batchGas := batchCtx.GasMeter().GasConsumed() - batchGasBefore
+
+	serialGasBefore := serialCtx.GasMeter().GasConsumed()
+	serialResults := make([]types.MsgSubmitRetrievalSessionProofV3Response, len(serialSessions))
+	for i := range serialSessions {
+		result, err := serialFixture.g.server.SubmitRetrievalSessionProofV3(serialCtx, &types.MsgSubmitRetrievalSessionProofV3{
+			Creator: creator, SessionId: serialSessions[i].SessionId, Slot: 0,
+			Proofs: []types.RetrievalSampleProofV3{serialSamples[i]},
+		})
+		require.NoError(t, err)
+		serialResults[i] = *result
+	}
+	serialGas := serialCtx.GasMeter().GasConsumed() - serialGasBefore
+
+	require.Equal(t, serialResults, batchResult.Results)
+	// The proof charge is identical; batching saves one feature-gate store read
+	// for each additional session because activation is checked once per message.
+	require.Less(t, batchGas, serialGas)
+	require.Equal(t,
+		sessionStoreSnapshot(t, serialCtx, serialFixture.g.fixture.storeService),
+		sessionStoreSnapshot(t, batchCtx, batchFixture.g.fixture.storeService),
+	)
+	require.Equal(t, serialFixture.g.bank.moduleBalances, batchFixture.g.bank.moduleBalances)
+	require.Equal(t, serialFixture.g.bank.accountBalances, batchFixture.g.bank.accountBalances)
+	require.Equal(t, serialFixture.g.bank.transfers, batchFixture.g.bank.transfers)
+	require.Equal(t, serialCtx.EventManager().Events(), batchCtx.EventManager().Events())
+	require.GreaterOrEqual(t, batchGas, uint64(len(batchSamples))*keeper.ProofCryptoGas)
+	require.True(t, batchResult.Results[0].Settled)
+	require.False(t, batchResult.Results[1].Settled)
+	require.True(t, batchResult.Results[2].Settled)
+	require.NotEmpty(t, batchFixture.g.bank.transfers)
+
+	replayGasBefore := batchCtx.GasMeter().GasConsumed()
+	replayed, err := batchFixture.g.server.SubmitRetrievalSessionProofBatchV3(batchCtx, batchProofMessageV3(creator, batchSessions, batchSamples))
+	require.NoError(t, err)
+	for i, result := range replayed.Results {
+		require.Zero(t, result.NewlyAccepted)
+		require.Equal(t, batchResult.Results[i].Settled, result.Settled)
+	}
+	require.GreaterOrEqual(t, batchCtx.GasMeter().GasConsumed()-replayGasBefore, uint64(len(batchSamples))*keeper.ProofCryptoGas)
+}
+
+func TestRetrievalSessionProofBatchV3AdmissionAndInvalidProofAreAtomic(t *testing.T) {
+	f, response, sessions, samples := openCryptoSessionV3Batch(t, 3)
+	creator := sessions[0].Obligations[0].AssignedProvider
+	valid := batchProofMessageV3(creator, sessions, samples)
+	before := sessionStoreSnapshot(t, response, f.g.fixture.storeService)
+	transfersBefore := append([]transferRecord(nil), f.g.bank.transfers...)
+
+	invalid := batchProofMessageV3(creator, sessions, samples)
+	for _, entryIndex := range []int{1, 2} {
+		invalid.Sessions[entryIndex].Proofs[0].Proof.YValue = append([]byte(nil), invalid.Sessions[entryIndex].Proofs[0].Proof.YValue...)
+		invalid.Sessions[entryIndex].Proofs[0].Proof.YValue[31] ^= 1
+	}
+	_, err := f.g.server.SubmitRetrievalSessionProofBatchV3(response, invalid)
+	require.ErrorContains(t, err, "batch entry 1 proof 0")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+	require.Equal(t, transfersBefore, f.g.bank.transfers)
+
+	duplicate := batchProofMessageV3(creator, sessions[:1], samples[:1])
+	duplicate.Sessions = append(duplicate.Sessions, duplicate.Sessions[0])
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(response, duplicate)
+	require.ErrorContains(t, err, "duplicate session_id and slot")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+
+	empty := batchProofMessageV3(creator, sessions[:1], samples[:1])
+	empty.Sessions[0].Proofs = nil
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(response, empty)
+	require.ErrorContains(t, err, "proof count must be 1..64")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+
+	tooMany := batchProofMessageV3(creator, sessions[:1], samples[:1])
+	tooMany.Sessions[0].Proofs = make([]types.RetrievalSampleProofV3, keeper.MaxProofsPerMessage+1)
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(response, tooMany)
+	require.ErrorContains(t, err, "proof count must be 1..64")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+
+	wrongProvider := *valid
+	wrongProvider.Creator = f.g.providers[1]
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(response, &wrongProvider)
+	require.ErrorContains(t, err, "creator is not the frozen provider")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+
+	oversized := batchProofMessageV3(creator, sessions[:1], samples[:1])
+	oversized.Sessions[0].Proofs[0].Proof.YValue = make([]byte, keeper.MaxProofEnvelopeBytes)
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(response, oversized)
+	require.ErrorContains(t, err, "proof envelope exceeds")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+}
+
+type failSecondBurnBankV3 struct {
+	types.BankKeeper
+	burns int
+}
+
+func (b *failSecondBurnBankV3) BurnCoins(ctx context.Context, moduleName string, amt sdk.Coins) error {
+	b.burns++
+	if b.burns == 2 {
+		return fmt.Errorf("injected second settlement burn failure")
+	}
+	return b.BankKeeper.BurnCoins(ctx, moduleName, amt)
+}
+
+func TestRetrievalSessionProofBatchV3SettlementFailureRollsBack(t *testing.T) {
+	f, response, sessions, samples := openCryptoSessionV3Batch(t, 2)
+	bank := newSessionCacheBank(t, f.g.fixture.storeService)
+	require.NoError(t, bank.balances.Set(response, "module/"+types.ModuleName, "100"))
+	failingBank := &failSecondBurnBankV3{BankKeeper: bank}
+	f.g.fixture.keeper.BankKeeper = failingBank
+	server := keeper.NewMsgServerImpl(f.g.fixture.keeper)
+	for _, session := range sessions {
+		_, err := server.AcknowledgeRetrievalObligationV3(response, &types.MsgAcknowledgeRetrievalObligationV3{
+			Creator: f.g.owner, SessionId: session.SessionId, Slot: 0, AckDigest: ackDigestV3(t, session, 0),
+		})
+		require.NoError(t, err)
+	}
+	before := sessionStoreSnapshot(t, response, f.g.fixture.storeService)
+	eventsBefore := append(sdk.Events{}, response.EventManager().Events()...)
+	moduleBefore, err := bank.amount(response, "module/"+types.ModuleName)
+	require.NoError(t, err)
+	burnedBefore, err := bank.amount(response, "burned")
+	require.NoError(t, err)
+	providerBefore, err := bank.amount(response, "account/"+sessions[0].Obligations[0].AssignedProvider)
+	require.NoError(t, err)
+	creator := sessions[0].Obligations[0].AssignedProvider
+	txCtx, _ := response.CacheContext()
+	_, err = server.SubmitRetrievalSessionProofBatchV3(txCtx, batchProofMessageV3(creator, sessions, samples))
+	require.ErrorContains(t, err, "injected second settlement burn failure")
+	require.Equal(t, 2, failingBank.burns)
+	cachedBurned, err := bank.amount(txCtx, "burned")
+	require.NoError(t, err)
+	require.True(t, cachedBurned.IsPositive(), "first settlement must mutate the discarded transaction cache")
+	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
+	moduleAfter, err := bank.amount(response, "module/"+types.ModuleName)
+	require.NoError(t, err)
+	burnedAfter, err := bank.amount(response, "burned")
+	require.NoError(t, err)
+	providerAfter, err := bank.amount(response, "account/"+sessions[0].Obligations[0].AssignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, moduleBefore, moduleAfter)
+	require.Equal(t, burnedBefore, burnedAfter)
+	require.Equal(t, providerBefore, providerAfter)
+	require.Equal(t, eventsBefore, append(sdk.Events{}, response.EventManager().Events()...))
 }
 
 func TestRetrievalSessionV3AckRequiresCommittedAnchor(t *testing.T) {
