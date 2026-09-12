@@ -64,3 +64,4 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 
 - `MAINNET_GAP_TRACKER.md`: Tracked gaps between current implementation and the long-term Mainnet plan.
 - `AGENTS_TRUSTED_DEVNET_SOFT_LAUNCH_TODO.md`: PR-by-PR TODO list for the Feb 2026 trusted devnet soft launch.
+- `docs/retrieval-v3-retention-decision.md`: Measured V3 history-growth proposal and explicit retention/qualification approval gate (#341); no pruning implementation.
