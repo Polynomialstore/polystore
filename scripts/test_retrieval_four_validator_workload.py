@@ -1081,6 +1081,14 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                    "proofs": [{"ordinal": str(i)} for i in range(17)]}
         self.assertEqual(workload.validate_v3_committed_message(message, kind="session-proof",
             creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17), list(range(17)))
+        batch = {"@type": workload.V3_BATCH_PROOF_TYPE, "creator": providers[0],
+                 "sessions": [{key: message[key] for key in ("session_id", "slot", "proofs")}]}
+        self.assertEqual(workload.validate_v3_committed_message(batch, kind="session-proof",
+            creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17), list(range(17)))
+        batch["sessions"].append(copy.deepcopy(batch["sessions"][0]))
+        with self.assertRaises(ValueError):
+            workload.validate_v3_committed_message(batch, kind="session-proof",
+                creator=providers[0], slot=0, session_id=self.SESSION, proof_count=17)
         duplicate = copy.deepcopy(message)
         duplicate["proofs"][-1]["ordinal"] = "0"
         with self.assertRaises(ValueError):
@@ -1152,10 +1160,10 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         txhash = hashlib.sha256(raw).hexdigest().upper()
         response = {"hash": txhash, "height": "219", "tx_result": {
             "code": "0", "gas_wanted": "2000000", "gas_used": "479121"}}
-        message = {"@type": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
-                   "creator": provider, "slot": "0",
-                   "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
-                   "proofs": [{"ordinal": "0"}]}
+        message = {"@type": workload.V3_BATCH_PROOF_TYPE, "creator": provider,
+                   "sessions": [{"slot": "0",
+                       "session_id": base64.b64encode(bytes.fromhex(self.SESSION)).decode(),
+                       "proofs": [{"ordinal": "0"}]}]}
         block = {"block_id": {"hash": "CD" * 32}, "block": {
             "header": {"height": "219", "chain_id": "chain", "time": "time", "app_hash": "EF" * 32},
             "data": {"txs": [base64.b64encode(raw).decode()]}}}
@@ -1193,6 +1201,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertTrue(all(isinstance(transaction[key], int)
                                 for key in ("height", "code", "gas_wanted", "gas_used")))
             self.assertEqual(transaction["outcome"], "committed_success")
+            self.assertEqual((transaction["message_type"], transaction["batch_occupancy"]),
+                             (workload.V3_BATCH_PROOF_TYPE, 1))
             tip_advanced = False
             lifecycle.wait_height.reset_mock()
             transaction["operation_id"] = "measured-1-0"
