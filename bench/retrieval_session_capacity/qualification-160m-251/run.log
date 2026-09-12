@@ -1,0 +1,6 @@
+{"completed": 12, "elapsed_ns": 2995805323, "phase": "generation-acceptance", "seconds_since_progress": 0, "total": 12}
+{"current_height": 70, "elapsed_ns": 60184839241, "phase": "height-wait", "seconds_since_progress": 0.200892286, "target_height": 103}
+{"current_height": 147, "elapsed_ns": 60187309326, "phase": "height-wait", "seconds_since_progress": 0.201111478, "target_height": 202}
+{"current_height": 191, "elapsed_ns": 120190395696, "phase": "height-wait", "seconds_since_progress": 0.603699178, "target_height": 202}
+{"current_height": 880, "elapsed_ns": 60051726715, "phase": "height-wait", "seconds_since_progress": 0.402229513, "target_height": 902}
+/home/mikers/polystore-bench-336-63eb7fe7-final/runs/63eb7fe7-20260912T040917Z-batch64-7680-160m-1s-a16-gmp4/evidence.json
