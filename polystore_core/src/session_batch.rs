@@ -840,7 +840,7 @@ mod tests {
         assert!(!bool::from(
             G1Affine::from_compressed(&wrong_subgroup_point).is_some()
         ));
-        wrong_subgroup[record_offset + 16 + 140..record_offset + 16 + 188]
+        wrong_subgroup[record_offset + 16 + 252..record_offset + 16 + 300]
             .copy_from_slice(&wrong_subgroup_point);
         assert!(
             !ctx.verify_polyfs_cross_session_batch(&wrong_subgroup)
