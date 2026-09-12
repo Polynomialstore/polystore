@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -95,6 +96,31 @@ type retrievalDiagnosticWriterV3 struct {
 
 func (w *retrievalDiagnosticWriterV3) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
+func (w *retrievalDiagnosticWriterV3) Flush() {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	if err := http.NewResponseController(w.ResponseWriter).Flush(); err != nil && err != http.ErrNotSupported {
+		w.writeError = true
+	}
+}
+
+func (w *retrievalDiagnosticWriterV3) ReadFrom(r io.Reader) (int64, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	if fast, ok := w.ResponseWriter.(io.ReaderFrom); ok {
+		n, err := fast.ReadFrom(r)
+		w.bytes += n
+		w.writeError = w.writeError || err != nil
+		return n, err
+	}
+	// Hide this ReaderFrom method to avoid recursion; Write owns accounting.
+	n, err := io.Copy(struct{ io.Writer }{w}, r)
+	w.writeError = w.writeError || err != nil
+	return n, err
+}
+
 func (w *retrievalDiagnosticWriterV3) WriteHeader(status int) {
 	if w.status != 0 {
 		return
@@ -151,7 +177,7 @@ func beginRetrievalDiagnosticsV3(w http.ResponseWriter, r *http.Request, role st
 			Chunk      string         `json:"chunk_id,omitempty"`
 			Status     int            `json:"status"`
 			Bytes      int64          `json:"response_bytes"`
-			WriteError bool           `json:"write_error"`
+			WriteError bool           `json:"response_error"`
 			MS         float64        `json:"route_ms"`
 			Phases     map[string]any `json:"phases"`
 		}{1, role, session, d.chunk, out.status, out.bytes, out.writeError, d.now().Sub(d.started).Seconds() * 1000, phases}

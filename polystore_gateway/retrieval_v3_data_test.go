@@ -610,6 +610,9 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 	if !strings.Contains(timing, "ps3p_lcd") || !strings.Contains(timing, "ps3g_lcd") || !strings.Contains(timing, "ps3g_endpoint") || strings.Contains(timing, "ps3g_proxy") || strings.Contains(timing, "keys") {
 		t.Fatalf("proxy lost or misattributed phase headers: %s", timing)
 	}
+	if !w.Flushed {
+		t.Fatal("instrumented public proxy did not flush the upstream response")
+	}
 	shortCtx, cancelShort := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShort()
 	w = httptest.NewRecorder()

@@ -154,6 +154,41 @@ func TestRetrievalDiagnosticsV3WriteFailureAndHeaderPreservation(t *testing.T) {
 	}
 }
 
+type fastDiagnosticWriterV3 struct {
+	*httptest.ResponseRecorder
+	reads int
+}
+
+func (w *fastDiagnosticWriterV3) ReadFrom(r io.Reader) (int64, error) {
+	w.reads++
+	return io.Copy(w.ResponseRecorder, r)
+}
+
+type failedDiagnosticReaderV3 struct{}
+
+func (failedDiagnosticReaderV3) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestRetrievalDiagnosticsV3PreservesFastCopyAndFlush(t *testing.T) {
+	underlying := &fastDiagnosticWriterV3{ResponseRecorder: httptest.NewRecorder()}
+	w := &retrievalDiagnosticWriterV3{ResponseWriter: underlying, d: &retrievalDiagnosticsV3{role: "provider-daemon"}}
+	// Hide strings.Reader's WriterTo so io.Copy selects the writer's ReaderFrom.
+	n, err := io.Copy(w, struct{ io.Reader }{strings.NewReader("payload")})
+	flusher, ok := any(w).(http.Flusher)
+	if !ok {
+		t.Fatal("diagnostic wrapper hid http.Flusher")
+	}
+	flusher.Flush()
+	if err != nil || n != 7 || w.bytes != 7 || underlying.reads != 1 || !underlying.Flushed || underlying.Body.String() != "payload" {
+		t.Fatalf("copy/flush changed: n=%d err=%v bytes=%d reads=%d flushed=%v", n, err, w.bytes, underlying.reads, underlying.Flushed)
+	}
+	for _, destination := range []http.ResponseWriter{underlying, httptest.NewRecorder()} {
+		failed := &retrievalDiagnosticWriterV3{ResponseWriter: destination, d: &retrievalDiagnosticsV3{}}
+		if n, err := failed.ReadFrom(failedDiagnosticReaderV3{}); n != 0 || err != io.ErrUnexpectedEOF || !failed.writeError || failed.bytes != 0 {
+			t.Fatalf("copy failure hidden: n=%d err=%v observed=%v bytes=%d", n, err, failed.writeError, failed.bytes)
+		}
+	}
+}
+
 func TestGatewayMduV3DiagnosticsAuthorityFailure(t *testing.T) {
 	t.Setenv("POLYSTORE_RETRIEVAL_DIAGNOSTICS", "1")
 	queries := 0
