@@ -44,6 +44,7 @@ func readLCDJSON(ctx context.Context, path string, height uint64, maxBytes int64
 	if height != 0 {
 		req.Header.Set(committedHeightHeader, strconv.FormatUint(height, 10))
 	}
+	defer startRetrievalPhaseV3(ctx, retrievalLCDV3)()
 	resp, err := lcdHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err

@@ -231,6 +231,39 @@ test('v3 multipart binds every complete blob to frozen coordinates before return
   await assert.rejects(parseRetrievalEnvelopeV3(response(metadata, bytes), authority), /content type/)
 })
 
+test('v3 wire diagnostics split body reading from parsing and close failed spans', async () => {
+  const events: { phase: string; edge?: string; sessionId?: string; chunkId?: string }[] = []
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const authority: RetrievalV3ChunkAuthority = {
+    sessionId: `0x${'11'.repeat(32)}`, contextHash: new Uint8Array(32), polyfsRoot: `0x${'33'.repeat(32)}`,
+    integrityRoot: `0x${'44'.repeat(32)}`, integrityLeafCount: 96n, metadataMdus: 2n, userMdus: 1n,
+    slot: 0, mduIndex: 2n, startBlobIndex: 0,
+    entries: [{ t: 0n, mduIndex: 2n, leafIndex: 0, integrityPosition: 0n }],
+  }
+  const metadata = { version: 3, session_id: authority.sessionId, context_hash: hex(authority.contextHash), polyfs_root: authority.polyfsRoot,
+    integrity_root: authority.integrityRoot, slot: 0, mdu_index: '2', start_blob_index: 0, blob_count: '1', total_bytes: '131072',
+    entries: [{ t: '0', mdu_index: '2', leaf_index: 0, integrity_position: '0', integrity_path: [] }] }
+  try {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: { __polystoreRetrievalDiagnostic: (event: typeof events[number]) => events.push(event) } })
+    await parseRetrievalEnvelopeV3(responseV3(metadata, new Uint8Array(131072)), authority)
+    assert.deepEqual(events.map((e) => [e.phase, e.edge]), [['body_read', 'start'], ['body_read', 'end'], ['multipart_parse', 'start'], ['multipart_parse', 'end']])
+    assert.ok(events.every((e) => e.sessionId === authority.sessionId && e.chunkId === '0:0:0'))
+    events.length = 0
+    await assert.rejects(parseRetrievalEnvelopeV3(responseV3(metadata, new Uint8Array(131071)), authority), /part size/)
+    assert.deepEqual(events.map((e) => [e.phase, e.edge]), [['body_read', 'start'], ['body_read', 'end'], ['multipart_parse', 'start'], ['multipart_parse', 'end']])
+    events.length = 0
+    const failure = new Error('body failed')
+    const failed = new Response(new ReadableStream({ start(controller) { controller.error(failure) } }), {
+      headers: { 'content-type': 'multipart/form-data; boundary=secure-v3; version=3' },
+    })
+    await assert.rejects(parseRetrievalEnvelopeV3(failed, authority), (error) => error === failure)
+    assert.deepEqual(events.map((e) => [e.phase, e.edge]), [['body_read', 'start'], ['body_read', 'end']])
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'window', original)
+    else Reflect.deleteProperty(globalThis, 'window')
+  }
+})
+
 test('v3 metadata authenticates the full MDU0 root before parsing FAT authority', () => {
   const bytes = new Uint8Array(8 * 1024 * 1024)
   let headerCalls = 0

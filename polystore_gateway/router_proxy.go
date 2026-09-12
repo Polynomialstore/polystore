@@ -480,6 +480,8 @@ func RouterGatewayDownload(w http.ResponseWriter, r *http.Request) { RouterGatew
 // RouterGatewayMdu resolves retrieval authority before any mutable deal cache.
 // A funded window has one payee; only metadata can retry another assigned replica.
 func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
+	w, r, finishDiagnostics := beginRetrievalDiagnosticsV3(w, r, "user-gateway")
+	defer finishDiagnostics()
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -639,12 +641,16 @@ func RouterGatewayMdu(w http.ResponseWriter, r *http.Request) {
 	r.URL.RawQuery = q.Encode()
 	var lastErr error
 	for _, provider := range providers {
+		endpointDone := startRetrievalPhaseV3(ctx, retrievalEndpointV3)
 		base, err := resolveProviderHTTPBaseURL(ctx, provider)
+		endpointDone()
 		if err != nil {
 			lastErr = err
 			continue
 		}
+		proxyDone := startRetrievalPhaseV3(ctx, retrievalProxyV3)
 		handled, err := tryProxyToProviderBaseURL(w, r, base, r.Header.Get("X-PolyStore-Session-Id") == "", retrievalV3)
+		proxyDone()
 		if handled {
 			return
 		}

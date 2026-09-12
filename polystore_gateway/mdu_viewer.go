@@ -51,6 +51,8 @@ func GatewayMdu(w http.ResponseWriter, r *http.Request) {
 		RouterGatewayMdu(w, r)
 		return
 	}
+	w, r, finishDiagnostics := beginRetrievalDiagnosticsV3(w, r, "provider-daemon")
+	defer finishDiagnostics()
 	setCORS(w)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)

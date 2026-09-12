@@ -28,6 +28,7 @@ func admitRetrievalResponse(ctx context.Context) (context.Context, func(), error
 	if ctx.Value(retrievalAdmissionKey{}) != nil {
 		return ctx, func() {}, nil
 	}
+	defer startRetrievalPhaseV3(ctx, retrievalAdmissionV3)()
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, err
 	}
