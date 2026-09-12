@@ -537,6 +537,12 @@ distinct real KZG openings is deliberately outside the normal fast unit gate:
 deadline while an unfinished V2 session remains charged; it does not measure
 byte delivery or service capacity. Retain its result separately from CPU evidence.
 
+[Retained lifecycle qualification](../bench/retrieval_session_capacity/terminal-lifecycle-338/README.md)
+records the 8,193-session pass and matched phase costs. Immediate terminal cleanup
+adds bounded work to the final ACK/proof transaction and removes the corresponding
+later expiry work; it does not accelerate cryptographic verification or establish
+an end-to-end retrieval rate.
+
 For K8/M4, one range creates at most eight systematic provider obligations and
 Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
 length. One proof message has at most 64 openings; batching changes envelope count,

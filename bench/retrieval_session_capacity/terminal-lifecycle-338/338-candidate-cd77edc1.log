@@ -1,0 +1,201 @@
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=1 reference_get_has=10 reference_sets=3 reference_deletes=5
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=1 reference_get_has=1 reference_sets=0 reference_deletes=0
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=8 reference_get_has=66 reference_sets=38 reference_deletes=12
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=8 reference_get_has=1 reference_sets=0 reference_deletes=0
+--- PASS: TestRetrievalV3CompletionReferenceOperationCounts (0.89s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=1 (0.52s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=8 (0.37s)
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=1 reference_get_has=10 reference_sets=3 reference_deletes=5
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=1 reference_get_has=1 reference_sets=0 reference_deletes=0
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=8 reference_get_has=66 reference_sets=38 reference_deletes=12
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=8 reference_get_has=1 reference_sets=0 reference_deletes=0
+--- PASS: TestRetrievalV3CompletionReferenceOperationCounts (0.54s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=1 (0.18s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=8 (0.37s)
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=1 reference_get_has=10 reference_sets=3 reference_deletes=5
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=1 reference_get_has=1 reference_sets=0 reference_deletes=0
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=8 reference_get_has=66 reference_sets=38 reference_deletes=12
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=8 reference_get_has=1 reference_sets=0 reference_deletes=0
+--- PASS: TestRetrievalV3CompletionReferenceOperationCounts (0.54s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=1 (0.17s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=8 (0.37s)
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=1 reference_get_has=10 reference_sets=3 reference_deletes=5
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=1 reference_get_has=1 reference_sets=0 reference_deletes=0
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=8 reference_get_has=66 reference_sets=38 reference_deletes=12
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=8 reference_get_has=1 reference_sets=0 reference_deletes=0
+--- PASS: TestRetrievalV3CompletionReferenceOperationCounts (0.54s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=1 (0.17s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=8 (0.37s)
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=1 reference_get_has=10 reference_sets=3 reference_deletes=5
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=1 reference_get_has=1 reference_sets=0 reference_deletes=0
+=== RUN   TestRetrievalV3CompletionReferenceOperationCounts/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_operations_test.go:92: ACK completion sessions=8 reference_get_has=66 reference_sets=38 reference_deletes=12
+    retrieval_v3_completion_operations_test.go:95: later expiry sessions=8 reference_get_has=1 reference_sets=0 reference_deletes=0
+--- PASS: TestRetrievalV3CompletionReferenceOperationCounts (0.54s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=1 (0.18s)
+    --- PASS: TestRetrievalV3CompletionReferenceOperationCounts/sessions=8 (0.37s)
+goos: linux
+goarch: amd64
+pkg: polystorechain/x/polystorechain/keeper
+cpu: AMD Ryzen 7 9700X 8-Core Processor             
+BenchmarkRetrievalV3Completion
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1-4         	      50	     32042 ns/op	     70880 gas/op	  27736136 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   47140 B/op	     439 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1-4         	      50	     34910 ns/op	     70880 gas/op	  27743824 process_live_heap_bytes	  74809344 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   47128 B/op	     439 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1-4         	      50	     31703 ns/op	     70880 gas/op	  27749256 process_live_heap_bytes	  74809344 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   47139 B/op	     439 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1-4         	      50	     31289 ns/op	     70880 gas/op	  27753752 process_live_heap_bytes	  74809344 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   47134 B/op	     439 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=1-4         	      50	     32514 ns/op	     70880 gas/op	  27757664 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   47128 B/op	     439 allocs/op
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8-4         	      50	    209197 ns/op	    578999 gas/op	  27785456 process_live_heap_bytes	  74809344 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  310641 B/op	    2937 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8-4         	      50	    215622 ns/op	    578999 gas/op	  27794400 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  310654 B/op	    2937 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8-4         	      50	    196131 ns/op	    578999 gas/op	  27798840 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  310640 B/op	    2937 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8-4         	      50	    221365 ns/op	    578999 gas/op	  27804064 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  310647 B/op	    2937 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/ack_after_proof/sessions=8-4         	      50	    220334 ns/op	    578999 gas/op	  27809360 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  310640 B/op	    2937 allocs/op
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1-4     	      50	   4512733 ns/op	   1270889 gas/op	  27784688 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   46788 B/op	     429 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1-4     	      50	   4508051 ns/op	   1270889 gas/op	  27794064 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   46785 B/op	     429 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1-4     	      50	   4511013 ns/op	   1270889 gas/op	  27798784 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   46793 B/op	     429 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1-4     	      50	   4505818 ns/op	   1270889 gas/op	  27803040 process_live_heap_bytes	  74776576 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   46788 B/op	     429 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/singleton_after_ack/sessions=1-4     	      50	   4507880 ns/op	   1270889 gas/op	  27808256 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   46788 B/op	     429 allocs/op
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1-4         	      50	   2694861 ns/op	   1070889 gas/op	  27809040 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   48636 B/op	     435 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1-4         	      50	   2694728 ns/op	   1070889 gas/op	  27816808 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   48619 B/op	     435 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1-4         	      50	   2690110 ns/op	   1070889 gas/op	  27822496 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   48641 B/op	     435 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1-4         	      50	   2695823 ns/op	   1070889 gas/op	  27827440 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   48636 B/op	     435 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=1-4         	      50	   2688448 ns/op	   1070889 gas/op	  27831632 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   48631 B/op	     435 allocs/op
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8-4         	      50	   5885779 ns/op	   2263349 gas/op	  27860224 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  302207 B/op	    2807 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8-4         	      50	   5943168 ns/op	   2263349 gas/op	  27868320 process_live_heap_bytes	  74743808 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  302207 B/op	    2807 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8-4         	      50	   5902786 ns/op	   2263349 gas/op	  27873312 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  302206 B/op	    2807 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8-4         	      50	   5893458 ns/op	   2263349 gas/op	  27877504 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  302201 B/op	    2807 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/batch_after_ack/sessions=8-4         	      50	   5896927 ns/op	   2263349 gas/op	  27883704 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	  302245 B/op	    2807 allocs/op
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1-4 	      50	     12796 ns/op	     10854 gas/op	  27856528 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1-4 	      50	     12595 ns/op	     10854 gas/op	  27864776 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1-4 	      50	     13222 ns/op	     10854 gas/op	  27870104 process_live_heap_bytes	  74711040 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1-4 	      50	     13344 ns/op	     10854 gas/op	  27875136 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=1-4 	      50	     12580 ns/op	     10854 gas/op	  27878376 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         1.000 sessions/op	         1.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8-4 	      50	     13231 ns/op	     10854 gas/op	  27901432 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8-4 	      50	     13235 ns/op	     10854 gas/op	  27909520 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8-4 	      50	     13222 ns/op	     10854 gas/op	  27914888 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8-4 	      50	     13554 ns/op	     10854 gas/op	  27919656 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3Completion/expiry_after_completion/sessions=8-4 	      50	     12924 ns/op	     10854 gas/op	  27923400 process_live_heap_bytes	  74678272 process_reserved_heap_bytes	         8.000 sessions/op	         8.000 terminal_rows/op	   22976 B/op	     207 allocs/op
+PASS
+	Command being timed: "timeout 90s /home/mikers/polystore-337-execution.euduqe/338-candidate-keeper.test -test.run=^TestRetrievalV3CompletionReferenceOperationCounts$ -test.bench=^BenchmarkRetrievalV3Completion$ -test.benchtime=50x -test.count=5 -test.timeout=85s -test.v"
+	User time (seconds): 32.29
+	System time (seconds): 0.39
+	Percent of CPU this job got: 132%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:24.61
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 122472
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 321834
+	Voluntary context switches: 254938
+	Involuntary context switches: 3939
+	Swaps: 0
+	File system inputs: 1584
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
