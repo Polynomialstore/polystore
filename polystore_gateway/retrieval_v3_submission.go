@@ -192,7 +192,9 @@ func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, k
 		writeRetrievalV3Outcome(w, "reconciled", sessionID, "", slot, 0, remaining, "complete", nil, nil)
 		return
 	}
-	msg := &types.MsgSubmitRetrievalSessionProofV3{Creator: signer, SessionId: frozen.Session.SessionId, Slot: slot, Proofs: proofs}
+	// One obligation keeps the existing journal and HTTP contract while the
+	// batch route aggregates its KZG openings in the native verifier.
+	msg := &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: signer, Sessions: []types.RetrievalSessionProofBatchEntryV3{{SessionId: frozen.Session.SessionId, Slot: slot, Proofs: proofs}}}
 	file, err := os.CreateTemp(uploadDir, "session-proof-v3-*.json")
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "cannot create v3 proof input", err.Error())
@@ -214,7 +216,7 @@ func submitRetrievalSessionProofV3(w http.ResponseWriter, ctx context.Context, k
 	hash, submissionTiming, err := submitTxAndRecordTiming(ctx, func(hash string) error {
 		op.TxHash = hash
 		return updatePendingSignerV3(signer, op, false)
-	}, "tx", "polystorechain", "retrieval-session-v3", "prove", file.Name(), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
+	}, "tx", "polystorechain", "retrieval-session-v3", "prove-batch", file.Name(), "--from", keyName, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
 	cleanup := "retained"
 	if err == nil || errors.Is(err, errTxFailed) || errors.Is(err, errTxRejected) || errors.Is(err, errTxNotSubmitted) {
 		if clearErr := updatePendingSignerV3(signer, op, true); clearErr != nil {
