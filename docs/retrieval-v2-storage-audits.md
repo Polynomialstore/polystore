@@ -1,9 +1,10 @@
 # Retrieval v2 frozen storage obligations
 
 This implements the C4 keeper path owned by [#255](https://github.com/Polynomialstore/polystore/issues/255).
-`retrieval_v2_activation_height=0` remains the default. The finite limits below
-are a candidate trusted-devnet profile, not capacity qualification or permission
-for funded activation. The [canonical challenge RFC](../rfcs/rfc-challenge-derivation-and-quotas.md)
+`retrieval_v2_activation_height=0` is the protocol's disabled sentinel; the
+canonical trusted-devnet bootstrap explicitly sets height 1. The finite limits below
+do not qualify a materially different state size, topology or workload. The
+[canonical challenge RFC](../rfcs/rfc-challenge-derivation-and-quotas.md)
 continues to define exact bytes, rejection sampling, off-domain points and trust
 limits. Session authority, admission and refunds are separate from these storage
 obligations.
@@ -123,8 +124,10 @@ genesis export code exports the new state.
 These bounds cover new C4 issuance/finalization and v2 funded task candidates.
 Existing global provider-health decay, jail, underbonding, draining and rotation
 scans remain in EndBlock. Existing assignment collateral eligibility work and
-legacy task history are also outside this new cap. [#260](https://github.com/Polynomialstore/polystore/issues/260)
-must measure the complete integrated workload before funded activation.
+legacy task history are also outside this new cap. Closed
+[#260](https://github.com/Polynomialstore/polystore/issues/260) retains the
+integrated evidence for its named trusted-devnet workload; it does not bound these
+scans or qualify a materially different state size, topology or workload.
 
 ## Provider queries and verification
 

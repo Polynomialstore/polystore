@@ -233,7 +233,7 @@ func (k Keeper) finalizeStorageAuditEpoch(ctx sdk.Context) error {
 		return err
 	}
 	// Existing global operational hooks remain shared. Their historical scans are
-	// not made bounded by the new C4 inventory; whole-chain #260 measures them.
+	// not made bounded by the new C4 inventory and need whole-chain capacity evidence.
 	if err := k.applyProviderHealthEpochDecay(ctx, epochID); err != nil {
 		return err
 	}

@@ -39,7 +39,7 @@ The 1,200,000 gas/proof component is fixed by the binary, not derived at runtime
 from these timings. The [native allocation probe](../../../../../polystore_core/examples/verifier_allocations.md)
 records sequential Rust heap scratch separately: 2456-byte measured peak,
 54264 cumulative bytes per proof, zero retained bytes for these K8/K2 fixtures.
-#260 still owns whole-process memory and sustained capacity.
+These allocation probes do not measure whole-process memory or sustained chain capacity.
 
 Full keeper submission characterization at the final #255 audit slice, using the
 same unchanged dylib, Go 1.25.5 / Apple M3 and `GOMAXPROCS=2`, three iterations

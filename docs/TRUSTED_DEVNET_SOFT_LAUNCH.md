@@ -156,14 +156,50 @@ Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its cha
 #### Back up and restore a fresh-genesis change
 
 Changing `scripts/retrieval_consensus_profile.json` does not update a running
-chain. A trusted-devnet consensus-profile change uses a fresh genesis. Stop all
-remote or local `provider-daemon` services first, then run this on the hub. The
-paths are the checked-in systemd defaults; if `/etc/polystore/*.env` overrides
-either path, use those deployed values consistently in both commands.
+chain. A trusted-devnet consensus-profile change uses a fresh genesis. Choose one
+reset stamp and copy its exact value into every provider and hub block below:
+
+```bash
+POLYSTORE_RESET_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+printf 'Reset stamp: %s\n' "$POLYSTORE_RESET_STAMP"
+```
+
+First run this on every provider host. It stops the `provider-daemon` and uses a
+temporary systemd drop-in to isolate mutable uploads and retrieval-session state
+for the new genesis. The paths are the checked-in defaults; substitute deployed
+values if `/etc/polystore/polystore-gateway-provider.env` overrides them.
 
 ```bash
 set -euo pipefail
-POLYSTORE_RESET_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
+POLYSTORE_PROVIDER_UPLOAD_DIR=/var/lib/polystore/polystore_gateway/provider/uploads
+POLYSTORE_PROVIDER_SESSION_DB_PATH=/var/lib/polystore/polystore_gateway/provider/sessions.db
+POLYSTORE_PROVIDER_FRESH_ROOT="/var/lib/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}/provider"
+POLYSTORE_PROVIDER_DROP_IN=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.conf
+
+sudo systemctl stop polystore-gateway-provider
+sudo test -d "$POLYSTORE_PROVIDER_UPLOAD_DIR"
+sudo test ! -e "$POLYSTORE_PROVIDER_SESSION_DB_PATH" || \
+  sudo test -f "$POLYSTORE_PROVIDER_SESSION_DB_PATH"
+sudo test ! -e "$POLYSTORE_PROVIDER_DROP_IN"
+sudo test ! -e "$POLYSTORE_PROVIDER_FRESH_ROOT"
+sudo install -d -m 0755 "$(dirname "$POLYSTORE_PROVIDER_DROP_IN")"
+sudo install -d -m 0750 "$POLYSTORE_PROVIDER_FRESH_ROOT"
+sudo tee "$POLYSTORE_PROVIDER_DROP_IN" >/dev/null <<EOF
+[Service]
+Environment=POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads
+Environment=POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db
+EOF
+sudo systemctl daemon-reload
+```
+
+Use a distinct fresh root and drop-in for each provider instance on a shared
+host. Leave every provider stopped while the hub is reset. Then run this on the
+hub with the same reset stamp:
+
+```bash
+set -euo pipefail
+POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
 POLYSTORE_BACKUP_DIR="/var/backups/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}"
 POLYSTORE_BACKUP_ARCHIVE="${POLYSTORE_BACKUP_DIR}/hub-state.tar.gz"
 
@@ -223,8 +259,26 @@ curl -fsS http://127.0.0.1:26657/status | \
 ```
 
 After those chain-only checks pass, re-register and fund the expected providers
-using the provider-onboarding steps below, start every `provider-daemon`, and
-then run the public healthcheck:
+using the provider-onboarding steps below. Start each `provider-daemon` and verify
+that it inherited the isolated paths:
+
+```bash
+set -euo pipefail
+POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
+POLYSTORE_PROVIDER_FRESH_ROOT="/var/lib/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}/provider"
+
+sudo systemctl start polystore-gateway-provider
+POLYSTORE_PROVIDER_PID="$(systemctl show --property MainPID --value polystore-gateway-provider)"
+test "$POLYSTORE_PROVIDER_PID" -gt 0
+sudo cat "/proc/${POLYSTORE_PROVIDER_PID}/environ" | tr '\0' '\n' | \
+  grep -Fxq "POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads"
+sudo cat "/proc/${POLYSTORE_PROVIDER_PID}/environ" | tr '\0' '\n' | \
+  grep -Fxq "POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db"
+sudo test -d "${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads"
+sudo test -f "${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db"
+```
+
+Then run the public healthcheck on the operator host:
 
 ```bash
 scripts/run_public_devnet_healthcheck.sh \
@@ -234,23 +288,51 @@ scripts/run_public_devnet_healthcheck.sh \
 The public healthcheck intentionally comes last because it requires the complete
 on-chain provider inventory and each configured provider endpoint. The 160M
 profile retains CometBFT's existing 1-second `timeout_commit`; do not edit
-validator `config.toml` during this rollout. Keep provider data intact until the
-new chain is qualified so the snapshot remains usable for rollback.
+validator `config.toml` during this rollout. Keep the provider drop-ins active and
+the original provider paths untouched until the new chain is qualified.
 
-To restore the snapshot, stop every provider-daemon and set the exact archive
-printed above. This quarantines the failed attempt instead of deleting it,
-restores numeric ownership, ACLs and extended attributes, and verifies the
-archive before changing live state:
+To restore the snapshot, first run this on each provider host. It quarantines the
+isolated state and removes the drop-in before the old chain is restored. Use the
+exact reset stamp from the attempted rollout:
 
 ```bash
 set -euo pipefail
-POLYSTORE_BACKUP_ARCHIVE=/var/backups/polystore/fresh-genesis-<UTC-stamp>/hub-state.tar.gz
+POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
+POLYSTORE_FAILED_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+POLYSTORE_PROVIDER_UPLOAD_DIR=/var/lib/polystore/polystore_gateway/provider/uploads
+POLYSTORE_PROVIDER_SESSION_DB_PATH=/var/lib/polystore/polystore_gateway/provider/sessions.db
+POLYSTORE_PROVIDER_FRESH_ROOT="/var/lib/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}/provider"
+POLYSTORE_PROVIDER_DROP_IN=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.conf
+
+sudo systemctl stop polystore-gateway-provider
+if sudo test -e "$POLYSTORE_PROVIDER_FRESH_ROOT"; then
+  sudo mv "$POLYSTORE_PROVIDER_FRESH_ROOT" \
+    "${POLYSTORE_PROVIDER_FRESH_ROOT}.failed-${POLYSTORE_FAILED_STAMP}"
+fi
+if sudo test -e "$POLYSTORE_PROVIDER_DROP_IN"; then
+  sudo unlink "$POLYSTORE_PROVIDER_DROP_IN"
+fi
+sudo systemctl daemon-reload
+sudo test -d "$POLYSTORE_PROVIDER_UPLOAD_DIR"
+sudo test ! -e "$POLYSTORE_PROVIDER_SESSION_DB_PATH" || \
+  sudo test -f "$POLYSTORE_PROVIDER_SESSION_DB_PATH"
+```
+
+Then run this on the hub with the exact archive printed above. It quarantines any
+failed hub state instead of deleting it, restores numeric ownership, ACLs and
+extended attributes, and verifies the archive before changing live state:
+
+```bash
+set -euo pipefail
+POLYSTORE_BACKUP_ARCHIVE='/var/backups/polystore/fresh-genesis-<UTC-stamp>/hub-state.tar.gz'
 POLYSTORE_FAILED_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 
 sudo sha256sum --check "${POLYSTORE_BACKUP_ARCHIVE}.sha256"
 sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
-sudo mv /var/lib/polystore/polystorechaind \
-  "/var/lib/polystore/polystorechaind.failed-${POLYSTORE_FAILED_STAMP}"
+if sudo test -e /var/lib/polystore/polystorechaind; then
+  sudo mv /var/lib/polystore/polystorechaind \
+    "/var/lib/polystore/polystorechaind.failed-${POLYSTORE_FAILED_STAMP}"
+fi
 if sudo test -e /var/lib/polystore/polystore_gateway/router; then
   sudo mv /var/lib/polystore/polystore_gateway/router \
     "/var/lib/polystore/polystore_gateway/router.failed-${POLYSTORE_FAILED_STAMP}"
@@ -261,7 +343,24 @@ sudo systemctl start polystorechaind
 sudo systemctl start polystore-faucet polystore-gateway-router
 ```
 
-Start every provider-daemon against the restored chain, then run:
+Start each provider-daemon against the restored chain and verify that its process
+uses the original deployed paths:
+
+```bash
+set -euo pipefail
+POLYSTORE_PROVIDER_UPLOAD_DIR=/var/lib/polystore/polystore_gateway/provider/uploads
+POLYSTORE_PROVIDER_SESSION_DB_PATH=/var/lib/polystore/polystore_gateway/provider/sessions.db
+
+sudo systemctl start polystore-gateway-provider
+POLYSTORE_PROVIDER_PID="$(systemctl show --property MainPID --value polystore-gateway-provider)"
+test "$POLYSTORE_PROVIDER_PID" -gt 0
+sudo cat "/proc/${POLYSTORE_PROVIDER_PID}/environ" | tr '\0' '\n' | \
+  grep -Fxq "POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_UPLOAD_DIR}"
+sudo cat "/proc/${POLYSTORE_PROVIDER_PID}/environ" | tr '\0' '\n' | \
+  grep -Fxq "POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_SESSION_DB_PATH}"
+```
+
+Then run the healthcheck on the operator host:
 
 ```bash
 scripts/run_public_devnet_healthcheck.sh \

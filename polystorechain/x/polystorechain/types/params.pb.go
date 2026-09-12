@@ -145,7 +145,7 @@ type Params struct {
 	// 0 preserves immediate withdrawal behavior for local/devnet compatibility.
 	ProviderBondUnbondingBlocks uint64 `protobuf:"varint,48,opt,name=provider_bond_unbonding_blocks,json=providerBondUnbondingBlocks,proto3" json:"provider_bond_unbonding_blocks,omitempty"`
 	// 0 disables v2. Nonzero schedules a coordinated, irreversible activation.
-	// Do not schedule until #255-#257 integration and #260 qualification pass.
+	// Schedule only with matching integration and capacity qualification evidence.
 	RetrievalV2ActivationHeight uint64 `protobuf:"varint,49,opt,name=retrieval_v2_activation_height,json=retrievalV2ActivationHeight,proto3" json:"retrieval_v2_activation_height,omitempty"`
 	// 0 disables v3. Nonzero schedules an irreversible activation after v2.
 	// Keep disabled until the full native large-session path is qualified.

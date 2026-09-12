@@ -36,6 +36,21 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             docs,
         )
 
+    def test_fresh_genesis_runbook_is_provider_and_partial_bootstrap_safe(self):
+        docs = (ROOT / "docs/TRUSTED_DEVNET_SOFT_LAUNCH.md").read_text()
+        self.assertIn(
+            "Environment=POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads",
+            docs,
+        )
+        self.assertIn(
+            "Environment=POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db",
+            docs,
+        )
+        self.assertIn(
+            "if sudo test -e /var/lib/polystore/polystorechaind; then",
+            docs,
+        )
+
     def test_legacy_gateway_retrieval_wrapper_disables_v2_only_for_startup(self):
         wrapper = (ROOT / "scripts/ci_e2e_gateway_retrieval_multi_sp.sh").read_text()
         self.assertIn(
