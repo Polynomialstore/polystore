@@ -1537,7 +1537,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                             "unchanged_fee": "17"}}, "evm": {"params": {"active_static_precompiles": []}},
                         "feemarket": {"params": {"min_gas_price": "0.000000000000000000"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
-                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[mempool]\\nsize = 5000\\nmax_txs_bytes = 1073741824\\nmax_tx_bytes = 1048576\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
+                    (config / "config.toml").write_text('[rpc]\\npprof_laddr = "localhost:6060"\\n[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[mempool]\\nsize = 5000\\nmax_txs_bytes = 1073741824\\nmax_tx_bytes = 1048576\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
                     (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\nenabled-unsafe-cors = false\\n[mempool]\\nmax-txs = -1\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
@@ -1664,6 +1664,8 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             home = Path(node["home"])
             self.assertEqual(artifact.sha256(home / "config/genesis.json"), doc["genesis_sha256"])
             self.assertIn('timeout_commit = "1s"', (home / "config/config.toml").read_text())
+            self.assertIn(f'pprof_laddr = "127.0.0.1:{node["pprof"]}"',
+                          (home / "config/config.toml").read_text())
             self.assertIn("prometheus = true", (home / "config/config.toml").read_text())
             self.assertIn("max_txs_bytes = 1073741824", (home / "config/config.toml").read_text())
             self.assertTrue((home / "initial.log").exists())

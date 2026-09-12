@@ -1763,7 +1763,7 @@ class FourValidatorLifecycle:
         self.timeout_commit = consensus_timeout_commit(consensus_timeout_commit_ms)
         self.nodes = [{"home": str(self.home / "nodes" / f"validator{i}"), "rpc": 26657 - 3*i,
                        "p2p": 26656 - 3*i, "grpc": 9090 - 2*i, "api": 1317 - i,
-                       "metrics": 26660 + i} for i in range(4)]
+                       "metrics": 26660 + i, "pprof": 6060 + i} for i in range(4)]
         self.browser_evm = bool(browser_evm)
         if self.browser_evm:
             self.nodes[0].update(evm_rpc=8545, evm_ws=8546)
@@ -1797,7 +1797,7 @@ class FourValidatorLifecycle:
 
     def reserve_ports(self):
         for node in self.nodes:
-            for name in ("rpc", "p2p", "grpc", "api", "metrics", "evm_rpc", "evm_ws"):
+            for name in ("rpc", "p2p", "grpc", "api", "metrics", "pprof", "evm_rpc", "evm_ws"):
                 if name not in node:
                     continue
                 reservation = socket.socket()
@@ -1881,6 +1881,7 @@ class FourValidatorLifecycle:
             path = home / "config/config.toml"
             config = path.read_text()
             for section, key, value in (("consensus", "timeout_commit", f'"{self.timeout_commit}"'),
+                                        ("rpc", "pprof_laddr", f'"127.0.0.1:{node["pprof"]}"'),
                                         ("p2p", "addr_book_strict", "false"),
                                         ("mempool", "size", str(COMET_MEMPOOL_SIZE)),
                                         ("mempool", "max_txs_bytes", str(COMET_MEMPOOL_MAX_TXS_BYTES)),
@@ -2173,7 +2174,7 @@ class FourValidatorLifecycle:
 
 def four_validator_main(args):
     parser = argparse.ArgumentParser(description="Four-validator lifecycle preparation; retains private homes and logs. No capacity qualification.",
-        epilog="Fixed local ports: RPC 26657/26654/26651/26648; P2P 26656/26653/26650/26647; gRPC 9090/9088/9086/9084; API 1317..1314; metrics 26660..26663.")
+        epilog="Fixed local ports: RPC 26657/26654/26651/26648; P2P 26656/26653/26650/26647; gRPC 9090/9088/9086/9084; API 1317..1314; metrics 26660..26663; pprof 6060..6063.")
     parser.add_argument("--binary", required=True)
     parser.add_argument("--library", required=True)
     parser.add_argument("--home", required=True, help="new directory whose parent already exists; never deleted")
