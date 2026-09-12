@@ -3606,7 +3606,7 @@ def run_native_v3_browser_contention(lifecycle, *, website, vite, playwright, de
     first = [attempt for attempt in attempts if attempt["phase"] == "first-pass"]
     if len(first) != clients:
         raise ValueError("contention run lacks one labeled first-pass continuation per client")
-    first_pass_overlap = clients == 1 or max(row["startedUnixMs"] for row in first) <= min(
+    first_pass_overlap = clients == 1 or max(row["startedUnixMs"] for row in first) < min(
         row["finishedUnixMs"] for row in first)
     status_counts = {}
     for attempt in attempts:
@@ -3628,6 +3628,13 @@ def run_native_v3_browser_contention(lifecycle, *, website, vite, playwright, de
     lifecycle.doc["native_v3_browser_contention"] = evidence
     lifecycle.save()
     return evidence
+
+
+def finish_native_v3_browser_qualification(doc, evidence, contention_clients):
+    """Publish an explicit top-level disposition without discarding measurements."""
+    inconclusive = contention_clients == 2 and not evidence["measurement"]["first_pass_overlap"]
+    doc.update(status=("native_v3_browser_contention_inconclusive" if inconclusive else
+                       "native_v3_browser_qualification_passed"), qualification=not inconclusive)
 
 
 def validate_browser_cache_mdu_requests(outcome):
@@ -5910,7 +5917,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 set_public_retrieval_policy(lifecycle, deal_id=identity, command=command)
                 doc["status"] = "native_v3_browser_running"
                 lifecycle.save()
-                run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
+                browser_evidence = run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
                     check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1,
                     executor_handoff=browser_executor_handoff,
@@ -5921,7 +5928,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                         send=send, wait=wait, command=command, curl=curl)
                     run_native_v3_browser_expiry(lifecycle, source=source, deal=expiry["deal"],
                         browser_ports=browser_ports, payload=expiry["payload"], check_providers=check_providers)
-                doc.update(status="native_v3_browser_qualification_passed", qualification=True)
+                finish_native_v3_browser_qualification(doc, browser_evidence, contention_clients)
             else:
                 run_native_v3_sessions(lifecycle, deal=deal, providers=providers, send=send, wait=wait, curl=curl)
                 doc["status"] = "native_v3_provider_diagnostic_passed"

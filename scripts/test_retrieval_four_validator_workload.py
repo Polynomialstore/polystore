@@ -257,7 +257,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
-    def test_browser_contention_uses_two_isolated_wallets_and_reports_first_pass_overlap(self):
+    def test_browser_contention_uses_two_isolated_wallets_and_treats_touching_intervals_as_non_overlap(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             website, home = root / "website", root / "run"
@@ -276,11 +276,12 @@ class FourValidatorWorkloadTest(unittest.TestCase):
 
             def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
                 index = int(env["E2E_NATIVE_V3_CONTENTION_LABEL"].removeprefix("client-")) - 1
+                bounds = ((1, 2), (2, 3))[index]
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps(dict(success=True,
                     label=f"client-{index + 1}", payer=workload.V3_BROWSER_ACCOUNTS[index]["payer"],
                     session={"session_id": base64.b64encode(bytes.fromhex(session_ids[index])).decode()},
-                    continuationAttempts=[dict(phase="first-pass", startedUnixMs=1 + 2 * index,
-                                               finishedUnixMs=2 + 2 * index, status=200)],
+                    continuationAttempts=[dict(phase="first-pass", startedUnixMs=bounds[0],
+                                               finishedUnixMs=bounds[1], status=200)],
                     dataMduRequests=1, dataMduRequestsAfterFirstPass=1,
                     evmReceipts=[], evmTransactions=[], providerProofOutcomes=[])))
                 return SimpleNamespace(returncode=0, stdout="passed", stderr=""), {"peak": index}
@@ -309,6 +310,14 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             self.assertEqual(snapshot.call_args_list[1].kwargs["session_ids"], list(session_ids))
             for reservation in reservations:
                 reservation.close.assert_called_once()
+
+    def test_browser_contention_without_overlap_is_top_level_inconclusive(self):
+        doc = {"native_v3_browser_contention": {"retained": True}}
+        workload.finish_native_v3_browser_qualification(
+            doc, {"measurement": {"first_pass_overlap": False}}, 2)
+        self.assertEqual(doc["status"], "native_v3_browser_contention_inconclusive")
+        self.assertFalse(doc["qualification"])
+        self.assertEqual(doc["native_v3_browser_contention"], {"retained": True})
 
     def test_browser_executor_handoff_publishes_fixed_request_and_retains_response(self):
         with tempfile.TemporaryDirectory() as directory:
