@@ -10,7 +10,9 @@ use blst::{blst_p1s_mult_pippenger, blst_p1s_mult_pippenger_scratch_sizeof, limb
 use ff::{BatchInverter, Field, PrimeField};
 use group::Curve;
 use rs_merkle::{Hasher, MerkleProof, MerkleTree};
-pub use session_batch::{SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_PROOFS};
+pub use session_batch::{
+    CROSS_SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_BYTES, SESSION_BATCH_MAX_PROOFS,
+};
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 use std::fs::File;

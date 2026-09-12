@@ -17,6 +17,7 @@ import (
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"polystorechain/pkg/retrievalchallenge"
+	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -224,6 +225,10 @@ func materializeV3Samples(s *types.RetrievalSessionV3, c retrievalchallenge.Cont
 	if err != nil {
 		return nil, err
 	}
+	return materializeV3SamplesFromSeed(s, c, seed)
+}
+
+func materializeV3SamplesFromSeed(s *types.RetrievalSessionV3, c retrievalchallenge.ContextV3, seed [32]byte) ([]retrievalchallenge.ChallengeV3, error) {
 	challenges, err := c.Challenges(seed[:])
 	if err != nil {
 		return nil, err
@@ -253,18 +258,23 @@ func materializeV3Samples(s *types.RetrievalSessionV3, c retrievalchallenge.Cont
 	return challenges, nil
 }
 
-func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSessionV3, c retrievalchallenge.ContextV3) ([]retrievalchallenge.ChallengeV3, error) {
+func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSessionV3, c retrievalchallenge.ContextV3) ([32]byte, []retrievalchallenge.ChallengeV3, error) {
 	if s.ChainId != ctx.ChainID() {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session chain ID mismatch")
+		return [32]byte{}, nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session chain ID mismatch")
 	}
 	if ctx.BlockHeight() < 0 || uint64(ctx.BlockHeight()) < s.FirstResponseHeight || uint64(ctx.BlockHeight()) > s.DeadlineHeight || s.Expired {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("outside v3 session response window")
+		return [32]byte{}, nil, sdkerrors.ErrInvalidRequest.Wrap("outside v3 session response window")
 	}
 	anchor, err := k.ChallengeAnchors.Get(ctx, s.AnchorHeight)
 	if err != nil || len(anchor.Seed) != 32 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session challenge seed unavailable")
+		return [32]byte{}, nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session challenge seed unavailable")
 	}
-	return materializeV3Samples(s, c, anchor.Seed)
+	seed, err := c.Seed(anchor.Seed)
+	if err != nil {
+		return [32]byte{}, nil, err
+	}
+	challenges, err := materializeV3SamplesFromSeed(s, c, seed)
+	return seed, challenges, err
 }
 
 func openRequestMatchesV3(s types.RetrievalSessionV3, creator string, dealID, generation uint64, r types.RetrievalRangeV3, nonce, deadline uint64, funding types.RetrievalSessionFunding) bool {
@@ -632,6 +642,7 @@ func (k msgServer) SubmitRetrievalSessionProofV3(goCtx context.Context, msg *typ
 
 type preparedRetrievalSessionProofV3 struct {
 	session                 types.RetrievalSessionV3
+	challengeSeed           [32]byte
 	obligationIndex         uint32
 	challenges              []retrievalchallenge.ChallengeV3
 	proofs                  []types.RetrievalSampleProofV3
@@ -679,7 +690,7 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 	for i := range s.Obligations {
 		samplesBefore += s.Obligations[i].SampleCount
 	}
-	challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
+	challengeSeed, challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
 	if err != nil {
 		return preparedRetrievalSessionProofV3{}, err
 	}
@@ -703,7 +714,7 @@ func (k msgServer) prepareRetrievalSessionProofV3(ctx sdk.Context, creator strin
 		}
 	}
 	return preparedRetrievalSessionProofV3{
-		session: s, obligationIndex: oi, challenges: challenges, proofs: proofs,
+		session: s, challengeSeed: challengeSeed, obligationIndex: oi, challenges: challenges, proofs: proofs,
 		samplePartitionWasEmpty: samplesBefore == 0,
 	}, nil
 }
@@ -775,8 +786,8 @@ func (k msgServer) applyPreparedRetrievalSessionProofV3(ctx sdk.Context, prepare
 	return &types.MsgSubmitRetrievalSessionProofV3Response{NewlyAccepted: added, Settled: settled}, nil
 }
 
-// SubmitRetrievalSessionProofBatchV3 verifies bounded, same-provider session
-// proofs concurrently, then applies every state transition in input order.
+// SubmitRetrievalSessionProofBatchV3 verifies one bounded, same-provider proof
+// aggregate, then applies every state transition in input order.
 func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProofBatchV3) (*types.MsgSubmitRetrievalSessionProofBatchV3Response, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 	if err := k.requireRetrievalV3(ctx); err != nil {
@@ -807,8 +818,7 @@ func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg
 	}
 
 	prepared := make([]preparedRetrievalSessionProofV3, len(msg.Sessions))
-	jobs := make([]retrievalProofVerificationV3, 0, totalProofs)
-	jobPositions := make([][2]int, 0, totalProofs)
+	batch := make([]crypto_ffi.PolyFSCrossSessionEntry, 0, len(msg.Sessions))
 	for i := range msg.Sessions {
 		entry := &msg.Sessions[i]
 		entryPrepared, err := k.prepareRetrievalSessionProofV3(ctx, msg.Creator, entry.SessionId, entry.Slot, entry.Proofs)
@@ -816,19 +826,23 @@ func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg
 			return nil, err
 		}
 		prepared[i] = entryPrepared
+		proofs := make([]crypto_ffi.PolyFSCrossSessionProof, len(entry.Proofs))
 		for j := range entry.Proofs {
-			jobs = append(jobs, retrievalProofVerificationV3{root: prepared[i].session.PolyfsRoot, proof: &entry.Proofs[j].Proof})
-			jobPositions = append(jobPositions, [2]int{i, j})
+			challenge := prepared[i].challenges[entry.Proofs[j].Ordinal]
+			proofs[j] = crypto_ffi.PolyFSCrossSessionProof{Ordinal: entry.Proofs[j].Ordinal, T: challenge.T, Proof: entry.Proofs[j].Proof}
 		}
+		batch = append(batch, crypto_ffi.PolyFSCrossSessionEntry{
+			SessionID: entry.SessionId, ContextHash: prepared[i].session.ContextHash,
+			ChallengeSeed: prepared[i].challengeSeed[:], Root: prepared[i].session.PolyfsRoot,
+			Slot: entry.Slot, Proofs: proofs,
+		})
 	}
 	if err := PrepayProofCrypto(ctx, uint64(totalProofs)); err != nil {
 		return nil, err
 	}
-	verification := verifyRetrievalProofsV3(jobs, retrievalProofWorkerCountV3(totalProofs))
-	for i := range verification {
-		if verification[i].err != nil || !verification[i].ok {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("batch entry %d proof %d: invalid v3 chained proof", jobPositions[i][0], jobPositions[i][1])
-		}
+	verified, err := crypto_ffi.VerifyPolyFSCrossSessionProofBatch(batch, v3IntegrityLeavesPerMDU)
+	if err != nil || !verified {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid v3 chained proof batch")
 	}
 
 	response := &types.MsgSubmitRetrievalSessionProofBatchV3Response{Results: make([]types.MsgSubmitRetrievalSessionProofV3Response, len(prepared))}
@@ -878,7 +892,7 @@ func (k msgServer) AcknowledgeRetrievalObligationV3(goCtx context.Context, msg *
 	for i := range s.Obligations {
 		samplesBefore += s.Obligations[i].SampleCount
 	}
-	challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
+	_, challenges, err := k.v3AnchorAndChallenges(ctx, &s, challengeContext)
 	if err != nil {
 		return nil, err
 	}

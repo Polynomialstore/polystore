@@ -51,6 +51,39 @@ func TestSessionBatchTransportBounds(t *testing.T) {
 	}
 }
 
+func TestCrossSessionBatchTransportBounds(t *testing.T) {
+	path := func(n int) [][]byte {
+		p := make([][]byte, n)
+		for i := range p {
+			p[i] = make([]byte, 32)
+		}
+		return p
+	}
+	header := make([]byte, 32)
+	proof := types.ChainedProof{MduIndex: 65536, BlobIndex: 95, MduRootFr: make([]byte, 32), RootTableDuCommitment: make([]byte, 48), ManifestOpening: make([]byte, 48), BlobCommitment: make([]byte, 48), ZValue: make([]byte, 32), YValue: make([]byte, 32), KzgOpeningProof: make([]byte, 48), RootTableDuMerklePath: path(6), MerklePath: path(7)}
+	entries := make([]PolyFSCrossSessionEntry, 64)
+	for i := range entries {
+		entries[i] = PolyFSCrossSessionEntry{SessionID: header, ContextHash: header, ChallengeSeed: header, Root: header, Slot: uint32(i % 8), Proofs: []PolyFSCrossSessionProof{{Ordinal: uint64(i), T: uint64(100 + i), Proof: proof}}}
+	}
+	b, err := encodePolyFSCrossSessionProofBatch(entries, polyFSV3LeavesPerMDU)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(b), polyFSCrossSessionBatchMaxBytes)
+	require.Equal(t, "PSB2", string(b[:4]))
+	require.Equal(t, uint16(64), binary.BigEndian.Uint16(b[4:6]))
+	require.Equal(t, uint16(64), binary.BigEndian.Uint16(b[6:8]))
+	require.Equal(t, uint32(polyFSV3LeavesPerMDU), binary.BigEndian.Uint32(b[8:12]))
+	require.Equal(t, uint64(0), binary.BigEndian.Uint64(b[146:154]))
+	require.Equal(t, uint64(100), binary.BigEndian.Uint64(b[154:162]))
+
+	_, err = encodePolyFSCrossSessionProofBatch(nil, polyFSV3LeavesPerMDU)
+	require.Error(t, err)
+	_, err = encodePolyFSCrossSessionProofBatch(entries, 64)
+	require.Error(t, err)
+	entries[0].Proofs = make([]PolyFSCrossSessionProof, 65)
+	_, err = encodePolyFSCrossSessionProofBatch(entries[:1], polyFSV3LeavesPerMDU)
+	require.Error(t, err)
+}
+
 func TestReceivedBlobCanonicalCommitment(t *testing.T) {
 	require.NoError(t, Init("../../trusted_setup.txt"))
 	blob := make([]byte, types.BLOB_SIZE)

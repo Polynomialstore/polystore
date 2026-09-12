@@ -35,7 +35,7 @@ type generationV3Fixture struct {
 	deal      types.Deal
 }
 
-func setupGenerationV3(t *testing.T) generationV3Fixture {
+func setupGenerationV3(t testing.TB) generationV3Fixture {
 	t.Helper()
 	bank := newTrackingBankKeeper()
 	f := initFixtureWithBankKeeper(t, bank)
@@ -75,7 +75,7 @@ func generationProposal(g generationV3Fixture, fill byte) *types.MsgProposeDealG
 	}
 }
 
-func activateGenerationV3(t *testing.T, g generationV3Fixture) {
+func activateGenerationV3(t testing.TB, g generationV3Fixture) {
 	t.Helper()
 	require.NoError(t, g.fixture.keeper.RetrievalV2ActivatedHeight.Set(g.ctx, 1))
 	require.NoError(t, g.fixture.keeper.RetrievalV3ActivatedHeight.Set(g.ctx, 1))

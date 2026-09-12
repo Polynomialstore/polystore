@@ -138,7 +138,7 @@ func ackDigestV3(t *testing.T, session types.RetrievalSessionV3, slot uint32) []
 	return digest[:]
 }
 
-func challengeContextV3(t *testing.T, s types.RetrievalSessionV3) retrievalchallenge.ContextV3 {
+func challengeContextV3(t testing.TB, s types.RetrievalSessionV3) retrievalchallenge.ContextV3 {
 	t.Helper()
 	var setup, id, root, integrity, plan [32]byte
 	copy(setup[:], s.SetupDigest)
@@ -170,7 +170,7 @@ func challengeContextV3(t *testing.T, s types.RetrievalSessionV3) retrievalchall
 	return c
 }
 
-func openCryptoSessionV3(t *testing.T, length uint64) cryptoSessionV3Fixture {
+func openCryptoSessionV3(t testing.TB, length uint64) cryptoSessionV3Fixture {
 	t.Helper()
 	t.Setenv("KZG_TRUSTED_SETUP", "../../../trusted_setup.txt")
 	if _, err := os.Stat("../../../trusted_setup.txt"); os.IsNotExist(err) {
@@ -227,7 +227,7 @@ func openCryptoSessionV3(t *testing.T, length uint64) cryptoSessionV3Fixture {
 	return cryptoSessionV3Fixture{g, session, mduData, witness, shards, mduRoot, rootDU, rootDUPath, rootOpening}
 }
 
-func (f cryptoSessionV3Fixture) proof(t *testing.T, challenge retrievalchallenge.ChallengeV3) types.RetrievalSampleProofV3 {
+func (f cryptoSessionV3Fixture) proof(t testing.TB, challenge retrievalchallenge.ChallengeV3) types.RetrievalSampleProofV3 {
 	t.Helper()
 	leaf := uint64(challenge.LeafIndex)
 	blob := benchBlobBytesForLeaf(t, f.mduData, f.shards, 8, leaf/8, leaf%8)
@@ -243,10 +243,15 @@ func (f cryptoSessionV3Fixture) proof(t *testing.T, challenge retrievalchallenge
 	}}
 }
 
-func openCryptoSessionV3Batch(t *testing.T, count int) (cryptoSessionV3Fixture, sdk.Context, []types.RetrievalSessionV3, []types.RetrievalSampleProofV3) {
+func openCryptoSessionV3Batch(t testing.TB, count int) (cryptoSessionV3Fixture, sdk.Context, []types.RetrievalSessionV3, []types.RetrievalSampleProofV3) {
 	t.Helper()
 	require.Positive(t, count)
 	f := openCryptoSessionV3(t, 1024)
+	deal, err := f.g.fixture.keeper.Deals.Get(f.g.ctx, f.g.deal.Id)
+	require.NoError(t, err)
+	deal.EscrowBalance = math.NewInt(1_000_000)
+	require.NoError(t, f.g.fixture.keeper.Deals.Set(f.g.ctx, deal.Id, deal))
+	f.g.bank.moduleBalances[types.ModuleName] = sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1_000_000))
 	sessions := []types.RetrievalSessionV3{f.session}
 	for i := 1; i < count; i++ {
 		opened, err := f.g.server.OpenRetrievalSessionV3(f.g.ctx, &types.MsgOpenRetrievalSessionV3{
@@ -416,7 +421,7 @@ func TestRetrievalSessionProofBatchV3AdmissionAndInvalidProofAreAtomic(t *testin
 		invalid.Sessions[entryIndex].Proofs[0].Proof.YValue[31] ^= 1
 	}
 	_, err := f.g.server.SubmitRetrievalSessionProofBatchV3(response, invalid)
-	require.ErrorContains(t, err, "batch entry 1 proof 0")
+	require.ErrorContains(t, err, "invalid v3 chained proof batch")
 	require.Equal(t, before, sessionStoreSnapshot(t, response, f.g.fixture.storeService))
 	require.Equal(t, transfersBefore, f.g.bank.transfers)
 

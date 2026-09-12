@@ -72,3 +72,22 @@ func BenchmarkRetrievalV3ProofBatchVerify(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkRetrievalV3CrossSessionBatchFirstAcceptance(b *testing.B) {
+	for _, count := range []int{1, 8, 32, 64} {
+		b.Run(fmt.Sprintf("sessions=%d", count), func(b *testing.B) {
+			f, ctx, sessions, samples := openCryptoSessionV3Batch(b, count)
+			creator := sessions[0].Obligations[0].AssignedProvider
+			msg := batchProofMessageV3(creator, sessions, samples)
+			b.ReportAllocs()
+			b.ReportMetric(float64(count), "sessions/op")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				run, _ := ctx.CacheContext()
+				if _, err := f.g.server.SubmitRetrievalSessionProofBatchV3(run, msg); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
