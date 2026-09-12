@@ -1,6 +1,7 @@
 import { RAW_MDU_CAPACITY_BYTES } from '../domain/polyfsLayout'
 import { BLOB_SIZE_BYTES, MDU_SIZE_BYTES, parsePolyfsRecordsFromAuthenticatedMdu0, parsePolyfsRecordsFromMdu0, readPolyfsFatRange } from './polyfsLocal'
 import { base64, equal, hex, readBoundedResponse, record, u64, uint, unhex, type FrozenSession, type PinnedGeneration } from './retrieval'
+import { retrievalDiagnostic, retrievalServerTiming, timeRetrieval, type RetrievalDiagnostic } from './retrievalDiagnostics'
 
 export const RETRIEVAL_METADATA_LIMIT = 128 * 1024
 export const RETRIEVAL_FRAMING_LIMIT = 16 * 1024
@@ -76,7 +77,8 @@ export function parseWindowProof(value: unknown, leafCount: number): WindowProof
 
 // Bound bytes before using the platform multipart parser. Exactly two ordered
 // parts are allowed; preambles, epilogues and additional delimiters are rejected.
-async function parseMultipartRetrieval(response: Response, version: 2 | 3, expectedBytes: number, signal?: AbortSignal): Promise<{ metadata: unknown; bytes: Uint8Array }> {
+async function parseMultipartRetrieval(response: Response, version: 2 | 3, expectedBytes: number, signal?: AbortSignal,
+  diagnostic?: Pick<RetrievalDiagnostic, 'sessionId' | 'chunkId' | 'slot'>): Promise<{ metadata: unknown; bytes: Uint8Array }> {
   if (!response.ok || !Number.isSafeInteger(expectedBytes) || expectedBytes < BLOB_SIZE_BYTES || expectedBytes > 8 * 1024 * 1024) {
     await response.body?.cancel(); throw new Error('invalid retrieval response')
   }
@@ -87,31 +89,37 @@ async function parseMultipartRetrieval(response: Response, version: 2 | 3, expec
   if (fields.length !== 3 || fields[0].toLowerCase() !== 'multipart/form-data' || !fields.includes(`version=${version}`) || !boundary || !/^[A-Za-z0-9'()+_,\-./:=?]{1,70}$/.test(boundary)) {
     await response.body?.cancel(); throw new Error('unsupported secured retrieval content type')
   }
-  const body = await readBoundedResponse(response, expectedBytes + RETRIEVAL_METADATA_LIMIT + RETRIEVAL_FRAMING_LIMIT, signal)
-  const find = (needle: Uint8Array, start: number) => {
-    outer: for (let i = start; i <= body.length - needle.length; i++) {
-      for (let j = 0; j < needle.length; j++) if (body[i + j] !== needle[j]) continue outer
-      return i
+  const read = () => readBoundedResponse(response, expectedBytes + RETRIEVAL_METADATA_LIMIT + RETRIEVAL_FRAMING_LIMIT, signal)
+  const body = await (diagnostic ? timeRetrieval('body_read', read, diagnostic.sessionId, diagnostic) : read())
+  if (diagnostic) retrievalDiagnostic({ ...diagnostic, phase: 'multipart_parse', edge: 'start' })
+  try {
+    const find = (needle: Uint8Array, start: number) => {
+      outer: for (let i = start; i <= body.length - needle.length; i++) {
+        for (let j = 0; j < needle.length; j++) if (body[i + j] !== needle[j]) continue outer
+        return i
+      }
+      return -1
     }
-    return -1
+    const encode = (text: string) => new TextEncoder().encode(text)
+    const first = encode(`--${boundary}\r\n`), middle = encode(`\r\n--${boundary}\r\n`), last = encode(`\r\n--${boundary}--`), headerEnd = encode('\r\n\r\n')
+    const split = find(middle, first.length), close = find(last, first.length)
+    if (!equal(body.subarray(0, first.length), first) || split < 0 || close < split || find(middle, split + middle.length) >= 0 ||
+      !(close + last.length === body.length || (close + last.length + 2 === body.length && body[body.length - 2] === 13 && body[body.length - 1] === 10))) throw new Error('invalid multipart framing')
+    const h1 = find(headerEnd, first.length), h2 = find(headerEnd, split + middle.length)
+    if (h1 < first.length || h1 - first.length > 4096 || h1 >= split || h2 < split + middle.length || h2 - split - middle.length > 4096 || h2 >= close ||
+      split - h1 - 4 > RETRIEVAL_METADATA_LIMIT || close - h2 - 4 !== expectedBytes) throw new Error('invalid multipart part size')
+    const form = await new Response(body.slice().buffer, { headers: { 'content-type': contentType } }).formData()
+    const entries = [...form.entries()]
+    if (entries.length !== 2 || entries[0][0] !== 'metadata' || entries[1][0] !== 'bytes' || typeof entries[0][1] !== 'string' || typeof entries[1][1] === 'string' || entries[1][1].type !== 'application/octet-stream') throw new Error('invalid multipart parts')
+    // Parse original bytes with fatal UTF-8: FormData's string decoding is lossy.
+    const metadataHeader = decoder.decode(body.subarray(first.length, h1)).toLowerCase().split('\r\n')
+    if (metadataHeader.filter((v) => v === 'content-type: application/json').length !== 1) throw new Error('invalid metadata content type')
+    const metadata: unknown = JSON.parse(decoder.decode(body.subarray(h1 + 4, split)))
+    signal?.throwIfAborted()
+    return { metadata, bytes: body.slice(h2 + 4, close) }
+  } finally {
+    if (diagnostic) retrievalDiagnostic({ ...diagnostic, phase: 'multipart_parse', edge: 'end' })
   }
-  const encode = (text: string) => new TextEncoder().encode(text)
-  const first = encode(`--${boundary}\r\n`), middle = encode(`\r\n--${boundary}\r\n`), last = encode(`\r\n--${boundary}--`), headerEnd = encode('\r\n\r\n')
-  const split = find(middle, first.length), close = find(last, first.length)
-  if (!equal(body.subarray(0, first.length), first) || split < 0 || close < split || find(middle, split + middle.length) >= 0 ||
-    !(close + last.length === body.length || (close + last.length + 2 === body.length && body[body.length - 2] === 13 && body[body.length - 1] === 10))) throw new Error('invalid multipart framing')
-  const h1 = find(headerEnd, first.length), h2 = find(headerEnd, split + middle.length)
-  if (h1 < first.length || h1 - first.length > 4096 || h1 >= split || h2 < split + middle.length || h2 - split - middle.length > 4096 || h2 >= close ||
-    split - h1 - 4 > RETRIEVAL_METADATA_LIMIT || close - h2 - 4 !== expectedBytes) throw new Error('invalid multipart part size')
-  const form = await new Response(body.slice().buffer, { headers: { 'content-type': contentType } }).formData()
-  const entries = [...form.entries()]
-  if (entries.length !== 2 || entries[0][0] !== 'metadata' || entries[1][0] !== 'bytes' || typeof entries[0][1] !== 'string' || typeof entries[1][1] === 'string' || entries[1][1].type !== 'application/octet-stream') throw new Error('invalid multipart parts')
-  // Parse original bytes with fatal UTF-8: FormData's string decoding is lossy.
-  const metadataHeader = decoder.decode(body.subarray(first.length, h1)).toLowerCase().split('\r\n')
-  if (metadataHeader.filter((v) => v === 'content-type: application/json').length !== 1) throw new Error('invalid metadata content type')
-  const metadata: unknown = JSON.parse(decoder.decode(body.subarray(h1 + 4, split)))
-  signal?.throwIfAborted()
-  return { metadata, bytes: body.slice(h2 + 4, close) }
 }
 
 export async function parseRetrievalEnvelope(response: Response, session: FrozenSession, signal?: AbortSignal): Promise<RetrievalEnvelope> {
@@ -135,7 +143,10 @@ function parseIntegrityPath(value: unknown): Uint8Array[] {
 export async function parseRetrievalEnvelopeV3(response: Response, authority: RetrievalV3ChunkAuthority, signal?: AbortSignal): Promise<RetrievalV3Envelope> {
   validateV3ChunkAuthority(authority)
   const expectedBytes = authority.entries.length * BLOB_SIZE_BYTES
-  const parsed = await parseMultipartRetrieval(response, 3, expectedBytes, signal)
+  const diagnostic = { sessionId: authority.sessionId, slot: authority.slot,
+    chunkId: `${authority.slot}:${authority.entries[0].t}:${authority.entries[authority.entries.length - 1].t}` }
+  retrievalServerTiming(response.headers.get('server-timing'), diagnostic)
+  const parsed = await parseMultipartRetrieval(response, 3, expectedBytes, signal, diagnostic)
   const m = record(parsed.metadata)
   exactKeys(m, ['version', 'session_id', 'context_hash', 'polyfs_root', 'integrity_root', 'slot', 'mdu_index', 'start_blob_index', 'blob_count', 'total_bytes', 'entries'])
   if (uint(m.version) !== 3 || m.session_id !== authority.sessionId || !equal(unhex(m.context_hash, 32), authority.contextHash) ||

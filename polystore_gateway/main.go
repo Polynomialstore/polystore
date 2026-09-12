@@ -4855,7 +4855,7 @@ const defaultCORSAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD"
 
 const defaultCORSAllowHeaders = "Content-Type, Accept, Range, Origin, Authorization, X-PolyStore-Req-Sig, X-PolyStore-Req-Nonce, X-PolyStore-Req-Expires-At, X-PolyStore-Req-Range-Start, X-PolyStore-Req-Range-Len, X-PolyStore-Download-Session, X-PolyStore-Session-Id, X-PolyStore-Manifest-Root, X-PolyStore-Previous-Manifest-Root, X-PolyStore-Upload-Generation, X-PolyStore-Deal-ID, X-PolyStore-Mdu-Index, X-PolyStore-Slot, X-PolyStore-Full-Size, X-PolyStore-Gateway-Auth, X-PolyStore-Deputy"
 
-const defaultCORSExposeHeaders = "Accept-Ranges, Content-Range, X-PolyStore-Deal-ID, X-PolyStore-Epoch, X-PolyStore-Bytes-Served, X-PolyStore-Provider, X-PolyStore-File-Path, X-PolyStore-Range-Start, X-PolyStore-Range-Len, X-PolyStore-Proof-JSON, X-PolyStore-Proof-Hash, X-PolyStore-Fetch-Session, X-PolyStore-Gateway-Proof-MS, X-PolyStore-Gateway-Fetch-MS"
+const defaultCORSExposeHeaders = "Server-Timing, Accept-Ranges, Content-Range, X-PolyStore-Deal-ID, X-PolyStore-Epoch, X-PolyStore-Bytes-Served, X-PolyStore-Provider, X-PolyStore-File-Path, X-PolyStore-Range-Start, X-PolyStore-Range-Len, X-PolyStore-Proof-JSON, X-PolyStore-Proof-Hash, X-PolyStore-Fetch-Session, X-PolyStore-Gateway-Proof-MS, X-PolyStore-Gateway-Fetch-MS"
 
 func withGlobalCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5156,6 +5156,7 @@ func resolveKeyAddress(ctx context.Context, name string) (string, error) {
 	}
 	cctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
+	defer startRetrievalPhaseV3(cctx, retrievalKeysV3)()
 	out, err := execPolystorechaind(
 		cctx,
 		"keys", "show", name,

@@ -136,18 +136,25 @@ func retrievalGenerationV3(f *frozenRetrievalSessionV3) retrievalGenerationKey {
 
 func prepareRetrievalDataV3(ctx context.Context, dir string, f *frozenRetrievalSessionV3, chunk retrievalDataChunkV3) ([]byte, []byte, error) {
 	key := retrievalGenerationV3(f)
-	if _, err := authenticatedRetrievalMetadataFor(ctx, dir, key); err != nil {
+	metadataDone := startRetrievalPhaseV3(ctx, retrievalMetadataV3)
+	_, err := authenticatedRetrievalMetadataFor(ctx, dir, key)
+	metadataDone()
+	if err != nil {
 		return nil, nil, err
 	}
 	buildCtx, cancel := context.WithTimeout(ctx, integrityIndexColdBuildTimeoutV3)
 	defer cancel()
+	indexDone := startRetrievalPhaseV3(ctx, retrievalIndexV3)
 	indexPath, err := ensureIntegrityIndexV3(buildCtx, dir, key)
+	indexDone()
 	if err != nil {
 		return nil, nil, err
 	}
 	rowStart := uint64(chunk.startLeaf % 8)
 	length := uint64(len(chunk.t)) * types.BLOB_SIZE
+	readDone := startRetrievalPhaseV3(ctx, retrievalArtifactReadV3)
 	window, err := readExactArtifactRange(filepath.Join(dir, fmt.Sprintf("mdu_%d_slot_%d.bin", chunk.mdu, chunk.slot)), 8*types.BLOB_SIZE, rowStart*types.BLOB_SIZE, length)
+	readDone()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,13 +169,18 @@ func prepareRetrievalDataV3(ctx context.Context, dir string, f *frozenRetrievalS
 			return nil, nil, fmt.Errorf("noncanonical v3 chunk coordinate")
 		}
 		blob := window[uint64(i)*types.BLOB_SIZE : uint64(i+1)*types.BLOB_SIZE]
+		hashDone := startRetrievalPhaseV3(ctx, retrievalHashV3)
 		value, err := retrievalchallenge.IntegrityLeafV3(mdu, leaf, blob)
+		hashDone()
 		if err != nil {
 			return nil, nil, err
 		}
 		position := (mdu-key.Metadata)*retrievalchallenge.IntegrityLeavesPerUserMDU + uint64(leaf)
+		pathDone := startRetrievalPhaseV3(ctx, retrievalPathV3)
 		path, err := readIntegrityPathV3(indexPath, filepath.Join(dir, integrityLeavesV3File), position, leafCount)
-		if err != nil || !retrievalchallenge.VerifyIntegrityPathV3(value, position, leafCount, path, key.Integrity) {
+		valid := err == nil && retrievalchallenge.VerifyIntegrityPathV3(value, position, leafCount, path, key.Integrity)
+		pathDone()
+		if !valid {
 			return nil, nil, fmt.Errorf("v3 data blob %d/%d failed integrity verification", mdu, leaf)
 		}
 		encodedPath := make([]string, len(path))
@@ -177,11 +189,13 @@ func prepareRetrievalDataV3(ctx context.Context, dir string, f *frozenRetrievalS
 		}
 		entries[i] = retrievalDataEntryV3{T: strconv.FormatUint(t, 10), MDUIndex: strconv.FormatUint(mdu, 10), LeafIndex: leaf, IntegrityPosition: strconv.FormatUint(position, 10), IntegrityPath: encodedPath}
 	}
+	encodeDone := startRetrievalPhaseV3(ctx, retrievalEncodeV3)
 	metadata, err := json.Marshal(retrievalDataMetadataV3{
 		Version: 3, SessionID: "0x" + hex.EncodeToString(f.Session.SessionId), ContextHash: "0x" + hex.EncodeToString(f.Hash[:]),
 		PolyFSRoot: "0x" + hex.EncodeToString(f.Context.PolyFSRoot[:]), IntegrityRoot: "0x" + hex.EncodeToString(f.Context.IntegrityRoot[:]),
 		Slot: chunk.slot, MDUIndex: strconv.FormatUint(chunk.mdu, 10), StartBlob: chunk.startLeaf, BlobCount: strconv.Itoa(len(chunk.t)), TotalBytes: strconv.FormatUint(length, 10), Entries: entries,
 	})
+	encodeDone()
 	if err != nil || len(metadata) > maxRetrievalMetadataBytes {
 		return nil, nil, fmt.Errorf("v3 retrieval metadata exceeds response bound")
 	}
@@ -217,6 +231,9 @@ func serveFrozenRetrievalDataV3(w http.ResponseWriter, r *http.Request, root Man
 		writeJSONError(w, http.StatusBadRequest, "request does not match frozen v3 data chunk", err.Error())
 		return
 	}
+	if d := retrievalDiagnosticsFromV3(r.Context()); d != nil {
+		d.chunk = fmt.Sprintf("%d:%d:%d", chunk.slot, chunk.t[0], chunk.t[len(chunk.t)-1])
+	}
 	_, signer, err := retrievalSigner(r.Context())
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "provider signing key unavailable", err.Error())
@@ -233,7 +250,9 @@ func serveFrozenRetrievalDataV3(w http.ResponseWriter, r *http.Request, root Man
 		return
 	}
 	defer release()
+	generationDone := startRetrievalPhaseV3(ctx, retrievalGenerationOpenV3)
 	dir, releaseGeneration, err := openFrozenGeneration(deal, root)
+	generationDone()
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "retained generation unavailable", err.Error())
 		return
@@ -253,7 +272,10 @@ func serveFrozenRetrievalDataV3(w http.ResponseWriter, r *http.Request, root Man
 	w.Header().Set("X-PolyStore-Slot", strconv.FormatUint(uint64(chunk.slot), 10))
 	w.Header().Set("X-PolyStore-Start-Blob-Index", strconv.FormatUint(uint64(chunk.startLeaf), 10))
 	w.Header().Set("X-PolyStore-Blob-Count", strconv.Itoa(len(chunk.t)))
-	if err := writeRetrievalWindowVersion(w, metadata, window, "3"); err != nil {
+	writeDone := startRetrievalPhaseV3(ctx, retrievalWriteV3)
+	err = writeRetrievalWindowVersion(w, metadata, window, "3")
+	writeDone()
+	if err != nil {
 		return
 	}
 }
@@ -272,6 +294,9 @@ func routerRetrievalDataProviderV3(r *http.Request, f *frozenRetrievalSessionV3,
 	}
 	if err := validateRetrievalChunkHintsV3(r, chunk); err != nil {
 		return "", http.StatusBadRequest, err
+	}
+	if d := retrievalDiagnosticsFromV3(r.Context()); d != nil {
+		d.chunk = fmt.Sprintf("%d:%d:%d", chunk.slot, chunk.t[0], chunk.t[len(chunk.t)-1])
 	}
 	return chunk.payee, http.StatusOK, nil
 }
