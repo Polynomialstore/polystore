@@ -2,9 +2,10 @@
 
 This is the internal verifier for the [v2 session contract](retrieval-v2-session-profile.md).
 It preserves public `ChainedProof` encoding, authorization, whole-list gas and
-once-only settlement. Deployment activation remains disabled pending provider/client
-adoption and integrated qualification. Proof acceptance establishes the challenged
-algebraic statement; it does not independently establish fresh byte delivery.
+once-only settlement. A zero activation height disables v2; the canonical
+trusted-devnet bootstrap explicitly sets height 1. Proof acceptance establishes
+the challenged algebraic statement; it does not independently establish fresh
+byte delivery.
 
 ## Authenticated setup and input boundaries
 

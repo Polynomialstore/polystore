@@ -479,8 +479,12 @@ opened blob requires its expected fresh evaluation point. Ordinary session
 acceptance creates no storage-audit credit; completion records billed encoded
 coverage once. A public proof is not independent evidence of fresh byte delivery.
 Existing version-0 liabilities become expiry-refund-only upon coordinated activation;
-COMPLETED remains terminal. Default deployment stays inactive pending C4 and
-#256/#257/#260 qualification. The historical flow below applies to legacy operation
+COMPLETED remains terminal. A zero parameter value disables v2; the canonical
+trusted-devnet bootstrap explicitly activates it at height 1. Activation on another
+network is a coordinated deployment decision backed by matching security,
+client/provider and qualification evidence. #251 qualifies only the named
+V3 proof-confirmation capacity profile and does not extend provider, browser, delivery
+or payment-throughput claims. The historical flow below applies to legacy operation
 where it differs from this versioned contract.
 
 The [v2 cryptographic verifier](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-crypto.md)
@@ -642,7 +646,7 @@ These evidence types collectively support the retrievability invariant: for each
 
 ### 7.6 Proof Demand Policy
 
-**V2 candidate, disabled by default:** the
+**Version-2 activation behavior:** the
 [frozen storage obligation contract](https://github.com/Polynomialstore/polystore/blob/main/docs/retrieval-v2-storage-audits.md) supersedes
 organic credit subtraction and storage/health equivalence in §7.2/§7.5 when v2
 is activated. ACTIVE assignments freeze independent `Q=min(U,snapshot_quota)`

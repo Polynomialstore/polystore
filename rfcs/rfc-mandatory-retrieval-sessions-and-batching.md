@@ -1,23 +1,23 @@
-# RFC: Mandatory Retrieval Sessions for All Served Bytes + Batching Semantics (Access Control + Protocol Hooks) (Draft)
+# RFC: Mandatory Retrieval Sessions for All Served Bytes + Batching Semantics (Access Control + Protocol Hooks)
 
-**Status:** V2 implementation; inactive by default, integrated qualification pending
-**Last updated:** 2026-09-07
+**Status:** V2 implemented; canonical trusted-devnet bootstrap activates at height 1
+**Last updated:** 2026-09-11
 **Scope:** provider-daemon, user-gateway, browser/CLI clients, deputies, and protocol audit/repair paths
 **Hard constraints respected:** does **not** modify `rfcs/rfc-pricing-and-escrow-accounting.md` (owner-paid settlement semantics); no oracles; deterministic on-chain state.
 
 ---
 
-## V3 large native session amendment (contract only)
+## V3 large native session amendment
 
 The [retrieval v3 large-session profile](../docs/retrieval-v3-large-session-profile.md)
 defines one funded logical-range session with at most eight systematic K8 provider
 obligations, one session-wide sample population and explicit per-obligation
 settlement. It preserves current per-blob pricing and the 64-opening envelope;
 splitting proof messages does not split the session, base fee or liability. V3 is
-disabled, adds no keeper acceptance in this RFC change, and requires independent
-contract approval before implementation. V2 below is unchanged.
+implemented and disabled when its activation parameter is zero. Its target-network
+activation still requires matching end-to-end qualification. V2 below is unchanged.
 
-## V2 SESSION integration (inactive by default)
+## V2 SESSION integration
 
 The [versioned session profile](../docs/retrieval-v2-session-profile.md) is normative
 for version-2 chain sessions and supersedes legacy current-root/current-slot
@@ -26,8 +26,10 @@ payee at open, requires the fixed H+1 seed and responses from H+2, proves every
 opened blob, and separates completion activity from independent storage audits.
 Provider/browser integration is described in the
 [operator and client contract](../polystore_gateway/polystore-gateway-spec.md#33-retrieval-v2-client-and-operator-contract).
-Integrated qualification remains an activation gate; this document makes no
-throughput or completed end-to-end qualification claim.
+Closed #254–#258 and #260 retain the canonical trusted-devnet security,
+integration and qualification record; #259 remains open and deferred. A different
+topology or workload needs matching qualification. This document makes no broader
+throughput or end-to-end claim.
 Historical generation reads must preserve their pinned directory and must not
 change `.active_generation`; current deal updates cannot redirect old sessions.
 Funded windows split at slot/MDU boundaries and preserve each session's ID and fresh z.
@@ -182,8 +184,7 @@ Protocol operations that fetch bytes (audit debt, repair catch-up, healing reads
 6. Persist submission intent and known transaction hashes before reporting pending outcomes; reconcile the original ordered IDs without blind rebroadcast.
 7. Keep protocol task authority and independent C4 storage audits separate from user-session completion.
 
-These requirements are not a claim that deployment, CI or end-to-end qualification
-has completed. The parent execution tracker retains those gates.
+These requirements do not qualify a different deployment topology or workload.
 
 ## 5. Batching economics and operator submission
 
@@ -216,10 +217,11 @@ Append/extend, cross-session cryptographic aggregation, automatic batching queue
 and session base-fee amortization are not implemented by this contract. A new
 range requires a new funded session and challenge.
 
-## 6. Chain proof admission and finite qualification profile (#255)
+## 6. Chain proof admission and finite qualification profile
 
-These consensus validation changes require a coordinated binary upgrade. Merging
-them does not activate challenge v2 or qualify the data-plane requirements above.
+These consensus validation changes require a coordinated binary upgrade and an
+explicit nonzero activation height. They do not by themselves qualify a different
+data-plane deployment.
 
 | Boundary | Limit / behavior |
 | --- | --- |
@@ -251,14 +253,14 @@ activation must quarantine these unbound routes; they are not a substitute for
 the all-opened-blob challenge session contract in #254.
 
 `scripts/retrieval_consensus_profile.json` is the canonical fresh-genesis profile:
-positive finite **2 MiB block bytes / 64,000,000 block gas**. Devnet bootstrap,
+positive finite **2 MiB block bytes / 160,000,000 block gas**. Devnet bootstrap,
 install-time health checks and benchmark defaults load this file strictly. A
 benchmark sweep may explicitly override gas up to the compiled 448,000,000
-activation ceiling while retaining the 2 MiB byte limit. The same 64,000,000
+activation ceiling while retaining the 2 MiB byte limit. The same 160,000,000
 bound is the maximum estimated gas admitted for one retrieval transaction.
-The candidate gas rate and block limits are preliminary bounds, not a throughput
-or permissionless-security claim. #260 must measure honest generation/admission
-and admitted-state maxima, including the separate fixed audit demand, before
-coordinated activation. Run focused checks with `scripts/chain_go.sh test -p 2
+The gas rate and block limits are finite deployment bounds, not a
+permissionless-security claim. #251 retains proof-confirmation capacity evidence
+for its fixed four-validator workload with normal audits active; it does not
+qualify other state sizes, EndBlock demand or end-to-end retrieval. Run focused checks with `scripts/chain_go.sh test -p 2
 ./app ./precompiles/polystore ./x/polystorechain/keeper` and the real entrypoint
 regressions with `python3 scripts/test_bench_retrieval_sessions.py`.

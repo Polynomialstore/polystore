@@ -36,6 +36,33 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             docs,
         )
 
+    def test_fresh_genesis_runbook_is_provider_bootstrap_and_rollback_safe(self):
+        docs = (ROOT / "docs/TRUSTED_DEVNET_SOFT_LAUNCH.md").read_text()
+        self.assertIn(
+            "EnvironmentFile=${POLYSTORE_PROVIDER_OVERRIDE_ENV}",
+            docs,
+        )
+        self.assertIn(
+            "ExecStartPre=/usr/bin/test \\${POLYSTORE_UPLOAD_DIR} = ${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads",
+            docs,
+        )
+        self.assertIn(
+            "ExecStartPre=/usr/bin/test \\${POLYSTORE_SESSION_DB_PATH} = ${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db",
+            docs,
+        )
+        self.assertIn('sudo unlink "$POLYSTORE_PROVIDER_OVERRIDE_ENV"', docs)
+        self.assertIn(
+            'sudo sha256sum "$POLYSTORE_BACKUP_ARCHIVE" "$POLYSTORE_PRE_RESET_PROFILE"',
+            docs,
+        )
+        self.assertIn('POLYSTORE_RETRIEVAL_CONSENSUS_PROFILE="$POLYSTORE_ROLLBACK_PROFILE"', docs)
+        self.assertIn(
+            "if sudo test -e /var/lib/polystore/polystorechaind; then",
+            docs,
+        )
+        wrapper = (ROOT / "scripts/run_public_devnet_healthcheck.sh").read_text()
+        self.assertIn("${POLYSTORE_RETRIEVAL_CONSENSUS_PROFILE:-$ROOT_DIR/scripts/retrieval_consensus_profile.json}", wrapper)
+
     def test_legacy_gateway_retrieval_wrapper_disables_v2_only_for_startup(self):
         wrapper = (ROOT / "scripts/ci_e2e_gateway_retrieval_multi_sp.sh").read_text()
         self.assertIn(
@@ -63,7 +90,7 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             path.write_text(json.dumps(genesis))
             profile_path = Path(raw) / "profile.json"
             profile_path.write_text(json.dumps(profile or {
-                "block": {"max_bytes": "2097152", "max_gas": "64000000"}}))
+                "block": {"max_bytes": "2097152", "max_gas": "160000000"}}))
             env = os.environ.copy()
             env.update(
                 EVM_CHAIN_ID="20260211",
@@ -90,7 +117,7 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             genesis["app_state"]["evm"]["params"]["active_static_precompiles"],
         )
         self.assertTrue(any(m["base"] == "aatom" for m in genesis["app_state"]["bank"]["denom_metadata"]))
-        self.assertEqual(genesis["consensus"]["params"]["block"]["max_gas"], "64000000")
+        self.assertEqual(genesis["consensus"]["params"]["block"]["max_gas"], "160000000")
         self.assertEqual(genesis["consensus"]["params"]["block"]["max_bytes"], "2097152")
 
     def test_final_genesis_current_nilchain_module(self):

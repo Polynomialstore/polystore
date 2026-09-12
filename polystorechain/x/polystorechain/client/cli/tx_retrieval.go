@@ -251,7 +251,7 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit-retrieval-proof [json-file]",
 		Short: "Submit a retrieval receipt or one transaction containing session proofs",
-		Long: `Submit the existing receipt, receipt batch, or single-session JSON form.
+		Long: fmt.Sprintf(`Submit the existing receipt, receipt batch, or single-session JSON form.
 To submit multiple sessions with one signer and transaction, use:
   {"sessions":[{"session_id":"<base64>","proofs":[...]}, ...]}
 Each of 1..64 entries uses the single-session JSON encoding. The --from key
@@ -259,7 +259,7 @@ supplies every creator; session owners and deals may differ. Session IDs must be
 unique. This batches transaction envelopes, not cryptography across sessions.
 JSON input is limited to 2 MiB. Unsigned protobuf reserves 4 KiB for signing;
 final protobuf is limited to 1 MiB and online block byte/gas limits. Generate-only
-output (including offline) uses the 1 MiB / 64,000,000 gas profile ceilings.`,
+output (including offline) uses the canonical 1 MiB / %d gas profile ceilings.`, types.MaxRetrievalV2BlockGas),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			phase := beginSubmissionPhase(cmd)

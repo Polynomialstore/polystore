@@ -1,0 +1,407 @@
+{
+  "artifacts": {
+    "blocks": {
+      "bytes": 28589,
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/runs/63eb7fe7-20260912T040917Z-batch64-7680-160m-1s-a16-gmp4/native-v3-chain-1kib-blocks.jsonl",
+      "sha256": "12cada6211a6afc4ad3afb419a2b3c646a62d35e4b248f94dc82c3a1870d019b"
+    },
+    "build_manifest": {
+      "bytes": 515,
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/build/build-manifest.json",
+      "sha256": "5cc13b80c6e334b15a54cbcf624c2ab23014f6110ecee3f2c9420f159c4cf542"
+    },
+    "exact_command": {
+      "bytes": 1465,
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/run-final.sh",
+      "sha256": "2220b6e46eca832f5432a53a065bfa7b01d2c284083e63b88080e10d4112381e"
+    },
+    "raw_evidence": {
+      "bytes": 44687639,
+      "compressed_bytes": 5067536,
+      "compressed_sha256": "4d2c29854f615bdf059cfd52701f00c97f36b0612370614145d6b3f9983764cc",
+      "compression": "gzip -n -9",
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/runs/63eb7fe7-20260912T040917Z-batch64-7680-160m-1s-a16-gmp4/evidence.json",
+      "retained_compressed_path": "evidence.json.gz",
+      "retained_in_git": true,
+      "sha256": "1ccc8bd796b2a5232efad9c2b9ebf46d962ed8a68e215d8807bf790b58bf881f"
+    },
+    "remote_run_directory": "/home/mikers/polystore-bench-336-63eb7fe7-final/runs/63eb7fe7-20260912T040917Z-batch64-7680-160m-1s-a16-gmp4",
+    "run_log": {
+      "bytes": 787,
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/runs/63eb7fe7-20260912T040917Z-batch64-7680-160m-1s-a16-gmp4.log",
+      "sha256": "9e5f843f5df9916e05d78629a904093fed91a3190e8c7052837f9cbaa7a65bda"
+    }
+  },
+  "blocks": {
+    "count": 12,
+    "first_height": 816,
+    "gas_used": {
+      "average": 93480130.25,
+      "maximum": 93515368,
+      "minimum": 93235776,
+      "total": 1121761563
+    },
+    "gas_wanted": {
+      "average": 149308573.75,
+      "maximum": 149364968,
+      "minimum": 148917585,
+      "total": 1791702885
+    },
+    "last_height": 827,
+    "transaction_bytes": {
+      "average": 510220.0,
+      "maximum": 510540,
+      "minimum": 507980,
+      "total": 6122640
+    },
+    "transactions": {
+      "average": 10.0,
+      "maximum": 10,
+      "minimum": 10,
+      "total": 120
+    }
+  },
+  "candidate": {
+    "audit_profile": "normal",
+    "batch_size": 64,
+    "batch_transactions": 120,
+    "gas_adjustment": "1.6",
+    "gomaxprocs_per_validator": 4,
+    "logical_sessions": 7680,
+    "max_block_bytes": 2097152,
+    "max_block_gas": 160000000,
+    "profile": "1kib",
+    "range_bytes": 1024,
+    "sample_count": 1,
+    "submission_mode": "batch-message",
+    "timeout_commit": "1s",
+    "topology": "four processes on one local host"
+  },
+  "capacity": {
+    "committed_kzg_opening_verifications_per_day": 81840600.81544843,
+    "committed_kzg_opening_verifications_per_second": 947.2291761047272,
+    "committed_logical_sessions_per_day": 40920300.40772422,
+    "committed_logical_sessions_per_second": 473.6145880523636,
+    "committed_sampled_chained_proofs_per_day": 40920300.40772422,
+    "committed_sampled_chained_proofs_per_second": 473.6145880523636,
+    "committed_transactions_per_day": 639379.6938706909,
+    "committed_transactions_per_second": 7.4002279383181815,
+    "configured_validator_verifier_comparison": {
+      "measured_percent": 54.20490543384019,
+      "provenance": {
+        "artifact_commit": "1bf6762d2bce694917833a6f9a626769e9fd7578",
+        "artifact_path": "bench/retrieval_session_capacity/parallel-ceiling-328/results.json",
+        "benchmark_source_commit": "53c197a860cbd88e46709d2e6cf3996d685f7902",
+        "linearization": "profiles with more than one sampled chained proof divide the one-sample rate by sample_count; the current 1 KiB capacity profile has sample_count=1",
+        "raw_benchmark_sha256": "be001f7961def5e5da94d165e0bd484e1dcf6d9cf966bffb51efdd8b0f900f71",
+        "source_statistic": ".parallel_verifier[] | select(.workers == 4) | .median_sessions_per_second",
+        "source_statistic_semantics": "exact pure verifyPolyFSChainedProof throughput for one sampled chained proof per session at GOMAXPROCS=4; each configured validator repeats the same transaction stream",
+        "validator_gomaxprocs": 4
+      },
+      "sessions_per_second": 873.7485736054535
+    },
+    "daily_equivalent_basis": "short saturated rate multiplied by 86400; not a 24-hour sustained or delivery claim",
+    "logical_requested_gib_per_day": 39.024639518474785,
+    "measurement_elapsed_seconds": 18.840434662,
+    "positive_backlog_seconds": 16.215716732,
+    "saturated_elapsed_seconds": 16.215716732
+  },
+  "commit_intervals_seconds": {
+    "basis": "differences between consecutive canonical Comet block header timestamps",
+    "observations": 12,
+    "p50": 1.367724905,
+    "p95": 1.498773557,
+    "p99": 1.498773557
+  },
+  "consensus": {
+    "blocks": 12,
+    "blocks_above_round_zero": 0,
+    "first_height": 816,
+    "last_height": 827,
+    "maximum_round": 0,
+    "missed_signatures": 0
+  },
+  "finalize_block": {
+    "measurement": "precise cumulative FinalizeBlock sum deltas isolated by frequent scrapes",
+    "validators": [
+      {
+        "isolated_blocks": 14,
+        "node_id": "1a13431655939f2d17dcdb8943417c3a61f0cd08",
+        "observed_blocks": 14,
+        "p95_upper_bound_seconds": 0.31639260900060473,
+        "p95_within_700ms": true,
+        "qualification_reasons": [],
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 14,
+        "node_id": "45ba5a052cd046eb0610b06bfb6467ed2b70e9e4",
+        "observed_blocks": 14,
+        "p95_upper_bound_seconds": 0.3126559930006143,
+        "p95_within_700ms": true,
+        "qualification_reasons": [],
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 14,
+        "node_id": "0584c7d0c15cf0f1f40a9c6b1b8ce7e7e93426ac",
+        "observed_blocks": 14,
+        "p95_upper_bound_seconds": 0.3239990910006084,
+        "p95_within_700ms": true,
+        "qualification_reasons": [],
+        "qualified": true
+      },
+      {
+        "isolated_blocks": 14,
+        "node_id": "eb4947a31324278ac2c244bda0cf1f11096053dd",
+        "observed_blocks": 14,
+        "p95_upper_bound_seconds": 0.32053642900072493,
+        "p95_within_700ms": true,
+        "qualification_reasons": [],
+        "qualified": true
+      }
+    ]
+  },
+  "gates": {
+    "comet_mempool_count": {
+      "observed_peak": 120,
+      "passed": true,
+      "required_strictly_less_than": 5000
+    },
+    "commit_interval_p95_seconds": {
+      "observed": 1.498773557,
+      "passed": true,
+      "required_maximum": 1.6
+    },
+    "finalize_block_p95_upper_bound_seconds": {
+      "observed_maximum": 0.3239990910006084,
+      "passed": true,
+      "required_maximum": 0.7
+    },
+    "maximum_consensus_round": {
+      "observed": 0,
+      "passed": true,
+      "required_maximum": 0
+    },
+    "missed_validator_signatures": {
+      "observed": 0,
+      "passed": true,
+      "required_maximum": 0
+    },
+    "positive_backlog_seconds": {
+      "observed": 16.215716732,
+      "passed": true,
+      "required_minimum": 10
+    },
+    "saturated_blocks": {
+      "observed": 12,
+      "passed": true,
+      "required_minimum": 10
+    },
+    "validator_peak_rss_bytes": {
+      "observed_maximum": 652185600,
+      "passed": true,
+      "required_maximum": 2147483648
+    }
+  },
+  "inclusion_latency_upper_bound_seconds": {
+    "basis": "offer to first local RPC observation at or above the committed height; conservative upper bound",
+    "max": 16.094308201,
+    "min": 0.994554617,
+    "p50": 7.781113408,
+    "p95": 16.048054213
+  },
+  "issue": 251,
+  "issue_251_qualification": {
+    "candidate": "160M max gas, 2MiB max bytes, 7,680 one-opening 1KiB sessions in 120 batches of 64",
+    "gates": {
+      "comet_mempool_count_cap_must_not_be_reached": 5000,
+      "commit_interval_p95_seconds": 1.6,
+      "finalize_block_p95_upper_bound_seconds": 0.7,
+      "maximum_consensus_round": 0,
+      "memory_ceiling_per_validator_bytes": 2147483648,
+      "minimum_positive_backlog_seconds": 10,
+      "minimum_saturated_blocks": 10,
+      "missed_validator_signatures": 0
+    },
+    "qualified": true,
+    "reasons": []
+  },
+  "post_qualification_restart": {
+    "audit_height": 902,
+    "chain_progress_verified": true,
+    "fixed_height": 833,
+    "later_height": 835,
+    "nodes_checked": [
+      "1a13431655939f2d17dcdb8943417c3a61f0cd08",
+      "45ba5a052cd046eb0610b06bfb6467ed2b70e9e4",
+      "0584c7d0c15cf0f1f40a9c6b1b8ce7e7e93426ac",
+      "eb4947a31324278ac2c244bda0cf1f11096053dd"
+    ],
+    "nonce_ordered_admission": "all 120 frozen per-signer batch sequences committed exactly once before restart",
+    "normal_audit_slots": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11"
+    ],
+    "qualification": true
+  },
+  "provenance": {
+    "artifact_source_match": "verified exact clean source commit and artifact hashes",
+    "build_attestation": {
+      "artifacts": {
+        "libpolystore_core": "11b7f1f3d12fc9fa14e604b911ab7a37a6290d4bfe4d113fad273b92f75691c2",
+        "polystore_cli": "d25583896a39d1b12d52e7f94e761bcf99c673448cb891fb7876f7b339c1a3ac",
+        "polystore_gateway": "a96d36c54a63597989f7236eb7730862e228045851020516e4d9fce7ecb70fec",
+        "polystorechaind": "4e0f86fd7e022c572eec755494ca23113b74dbbad85031ff649c822cf9375b1d",
+        "retrieval_inventory_exporter": "d7fa9a27b0f4d1366b6a4471b96c172cdc3c4846405d4a0354715b4ec0936a63"
+      },
+      "checkouts": [
+        "/home/mikers/polystore-bench-336-63eb7fe7-final/source"
+      ],
+      "path": "/home/mikers/polystore-bench-336-63eb7fe7-final/build/build-manifest.json",
+      "sha256": "5cc13b80c6e334b15a54cbcf624c2ab23014f6110ecee3f2c9420f159c4cf542",
+      "source_commit": "63eb7fe73e4933fc6b847b76bcccb883c0484dc9",
+      "verified": true
+    },
+    "driver_sha256": "9e059d6d4c361c1a55e4b7c053cb7f5e74fb7431041fa0dd2ea969c2bf60f7b9",
+    "host": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+    "logical_cpus": 16,
+    "machine": "x86_64",
+    "product_source_status": "",
+    "source_checkout": "63eb7fe73e4933fc6b847b76bcccb883c0484dc9",
+    "trusted_setup_sha256": "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
+  },
+  "qualified": true,
+  "reconciliation": {
+    "committed_batch_transactions": 120,
+    "committed_logical_sessions": 7680,
+    "complete_proof_sets": 7680,
+    "dropped_transactions": 0,
+    "duplicate_transactions": 0,
+    "invalid_transactions": 0,
+    "kzg_opening_verifications": 15360,
+    "offered_batch_transactions": 120,
+    "partial_proof_sets": 0,
+    "provider_nonce_ordering": "all 120 frozen per-signer batch sequences committed exactly once before restart",
+    "retried_transactions": 0,
+    "sampled_chained_proofs": 7680,
+    "unknown_transactions": 0
+  },
+  "resources": {
+    "during_positive_backlog": {
+      "measurement_scope": "longest all-validator-positive mempool interval",
+      "rss_basis": "100ms /proc resident-set samples; sampled peak, not process-lifetime peak",
+      "validators": [
+        {
+          "cpu_percent_of_one_core": 33.180207189043855,
+          "elapsed_seconds": 16.214485851,
+          "node_id": "0584c7d0c15cf0f1f40a9c6b1b8ce7e7e93426ac",
+          "peak_mempool_bytes": 5612100,
+          "peak_mempool_transactions": 110,
+          "pid": 2168974,
+          "sampled_peak_rss_bytes": 592531456,
+          "system_cpu_seconds": 0.02,
+          "user_cpu_seconds": 5.36
+        },
+        {
+          "cpu_percent_of_one_core": 33.0568394932405,
+          "elapsed_seconds": 16.21449625,
+          "node_id": "1a13431655939f2d17dcdb8943417c3a61f0cd08",
+          "peak_mempool_bytes": 6122640,
+          "peak_mempool_transactions": 120,
+          "pid": 2168972,
+          "sampled_peak_rss_bytes": 645013504,
+          "system_cpu_seconds": 0.14,
+          "user_cpu_seconds": 5.22
+        },
+        {
+          "cpu_percent_of_one_core": 33.056795964558525,
+          "elapsed_seconds": 16.214517601,
+          "node_id": "45ba5a052cd046eb0610b06bfb6467ed2b70e9e4",
+          "peak_mempool_bytes": 5612100,
+          "peak_mempool_transactions": 110,
+          "pid": 2168973,
+          "sampled_peak_rss_bytes": 605224960,
+          "system_cpu_seconds": 0.03,
+          "user_cpu_seconds": 5.33
+        },
+        {
+          "cpu_percent_of_one_core": 32.62511862459982,
+          "elapsed_seconds": 16.214500431,
+          "node_id": "eb4947a31324278ac2c244bda0cf1f11096053dd",
+          "peak_mempool_bytes": 5612100,
+          "peak_mempool_transactions": 110,
+          "pid": 2168975,
+          "sampled_peak_rss_bytes": 650510336,
+          "system_cpu_seconds": 0.02,
+          "user_cpu_seconds": 5.27
+        }
+      ]
+    },
+    "host_average_cpu_cores": 1.4229433806593557,
+    "sample_span": {
+      "aggregate_validator_average_cpu_cores": 1.2160810594149045,
+      "aggregate_validator_peak_rss_bytes": 2440404992,
+      "elapsed_seconds": 18.23891576,
+      "host_average_cpu_fraction": 0.08893396129120973,
+      "host_memory_total_bytes": 32109105152,
+      "host_peak_memory_used_bytes": 7851089920,
+      "sample_count": 19,
+      "validators": [
+        {
+          "average_cpu_cores": 0.32183930652684806,
+          "node_id": "1a13431655939f2d17dcdb8943417c3a61f0cd08",
+          "peak_rss_bytes": 646324224,
+          "pid": 2168972
+        },
+        {
+          "average_cpu_cores": 0.3004564565191018,
+          "node_id": "45ba5a052cd046eb0610b06bfb6467ed2b70e9e4",
+          "peak_rss_bytes": 607125504,
+          "pid": 2168973
+        },
+        {
+          "average_cpu_cores": 0.30100473472442857,
+          "node_id": "0584c7d0c15cf0f1f40a9c6b1b8ce7e7e93426ac",
+          "peak_rss_bytes": 593096704,
+          "pid": 2168974
+        },
+        {
+          "average_cpu_cores": 0.29278056164452615,
+          "node_id": "eb4947a31324278ac2c244bda0cf1f11096053dd",
+          "peak_rss_bytes": 652185600,
+          "pid": 2168975
+        }
+      ]
+    }
+  },
+  "schema": "polystore-retrieval-160m-qualification-v1",
+  "scope": {
+    "excluded": [
+      "file transport",
+      "proof preparation",
+      "session opening",
+      "transaction signing",
+      "owner acknowledgement",
+      "settlement",
+      "expiration",
+      "refund"
+    ],
+    "measured": "proof-confirmation chain capacity for pre-opened sessions and frozen signed batch transactions",
+    "new_session_open_limit_per_block": 128,
+    "new_session_open_limit_per_day_at_one_second_blocks": 11059200,
+    "normal_audits_active": true
+  },
+  "source_commit": "63eb7fe73e4933fc6b847b76bcccb883c0484dc9",
+  "status": "native_v3_chain_capacity_passed"
+}

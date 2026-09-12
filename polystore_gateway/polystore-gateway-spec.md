@@ -366,11 +366,12 @@ is maintained in [the native CLI smoke](../scripts/smoke_retrieval_v2.py), with
 
 Input JSON is bounded to 2 MiB before decoding. Unsigned protobuf must leave
 4 KiB for signing; final signed protobuf is capped at 1 MiB and the applicable
-online block byte/gas limits, with a 64,000,000 gas ceiling. Online submission
-fails if current block limits cannot be read. `--generate-only`, including
-`--offline`, uses conservative 1 MiB/64M ceilings; that output does not prove a
-live node will admit it. Caps apply to protobuf bytes, not base64-expanded output
-JSON. Final automatic gas and encoded size are checked before broadcast.
+online block byte/gas limits, with the canonical 160,000,000 gas ceiling. Online
+submission fails if current block limits cannot be read. `--generate-only`,
+including `--offline`, uses the canonical 1 MiB/160M profile; use it only for a
+chain started from the matching fresh genesis. That output does not prove a live
+node will admit it. Caps apply to protobuf bytes, not base64-expanded output JSON.
+Final automatic gas and encoded size are checked before broadcast.
 
 Transaction batching reduces repeated signatures/envelopes. It does not combine
 session funding or crypto statements. Each session pays its own base fee and

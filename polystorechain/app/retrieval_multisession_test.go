@@ -392,10 +392,8 @@ func TestRetrievalMultiSessionTransactionMatrix(t *testing.T) {
 	if runGenesisTestInFreshProcess(t) {
 		return
 	}
-	// Sixty-four independent messages exceed the canonical 64M block after SDK overhead.
-	// The PSB2 64-proof message bound is covered by the keeper suite.
-	f := newRetrievalNativeFixture(t, 32)
-	for _, count := range []int{1, 8, 32} {
+	f := newRetrievalNativeFixture(t, 64)
+	for _, count := range []int{1, 8, 32, 64} {
 		t.Run(fmt.Sprintf("sessions%d", count), func(t *testing.T) {
 			var moduleState, bankState map[string][]byte
 			for _, batched := range []bool{false, true} {

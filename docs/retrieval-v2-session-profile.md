@@ -1,10 +1,11 @@
 # Retrieval v2 session profile and recovery contract
 
-Status: SESSION implementation candidate for #255. Network activation remains
-**disabled by default**. Merging this code does not qualify activation. Independent
-C4 audits, native setup enforcement and prover support (#256), provider/browser
-integration (#257), and integrated resource/security qualification (#260) must
-pass first. #254 remains the authority for outstanding deployment dispositions.
+Status: SESSION implementation delivered by #255. A zero parameter value disables
+the protocol, while the canonical trusted-devnet bootstrap explicitly sets activation
+height 1. Activation on another network remains a coordinated deployment decision;
+closed #254–#258 and #260 retain the security, integration and qualification record;
+#259 remains open and deferred.
+#251 qualifies only its named V3 proof-confirmation capacity profile.
 
 The separate [v3 large-session contract](retrieval-v3-large-session-profile.md)
 specifies sampled KZG plus authenticated full-byte integrity for one large logical
@@ -145,7 +146,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Independent prepaid cryptography per proof | 1200000 gas |
 | Aggregate V3 prepaid cryptography | 1000000 + 100000 for each proof after the first |
 | Candidate reserved future retention work per open | 100000 gas |
-| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 160000000 / 2097152 |
 | Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
@@ -174,9 +175,10 @@ benchmark uses that profile by default; an explicit `--chain-max-gas` remains
 available only for bounded capacity experiments. Changing the gas value requires
 a coordinated fresh-genesis rollout because it is a consensus parameter;
 changing only a healthcheck expectation or one validator is invalid. The
-checked-in profile remains 64000000 until the fixed 160000000 aggregate V3
-candidate passes the retained exact-head qualification below. Issue #328 owns
-the separate default-off parallel-execution feasibility spike.
+checked-in 160000000 profile is accepted only if the fixed aggregate V3 workload
+below passes its retained exact-head qualification. The activation PR records
+the evidence path, SHA-256, and measured result. Issue #328 owns the separate
+default-off parallel-execution feasibility spike.
 
 The bounded activation qualification is one fresh four-validator run on Linux:
 
@@ -202,7 +204,7 @@ python3 scripts/retrieval_four_validator_workload.py \
   --timeout 3600
 ```
 
-Only that exact 120-transaction candidate enables the #326 gates. The evidence records native
+Only that exact 120-transaction candidate enables the #251 gates. The evidence records native
 CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
 reported as unknown), block-header commit-interval quantiles, canonical commit
 rounds and signatures, validator `/proc` CPU and sampled RSS during the longest
@@ -255,10 +257,10 @@ an explicit recovery blocker, not an invitation to infer a beneficiary.
 
 Durable database restart preserves the latch, seeds, sessions and nonces. Current
 module genesis export omits non-parameter module state; **export/import is not a
-supported recovery path** for these liabilities or challenges. Before deployment,
-#254 must record the affected-state inventory, supported snapshot/database restore
-procedure and disposition of malformed records. No broader restore guarantee is
-made by this slice.
+supported recovery path** for these liabilities or challenges. Closed #254 retains
+the affected-state inventory and disposition record. Deployment recovery uses the
+snapshot/database procedure in [the soft-launch runbook](TRUSTED_DEVNET_SOFT_LAUNCH.md#back-up-and-restore-a-fresh-genesis-change).
+No broader restore guarantee is made.
 
 ## Transaction evidence
 

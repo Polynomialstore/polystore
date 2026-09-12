@@ -14,7 +14,7 @@ import (
 )
 
 // Candidate reservation for bounded future anchor and expiry KV work.
-// Qualification against the session profile is required by #260.
+// Qualification against the selected activation profile is required by #251.
 const RetrievalSessionRetentionGas = uint64(100000)
 
 func optionalSessionCount(n uint64, err error) (uint64, error) {

@@ -15,7 +15,7 @@ import (
 )
 
 // The activation fixture is deliberately isolated from deployment qualification:
-// production activation also requires the C4 audit and #256/#257/#260 gates.
+// production activation also requires the C4 audit and #256/#257/#251 gates.
 func activateSessionFixture(t *testing.T, f *fixture) sdk.Context {
 	t.Helper()
 	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1).WithChainID("retrieval-v2-test").WithConsensusParams(cmtproto.ConsensusParams{Block: &cmtproto.BlockParams{MaxGas: types.MaxRetrievalV2BlockGas, MaxBytes: types.MaxRetrievalV2BlockBytes}})
