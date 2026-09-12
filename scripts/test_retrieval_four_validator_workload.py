@@ -247,9 +247,11 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                  patch.object(workload, "verify_browser_v3_economics", return_value={"issued_stake": 17}):
                 result = workload.run_native_v3_browser(lifecycle, gateway=Path("/gateway"), source=root,
                     deal={"id": "7"}, browser_ports=ports, command=command, processes=processes,
-                    check_providers=Mock())
+                    check_providers=Mock(), diagnostics=True)
             self.assertEqual([row[0][0] for row in launched], ["/gateway", str(website / "node_modules/.bin/vite")])
+            self.assertEqual(launched[0][1]["env"]["POLYSTORE_RETRIEVAL_DIAGNOSTICS"], "1")
             self.assertEqual(result["gateway"]["status"]["persona"], "user-gateway")
+            self.assertTrue(result["diagnostics_enabled"])
             self.assertEqual(result["economics"]["issued_stake"], 17)
             self.assertEqual(result["playwright"]["memory"], memory)
             ports["gateway_reservation"].close.assert_called_once()
@@ -2678,6 +2680,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
                   "--library", "/lib", "--home", "/new-home", "--gateway-binary", "/gateway",
                   "--cli-binary", "/native-cli", "--product-source", "/source"]
         for extra, expected_browser in (([], {"file_bytes": 1024}),
+                (["--retrieval-diagnostics"], {"file_bytes": 1024, "diagnostics": True}),
                 (["--browser-bytes", "1073741824"], {"file_bytes": 1_073_741_824}),
                 (["--browser-bytes", "1073741824", "--browser-executor-handoff"],
                  {"file_bytes": 1_073_741_824, "executor_handoff": True})):

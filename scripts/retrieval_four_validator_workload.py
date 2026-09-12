@@ -3313,7 +3313,8 @@ def run_browser_executor_handoff(lifecycle, *, source, browser_env, faults, chec
 
 
 def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, command,
-                          processes, check_providers, faults=False, executor_handoff=False):
+                          processes, check_providers, faults=False, executor_handoff=False,
+                          diagnostics=False):
     """Run one real sponsored DealDetail retrieval through the owned browser stack."""
     website = source / "polystore-website"
     vite = website / "node_modules/.bin/vite"
@@ -3338,6 +3339,8 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         POLYSTORE_UPLOAD_DIR=str(directory), POLYSTORE_SESSION_DB_PATH=str(directory / "sessions.db"),
         POLYSTORE_LISTEN_ADDR=f"127.0.0.1:{gateway_port}", POLYSTORE_P2P_ENABLED="0",
         POLYSTORE_GATEWAY_SP_AUTH=V3_PROVIDER_AUTH_TOKEN, POLYSTORE_CMD_TIMEOUT_SECONDS="120")
+    if diagnostics:
+        gateway_env["POLYSTORE_RETRIEVAL_DIAGNOSTICS"] = "1"
     # The supplied native CLI may be outside the source checkout.
     gateway_env["POLYSTORE_CLI_BIN"] = lifecycle.doc["provenance"]["cli_binary"]
     browser_ports["gateway_reservation"].close()
@@ -3447,7 +3450,8 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         paid_count = artifact.integer(outcome["paidDiagnosticCount"], "paid diagnostic count", 1,
                                       len(outcome["diagnostics"]))
         browser_phases = browser_phase_intervals(outcome["diagnostics"][:paid_count])
-    evidence = dict(gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
+    evidence = dict(diagnostics_enabled=diagnostics,
+        gateway=dict(pid=processes[-2].pid, base=gateway_base, status=status,
                                  log=str(directory / "gateway.log")),
         website=dict(pid=processes[-1].pid, base=browser_env["E2E_BASE_URL"], log=str(lifecycle.home / "website.log")),
         playwright=dict(command=getattr(result, "args", argv), stdout=str(stdout), stderr=str(stderr),
@@ -5508,6 +5512,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 POLYSTORE_GATEWAY_UPLOAD_TIMEOUT_SECONDS="180", POLYSTORE_CMD_TIMEOUT_SECONDS="30",
                 POLYSTORE_SHARD_TIMEOUT_SECONDS="180", POLYSTORE_MODE2_UPLOAD_TASK_TIMEOUT_SECONDS="60",
                 POLYSTORE_GATEWAY_SP_AUTH=V3_PROVIDER_AUTH_TOKEN)
+            if native_browser is not None and native_browser.get("diagnostics", False):
+                env["POLYSTORE_RETRIEVAL_DIAGNOSTICS"] = "1"
             provider_reservations[i].close()
             if (artifact.sha256(gateway) != doc["provenance"]["gateway_sha256"] or
                     artifact.sha256(cli) != doc["provenance"]["cli_sha256"]):
@@ -5674,7 +5680,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 run_native_v3_browser(lifecycle, gateway=gateway, source=source, deal=deal,
                     browser_ports=browser_ports, command=command, processes=processes,
                     check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1,
-                    executor_handoff=browser_executor_handoff)
+                    executor_handoff=browser_executor_handoff,
+                    diagnostics=bool(native_browser.get("diagnostics", False)))
                 if browser_bytes == 1024:
                     expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
                         send=send, wait=wait, command=command, curl=curl)
@@ -5756,6 +5763,8 @@ def main():
                         help="Retained browser fixture size; only used by native-v3-browser")
     parser.add_argument("--browser-executor-handoff", action="store_true",
                         help="Run the fixed Playwright worker on the Mac LAN client; native-v3-browser only")
+    parser.add_argument("--retrieval-diagnostics", action="store_true",
+                        help="Enable bounded V3 fetch timing for an owned native-v3-browser run")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
@@ -5772,6 +5781,7 @@ def main():
     sustained_deputies = options.pop("sustained_deputies")
     browser_bytes = options.pop("browser_bytes")
     browser_executor_handoff = options.pop("browser_executor_handoff")
+    retrieval_diagnostics = options.pop("retrieval_diagnostics")
     chain_max_gas = options.pop("chain_max_gas")
     chain_capacity_profile = options.pop("chain_capacity_profile")
     chain_capacity_transactions = options.pop("chain_capacity_transactions")
@@ -5794,6 +5804,8 @@ def main():
     if browser_executor_handoff and (mode != "native-v3-browser" or
             (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != 1_073_741_824):
         parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
+    if retrieval_diagnostics and mode != "native-v3-browser":
+        parser.error("retrieval diagnostics require native-v3-browser")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
@@ -5840,6 +5852,8 @@ def main():
                 options["timeout"] > 3600 or audit_profile != "normal"):
             parser.error("native-v3-browser requires product binaries/source, normal audits, timeout <= 3600, and excludes fixtures/--proof-only")
         native_browser = dict(file_bytes=browser_bytes or V3_BROWSER_DEFAULT_BYTES)
+        if retrieval_diagnostics:
+            native_browser["diagnostics"] = True
         if browser_executor_handoff:
             native_browser["executor_handoff"] = True
         print(run_healthy(artifact.FourValidatorLifecycle(**options, browser_evm=True), gateway, cli, source,
