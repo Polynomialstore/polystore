@@ -64,17 +64,18 @@ repetitions; timings are descriptive, not a confidence-interval claim.
   `11b7f1f3d12fc9fa14e604b911ab7a37a6290d4bfe4d113fad273b92f75691c2`.
 
 Each row is one transition of the stated number of sessions. `8` is not a
-per-session figure. Arrows are baseline → candidate.
+per-session figure. Arrows are baseline → candidate. Transitions/s is the rounded
+reciprocal of the measured phase time, not sessions/s or delivered requests/s.
 
-| Phase | Sessions | µs/op | Gas/op | B/op | allocs/op |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| ACK after proof | 1 | 23.565 → 32.042 | 43,803 → 70,880 | 26,531 → 47,134 | 322 → 439 |
-| ACK after proof | 8 | 165.339 → 215.622 | 350,574 → 578,999 | 179,643 → 310,641 | 2,216 → 2,937 |
-| Singleton proof after ACK | 1 | 4,502.717 → 4,508.051 | 1,243,812 → 1,270,889 | 26,180 → 46,788 | 312 → 429 |
-| Aggregate proof after ACK | 1 | 2,686.272 → 2,694.728 | 1,043,812 → 1,070,889 | 28,022 → 48,636 | 318 → 435 |
-| Aggregate proof after ACK | 8 | 5,839.021 → 5,896.927 | 2,034,924 → 2,263,349 | 171,217 → 302,207 | 2,086 → 2,807 |
-| Later expiry | 1 | 29.638 → 12.796 | 51,939 → 10,854 | 48,448 → 22,976 | 413 → 207 |
-| Later expiry | 8 | 107.641 → 13.231 | 294,671 → 10,854 | 163,256 → 22,976 | 1,542 → 207 |
+| Phase | Sessions | µs/op | Transitions/s | Gas/op | B/op | allocs/op |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| ACK after proof | 1 | 23.565 → 32.042 | 42,436 → 31,209 | 43,803 → 70,880 | 26,531 → 47,134 | 322 → 439 |
+| ACK after proof | 8 | 165.339 → 215.622 | 6,048 → 4,638 | 350,574 → 578,999 | 179,643 → 310,641 | 2,216 → 2,937 |
+| Singleton proof after ACK | 1 | 4,502.717 → 4,508.051 | 222 → 222 | 1,243,812 → 1,270,889 | 26,180 → 46,788 | 312 → 429 |
+| Aggregate proof after ACK | 1 | 2,686.272 → 2,694.728 | 372 → 371 | 1,043,812 → 1,070,889 | 28,022 → 48,636 | 318 → 435 |
+| Aggregate proof after ACK | 8 | 5,839.021 → 5,896.927 | 171 → 170 | 2,034,924 → 2,263,349 | 171,217 → 302,207 | 2,086 → 2,807 |
+| Later expiry | 1 | 29.638 → 12.796 | 33,740 → 78,149 | 51,939 → 10,854 | 48,448 → 22,976 | 413 → 207 |
+| Later expiry | 8 | 107.641 → 13.231 | 9,290 → 75,580 | 294,671 → 10,854 | 163,256 → 22,976 | 1,542 → 207 |
 
 This intentionally moves cleanup into the final settlement transaction. The
 one-session ACK adds 8.477 µs, 27,077 gas, 20,603 allocated bytes and 117
