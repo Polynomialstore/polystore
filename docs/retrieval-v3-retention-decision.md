@@ -69,22 +69,26 @@ call the result an exact long-run database bound.
 
 `TestRetrievalV3RetentionCommittedGrowth` inserts **phase snapshots directly**
 using the production maps, 128 terminal rows per commit, four IAVL versions,
-GoLevelDB, then reloads the store and checks row/nonce identity. It does not
+GoLevelDB, then closes/reopens the database and checks row/nonce identity. It does not
 execute funding, delivery, ACK, proof verification, or full open/terminal churn.
 That production-path endurance gate belongs to #338/#343.
 
 Diagnostic run: Apple M3, 16 GiB, macOS, Go 1.25.5 darwin/arm64,
-`GOMAXPROCS=2`. The test itself took 1.686 s including both measurements;
+`GOMAXPROCS=2`. The test package took 1.359 s including both measurements;
 other focused tests were active, so **no CPU throughput claim** is made.
 
-| Fixture | 128 rows: DB key/value bytes | 512 rows: DB key/value bytes | Last 128-row marginal bytes/session | 512 rows: compacted directory bytes | GC-observed retained heap delta |
+| Fixture | 128 rows: DB key/value bytes | 512 rows: DB key/value bytes | Last 128-row marginal bytes/session | 512 rows: closed compacted directory bytes | GC-observed retained heap delta |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 KiB settled | 224,519 | 966,268 | 1,985.11 | 570,189 | 6,542,304 B |
-| 1 GiB settled | 426,502 | 1,780,052 | 3,597.48 | 530,234 | 9,728,000 B |
+| 1 KiB settled | 224,519 | 966,268 | 1,985.11 | 333,279 | 6,554,008 B |
+| 1 GiB settled | 426,502 | 1,780,052 | 3,597.48 | 530,302 | 9,715,816 B |
 
 DB key/value bytes include retained IAVL versions and internal indexes.
-Directory size includes LevelDB files after an explicit compaction, not an
-uncompressed logical limit; the fixtures' repetitive fields compress well.
+Directory size includes LevelDB files after explicit compaction and database
+closure, not an uncompressed logical limit; the fixtures' repetitive fields
+compress well. Closing first avoids racing background SST retirement, which CI
+exposed in the initial live-directory measurement. Missing files are not ignored
+or counted as zero. The corrected measurement also passed ten repetitions;
+closing/reopening preserves the committed row and nonce checks.
 Heap deltas include backend/store caches and runtime noise and are not a
 per-session live-heap bound. These small slopes cannot establish a million-row
 or many-version bound; measure the actual database during qualification.

@@ -140,7 +140,7 @@ func TestRetrievalV3RetentionCommittedGrowth(t *testing.T) {
 			dir := t.TempDir()
 			db, err := dbm.NewGoLevelDB("retention", dir, nil)
 			require.NoError(t, err)
-			defer db.Close()
+			t.Cleanup(func() { _ = db.Close() })
 			key := storetypes.NewKVStoreKey(types.StoreKey)
 			cms := store.NewCommitMultiStore(db, log.NewNopLogger(), metrics.NewNoOpMetrics())
 			cms.MountStoreWithDB(key, storetypes.StoreTypeIAVL, db)
@@ -162,26 +162,34 @@ func TestRetrievalV3RetentionCommittedGrowth(t *testing.T) {
 				size := retentionDBBytes(t, db)
 				require.Greater(t, size, previousDB)
 				require.NoError(t, db.ForceCompact(nil, nil))
-				var disk int64
-				require.NoError(t, filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-					if err != nil {
-						return err
-					}
-					if d.Type().IsRegular() {
-						info, e := d.Info()
-						if e != nil {
-							return e
-						}
-						disk += info.Size()
-					}
-					return nil
-				}))
 				runtime.GC()
 				var current runtime.MemStats
 				runtime.ReadMemStats(&current)
-				t.Logf("length=%d sessions=%d versions=%d database_kv_bytes=%d incremental_db_bytes_per_session=%.2f compacted_directory_bytes=%d retained_heap_delta=%d", length, (group+1)*128, group+1, size, float64(size-previousDB)/128, disk, int64(current.HeapAlloc)-int64(initial.HeapAlloc))
+				t.Logf("length=%d sessions=%d versions=%d database_kv_bytes=%d incremental_db_bytes_per_session=%.2f retained_heap_delta=%d", length, (group+1)*128, group+1, size, float64(size-previousDB)/128, int64(current.HeapAlloc)-int64(initial.HeapAlloc))
 				previousDB = size
 			}
+			// Compaction can retire files even after ForceCompact returns. Stop
+			// the backend before walking its directory; never ignore missing SSTs
+			// and report the resulting partial sum as a storage measurement.
+			require.NoError(t, db.Close())
+			var disk int64
+			require.NoError(t, filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.Type().IsRegular() {
+					info, err := d.Info()
+					if err != nil {
+						return err
+					}
+					disk += info.Size()
+				}
+				return nil
+			}))
+			t.Logf("length=%d sessions=512 closed_compacted_directory_bytes=%d", length, disk)
+			reopenedDB, err := dbm.NewGoLevelDB("retention", dir, nil)
+			require.NoError(t, err)
+			db = reopenedDB
 			// Persistent store reload and exact nonce lookup survive measurement.
 			reopened := store.NewCommitMultiStore(db, log.NewNopLogger(), metrics.NewNoOpMetrics())
 			reopened.MountStoreWithDB(key, storetypes.StoreTypeIAVL, db)
