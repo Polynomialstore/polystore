@@ -1068,19 +1068,30 @@ def v3_retained_generations(lifecycle, *, deal_id, root, height=None):
 def validate_v3_committed_message(message, *, kind, creator, slot, deal_id=None,
                                   session_id=None, proof_count=None):
     """Bind a committed hash to the one native message the HTTP route intended."""
-    expected_type = {
-        "generation-acceptance": "/polystorechain.polystorechain.v1.MsgAcceptDealGenerationV3",
-        "session-proof": "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3",
-    }.get(kind)
-    if expected_type is None or message.get("@type") != expected_type or message.get("creator") != creator or producer.uint(message.get("slot", 99)) != slot:
+    if message.get("creator") != creator:
         raise ValueError("committed HTTP transaction message differs from route intent")
     if kind == "generation-acceptance":
-        if producer.uint(message.get("deal_id", 0)) != producer.uint(deal_id) or not any(producer.b64(message.get("acceptance_digest", ""), 32)):
+        if (message.get("@type") != "/polystorechain.polystorechain.v1.MsgAcceptDealGenerationV3" or
+                producer.uint(message.get("slot", 99)) != slot or
+                producer.uint(message.get("deal_id", 0)) != producer.uint(deal_id) or
+                not any(producer.b64(message.get("acceptance_digest", ""), 32))):
             raise ValueError("committed generation acceptance differs from frozen intent")
         return []
-    if producer.b64(message.get("session_id", ""), 32).hex() != session_id:
+    if kind != "session-proof":
+        raise ValueError("committed HTTP transaction message differs from route intent")
+    if message.get("@type") == V3_SINGLE_PROOF_TYPE:
+        entry = message
+    elif message.get("@type") == V3_BATCH_PROOF_TYPE:
+        sessions = message.get("sessions")
+        if not isinstance(sessions, list) or len(sessions) != 1 or not isinstance(sessions[0], dict):
+            raise ValueError("committed proof batch must contain exactly one routed session")
+        entry = sessions[0]
+    else:
+        raise ValueError("committed HTTP transaction message differs from route intent")
+    if (producer.uint(entry.get("slot", 99)) != slot or
+            producer.b64(entry.get("session_id", ""), 32).hex() != session_id):
         raise ValueError("committed proof transaction targets the wrong session")
-    proofs = message.get("proofs")
+    proofs = entry.get("proofs")
     if not isinstance(proofs, list) or len(proofs) != proof_count or not 1 <= len(proofs) <= 64:
         raise ValueError("committed proof count differs from provider response")
     ordinals = [producer.uint(proof.get("ordinal", V3_MAX_SAMPLES)) for proof in proofs]
@@ -1113,6 +1124,8 @@ def committed_v3_http_tx(lifecycle, row, *, kind, creator, slot, deal_id=None,
     result["ordinals"] = validate_v3_committed_message(messages[0], kind=kind, creator=creator,
         slot=slot, deal_id=deal_id, session_id=session_id, proof_count=proof_count)
     if kind == "session-proof":
+        result.update(message_type=messages[0]["@type"],
+                      batch_occupancy=len(messages[0].get("sessions", [])) or 1)
         result.update(operation_id=row.get("request_id"), provider=creator, creator=creator,
                       slot=slot, session_id="0x" + session_id)
     return result
