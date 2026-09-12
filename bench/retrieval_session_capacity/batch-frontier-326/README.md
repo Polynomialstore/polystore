@@ -20,12 +20,10 @@ the checked-in profile remains 64M until either unbatched submissions are
 disabled or a worst-case mixed batch/unbatched workload passes the same gates.
 
 The gas step is discrete. Each 64-session batch requested about 37.44M gas.
-The 160M profile admitted four batches per full block. A 192M diagnostic admitted
-five and reached 234.57 sessions/s, but its 757-771ms `FinalizeBlock` p95
-exceeded the 700ms budget. The 384M diagnostic admitted ten and reached 317.00
-sessions/s, but execution took 1.54-1.58 seconds and five validator signatures
-were missed. Full blocks were only 510 KiB, so the 2 MiB byte limit was not
-involved.
+The 160M profile admitted four batches per full block. The retained 384M
+diagnostic admitted ten and reached 317.00 sessions/s, but execution took
+1.54-1.58 seconds and five validator signatures were missed. Full blocks were
+only 510 KiB, so the 2 MiB byte limit was not involved.
 
 The host was not fully used: validators averaged 6.27 cores together at 160M
 and 10.49 of 16 logical CPUs at 384M. The directly comparable four-worker pure
