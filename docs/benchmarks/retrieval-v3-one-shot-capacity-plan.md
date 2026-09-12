@@ -66,14 +66,16 @@ The equivalent throughput benchmark is a steady-state pipeline:
 | --- | --- | --- | --- |
 | `H` | open | - | - |
 | `H+1` | anchor | open | - |
-| `H+2` | proof + ACK + settlement | anchor | open |
-| `H+3` | - | proof + ACK + settlement | anchor |
+| `H+2` | ACK + proof + settlement | anchor | open |
+| `H+3` | - | ACK + proof + settlement | anchor |
 
 After the two-block warm-up, every measured block admits a new cohort while a
-mature cohort executes its proof and ACK in deterministic transaction order.
-ACK-before-proof and proof-before-ACK must both be represented; the second valid
-transition settles the obligation. This preserves the real minimum lifecycle
-latency while measuring the pipeline's throughput.
+mature cohort executes its ACK and proof in deterministic transaction order.
+The public-path profile must use its production ACK-before-proof order, with the
+proof transition performing settlement. A separate low-load protocol control
+may confirm proof-before-ACK equivalence, but its rate must not be mixed into the
+current-product result. This preserves the real minimum lifecycle latency while
+measuring the pipeline's throughput.
 
 ## Timed scope
 
@@ -82,8 +84,8 @@ on-chain transition:
 
 1. EVM-precompile session open and fee lock;
 2. anchor capture;
-3. native `MsgSubmitRetrievalSessionProofBatchV3` verification;
-4. EVM-precompile ACK; and
+3. EVM-precompile ACK;
+4. native `MsgSubmitRetrievalSessionProofBatchV3` verification; and
 5. terminal payment settlement and immediate reference release.
 
 The fixture must use valid encoded bytes, proof material, signatures, balances,
@@ -166,8 +168,13 @@ A point passes only when all of the following hold on the exact candidate:
 - maximum consensus round is zero and there are no missed validator signatures;
 - the 2 MiB block limit, gas limit, mempool, CPU, RSS, and database growth are all
   recorded, whether or not they bind; and
-- payer debit equals base-fee burn plus locked variable fee, while terminal burn,
-  provider payout, escrow, refunds, module balance, and supply reconcile exactly.
+- retrieval application charges reconcile per denomination across base-fee burn,
+  locked variable fee, terminal burn, provider payout, escrow, refunds, module
+  balance, and supply; and
+- network fees reconcile separately per denomination for every EVM open/ACK and
+  SDK proof transaction, including actual gas used, effective gas price,
+  requester/provider debits, and fee-collector or configured fee-destination
+  deltas.
 
 The quoted result is the highest repeated point that passes, not the largest
 load the harness can submit and not a single lucky block. Use at least five
@@ -197,6 +204,8 @@ Retain enough evidence to recompute the result without trusting the summary:
 - per-block committed transaction types, gas wanted/used, bytes, session IDs,
   open and settlement counts, commit times, consensus rounds, and signatures;
 - all-validator state roots and session/economic reconciliation;
+- effective gas prices and denomination-specific account, fee-collector, module,
+  burn, and supply balance deltas;
 - per-component CPU and RSS samples, Go/native/JS memory scopes kept distinct;
 - application-database start/end sizes and retained rows/index counts; and
 - low-load delivery-path evidence plus raw saturation evidence and checksums.
