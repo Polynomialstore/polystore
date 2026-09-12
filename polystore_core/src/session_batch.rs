@@ -716,13 +716,67 @@ mod tests {
         input
     }
 
+    fn verify_cross_session_individually(input: &[u8]) -> Result<bool, KzgError> {
+        let ctx = context();
+        let batch = CrossSessionBatch::parse(input)?;
+        for entry in batch.entries {
+            for item in entry.records {
+                let record = item.proof;
+                if record.z
+                    != derive_z_with_domain(
+                        b"polystore/blob-challenge/v3",
+                        &entry.context,
+                        &entry.seed,
+                        item.ordinal,
+                        Some(item.t),
+                        record.mdu,
+                        record.leaf,
+                    )?
+                {
+                    return Ok(false);
+                }
+                let position = root_table_position_for_mdu_index(record.mdu)?;
+                if !KzgContext::verify_mdu_merkle_proof(
+                    &entry.root,
+                    &record.root_commitment,
+                    position.root_table_du,
+                    record.root_path,
+                    64,
+                )? || !KzgContext::verify_mdu_merkle_proof(
+                    &record.root,
+                    &record.commitment,
+                    record.leaf as usize,
+                    record.blob_path,
+                    batch.leaves,
+                )? || !ctx.verify_proof(
+                    &record.root_commitment,
+                    &crate::utils::z_for_cell(position.root_table_cell),
+                    &encode_mdu_root_for_root_table(&record.root)?,
+                    &record.root_proof,
+                )? || !ctx.verify_proof(
+                    &record.commitment,
+                    &record.z,
+                    &record.y,
+                    &record.proof,
+                )? {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
     #[test]
     fn cross_session_v3_batch_is_bounded_and_challenge_bound() {
         let ctx = context();
         for count in [1, 2, 8, 32, 64] {
-            assert!(
-                ctx.verify_polyfs_cross_session_batch(&cross_session_fixture(count))
-                    .unwrap()
+            let input = cross_session_fixture(count);
+            let independent = verify_cross_session_individually(&input).unwrap();
+            assert!(independent);
+            assert_eq!(
+                ctx.verify_polyfs_cross_session_batch(&input).unwrap(),
+                independent,
+                "aggregate differs from independent verification at width {count}",
             );
         }
         let input = cross_session_fixture(2);
@@ -775,6 +829,21 @@ mod tests {
         noncanonical[record_offset + 16 + 140..record_offset + 16 + 188].fill(0xff);
         assert!(
             !ctx.verify_polyfs_cross_session_batch(&noncanonical)
+                .unwrap_or(false)
+        );
+        let mut wrong_subgroup = input.clone();
+        let mut wrong_subgroup_point = [0; 48];
+        wrong_subgroup_point[0] = 0x80;
+        assert!(bool::from(
+            G1Affine::from_compressed_unchecked(&wrong_subgroup_point).is_some()
+        ));
+        assert!(!bool::from(
+            G1Affine::from_compressed(&wrong_subgroup_point).is_some()
+        ));
+        wrong_subgroup[record_offset + 16 + 140..record_offset + 16 + 188]
+            .copy_from_slice(&wrong_subgroup_point);
+        assert!(
+            !ctx.verify_polyfs_cross_session_batch(&wrong_subgroup)
                 .unwrap_or(false)
         );
         assert_eq!(
