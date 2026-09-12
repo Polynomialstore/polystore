@@ -1,10 +1,12 @@
 # V3 fetch attribution (#342)
 
-Disposition: instrumentation and measurement coverage only. No new key/address
+Phase 1: instrumentation and measurement coverage only. No new key/address
 cache, admission reordering, concurrency increase, parser replacement, payment
 change, or deployment change. The local fixture below does not establish the
-deployed bottleneck or justify a product optimization. [#343](https://github.com/Polynomialstore/polystore/issues/343)
-owns retained paid end-to-end qualification.
+deployed bottleneck or justify a product optimization. [#342](https://github.com/Polynomialstore/polystore/issues/342)
+remains open for real-route bounded repeats, matched 1 GiB attribution, cost
+ranking and a measured optimization/no-optimization disposition. [#343](https://github.com/Polynomialstore/polystore/issues/343)
+owns final retained paid end-to-end qualification after that disposition.
 
 ## Actual route and safety boundaries
 
@@ -189,7 +191,7 @@ cannot rank production bottlenecks. Timing variation on this non-isolated host
 is another reason not to derive capacity or an optimization claim from these
 small samples. No throughput conversion is reported.
 
-## Required #343 measurements and optimization gate
+## Remaining #342 attribution and the #343 qualification gate
 
 For independent paid reads / CDN-style distribution, a repeated verified local
 download is not a new paid session. Use the existing public settled-cache purge
@@ -198,8 +200,12 @@ payment/checkpoint journals. Record new session IDs and proof-confirmed outcomes
 Keep repeated-content cache reuse, independent paid objects, and concurrent
 distinct requesters as separate workload cases.
 
-Start with 1 KiB and multi-MDU warm/cold public downloads, then qualify a 1 GiB
-range. Record exact revisions, hardware, fixture entropy/compression, direct vs
+After the instrumentation is merged, #342 uses the existing public browser
+workload on a quiet runner, starting with real 1 KiB and multi-MDU warm/cold
+downloads and then matched 1 GiB attribution. Rank the measured costs before
+selecting any minimal fix or issuing a measured no-optimization disposition.
+The stub-key/discarded-response fixture above does not satisfy that gate.
+Record exact revisions, hardware, fixture entropy/compression, direct vs
 gateway routing, chunk counts/concurrency, authority RPC attempts, actual CLI
 process counts, real keyring/configuration, server CPU/RSS/Go heap and allocations,
 physical I/O, browser first verified write, durable verified throughput, and
@@ -214,8 +220,10 @@ keys-show timings, production RPC/network latency, socket backpressure, actual
 browser durable flush cost, peak resident memory, sustained concurrency or new
 proof-confirmed capacity result. The historical 601.477 s composite chunk phase
 is still not attribution to a single cause, and the earlier 840 s test bound is
-not an SLA. Keep these measurements in #343; no defensible end-to-end optimization
-is selected by this instrumentation-only PR. Any later key reuse must define
+not an SLA. These missing real-route costs remain part of #342; #343's final
+qualification is gated on its measured disposition, not the phase-1 merge.
+No defensible end-to-end optimization is selected by this instrumentation-only
+PR. Any later key reuse must define
 rotation/config invalidation and preserve actual submission signer checks; any
 copy/concurrency change must preserve bounded buffers, cancellation/recovery,
 whole-chunk verification and durable-before-ACK ordering.
