@@ -18,7 +18,7 @@ import (
 const RetrievalSetupDigest = "d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7"
 
 // Session profile ceilings are intentionally independent of audit quotas. Their
-// admitted maxima still require the deployment qualification in issue #260.
+// admitted maxima still require the deployment qualification in issue #251.
 const (
 	// MaxTransactionBytes is shared by consensus admission and client builders.
 	// Changes require a coordinated binary upgrade.

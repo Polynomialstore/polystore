@@ -153,12 +153,126 @@ PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 
 Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `POLYSTORE_REINIT_HOME=1` is set. Use it only for bootstrap and local smoke tests.
 
-The checked-in retrieval consensus profile uses 160000000 max block gas. Apply
-that change only through a coordinated fresh genesis: stop every validator,
-rebuild every validator home from the same generated genesis, and compare the
-genesis SHA-256 on all nodes before starting them. This discards existing
-devnet chain state and sessions; the routine stack updater does not change an
-existing chain's consensus parameters.
+#### Back up and restore a fresh-genesis change
+
+Changing `scripts/retrieval_consensus_profile.json` does not update a running
+chain. A trusted-devnet consensus-profile change uses a fresh genesis. Stop all
+remote or local `provider-daemon` services first, then run this on the hub. The
+paths are the checked-in systemd defaults; if `/etc/polystore/*.env` overrides
+either path, use those deployed values consistently in both commands.
+
+```bash
+set -euo pipefail
+POLYSTORE_RESET_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+POLYSTORE_BACKUP_DIR="/var/backups/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}"
+POLYSTORE_BACKUP_ARCHIVE="${POLYSTORE_BACKUP_DIR}/hub-state.tar.gz"
+
+sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
+grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env
+sudo test -d /var/lib/polystore/polystorechaind
+sudo test -d /var/lib/polystore/polystore_gateway/router
+sudo install -d -m 0700 "$POLYSTORE_BACKUP_DIR"
+sudo tar --xattrs --acls --numeric-owner \
+  -C /var/lib/polystore \
+  -czf "$POLYSTORE_BACKUP_ARCHIVE" \
+  polystorechaind polystore_gateway/router
+sudo sha256sum "$POLYSTORE_BACKUP_ARCHIVE" | \
+  sudo tee "${POLYSTORE_BACKUP_ARCHIVE}.sha256" >/dev/null
+sudo sha256sum --check "${POLYSTORE_BACKUP_ARCHIVE}.sha256"
+sudo tar -tzf "$POLYSTORE_BACKUP_ARCHIVE" | grep -Fx 'polystorechaind/'
+sudo tar -tzf "$POLYSTORE_BACKUP_ARCHIVE" | grep -Fx 'polystore_gateway/router/'
+
+# Keep the pre-reset trees intact until the new network is qualified.
+sudo mv /var/lib/polystore/polystorechaind \
+  "/var/lib/polystore/polystorechaind.pre-fresh-genesis-${POLYSTORE_RESET_STAMP}"
+sudo mv /var/lib/polystore/polystore_gateway/router \
+  "/var/lib/polystore/polystore_gateway/router.pre-fresh-genesis-${POLYSTORE_RESET_STAMP}"
+printf 'Rollback archive: %s\n' "$POLYSTORE_BACKUP_ARCHIVE"
+```
+
+Bootstrap the absent chain home with the checked-in profile; no
+`POLYSTORE_REINIT_HOME=1` is needed after the move:
+
+```bash
+set -euo pipefail
+POLYSTORE_RETRIEVAL_V2_ACTIVATION_HEIGHT=1 \
+CHAIN_ID=20260211 EVM_CHAIN_ID=20260211 \
+POLYSTORE_HOME=/var/lib/polystore/polystorechaind \
+PROVIDER_COUNT=0 START_WEB=0 \
+./scripts/run_devnet_alpha_multi_sp.sh start
+PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
+sudo systemctl start polystorechaind
+POLYSTORECHAIND_PID="$(systemctl show --property MainPID --value polystorechaind)"
+test "$POLYSTORECHAIND_PID" -gt 0
+sudo cat "/proc/${POLYSTORECHAIND_PID}/environ" | tr '\0' '\n' | grep -Fxq 'GOMAXPROCS=4'
+sudo systemctl start polystore-faucet polystore-gateway-router
+POLYSTORE_CONSENSUS_PARAMS="$(mktemp)"
+trap 'rm -f "$POLYSTORE_CONSENSUS_PARAMS"' EXIT
+for _ in {1..60}; do
+  curl -fsS http://127.0.0.1:1317/cosmos/consensus/v1/params \
+    -o "$POLYSTORE_CONSENSUS_PARAMS" && break
+  sleep 1
+done
+jq -e \
+  '.params.block.max_gas == "160000000" and .params.block.max_bytes == "2097152"' \
+  "$POLYSTORE_CONSENSUS_PARAMS"
+rm -f "$POLYSTORE_CONSENSUS_PARAMS"
+trap - EXIT
+curl -fsS http://127.0.0.1:26657/status | \
+  jq -e '.result.sync_info.catching_up == false'
+```
+
+After those chain-only checks pass, re-register and fund the expected providers
+using the provider-onboarding steps below, start every `provider-daemon`, and
+then run the public healthcheck:
+
+```bash
+scripts/run_public_devnet_healthcheck.sh \
+  ops/systemd/env/polystore-public-healthcheck.env
+```
+
+The public healthcheck intentionally comes last because it requires the complete
+on-chain provider inventory and each configured provider endpoint. The 160M
+profile retains CometBFT's existing 1-second `timeout_commit`; do not edit
+validator `config.toml` during this rollout. Keep provider data intact until the
+new chain is qualified so the snapshot remains usable for rollback.
+
+To restore the snapshot, stop every provider-daemon and set the exact archive
+printed above. This quarantines the failed attempt instead of deleting it,
+restores numeric ownership, ACLs and extended attributes, and verifies the
+archive before changing live state:
+
+```bash
+set -euo pipefail
+POLYSTORE_BACKUP_ARCHIVE=/var/backups/polystore/fresh-genesis-<UTC-stamp>/hub-state.tar.gz
+POLYSTORE_FAILED_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+
+sudo sha256sum --check "${POLYSTORE_BACKUP_ARCHIVE}.sha256"
+sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
+sudo mv /var/lib/polystore/polystorechaind \
+  "/var/lib/polystore/polystorechaind.failed-${POLYSTORE_FAILED_STAMP}"
+if sudo test -e /var/lib/polystore/polystore_gateway/router; then
+  sudo mv /var/lib/polystore/polystore_gateway/router \
+    "/var/lib/polystore/polystore_gateway/router.failed-${POLYSTORE_FAILED_STAMP}"
+fi
+sudo tar --xattrs --acls --numeric-owner \
+  -C /var/lib/polystore -xzf "$POLYSTORE_BACKUP_ARCHIVE"
+sudo systemctl start polystorechaind
+sudo systemctl start polystore-faucet polystore-gateway-router
+```
+
+Start every provider-daemon against the restored chain, then run:
+
+```bash
+scripts/run_public_devnet_healthcheck.sh \
+  ops/systemd/env/polystore-public-healthcheck.env
+```
+
+The restored snapshot already contains the provider registrations that the
+public healthcheck requires. Rootless installations use the same stop/start
+order with `systemctl --user`, as documented in
+`docs/devnet-rootless-handoff.md`.
+
 
 ### 3) systemd (hub services)
 
@@ -794,4 +908,6 @@ This is the “are we ready to invite people?” checklist. If any item is faili
 
 - How to pause/disable the faucet quickly (systemd stop + reverse-proxy disable).
 - How to rotate `POLYSTORE_GATEWAY_SP_AUTH` (requires restarting hub router + all providers).
-- How to snapshot/backup the chain home (`POLYSTORE_HOME`) and the hub’s gateway data dirs before changes.
+- Use the tested fresh-genesis backup and restore commands in section 2 for the
+  chain home (`POLYSTORE_HOME`) and hub user-gateway state before consensus-profile
+  changes.

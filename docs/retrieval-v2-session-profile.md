@@ -203,7 +203,7 @@ python3 scripts/retrieval_four_validator_workload.py \
   --timeout 3600
 ```
 
-Only that exact 120-transaction candidate enables the #326 gates. The evidence records native
+Only that exact 120-transaction candidate enables the #251 gates. The evidence records native
 CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
 reported as unknown), block-header commit-interval quantiles, canonical commit
 rounds and signatures, validator `/proc` CPU and sampled RSS during the longest

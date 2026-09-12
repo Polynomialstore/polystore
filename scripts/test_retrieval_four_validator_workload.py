@@ -1797,7 +1797,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertAlmostEqual(imbalanced_metrics["complete_proof_sets_per_second"], 1 / 15)
         self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
 
-    def test_issue_326_qualification_gates_mempool_memory_and_consensus(self):
+    def test_issue_251_qualification_gates_mempool_memory_and_consensus(self):
         metrics = dict(saturated_commit_interval={"blocks": 10}, positive_backlog_seconds=10,
             commit_interval_seconds={"p95": 1.6}, peak_observed_mempool_transactions=4999,
             validator_resources_during_backlog={"validators": [
@@ -1806,38 +1806,38 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             dropped_transactions=0, retried_transactions=0)
         finalize = [{"summary": {"p95_within_700ms": True}} for _ in range(4)]
         consensus = {"maximum_round": 0, "missed_signatures": 0}
-        result = workload.native_v3_issue_326_qualification(
+        result = workload.native_v3_issue_251_qualification(
             metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertTrue(result["qualified"])
         metrics["peak_observed_mempool_transactions"] = 5000
-        result = workload.native_v3_issue_326_qualification(
+        result = workload.native_v3_issue_251_qualification(
             metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertFalse(result["qualified"])
         self.assertIn("mempool", " ".join(result["reasons"]))
         metrics["peak_observed_mempool_transactions"] = 4999
         metrics["validator_resources_during_backlog"]["validators"][0]["sampled_peak_rss_bytes"] = 2048
-        result = workload.native_v3_issue_326_qualification(
+        result = workload.native_v3_issue_251_qualification(
             metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertIn("memory", " ".join(result["reasons"]))
         metrics["validator_resources_during_backlog"]["validators"][0]["sampled_peak_rss_bytes"] = 1024
         finalize[0]["summary"]["p95_within_700ms"] = False
-        result = workload.native_v3_issue_326_qualification(
+        result = workload.native_v3_issue_251_qualification(
             metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertIn("FinalizeBlock", " ".join(result["reasons"]))
 
-    def test_issue_326_candidate_is_exact_current_profile(self):
+    def test_issue_251_candidate_is_exact_current_profile(self):
         profile = dict(name="1kib", submission_mode="batch-message", batch_size=64,
                        sessions=7680, measured_transactions=120)
-        self.assertTrue(workload.is_issue_326_candidate(profile, 160_000_000, "1.6", 4, "1s"))
+        self.assertTrue(workload.is_issue_251_candidate(profile, 160_000_000, "1.6", 4, "1s"))
         for changed in (dict(max_block_gas=192_000_000), dict(gas_adjustment="1.1"),
                         dict(gomaxprocs=2), dict(timeout_commit="500ms")):
             arguments = dict(max_block_gas=160_000_000, gas_adjustment="1.6",
                              gomaxprocs=4, timeout_commit="1s")
             arguments.update(changed)
-            self.assertFalse(workload.is_issue_326_candidate(profile, **arguments))
+            self.assertFalse(workload.is_issue_251_candidate(profile, **arguments))
         for changed in (dict(sessions=6592), dict(batch_size=32)):
             altered = dict(profile, **changed)
-            self.assertFalse(workload.is_issue_326_candidate(
+            self.assertFalse(workload.is_issue_251_candidate(
                 altered, 160_000_000, "1.6", 4, "1s"))
 
     def test_native_v3_build_manifest_binds_clean_source_and_every_artifact(self):
@@ -1883,8 +1883,8 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
              self.assertRaisesRegex(ValueError, "one checkout"):
             workload.native_v3_harness_source()
 
-    def test_failed_issue_326_qualification_retains_restart_validation_and_original_failure(self):
-        original = "issue #326 qualification gates failed: FinalizeBlock exceeded the gate"
+    def test_failed_issue_251_qualification_retains_restart_validation_and_original_failure(self):
+        original = "issue #251 qualification gates failed: FinalizeBlock exceeded the gate"
         for restart_result in (
                 dict(chain_progress_verified=True, qualification=True),
                 RuntimeError("validator restart failed")):
@@ -1909,7 +1909,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
                                      ["post_qualification_restart"]["error"], str(restart_result))
                     self.assertIs(raised.exception.__cause__, restart_result)
 
-    def test_successful_issue_326_qualification_requires_successful_restart(self):
+    def test_successful_issue_251_qualification_requires_successful_restart(self):
         lifecycle = SimpleNamespace(doc={"native_v3_chain": {}}, save=Mock())
         restart_result = dict(chain_progress_verified=True, qualification=True)
         with patch.object(workload, "validate_native_v3_candidate_restart",

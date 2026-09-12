@@ -257,8 +257,8 @@ benchmark sweep may explicitly override gas up to the compiled 448,000,000
 activation ceiling while retaining the 2 MiB byte limit. The same 160,000,000
 bound is the maximum estimated gas admitted for one retrieval transaction.
 The candidate gas rate and block limits are preliminary bounds, not a throughput
-or permissionless-security claim. #260 must measure honest generation/admission
-and admitted-state maxima, including the separate fixed audit demand, before
-coordinated activation. Run focused checks with `scripts/chain_go.sh test -p 2
+or permissionless-security claim. #251 owns the retained capacity qualification
+required before coordinated activation, including the separate fixed audit
+demand. Run focused checks with `scripts/chain_go.sh test -p 2
 ./app ./precompiles/polystore ./x/polystorechain/keeper` and the real entrypoint
 regressions with `python3 scripts/test_bench_retrieval_sessions.py`.
