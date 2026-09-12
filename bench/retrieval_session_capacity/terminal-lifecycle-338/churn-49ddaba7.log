@@ -1,0 +1,13 @@
+=== RUN   TestRetrievalSessionV3CompletionChurnBeyondLiveCapacity
+Initializing KZG with path: ../../../trusted_setup.txt
+    retrieval_v3_completion_test.go:217: completed 1024 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 2048 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 3072 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 4096 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 5120 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 6144 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 7168 fresh real-proof sessions
+    retrieval_v3_completion_test.go:217: completed 8192 fresh real-proof sessions
+    retrieval_v3_completion_test.go:226: completed 8193 fresh real-proof V3 sessions before their original deadlines; unfinished V2 remains charged
+--- PASS: TestRetrievalSessionV3CompletionChurnBeyondLiveCapacity (237.50s)
+PASS

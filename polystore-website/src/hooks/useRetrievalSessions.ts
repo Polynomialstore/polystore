@@ -17,6 +17,7 @@ import { accountBytes } from '../lib/retrieval'
 import { discardUnboundRetrievalV3Checkpoint } from '../lib/retrievalV3Checkpoint'
 import { readLocalGatewayConnectedBase } from '../lib/retrievalMode'
 import { isGatewayTransportEnabled } from '../lib/transport/mode'
+import { waitForRetrievalV3Challenge } from '../lib/retrievalV3Recovery'
 
 let lastBrowserNonce = 0n
 
@@ -54,21 +55,8 @@ export function useRetrievalSessions() {
     retrievalDiagnostic({ phase: 'session_height', sessionId: fresh.sessionId, height: String(fresh.height) })
     return fresh
   }
-  const readyV3 = (initial: FrozenSessionV3, signal?: AbortSignal) => timeRetrieval('challenge_ready', async () => {
-    let session = initial
-    while (!session.anchorSeed || session.height < session.firstResponse) {
-      signal?.throwIfAborted()
-      if (session.expired || session.height > session.deadline) return session
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(done, 750)
-        function done() { signal?.removeEventListener('abort', aborted); resolve() }
-        function aborted() { clearTimeout(timer); reject(signal?.reason) }
-        signal?.addEventListener('abort', aborted, { once: true })
-      })
-      session = await observedV3(session, signal)
-    }
-    return session
-  }, initial.sessionId)
+  const readyV3 = (initial: FrozenSessionV3, signal?: AbortSignal) => timeRetrieval('challenge_ready',
+    () => waitForRetrievalV3Challenge(initial, observedV3, signal), initial.sessionId)
   return {
     requireWallet, scope, observeV3: observedV3, readyV3,
     unavailableReason: activation.error ? 'Cannot verify network retrieval availability. Check the chain connection.' : activation.data === undefined ? 'Checking network retrieval availability…' : activation.data,

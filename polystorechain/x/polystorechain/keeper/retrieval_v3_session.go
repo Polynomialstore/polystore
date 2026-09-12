@@ -265,11 +265,11 @@ func (k Keeper) v3AnchorAndChallenges(ctx sdk.Context, s *types.RetrievalSession
 	if ctx.BlockHeight() < 0 || uint64(ctx.BlockHeight()) < s.FirstResponseHeight || uint64(ctx.BlockHeight()) > s.DeadlineHeight || s.Expired {
 		return [32]byte{}, nil, sdkerrors.ErrInvalidRequest.Wrap("outside v3 session response window")
 	}
-	anchor, err := k.ChallengeAnchors.Get(ctx, s.AnchorHeight)
-	if err != nil || len(anchor.Seed) != 32 {
+	anchorSeed, err := k.retrievalSessionV3AnchorSeed(ctx, *s)
+	if err != nil || len(anchorSeed) != 32 {
 		return [32]byte{}, nil, sdkerrors.ErrInvalidRequest.Wrap("v3 session challenge seed unavailable")
 	}
-	seed, err := c.Seed(anchor.Seed)
+	seed, err := c.Seed(anchorSeed)
 	if err != nil {
 		return [32]byte{}, nil, err
 	}
@@ -585,7 +585,8 @@ func (k msgServer) settleRetrievalObligationV3(ctx sdk.Context, s *types.Retriev
 	o := &s.Obligations[obligationIndex]
 	bit := uint32(1) << o.Slot
 	if s.SettledSlotsMask&bit != 0 {
-		return true, false, nil
+		changed, err := k.releaseTerminalRetrievalSessionV3(ctx, *s)
+		return true, changed, err
 	}
 	if s.RefundedSlotsMask&bit != 0 || s.AckedSlotsMask&bit == 0 {
 		return false, false, nil
@@ -613,7 +614,8 @@ func (k msgServer) settleRetrievalObligationV3(ctx sdk.Context, s *types.Retriev
 	}
 	s.LockedFee = s.LockedFee.Sub(o.LockedFee)
 	s.SettledSlotsMask |= bit
-	return true, true, nil
+	_, err = k.releaseTerminalRetrievalSessionV3(ctx, *s)
+	return true, true, err
 }
 
 func (k msgServer) SubmitRetrievalSessionProofV3(goCtx context.Context, msg *types.MsgSubmitRetrievalSessionProofV3) (*types.MsgSubmitRetrievalSessionProofV3Response, error) {

@@ -65,7 +65,7 @@ type sessionCacheBank struct {
 	balances collections.Map[string, string]
 }
 
-func newSessionCacheBank(t *testing.T, svc corestore.KVStoreService) sessionCacheBank {
+func newSessionCacheBank(t testing.TB, svc corestore.KVStoreService) sessionCacheBank {
 	sb := collections.NewSchemaBuilder(svc)
 	b := sessionCacheBank{balances: collections.NewMap(sb, collections.NewPrefix("SessionFaultBank/value/"), "SessionFaultBank", collections.StringKey, collections.StringValue)}
 	_, err := sb.Build()
