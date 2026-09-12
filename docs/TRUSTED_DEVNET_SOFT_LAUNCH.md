@@ -165,9 +165,10 @@ printf 'Reset stamp: %s\n' "$POLYSTORE_RESET_STAMP"
 ```
 
 First run this on every provider host. It stops the `provider-daemon` and uses a
-temporary systemd drop-in to isolate mutable uploads and retrieval-session state
-for the new genesis. The paths are the checked-in defaults; substitute deployed
-values if `/etc/polystore/polystore-gateway-provider.env` overrides them.
+later systemd environment file plus fail-closed startup checks to isolate mutable
+uploads and retrieval-session state for the new genesis. The paths are the
+checked-in defaults; substitute deployed values if
+`/etc/polystore/polystore-gateway-provider.env` overrides them.
 
 ```bash
 set -euo pipefail
@@ -175,44 +176,57 @@ POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
 POLYSTORE_PROVIDER_UPLOAD_DIR=/var/lib/polystore/polystore_gateway/provider/uploads
 POLYSTORE_PROVIDER_SESSION_DB_PATH=/var/lib/polystore/polystore_gateway/provider/sessions.db
 POLYSTORE_PROVIDER_FRESH_ROOT="/var/lib/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}/provider"
+POLYSTORE_PROVIDER_OVERRIDE_ENV=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.env
 POLYSTORE_PROVIDER_DROP_IN=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.conf
 
 sudo systemctl stop polystore-gateway-provider
 sudo test -d "$POLYSTORE_PROVIDER_UPLOAD_DIR"
 sudo test ! -e "$POLYSTORE_PROVIDER_SESSION_DB_PATH" || \
   sudo test -f "$POLYSTORE_PROVIDER_SESSION_DB_PATH"
+sudo test ! -e "$POLYSTORE_PROVIDER_OVERRIDE_ENV"
 sudo test ! -e "$POLYSTORE_PROVIDER_DROP_IN"
 sudo test ! -e "$POLYSTORE_PROVIDER_FRESH_ROOT"
 sudo install -d -m 0755 "$(dirname "$POLYSTORE_PROVIDER_DROP_IN")"
 sudo install -d -m 0750 "$POLYSTORE_PROVIDER_FRESH_ROOT"
+sudo tee "$POLYSTORE_PROVIDER_OVERRIDE_ENV" >/dev/null <<EOF
+POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads
+POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db
+EOF
+sudo chmod 0600 "$POLYSTORE_PROVIDER_OVERRIDE_ENV"
 sudo tee "$POLYSTORE_PROVIDER_DROP_IN" >/dev/null <<EOF
 [Service]
-Environment=POLYSTORE_UPLOAD_DIR=${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads
-Environment=POLYSTORE_SESSION_DB_PATH=${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db
+EnvironmentFile=${POLYSTORE_PROVIDER_OVERRIDE_ENV}
+ExecStartPre=/usr/bin/test \${POLYSTORE_UPLOAD_DIR} = ${POLYSTORE_PROVIDER_FRESH_ROOT}/uploads
+ExecStartPre=/usr/bin/test \${POLYSTORE_SESSION_DB_PATH} = ${POLYSTORE_PROVIDER_FRESH_ROOT}/sessions.db
 EOF
 sudo systemctl daemon-reload
 ```
 
-Use a distinct fresh root and drop-in for each provider instance on a shared
-host. Leave every provider stopped while the hub is reset. Then run this on the
-hub with the same reset stamp:
+Use a distinct fresh root, override environment file and drop-in for each provider
+instance on a shared host. Leave every provider stopped while the hub is reset.
+Then run this on the hub with the same reset stamp:
 
 ```bash
 set -euo pipefail
 POLYSTORE_RESET_STAMP='<exact-reset-stamp>'
 POLYSTORE_BACKUP_DIR="/var/backups/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}"
 POLYSTORE_BACKUP_ARCHIVE="${POLYSTORE_BACKUP_DIR}/hub-state.tar.gz"
+POLYSTORE_PRE_RESET_PROFILE="${POLYSTORE_BACKUP_DIR}/consensus-profile.json"
 
-sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
 grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env
 sudo test -d /var/lib/polystore/polystorechaind
 sudo test -d /var/lib/polystore/polystore_gateway/router
 sudo install -d -m 0700 "$POLYSTORE_BACKUP_DIR"
+curl -fsS http://127.0.0.1:1317/cosmos/consensus/v1/params | \
+  jq -e '{block: {max_gas: .params.block.max_gas, max_bytes: .params.block.max_bytes}}' | \
+  sudo tee "$POLYSTORE_PRE_RESET_PROFILE" >/dev/null
+sudo python3 scripts/retrieval_consensus_profile.py "$POLYSTORE_PRE_RESET_PROFILE" >/dev/null
+sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
 sudo tar --xattrs --acls --numeric-owner \
   -C /var/lib/polystore \
   -czf "$POLYSTORE_BACKUP_ARCHIVE" \
   polystorechaind polystore_gateway/router
-sudo sha256sum "$POLYSTORE_BACKUP_ARCHIVE" | \
+sudo sha256sum "$POLYSTORE_BACKUP_ARCHIVE" "$POLYSTORE_PRE_RESET_PROFILE" | \
   sudo tee "${POLYSTORE_BACKUP_ARCHIVE}.sha256" >/dev/null
 sudo sha256sum --check "${POLYSTORE_BACKUP_ARCHIVE}.sha256"
 sudo tar -tzf "$POLYSTORE_BACKUP_ARCHIVE" | grep -Fx 'polystorechaind/'
@@ -302,6 +316,7 @@ POLYSTORE_FAILED_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 POLYSTORE_PROVIDER_UPLOAD_DIR=/var/lib/polystore/polystore_gateway/provider/uploads
 POLYSTORE_PROVIDER_SESSION_DB_PATH=/var/lib/polystore/polystore_gateway/provider/sessions.db
 POLYSTORE_PROVIDER_FRESH_ROOT="/var/lib/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}/provider"
+POLYSTORE_PROVIDER_OVERRIDE_ENV=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.env
 POLYSTORE_PROVIDER_DROP_IN=/etc/systemd/system/polystore-gateway-provider.service.d/fresh-genesis.conf
 
 sudo systemctl stop polystore-gateway-provider
@@ -311,6 +326,9 @@ if sudo test -e "$POLYSTORE_PROVIDER_FRESH_ROOT"; then
 fi
 if sudo test -e "$POLYSTORE_PROVIDER_DROP_IN"; then
   sudo unlink "$POLYSTORE_PROVIDER_DROP_IN"
+fi
+if sudo test -e "$POLYSTORE_PROVIDER_OVERRIDE_ENV"; then
+  sudo unlink "$POLYSTORE_PROVIDER_OVERRIDE_ENV"
 fi
 sudo systemctl daemon-reload
 sudo test -d "$POLYSTORE_PROVIDER_UPLOAD_DIR"
@@ -363,8 +381,16 @@ sudo cat "/proc/${POLYSTORE_PROVIDER_PID}/environ" | tr '\0' '\n' | \
 Then run the healthcheck on the operator host:
 
 ```bash
-scripts/run_public_devnet_healthcheck.sh \
+POLYSTORE_BACKUP_ARCHIVE='/var/backups/polystore/fresh-genesis-<UTC-stamp>/hub-state.tar.gz'
+POLYSTORE_ROLLBACK_PROFILE="$(mktemp)"
+trap 'rm -f "$POLYSTORE_ROLLBACK_PROFILE"' EXIT
+sudo cat "$(dirname "$POLYSTORE_BACKUP_ARCHIVE")/consensus-profile.json" > \
+  "$POLYSTORE_ROLLBACK_PROFILE"
+POLYSTORE_RETRIEVAL_CONSENSUS_PROFILE="$POLYSTORE_ROLLBACK_PROFILE" \
+  scripts/run_public_devnet_healthcheck.sh \
   ops/systemd/env/polystore-public-healthcheck.env
+rm -f "$POLYSTORE_ROLLBACK_PROFILE"
+trap - EXIT
 ```
 
 The restored snapshot already contains the provider registrations that the

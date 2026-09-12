@@ -43,7 +43,7 @@ args=(
   --expected-evm-chain-id "$POLYSTORE_EXPECTED_EVM_CHAIN_ID"
   --expected-eip712-chain-id "$POLYSTORE_EXPECTED_EIP712_CHAIN_ID"
   --expected-evm-denom "$POLYSTORE_EXPECTED_EVM_DENOM"
-  --consensus-profile "$ROOT_DIR/scripts/retrieval_consensus_profile.json"
+  --consensus-profile "${POLYSTORE_RETRIEVAL_CONSENSUS_PROFILE:-$ROOT_DIR/scripts/retrieval_consensus_profile.json}"
   --expected-min-provider-bond "$POLYSTORE_EXPECTED_MIN_PROVIDER_BOND"
   --polystore-precompile "$POLYSTORE_PRECOMPILE_ADDRESS"
   --block-wait "${POLYSTORE_PUBLIC_BLOCK_WAIT:-10}"
