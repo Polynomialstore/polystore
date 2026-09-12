@@ -1033,10 +1033,15 @@ test.describe('native V3 browser qualification', () => {
       if (!isTarget) return route.continue()
       targetRequests++
       if (faultMode === 'pass') return route.continue()
-      faultDeliveries[faultMode]++
       const upstream = await route.fetch()
       const body = await upstream.body()
       const contentType = upstream.headers()['content-type'] || ''
+      // Transport fallback can legitimately hit a rejecting provider. Relay
+      // that bounded response unchanged; only corrupt an authenticated payload.
+      if (!upstream.ok() || !/(?:^|;)\s*boundary=(?:"[^"]+"|[^;\s]+)/i.test(contentType)) {
+        return route.fulfill({ response: upstream, body })
+      }
+      faultDeliveries[faultMode]++
       const mutated = mutateV3Multipart(body, contentType, faultMode, targetBlob)
       await route.fulfill({ response: upstream, body: mutated })
     }
