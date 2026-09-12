@@ -525,4 +525,105 @@ func TestSignedEVMV3ProofUsesProductionGasAndRollsBackOutOfGas(t *testing.T) {
 		require.GreaterOrEqual(t, receipt.GasUsed, static+keeper.ProofCryptoGas-1)
 		t.Logf("v3 proof gas limit=%d static=%d crypto=%d used=%d", gas, static, keeper.ProofCryptoGas, receipt.GasUsed)
 	}
+
+	// The real proof is now accepted. Exercise the terminal ACK with production
+	// bank and transaction boundaries, including failures after reference writes.
+	query = retrievalNativeQuery(t, a)
+	beforeACK, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(query, session.SessionId)
+	require.NoError(t, err)
+	beforeModule := a.BankKeeper.GetBalance(query, module, "stake")
+	beforeOwner := a.BankKeeper.GetBalance(query, owner, "stake")
+	beforeSupply := a.BankKeeper.GetSupply(query, "stake")
+	var contextHash [32]byte
+	copy(contextHash[:], session.ContextHash)
+	ackDigest, err := (retrievalchallenge.ObligationAckV3{
+		ChainID: session.ChainId, SessionID: challengeContext.SessionID, ContextHash: contextHash,
+		PlanHash: challengeContext.PlanHash, Slot: 0, Assigned: challengeContext.SessionOwner, Payee: challengeContext.SessionOwner,
+		BlobCount: session.Obligations[0].BlobCount, BilledEncodedBytes: session.Obligations[0].BlobCount * retrievalchallenge.EncodedBlobBytes,
+		IntegrityRoot: challengeContext.IntegrityRoot,
+	}).Hash()
+	require.NoError(t, err)
+	assertUnreleased := func(ctx sdk.Context) {
+		stored, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, session.SessionId)
+		require.NoError(t, err)
+		require.Equal(t, beforeACK, stored)
+		live, err := a.PolyStoreChainKeeper.RetrievalSessionLiveCount.Get(ctx)
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), live)
+		retainedAnchor, err := a.PolyStoreChainKeeper.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+		require.NoError(t, err)
+		require.Equal(t, anchor, retainedAnchor)
+		refs, err := a.PolyStoreChainKeeper.RetrievalSessionGenerationRefs.Get(ctx, collections.Join(session.DealId, session.Generation))
+		require.NoError(t, err)
+		require.Equal(t, uint64(1), refs)
+		expiry, err := a.PolyStoreChainKeeper.RetrievalSessionExpiryRefs.Has(ctx, collections.Join(session.DeadlineHeight, session.SessionId))
+		require.NoError(t, err)
+		require.True(t, expiry)
+		terminal, err := a.PolyStoreChainKeeper.RetrievalSessionV3TerminalAnchors.Has(ctx, session.SessionId)
+		require.NoError(t, err)
+		require.False(t, terminal)
+		require.Equal(t, beforeModule, a.BankKeeper.GetBalance(ctx, module, "stake"))
+		require.Equal(t, beforeOwner, a.BankKeeper.GetBalance(ctx, owner, "stake"))
+		require.Equal(t, beforeSupply, a.BankKeeper.GetSupply(ctx, "stake"))
+	}
+	ackAPI, err := abi.JSON(strings.NewReader(sponsoredRetrievalSessionV3ABI))
+	require.NoError(t, err)
+	ackInput, err := ackAPI.Pack("acknowledgeRetrievalObligationV3", sessionID, uint32(0), ackDigest[:])
+	require.NoError(t, err)
+	calibrationCtx, _ := query.CacheContext()
+	calibrationEVM, calibrationState := nativeEVM(t, a, calibrationCtx)
+	const ackLimit = uint64(8_000_000)
+	_, left, err := calibrationEVM.Call(caller, polystoreprecompile.Address, ackInput, ackLimit, uint256.NewInt(0))
+	require.NoError(t, err)
+	require.NoError(t, calibrationState.Commit())
+	calibrationSeed, err := a.PolyStoreChainKeeper.RetrievalSessionV3TerminalAnchors.Get(calibrationCtx, session.SessionId)
+	require.NoError(t, err, "gas calibration must actually reach terminal mutation")
+	require.Equal(t, anchor.Seed, calibrationSeed)
+	lateOOG := ackLimit - left - 1
+	require.LessOrEqual(t, lateOOG, uint64(^uint32(0)))
+	for _, tc := range []struct {
+		name   string
+		gas    uint32
+		revert bool
+	}{{"terminal_child_revert", uint32(ackLimit), true}, {"terminal_late_out_of_gas", uint32(lateOOG), false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := query.CacheContext()
+			evm, state := nativeEVM(t, a, ctx)
+			state.SetCode(caller, callAndReturn(polystoreprecompile.Address, tc.gas, tc.revert))
+			_, _, callErr := evm.Call(common.HexToAddress("0xf0338"), caller, ackInput, 12_000_000, uint256.NewInt(0))
+			if tc.revert {
+				require.Error(t, callErr)
+			} else {
+				require.NoError(t, callErr)
+			}
+			require.Empty(t, state.Logs())
+			require.NoError(t, state.Commit())
+			assertUnreleased(ctx)
+		})
+	}
+	completedCtx, _ := query.CacheContext()
+	completedEVM, completedState := nativeEVM(t, a, completedCtx)
+	output, _, err := completedEVM.Call(caller, polystoreprecompile.Address, ackInput, ackLimit, uint256.NewInt(0))
+	require.NoError(t, err)
+	decoded, err := ackAPI.Methods["acknowledgeRetrievalObligationV3"].Outputs.Unpack(output)
+	require.NoError(t, err)
+	require.Equal(t, true, decoded[0])
+	require.NoError(t, completedState.Commit())
+	live, err := a.PolyStoreChainKeeper.RetrievalSessionLiveCount.Get(completedCtx)
+	require.NoError(t, err)
+	require.Zero(t, live)
+	terminalSeed, err := a.PolyStoreChainKeeper.RetrievalSessionV3TerminalAnchors.Get(completedCtx, session.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, anchor.Seed, terminalSeed)
+	completed, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(completedCtx, session.SessionId)
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), completed.SettledSlotsMask)
+	expiry, err := a.PolyStoreChainKeeper.RetrievalSessionExpiryRefs.Has(completedCtx, collections.Join(session.DeadlineHeight, session.SessionId))
+	require.NoError(t, err)
+	require.False(t, expiry)
+	_, err = a.PolyStoreChainKeeper.RetrievalSessionGenerationRefs.Get(completedCtx, collections.Join(session.DealId, session.Generation))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = a.PolyStoreChainKeeper.ChallengeAnchors.Get(completedCtx, session.AnchorHeight)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	require.True(t, a.BankKeeper.GetBalance(completedCtx, owner, "stake").Amount.GT(beforeOwner.Amount))
 }

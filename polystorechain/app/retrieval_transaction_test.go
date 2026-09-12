@@ -27,6 +27,8 @@ import (
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/stretchr/testify/require"
+	"polystorechain/pkg/retrievalchallenge"
+	"polystorechain/x/crypto_ffi"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -151,6 +153,15 @@ func TestRetrievalSessionV3SignedNativeAuthorityAndRollback(t *testing.T) {
 	if runGenesisTestInFreshProcess(t) {
 		return
 	}
+	require.NoError(t, crypto_ffi.Init("../trusted_setup.txt"))
+	rawFixture, err := os.ReadFile("../x/polystorechain/keeper/testdata/proof_admission_k8.json")
+	require.NoError(t, err)
+	var fixture struct {
+		Root   []byte               `json:"root"`
+		Proofs []types.ChainedProof `json:"proofs"`
+	}
+	require.NoError(t, json.Unmarshal(rawFixture, &fixture))
+	require.NotEmpty(t, fixture.Proofs)
 	ownerKey := secp256k1.GenPrivKeyFromSecret([]byte("retrieval v3 native owner"))
 	attackerKey := secp256k1.GenPrivKeyFromSecret([]byte("retrieval v3 native attacker"))
 	a := newRetrievalTransactionApp(t, ownerKey)
@@ -165,11 +176,14 @@ func TestRetrievalSessionV3SignedNativeAuthorityAndRollback(t *testing.T) {
 	slots := make([]*types.DealSlot, 12)
 	for i := range providers {
 		provider := sdk.AccAddress(bytes.Repeat([]byte{byte(0x40 + i)}, 20)).String()
+		if i == 0 {
+			provider = owner.String()
+		}
 		providers[i] = provider
 		slots[i] = &types.DealSlot{Slot: uint32(i), Provider: provider, Status: types.SlotStatus_SLOT_STATUS_ACTIVE}
 		require.NoError(t, a.PolyStoreChainKeeper.Providers.Set(setup, provider, types.Provider{Address: provider, Status: "Active"}))
 	}
-	root := bytes.Repeat([]byte{0x61}, 32)
+	root := fixture.Root
 	deal := types.Deal{Id: 1, Owner: owner.String(), ManifestRoot: root, Size_: 64 * 126976,
 		EscrowBalance: sdkmath.NewInt(100), StartBlock: 1, EndBlock: 100, CurrentGen: 1,
 		TotalMdus: 3, WitnessMdus: 1, RedundancyMode: 2,
@@ -206,7 +220,7 @@ func TestRetrievalSessionV3SignedNativeAuthorityAndRollback(t *testing.T) {
 
 	rollbackOpen := *open
 	rollbackOpen.Nonce = 2
-	laterFailure := &banktypes.MsgSend{FromAddress: owner.String(), ToAddress: providers[0], Amount: sdk.NewCoins(sdk.NewInt64Coin("stake", 2000000))}
+	laterFailure := &banktypes.MsgSend{FromAddress: owner.String(), ToAddress: providers[1], Amount: sdk.NewCoins(sdk.NewInt64Coin("stake", 2000000))}
 	failed := retrievalNativeFinalize(t, a, 4, retrievalNativeSign(t, a, ownerKey, 1, &rollbackOpen, laterFailure)).TxResults[0]
 	require.NotZero(t, failed.Code, failed.Log)
 	require.Contains(t, failed.Log, "insufficient funds")
@@ -220,6 +234,103 @@ func TestRetrievalSessionV3SignedNativeAuthorityAndRollback(t *testing.T) {
 	present, err := a.PolyStoreChainKeeper.RetrievalSessionV3NonceIDs.Has(ctx, collections.Join(collections.Join(owner.String(), deal.Id), uint64(2)))
 	require.NoError(t, err)
 	require.False(t, present)
+
+	// Accept a real proof, then fail a later message after the terminal ACK has
+	// paid and released its references. SDK transaction caching must undo all of it.
+	id, err := a.PolyStoreChainKeeper.RetrievalSessionV3NonceIDs.Get(ctx, collections.Join(collections.Join(owner.String(), deal.Id), uint64(1)))
+	require.NoError(t, err)
+	session, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, id)
+	require.NoError(t, err)
+	anchor, err := a.PolyStoreChainKeeper.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+	require.NoError(t, err)
+	challengeContext := appChallengeContextV3(t, session)
+	seed, err := challengeContext.Seed(anchor.Seed)
+	require.NoError(t, err)
+	challenges, err := challengeContext.Challenges(seed[:])
+	require.NoError(t, err)
+	require.Len(t, challenges, 1)
+	require.Zero(t, challenges[0].Slot)
+	require.Zero(t, challenges[0].LeafIndex)
+	blob := make([]byte, types.BLOB_SIZE)
+	for i := 31; i < len(blob); i += 32 {
+		blob[i] = byte(1 + (i/32)%251)
+	}
+	commitment, err := crypto_ffi.CommitReceivedBlob(blob)
+	require.NoError(t, err)
+	proof := fixture.Proofs[0]
+	require.Equal(t, commitment, proof.BlobCommitment)
+	proof.ZValue = bytes.Clone(challenges[0].Z[:])
+	proof.KzgOpeningProof, proof.YValue, err = crypto_ffi.ComputeBlobProof(blob, proof.ZValue)
+	require.NoError(t, err)
+	proved := retrievalNativeFinalize(t, a, 5, retrievalNativeSign(t, a, ownerKey, 2,
+		&types.MsgSubmitRetrievalSessionProofV3{Creator: owner.String(), SessionId: id, Slot: 0,
+			Proofs: []types.RetrievalSampleProofV3{{Ordinal: challenges[0].Ordinal, Proof: proof}}})).TxResults[0]
+	require.Zero(t, proved.Code, proved.Log)
+	ctx = retrievalNativeQuery(t, a)
+	beforeACK, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, byte(1), beforeACK.AcceptedSampleBitmap[0]&1)
+	require.Zero(t, beforeACK.SettledSlotsMask)
+	module := authtypes.NewModuleAddress(types.ModuleName)
+	beforeModule := a.BankKeeper.GetBalance(ctx, module, "stake")
+	beforeOwner := a.BankKeeper.GetBalance(ctx, owner, "stake")
+	beforeSupply := a.BankKeeper.GetSupply(ctx, "stake")
+	var contextHash [32]byte
+	copy(contextHash[:], session.ContextHash)
+	ackDigest, err := (retrievalchallenge.ObligationAckV3{
+		ChainID: session.ChainId, SessionID: challengeContext.SessionID, ContextHash: contextHash,
+		PlanHash: challengeContext.PlanHash, Slot: 0, Assigned: challengeContext.SessionOwner, Payee: challengeContext.SessionOwner,
+		BlobCount: session.Obligations[0].BlobCount, BilledEncodedBytes: session.Obligations[0].BlobCount * retrievalchallenge.EncodedBlobBytes,
+		IntegrityRoot: challengeContext.IntegrityRoot,
+	}).Hash()
+	require.NoError(t, err)
+	ack := &types.MsgAcknowledgeRetrievalObligationV3{Creator: owner.String(), SessionId: id, Slot: 0, AckDigest: ackDigest[:]}
+	failed = retrievalNativeFinalize(t, a, 6, retrievalNativeSign(t, a, ownerKey, 3, ack, laterFailure)).TxResults[0]
+	require.NotZero(t, failed.Code, failed.Log)
+	require.Contains(t, failed.Log, "insufficient funds", "terminal ACK must reach the later bank message")
+	ctx = retrievalNativeQuery(t, a)
+	stored, err := a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, beforeACK, stored)
+	live, err := a.PolyStoreChainKeeper.RetrievalSessionLiveCount.Get(ctx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), live)
+	retainedAnchor, err := a.PolyStoreChainKeeper.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+	require.NoError(t, err)
+	require.Equal(t, anchor, retainedAnchor)
+	refs, err := a.PolyStoreChainKeeper.RetrievalSessionGenerationRefs.Get(ctx, collections.Join(session.DealId, session.Generation))
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), refs)
+	expiry, err := a.PolyStoreChainKeeper.RetrievalSessionExpiryRefs.Has(ctx, collections.Join(session.DeadlineHeight, id))
+	require.NoError(t, err)
+	require.True(t, expiry)
+	terminal, err := a.PolyStoreChainKeeper.RetrievalSessionV3TerminalAnchors.Has(ctx, id)
+	require.NoError(t, err)
+	require.False(t, terminal)
+	require.Equal(t, beforeModule, a.BankKeeper.GetBalance(ctx, module, "stake"))
+	require.Equal(t, beforeOwner, a.BankKeeper.GetBalance(ctx, owner, "stake"))
+	require.Equal(t, beforeSupply, a.BankKeeper.GetSupply(ctx, "stake"))
+	require.Equal(t, uint64(4), a.AuthKeeper.GetAccount(ctx, owner).GetSequence(), "failed message preserves ante sequence")
+	completed := retrievalNativeFinalize(t, a, 7, retrievalNativeSign(t, a, ownerKey, 4, ack)).TxResults[0]
+	require.Zero(t, completed.Code, completed.Log)
+	ctx = retrievalNativeQuery(t, a)
+	stored, err = a.PolyStoreChainKeeper.RetrievalSessionsV3.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, uint32(1), stored.SettledSlotsMask)
+	live, err = a.PolyStoreChainKeeper.RetrievalSessionLiveCount.Get(ctx)
+	require.NoError(t, err)
+	require.Zero(t, live)
+	terminalSeed, err := a.PolyStoreChainKeeper.RetrievalSessionV3TerminalAnchors.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, anchor.Seed, terminalSeed)
+	expiry, err = a.PolyStoreChainKeeper.RetrievalSessionExpiryRefs.Has(ctx, collections.Join(session.DeadlineHeight, id))
+	require.NoError(t, err)
+	require.False(t, expiry)
+	_, err = a.PolyStoreChainKeeper.RetrievalSessionGenerationRefs.Get(ctx, collections.Join(session.DealId, session.Generation))
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	_, err = a.PolyStoreChainKeeper.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+	require.ErrorIs(t, err, collections.ErrNotFound)
+	require.True(t, a.BankKeeper.GetBalance(ctx, owner, "stake").Amount.GT(beforeOwner.Amount))
 }
 
 // Pinned cosmos/evm seals process-global coin configuration at InitGenesis.
