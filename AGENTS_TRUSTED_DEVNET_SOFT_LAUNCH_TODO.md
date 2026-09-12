@@ -14,7 +14,12 @@ Conventions:
 ## Retrieval challenge activation status
 
 - [x] The security, client/provider integration and trusted-devnet qualification
-  record is retained in closed #254–#258 and #260; #259 remains open and deferred.
+  record is retained in closed #254–#258 and #260; #259 remains open for gated
+  channel analysis, not channel implementation.
+- [ ] Follow [#337](https://github.com/Polynomialstore/polystore/issues/337) for
+  post-batching lifecycle scaling and its child-owned validation gates. The
+  [retention decision](docs/retrieval-v3-retention-decision.md) is a measured
+  proposal, not approval of pruning or unlimited operating volume.
 - [x] The canonical trusted-devnet bootstrap sets version-2 activation height 1.
 - [ ] Treat activation on any other network as an explicit coordinated deployment
   change. Follow the
