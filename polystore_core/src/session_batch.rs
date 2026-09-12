@@ -285,6 +285,20 @@ impl KzgContext {
 
     pub fn verify_polyfs_cross_session_batch(&self, input: &[u8]) -> Result<bool, KzgError> {
         let batch = CrossSessionBatch::parse(input)?;
+        let Some((transcript, openings)) = self.prepare_cross_session_batch(&batch)? else {
+            return Ok(false);
+        };
+        let hash: [u8; 32] = Sha256::digest(transcript).into();
+        let coefficients: Vec<Scalar> = (0..openings.len())
+            .map(|i| cross_session_coefficient(&hash, i as u16))
+            .collect::<Result<_, _>>()?;
+        self.verify_opening_batch(&openings, &coefficients)
+    }
+
+    fn prepare_cross_session_batch(
+        &self,
+        batch: &CrossSessionBatch<'_>,
+    ) -> Result<Option<(Vec<u8>, Vec<Opening>)>, KzgError> {
         let proof_count: usize = batch.entries.iter().map(|entry| entry.records.len()).sum();
         let mut transcript = Vec::with_capacity(256 + proof_count * 500);
         append_lp(&mut transcript, b"polystore/kzg-cross-session-batch/v1");
@@ -317,7 +331,7 @@ impl KzgContext {
                         record.leaf,
                     )?
                 {
-                    return Ok(false);
+                    return Ok(None);
                 }
                 transcript.extend(flat_index.to_be_bytes());
                 transcript.extend((proof_index as u16).to_be_bytes());
@@ -326,6 +340,10 @@ impl KzgContext {
                 transcript.extend(record.mdu.to_be_bytes());
                 transcript.extend(record.leaf.to_be_bytes());
                 transcript.extend((batch.leaves as u32).to_be_bytes());
+                transcript.extend((record.root_path.len() as u16).to_be_bytes());
+                transcript.extend(record.root_path);
+                transcript.extend((record.blob_path.len() as u16).to_be_bytes());
+                transcript.extend(record.blob_path);
                 let Some(pair) = self.prepare_record_openings(
                     &mut transcript,
                     &entry.root,
@@ -333,17 +351,13 @@ impl KzgContext {
                     batch.leaves,
                 )?
                 else {
-                    return Ok(false);
+                    return Ok(None);
                 };
                 openings.extend(pair);
                 flat_index += 1;
             }
         }
-        let hash: [u8; 32] = Sha256::digest(transcript).into();
-        let coefficients: Vec<Scalar> = (0..openings.len())
-            .map(|i| cross_session_coefficient(&hash, i as u16))
-            .collect::<Result<_, _>>()?;
-        self.verify_opening_batch(&openings, &coefficients)
+        Ok(Some((transcript, openings)))
     }
 
     fn prepare_record_openings(
@@ -507,6 +521,24 @@ mod tests {
         assert!(context().verify_polyfs_session_batch(input).unwrap());
     }
     #[test]
+    fn independent_python_cross_session_transcript_and_coefficients() {
+        let input = include_bytes!("../tests/testdata/cross-session-batch-input.bin");
+        let expected: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/testdata/cross-session-batch-golden.json"
+        ))
+        .unwrap();
+        let batch = CrossSessionBatch::parse(input).unwrap();
+        assert_eq!(batch.entries.len(), 8);
+        assert!(context().verify_polyfs_cross_session_batch(input).unwrap());
+        let observed = cross_session_observed(input);
+        assert_eq!(observed["transcript_hex"], expected["transcript_hex"]);
+        assert_eq!(observed["transcript_hash"], expected["transcript_hash"]);
+        assert_eq!(
+            observed["coefficient_scalars"],
+            expected["coefficient_scalars"]
+        );
+    }
+    #[test]
     fn coefficient_rejection_is_finite_and_canonical() {
         let mut calls = 0;
         assert!(
@@ -643,15 +675,21 @@ mod tests {
         encode_fixture(96, root, &records[..count])
     }
 
+    fn cross_context(index: usize, fill: u8) -> [u8; 32] {
+        let mut value = [fill; 32];
+        value[24..].copy_from_slice(&(index as u64).to_be_bytes());
+        value
+    }
+
     fn cross_session_fixture(count: usize) -> Vec<u8> {
         static RECORDS: OnceLock<([u8; 32], Vec<Vec<u8>>)> = OnceLock::new();
         let (root, records) = RECORDS.get_or_init(|| {
             fixture_records_with_z(96, 4097, 0, 64, |i, leaf| {
                 derive_z_with_domain(
                     b"polystore/blob-challenge/v3",
-                    &[17; 32],
-                    &[29; 32],
-                    i as u64,
+                    &cross_context(i, 17),
+                    &cross_context(i, 29),
+                    0,
                     Some(1000 + i as u64),
                     4097,
                     leaf as u32,
@@ -661,17 +699,17 @@ mod tests {
         });
         let mut input = Vec::new();
         input.extend(b"PSB2");
-        input.extend(1u16.to_be_bytes());
+        input.extend((count as u16).to_be_bytes());
         input.extend((count as u16).to_be_bytes());
         input.extend(96u32.to_be_bytes());
-        input.extend([31; 32]);
-        input.extend([17; 32]);
-        input.extend([29; 32]);
-        input.extend(root);
-        input.extend(0u32.to_be_bytes());
-        input.extend((count as u16).to_be_bytes());
         for (i, record) in records[..count].iter().enumerate() {
-            input.extend((i as u64).to_be_bytes());
+            input.extend(cross_context(i, 31));
+            input.extend(cross_context(i, 17));
+            input.extend(cross_context(i, 29));
+            input.extend(root);
+            input.extend(0u32.to_be_bytes());
+            input.extend(1u16.to_be_bytes());
+            input.extend(0u64.to_be_bytes());
             input.extend((1000 + i as u64).to_be_bytes());
             input.extend(record);
         }
@@ -707,6 +745,37 @@ mod tests {
         assert!(
             ctx.verify_polyfs_cross_session_batch(&wrong_leaves)
                 .is_err()
+        );
+
+        let entry_bytes = (input.len() - CROSS_SESSION_HEADER_BYTES) / 2;
+        let record_offset = CROSS_SESSION_HEADER_BYTES + CROSS_SESSION_ENTRY_BYTES;
+        let y_offset = record_offset + 16 + 220;
+        let mut cancellation = input.clone();
+        for (entry, delta) in [(0, Scalar::one()), (1, -Scalar::one())] {
+            let offset = y_offset + entry * entry_bytes;
+            let mut y =
+                (parse_scalar(&cancellation[offset..offset + 32]).unwrap() + delta).to_bytes();
+            y.reverse();
+            cancellation[offset..offset + 32].copy_from_slice(&y);
+        }
+        assert!(
+            !ctx.verify_polyfs_cross_session_batch(&cancellation)
+                .unwrap()
+        );
+
+        let mut reordered = input.clone();
+        let first_record = input[record_offset..CROSS_SESSION_HEADER_BYTES + entry_bytes].to_vec();
+        let second_record = input[record_offset + entry_bytes..].to_vec();
+        reordered[record_offset..CROSS_SESSION_HEADER_BYTES + entry_bytes]
+            .copy_from_slice(&second_record);
+        reordered[record_offset + entry_bytes..].copy_from_slice(&first_record);
+        assert!(!ctx.verify_polyfs_cross_session_batch(&reordered).unwrap());
+
+        let mut noncanonical = input.clone();
+        noncanonical[record_offset + 16 + 140..record_offset + 16 + 188].fill(0xff);
+        assert!(
+            !ctx.verify_polyfs_cross_session_batch(&noncanonical)
+                .unwrap_or(false)
         );
         assert_eq!(
             crate::ffi::polystore_verify_polyfs_cross_session_batch_v1(
@@ -935,5 +1004,39 @@ mod tests {
             .unwrap();
         }
         std::fs::write(std::path::Path::new(&dir).join("rust-batch-observed.json"), serde_json::to_vec_pretty(&serde_json::json!({"transcript_hex":hex::encode(transcript),"hash":hex::encode(hash),"coefficients":coefficients})).unwrap()).unwrap();
+    }
+
+    fn cross_session_observed(input: &[u8]) -> serde_json::Value {
+        let batch = CrossSessionBatch::parse(input).unwrap();
+        let (transcript, openings) = context()
+            .prepare_cross_session_batch(&batch)
+            .unwrap()
+            .unwrap();
+        let hash: [u8; 32] = Sha256::digest(&transcript).into();
+        let coefficients: Vec<_> = (0..openings.len())
+            .map(|i| {
+                let mut bytes = cross_session_coefficient(&hash, i as u16)
+                    .unwrap()
+                    .to_bytes();
+                bytes.reverse();
+                hex::encode(bytes)
+            })
+            .collect();
+        serde_json::json!({
+            "transcript_hex": hex::encode(transcript),
+            "transcript_hash": hex::encode(hash),
+            "coefficient_scalars": coefficients,
+        })
+    }
+
+    #[test]
+    #[ignore]
+    fn export_cross_session_batch_fixture() {
+        let dir = std::env::var("POLYSTORE_BATCH_VECTOR_DIR").unwrap();
+        std::fs::write(
+            std::path::Path::new(&dir).join("cross-session-batch-input.bin"),
+            cross_session_fixture(8),
+        )
+        .unwrap();
     }
 }
