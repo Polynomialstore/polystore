@@ -34,7 +34,8 @@ One benchmark session represents one independent CDN-style paid read:
 
 - one 1 KiB logical range;
 - one complete 128 KiB encoded blob delivered and authenticated;
-- one requester-funded or explicitly sponsored open through the EVM precompile;
+- one sponsored open through the EVM precompile, including retrieval-policy
+  authorization and payment by the independent requester;
 - one provider obligation and one nonconstant sampled chained proof;
 - one requester EVM ACK; and
 - exactly-once burn, provider payout, and terminal settlement.
@@ -42,6 +43,8 @@ One benchmark session represents one independent CDN-style paid read:
 Use a pool of independently funded requesters and assigned providers in a
 deterministic round-robin. Record the distribution. A single hot signer may be a
 useful control, but it must not be the only result presented as CDN-style load.
+An owner/deal-escrow open is also only a separately reported control; do not mix
+it into the primary sponsored-open rate.
 
 The primary metric is:
 
@@ -192,6 +195,15 @@ and refund semantics. No pruning or refund-deadline change is authorized. Measur
 application database bytes per session and verify live/expiry/anchor/generation
 references drain while terminal history remains.
 
+The harness must enforce and test this before collection. Count every funded
+open, including failed or incomplete sessions; warn at 750,000 opens or 3 GiB
+added data. Before admitting each cohort, reject it if its opens would exceed
+1,000,000 or if measured growth plus the cohort's forecast growth would exceed
+4 GiB. Start the byte forecast at 4 KiB per open, update it conservatively from
+observed growth, and never treat expired sessions as restored budget. Log the
+forecast decision, owner/deal cardinality, outstanding refundable amount, and
+oldest liability at every warning and stop.
+
 ## Required artifacts
 
 Retain enough evidence to recompute the result without trusting the summary:
@@ -200,7 +212,8 @@ Retain enough evidence to recompute the result without trusting the summary:
   SHA-256 build manifest for chain, native library, user-gateway, CLI, and any
   inventory exporter;
 - exact command, environment, genesis/consensus parameters, pricing, funded
-  accounts, provider assignment, and hardware/topology manifest;
+  accounts, sponsored-open method and policy/auth mix, provider assignment, and
+  hardware/topology manifest;
 - per-block committed transaction types, gas wanted/used, bytes, session IDs,
   open and settlement counts, commit times, consensus rounds, and signatures;
 - all-validator state roots and session/economic reconciliation;
@@ -208,6 +221,8 @@ Retain enough evidence to recompute the result without trusting the summary:
   burn, and supply balance deltas;
 - per-component CPU and RSS samples, Go/native/JS memory scopes kept distinct;
 - application-database start/end sizes and retained rows/index counts; and
+- retention admission-gate tests plus per-cohort open, byte-forecast, warning,
+  and stop decisions; and
 - low-load delivery-path evidence plus raw saturation evidence and checksums.
 
 ## Result format
