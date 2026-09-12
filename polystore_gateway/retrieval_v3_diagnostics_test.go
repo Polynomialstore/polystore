@@ -152,6 +152,11 @@ func TestRetrievalDiagnosticsV3WriteFailureAndHeaderPreservation(t *testing.T) {
 	if !strings.Contains(combined, "ps3p_lcd") || !strings.Contains(combined, "ps3g_lcd") {
 		t.Fatal("gateway overwrote provider attribution")
 	}
+	unsupported := &retrievalDiagnosticWriterV3{ResponseWriter: failingDiagnosticWriterV3{make(http.Header)}, d: d}
+	unsupported.Flush()
+	if unsupported.writeError {
+		t.Fatal("unsupported optional flush reported as a response error")
+	}
 }
 
 type fastDiagnosticWriterV3 struct {

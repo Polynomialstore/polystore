@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -100,7 +101,7 @@ func (w *retrievalDiagnosticWriterV3) Flush() {
 	if w.status == 0 {
 		w.WriteHeader(http.StatusOK)
 	}
-	if err := http.NewResponseController(w.ResponseWriter).Flush(); err != nil && err != http.ErrNotSupported {
+	if err := http.NewResponseController(w.ResponseWriter).Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
 		w.writeError = true
 	}
 }
