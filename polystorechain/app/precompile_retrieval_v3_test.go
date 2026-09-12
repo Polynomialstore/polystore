@@ -590,11 +590,12 @@ func TestSignedEVMV3ProofUsesProductionGasAndRollsBackOutOfGas(t *testing.T) {
 			ctx, _ := query.CacheContext()
 			evm, state := nativeEVM(t, a, ctx)
 			state.SetCode(caller, callAndReturn(polystoreprecompile.Address, tc.gas, tc.revert))
-			_, _, callErr := evm.Call(common.HexToAddress("0xf0338"), caller, ackInput, 12_000_000, uint256.NewInt(0))
+			output, _, callErr := evm.Call(common.HexToAddress("0xf0338"), caller, ackInput, 12_000_000, uint256.NewInt(0))
 			if tc.revert {
 				require.Error(t, callErr)
 			} else {
 				require.NoError(t, callErr)
+				require.Zero(t, new(big.Int).SetBytes(output).Sign(), "outer succeeds but terminal child ran out of gas")
 			}
 			require.Empty(t, state.Logs())
 			require.NoError(t, state.Commit())
@@ -603,7 +604,8 @@ func TestSignedEVMV3ProofUsesProductionGasAndRollsBackOutOfGas(t *testing.T) {
 	}
 	completedCtx, _ := query.CacheContext()
 	completedEVM, completedState := nativeEVM(t, a, completedCtx)
-	output, _, err := completedEVM.Call(caller, polystoreprecompile.Address, ackInput, ackLimit, uint256.NewInt(0))
+	completedState.SetCode(caller, callAndReturn(polystoreprecompile.Address, uint32(ackLimit), false))
+	output, _, err := completedEVM.Call(common.HexToAddress("0xf0338"), caller, ackInput, 12_000_000, uint256.NewInt(0))
 	require.NoError(t, err)
 	decoded, err := ackAPI.Methods["acknowledgeRetrievalObligationV3"].Outputs.Unpack(output)
 	require.NoError(t, err)
