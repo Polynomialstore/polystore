@@ -641,7 +641,9 @@ in `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`:
 session, progress bitmap, settlement/refund masks and `anchor_seed`. This field
 contains the raw committed H+1 anchor, **not** the derived sampling seed. Derive
 `ContextV3.Seed(anchor_seed)` before calling `ContextV3.Challenges`. It is empty
-before anchor capture and after reference release. The CLI does not generate
+before anchor capture and after ordinary expiry releases the last shared anchor
+reference. Fully settled sessions instead retain their original anchor seed in
+the terminal collection, including after their response deadline. The CLI does not generate
 proofs, authenticate downloaded bytes, or create ACK digests; those require the
 frozen context and provider/client integration specified above.
 
