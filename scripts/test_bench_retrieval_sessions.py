@@ -258,6 +258,7 @@ class BenchmarkArtifactTest(unittest.TestCase):
                 self.assertEqual(deadline, 123)
                 self.assertEqual(options, {"env": {"ONLY": "this"}, "cwd": root})
                 self.assertEqual(argv[:4], [str(systemd_run), "--user", "--scope", "--quiet"])
+                self.assertRegex(argv[4], r"^--unit=polystore-291-browser-[0-9]+-[0-9a-f]{12}$")
                 self.assertIn("--property=MemoryAccounting=yes", argv)
                 self.assertEqual(argv[-2:], ["playwright", "test"])
                 output.write_text(json.dumps(expected))
@@ -269,6 +270,15 @@ class BenchmarkArtifactTest(unittest.TestCase):
                     ["playwright", "test"], 123, output, env={"ONLY": "this"}, cwd=root)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(measurement, expected)
+
+            second = root / "second-memory.json"
+            with patch.object(artifact.platform, "system", return_value="Linux"), \
+                 patch.object(artifact, "SYSTEMD_RUN", systemd_run), \
+                 patch.object(artifact, "run_bounded_command", side_effect=lambda argv, *_args, **_kwargs:
+                              subprocess.CompletedProcess(argv, 1, "", "")) as run:
+                artifact.run_bounded_browser_command(["playwright"], 123, second)
+            self.assertNotEqual(command_unit := run.call_args.args[0][4],
+                                f"--unit=polystore-291-browser-{os.getpid()}-" + hashlib.sha256(str(output).encode()).hexdigest()[:12])
 
             output.unlink()
             with patch.object(artifact.platform, "system", return_value="Linux"), \
@@ -1763,6 +1773,20 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                     argv = call.args[0]
                     self.assertEqual(argv[argv.index("--minimum-gas-prices") + 1],
                                      artifact.BROWSER_EVM_NATIVE_GAS_PRICES if browser_evm else "0.001aatom")
+
+    def test_browser_evm_genesis_accepts_two_distinct_contention_payers(self):
+        runner = artifact.FourValidatorLifecycle(
+            self.binary, self.library, self.root / "browser-contention", browser_evm=True)
+        runner.home.mkdir(mode=0o700)
+        payers = ["nil1" + "y" * 35, "nil1" + "z" * 35]
+        runner.prepare(browser_payer=payers)
+        funding = [c for c in runner.doc["commands"] if c[1:3] == ["genesis", "add-genesis-account"]]
+        self.assertEqual([c[3] for c in funding if c[3] in payers], payers)
+        self.assertEqual(runner.doc["browser_payers"], payers)
+        with self.assertRaisesRegex(ValueError, "distinct E2E payer"):
+            artifact.FourValidatorLifecycle(
+                self.binary, self.library, self.root / "browser-duplicate", browser_evm=True
+            ).prepare(browser_payer=[payers[0], payers[0]])
 
     def test_prepare_provisions_bounded_high_load_signer_population(self):
         self.runner.home.mkdir(mode=0o700)

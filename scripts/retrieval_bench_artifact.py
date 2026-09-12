@@ -431,8 +431,9 @@ def run_bounded_browser_command(argv, deadline, memory_output, *, env=None, cwd=
     output = output.parent.resolve(strict=True) / output.name
     if os.path.lexists(output):
         raise ValueError("browser memory output must not already exist")
+    suffix = hashlib.sha256(str(output).encode()).hexdigest()[:12]
     command = [str(SYSTEMD_RUN), "--user", "--scope", "--quiet",
-               f"--unit=polystore-291-browser-{os.getpid()}", "--property=MemoryAccounting=yes", "--",
+               f"--unit=polystore-291-browser-{os.getpid()}-{suffix}", "--property=MemoryAccounting=yes", "--",
                sys.executable, str(Path(__file__).resolve(strict=True)), "browser-memory-wrapper", str(output), "--",
                *argv]
     result = run_bounded_command(command, deadline, env=env, cwd=cwd)
@@ -1834,13 +1835,18 @@ class FourValidatorLifecycle:
             self.cli(first, "genesis", "add-genesis-account", address,
                      "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
         if self.browser_evm:
-            if not isinstance(browser_payer, str) or not re.fullmatch(r"nil1[0-9a-z]{20,80}", browser_payer):
-                raise ValueError("browser qualification requires the canonical E2E payer account")
-            if browser_payer in self.signers.values():
-                raise ValueError("browser payer must remain distinct from lifecycle CLI signers")
-            self.cli(first, "genesis", "add-genesis-account", browser_payer,
-                     "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
-            self.doc["browser_payer"] = browser_payer
+            payers = [browser_payer] if isinstance(browser_payer, str) else browser_payer
+            if (not isinstance(payers, (list, tuple)) or not 1 <= len(payers) <= 2 or
+                    len(set(payers)) != len(payers) or
+                    any(not isinstance(payer, str) or not re.fullmatch(r"nil1[0-9a-z]{20,80}", payer)
+                        for payer in payers)):
+                raise ValueError("browser qualification requires one or two distinct E2E payer accounts")
+            if set(payers) & set(self.signers.values()):
+                raise ValueError("browser payers must remain distinct from lifecycle CLI signers")
+            for payer in payers:
+                self.cli(first, "genesis", "add-genesis-account", payer,
+                         "100000000000stake,1000000000000000000aatom", "--keyring-backend", "test")
+            self.doc["browser_payer" if isinstance(browser_payer, str) else "browser_payers"] = browser_payer
         elif browser_payer is not None:
             raise ValueError("browser payer requires browser EVM mode")
         genesis = json.loads((first / "config/genesis.json").read_text())
