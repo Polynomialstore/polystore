@@ -1,6 +1,7 @@
-import { expect, type APIRequestContext, type Download, type Page, type Response, type Route } from '@playwright/test'
+import { expect, type APIRequestContext, type Download, type Page, type Request, type Response, type Route } from '@playwright/test'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
 import { RetrievalProgress, startRetrievalWatchdog } from './utils/retrievalProgress'
 import { persistentTest as test } from './utils/persistentBrowser'
@@ -9,6 +10,8 @@ import type { RetrievalDiagnostic } from '../src/lib/retrievalDiagnostics'
 const enabled = process.env.E2E_NATIVE_V3_BROWSER === '1'
 const expiryEnabled = process.env.E2E_NATIVE_V3_EXPIRY === '1'
 const faultsEnabled = process.env.E2E_NATIVE_V3_FAULTS === '1'
+const contentionClients = Number(process.env.E2E_NATIVE_V3_CONTENTION_CLIENTS || 0)
+const contentionEnabled = contentionClients === 1 || contentionClients === 2
 const dealId = process.env.E2E_NATIVE_V3_DEAL_ID || ''
 const payer = process.env.E2E_NATIVE_V3_PAYER || ''
 const filePath = process.env.E2E_NATIVE_V3_FILE || 'payload.bin'
@@ -46,6 +49,16 @@ type BrowserFailureDiagnostics = {
     resourceType?: string
     route?: string
   }>
+}
+
+type ContinuationAttempt = {
+  phase: 'first-pass' | 'drain'
+  startedUnixMs: number
+  finishedUnixMs?: number
+  durationMs?: number
+  status?: number
+  outcome?: string
+  failure?: string
 }
 
 function safeFailureMessage(message: string): string {
@@ -567,6 +580,172 @@ test.describe('native V3 browser qualification', () => {
       stopWatchdog()
       persist()
       await saved
+    }
+  })
+
+  test('contention clients retain busy attempts and drain the same paid checkpoint without rereading data', async ({ page }) => {
+    test.skip(!contentionEnabled, 'requires the opt-in native V3 contention measurement')
+    test.setTimeout(15 * 60_000)
+    expect(expectedBytes).toBe(1024)
+    const label = process.env.E2E_NATIVE_V3_CONTENTION_LABEL || ''
+    const barrier = process.env.E2E_NATIVE_V3_CONTENTION_BARRIER || ''
+    expect(label).toMatch(/^client-[12]$/)
+    expect(barrier).not.toBe('')
+
+    const context = page.context()
+    const diagnostics: RetrievalDiagnostic[] = []
+    const continuationAttempts: ContinuationAttempt[] = []
+    const pending = new WeakMap<Request, ContinuationAttempt>()
+    const providerProofOutcomes: unknown[] = []
+    const evmResponseHashes: string[] = []
+    const evmTransactions: JsonObject[] = []
+    const evmReceipts: JsonObject[] = []
+    let phase: ContinuationAttempt['phase'] = 'first-pass'
+    let dataMduRequests = 0
+    let rawTransactions = 0
+    let barrierArrivedUnixMs = 0
+    const summary: Record<string, unknown> = {
+      success: false, label, contentionClients, dealId, payer, expectedBytes, expectedHash,
+      diagnostics, continuationAttempts, providerProofOutcomes, evmTransactions, evmReceipts,
+    }
+    const persist = async () => {
+      if (!resultPath) return
+      const temporary = `${resultPath}.tmp`
+      await fs.writeFile(temporary, JSON.stringify(summary, (_key, value) => typeof value === 'bigint' ? value.toString() : value, 2))
+      await fs.rename(temporary, resultPath)
+    }
+
+    await context.exposeFunction('__nativeV3ContentionDiagnostic', (event: RetrievalDiagnostic) => diagnostics.push(event))
+    await context.addInitScript(() => {
+      const scope = window as unknown as {
+        __polystoreRetrievalDiagnostic: (event: unknown) => void
+        __nativeV3ContentionDiagnostic: (event: unknown) => Promise<void>
+      }
+      scope.__polystoreRetrievalDiagnostic = (event) => { void scope.__nativeV3ContentionDiagnostic(event) }
+    })
+    context.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (/^\/(?:gateway\/mdu|sp\/retrieval\/mdu)\/[^/]+\/[^/]+$/.test(pathname) &&
+          request.headers()['x-polystore-session-id']) dataMduRequests++
+      if (pathname === '/gateway/retrieval/session-proof/continue') {
+        const attempt: ContinuationAttempt = { phase, startedUnixMs: Date.now() }
+        continuationAttempts.push(attempt)
+        pending.set(request, attempt)
+      }
+      if (request.method() !== 'POST' || !request.url().startsWith(evm)) return
+      try { if ((JSON.parse(request.postData() || '{}') as EvmRpcRequest).method === 'eth_sendRawTransaction') rawTransactions++ }
+      catch { /* malformed requests cannot count as financial evidence */ }
+    })
+    context.on('requestfailed', (request) => {
+      const attempt = pending.get(request)
+      if (!attempt) return
+      attempt.finishedUnixMs = Date.now()
+      attempt.durationMs = attempt.finishedUnixMs - attempt.startedUnixMs
+      attempt.failure = safeFailureMessage(request.failure()?.errorText || 'request failed')
+    })
+    context.on('response', (response: Response) => {
+      const request = response.request()
+      const attempt = pending.get(request)
+      if (attempt) {
+        attempt.finishedUnixMs = Date.now()
+        attempt.durationMs = attempt.finishedUnixMs - attempt.startedUnixMs
+        attempt.status = response.status()
+        void response.json().then((body: unknown) => {
+          if (!body || typeof body !== 'object') return
+          const outcome = body as JsonObject
+          attempt.outcome = String(outcome.status || outcome.error || 'unknown').slice(0, 128)
+          const timing = outcome.timing
+          if (response.ok() && timing && typeof timing === 'object' &&
+              (timing as JsonObject).schema === 'polystore-v3-provider-timing-v1') {
+            providerProofOutcomes.push({ url: response.url(), txHash: outcome.tx_hash, body: outcome })
+          }
+        }).catch(() => { attempt.outcome = 'non-json' })
+      }
+      if (request.method() !== 'POST' || !response.url().startsWith(evm) || !response.ok()) return
+      let rpc: EvmRpcRequest
+      try { rpc = JSON.parse(request.postData() || '{}') as EvmRpcRequest } catch { return }
+      if (rpc.method !== 'eth_sendRawTransaction') return
+      void response.json().then((body: JsonObject) => {
+        if (typeof body.result === 'string' && /^0x[0-9a-f]{64}$/i.test(body.result)) evmResponseHashes.push(body.result)
+      }).catch(() => undefined)
+    })
+
+    let holdFirstContinuation = true
+    await context.route('**/gateway/retrieval/session-proof/continue', async (route) => {
+      if (!holdFirstContinuation) return route.continue()
+      holdFirstContinuation = false
+      barrierArrivedUnixMs = Date.now()
+      await fs.writeFile(path.join(barrier, `${label}.ready`), String(barrierArrivedUnixMs))
+      await expect.poll(async () => (await fs.readdir(barrier)).filter((name) => name.endsWith('.ready')).length,
+        { timeout: 120_000, intervals: [20, 50, 100] }).toBe(contentionClients)
+      await route.continue()
+    })
+
+    try {
+      const before = { stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom') }
+      await mountDealDetail(page)
+      const button = await openDownload(page)
+      const [firstDownload] = await Promise.all([
+        page.waitForEvent('download', { timeout: 10 * 60_000 }), button.click(),
+      ])
+      const downloaded = await hashDownload(firstDownload)
+      await firstDownload.delete()
+      expect(downloaded).toEqual({ bytes: expectedBytes, sha256: expectedHash })
+      await expect.poll(() => diagnostics.filter((event) => event.phase === 'opened_session').length).toBe(1)
+      const sessionId = diagnostics.find((event) => event.phase === 'opened_session')!.sessionId!
+      const firstPass = await sessionById(page, sessionId)
+      const dataMduRequestsAfterFirstPass = dataMduRequests
+      let drained: { bytes: number; sha256: string } | null = null
+
+      if (BigInt(String(firstPass.locked_fee)) !== 0n) {
+        phase = 'drain'
+        await page.close()
+        const reopened = await context.newPage()
+        await mountDealDetail(reopened, false)
+        const recoveryRow = reopened.getByTestId('native-v3-live-driver')
+          .locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
+          .filter({ has: reopened.getByTestId('v3-frozen-recovery') })
+        await expect(recoveryRow).toHaveCount(1, { timeout: 120_000 })
+        const [recoveryDownload] = await Promise.all([
+          reopened.waitForEvent('download', { timeout: 10 * 60_000 }),
+          recoveryRow.getByTestId('deal-detail-download').click(),
+        ])
+        drained = await hashDownload(recoveryDownload)
+        await recoveryDownload.delete()
+        expect(drained).toEqual(downloaded)
+        expect(dataMduRequests).toBe(dataMduRequestsAfterFirstPass)
+        page = reopened
+      }
+
+      const session = await sessionById(page, sessionId)
+      const obligations = session.obligations as JsonObject[]
+      const expectedMask = obligations.reduce((mask, row) => mask | (1n << BigInt(String(row.slot))), 0n)
+      expect(BigInt(String(session.acked_slots_mask))).toBe(expectedMask)
+      expect(BigInt(String(session.settled_slots_mask))).toBe(expectedMask)
+      expect(BigInt(String(session.locked_fee))).toBe(0n)
+      await expect.poll(() => continuationAttempts.every((attempt) => attempt.finishedUnixMs !== undefined)).toBe(true)
+      const sampledSlots = obligations.filter((row) => BigInt(String(row.sample_count)) > 0n)
+        .map((row) => Number(row.slot)).sort((a, b) => a - b)
+      await expect.poll(() => proofOutcomeSlots(providerProofOutcomes)).toEqual(sampledSlots)
+      await expect.poll(() => evmResponseHashes.length).toBe(rawTransactions)
+      for (const hash of evmResponseHashes) {
+        const transaction = await evmRpc(page, 'eth_getTransactionByHash', [hash])
+        const receipt = await evmRpc(page, 'eth_getTransactionReceipt', [hash])
+        expect(transaction && typeof transaction === 'object').toBe(true)
+        expect(receipt && typeof receipt === 'object').toBe(true)
+        evmTransactions.push(transaction as JsonObject)
+        evmReceipts.push(receipt as JsonObject)
+      }
+      const after = { stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom') }
+      const variableFee = obligations.reduce((sum, row) =>
+        sum + BigInt(String(row.blob_count)) * BigInt(String(session.price_per_blob)), 0n)
+      expect(before.stake - after.stake).toBe(BigInt(String(session.base_fee)) + variableFee)
+      expect(after.aatom).toBeLessThan(before.aatom)
+      Object.assign(summary, { success: true, session, sessionId, firstPass, downloaded, drained,
+        before, after, rawTransactions, dataMduRequests, dataMduRequestsAfterFirstPass,
+        barrierArrivedUnixMs })
+    } finally {
+      await persist()
     }
   })
 

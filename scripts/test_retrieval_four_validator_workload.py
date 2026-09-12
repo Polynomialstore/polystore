@@ -257,6 +257,59 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
+    def test_browser_contention_uses_two_isolated_wallets_and_overlapping_first_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            website, home = root / "website", root / "run"
+            website.mkdir()
+            home.mkdir()
+            lifecycle = SimpleNamespace(home=home, deadline=10**18,
+                doc={"provenance": {"curl_binary": "/curl"}}, signers={}, save=Mock(),
+                remaining=Mock(return_value=30), wait_height=Mock(side_effect=[20, 21, 22]))
+            reservations = [Mock(), Mock()]
+            ports = {"websites": [dict(port=4173 + i, reservation=reservations[i]) for i in range(2)]}
+            launched, session_ids = [], ("11" * 32, "22" * 32)
+
+            def popen(argv, **kwargs):
+                launched.append((argv, kwargs))
+                return SimpleNamespace(pid=100 + len(launched))
+
+            def playwright(argv, deadline, memory_output, *, env=None, cwd=None):
+                index = int(env["E2E_NATIVE_V3_CONTENTION_LABEL"].removeprefix("client-")) - 1
+                Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps(dict(success=True,
+                    label=f"client-{index + 1}", payer=workload.V3_BROWSER_ACCOUNTS[index]["payer"],
+                    session={"session_id": base64.b64encode(bytes.fromhex(session_ids[index])).decode()},
+                    continuationAttempts=[dict(phase="first-pass", startedUnixMs=1,
+                                               finishedUnixMs=3, status=200)],
+                    dataMduRequests=1, dataMduRequestsAfterFirstPass=1,
+                    evmReceipts=[], evmTransactions=[], providerProofOutcomes=[])))
+                return SimpleNamespace(returncode=0, stdout="passed", stderr=""), {"peak": index}
+
+            before = {"bank": {"height": 19}}
+            after = {"bank": {"height": 21}, "retrieval": {"sessions": {
+                sid: {"sample_count": 0, "obligations": []} for sid in session_ids}}}
+            with patch.object(workload.subprocess, "Popen", side_effect=popen), \
+                 patch.object(artifact, "run_bounded_browser_command", side_effect=playwright), \
+                 patch.object(workload, "browser_v3_snapshot", side_effect=[before, after]) as snapshot, \
+                 patch.object(workload, "collect_issuance", return_value=0), \
+                 patch.object(workload, "browser_v3_committed_receipts", return_value=[]), \
+                 patch.object(workload, "validate_v3_provider_phase_timings", return_value={"qualification": True}), \
+                 patch.object(workload, "verify_browser_v3_contention_economics",
+                              return_value={"completed_sessions": 2}):
+                result = workload.run_native_v3_browser_contention(lifecycle, website=website,
+                    vite=website / "vite", playwright=website / "playwright", deal={"id": "7"},
+                    browser_ports=ports, browser_env={}, processes=[], check_providers=Mock(),
+                    command=Mock(), gateway_base="http://127.0.0.1:18080", gateway_pid=99,
+                    status={"persona": "user-gateway"}, clients=2, diagnostics=True)
+            self.assertEqual([row[0][-2] for row in launched], ["4173", "4174"])
+            self.assertEqual({row[1]["env"]["VITE_E2E_PK"] for row in launched},
+                             {account["private_key"] for account in workload.V3_BROWSER_ACCOUNTS})
+            self.assertEqual(result["measurement"], dict(first_pass_overlap=True,
+                status_counts={"200": 2}, busy_first_pass_clients=0, recovery_data_rereads=0))
+            self.assertEqual(snapshot.call_args_list[1].kwargs["session_ids"], list(session_ids))
+            for reservation in reservations:
+                reservation.close.assert_called_once()
+
     def test_browser_executor_handoff_publishes_fixed_request_and_retains_response(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -474,6 +527,52 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             candidate[0]["receipt"][field] = value
             with self.assertRaises(ValueError):
                 verify(observed=candidate)
+
+    def test_browser_contention_economics_reconciles_each_payer_and_the_aggregate(self):
+        sessions = ("ab" * 32, "cd" * 32)
+        signers = {"owner0": ADDRESSES[0], "provider0": ADDRESSES[1], "provider1": ADDRESSES[2]}
+        payers = {account["payer"]: dict(address=account["payer"], stake="1000", aatom="1000")
+                  for account in workload.V3_BROWSER_ACCOUNTS}
+        before = dict(bank=dict(height=10, balances={name + ":stake": "1000" for name in signers},
+                                supply={"stake": "10000"}), payers=payers,
+            retrieval=dict(module_stake="1000", deals={"0": {"escrow_balance": "1000"}}, sessions={}))
+        after = copy.deepcopy(before)
+        after["bank"].update(height=20, supply={"stake": "10046"})
+        after["bank"]["balances"].update({"provider0:stake": "1044", "provider1:stake": "1044"})
+        for account in workload.V3_BROWSER_ACCOUNTS:
+            after["payers"][account["payer"]].update(stake="929", aatom="970")
+        for account, sid in zip(workload.V3_BROWSER_ACCOUNTS, sessions):
+            after["retrieval"]["sessions"][sid] = dict(payer=account["payer"], owner=account["payer"],
+                funding="RETRIEVAL_SESSION_FUNDING_REQUESTER", price_denom="stake", base_fee="3",
+                price_per_blob="17", completion_burn_bps=3333, acked_slots_mask=3,
+                settled_slots_mask=3, refunded_slots_mask=0, locked_fee="0", sample_count=2,
+                accepted_sample_bitmap=base64.b64encode(bytes([3]) + bytes(16)).decode(),
+                obligations=[dict(slot=i, payee=ADDRESSES[i + 1], assigned_provider=ADDRESSES[i + 1],
+                    blob_count=2, locked_fee="34") for i in range(2)])
+        receipts = [dict(height=15, receipt={"from": account["evm"],
+            "to": "0x0000000000000000000000000000000000000900",
+            "gasUsed": "0xa", "effectiveGasPrice": "0x3"}) for account in workload.V3_BROWSER_ACCOUNTS]
+        result = workload.verify_browser_v3_contention_economics(before, after, sessions=sessions,
+            receipts=receipts, issued_stake=100, signers=signers, accounts=workload.V3_BROWSER_ACCOUNTS)
+        self.assertEqual(result, dict(charged_stake={account["payer"]: 71
+            for account in workload.V3_BROWSER_ACCOUNTS},
+            provider_payouts={ADDRESSES[1]: 44, ADDRESSES[2]: 44}, burned_stake=54,
+            issued_stake=100, payer_gas_aatom={account["payer"]: 30
+            for account in workload.V3_BROWSER_ACCOUNTS}, completed_sessions=2))
+        single_before = copy.deepcopy(before)
+        single_before["payer"] = single_before.pop("payers")[workload.V3_BROWSER_PAYER]
+        single_after = copy.deepcopy(single_before)
+        single_after["bank"].update(height=20, supply={"stake": "10073"})
+        single_after["bank"]["balances"].update({"provider0:stake": "1022", "provider1:stake": "1022"})
+        single_after["payer"].update(stake="929", aatom="970")
+        single_after["retrieval"]["sessions"][sessions[0]] = after["retrieval"]["sessions"][sessions[0]]
+        self.assertEqual(workload.verify_browser_v3_contention_economics(single_before, single_after,
+            sessions=sessions[:1], receipts=receipts[:1], issued_stake=100, signers=signers,
+            accounts=workload.V3_BROWSER_ACCOUNTS[:1])["completed_sessions"], 1)
+        after["payers"][workload.V3_BROWSER_ACCOUNTS[1]["payer"]]["stake"] = "928"
+        with self.assertRaisesRegex(ValueError, "payer stake debit"):
+            workload.verify_browser_v3_contention_economics(before, after, sessions=sessions,
+                receipts=receipts, issued_stake=100, signers=signers, accounts=workload.V3_BROWSER_ACCOUNTS)
 
     def test_browser_expiry_economics_refunds_variable_fee_and_retains_base_and_gas(self):
         sid = "ab" * 32

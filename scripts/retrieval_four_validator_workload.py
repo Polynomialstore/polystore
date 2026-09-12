@@ -55,6 +55,13 @@ V3_USER_MDU_BYTES = 8_126_464
 V3_BROWSER_DEFAULT_BYTES = 1024
 V3_BROWSER_SIZES = (1024, 16_777_217, 130_023_424, 1_073_741_824)
 V3_BROWSER_PAYER = "nil1ser7fv30x7e7xr7n62tlr7m7z07ldqj4thdezk"
+V3_BROWSER_ACCOUNTS = (
+    dict(payer=V3_BROWSER_PAYER, evm="0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255",
+         private_key="0x4f3edf983ac636a65a842ce7c78d9aa706d3b113b37a2b2d6f6fcf7e9f59b5f1"),
+    dict(payer="nil1j4z8jhur7a5vlm6skh3zzq7vx27qlmhp553jr4",
+         evm="0x9544795f83f768cfef50b5e22103cc32bc0feee1",
+         private_key="0x6cbed15c177e12c9c1a3da8fbd9d463d42d54e5b2a0f0e2db3c1e2d2b6c7a891"),
+)
 V3_PILOT_SESSIONS = 2
 V3_MAX_SAMPLES = 132
 V3_BITMAP_BYTES = (V3_MAX_SAMPLES + 7) // 8
@@ -3327,7 +3334,7 @@ def run_browser_executor_handoff(lifecycle, *, source, browser_env, faults, chec
 
 def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, command,
                           processes, check_providers, faults=False, executor_handoff=False,
-                          diagnostics=False):
+                          diagnostics=False, contention_clients=0):
     """Run one real sponsored DealDetail retrieval through the owned browser stack."""
     website = source / "polystore-website"
     vite = website / "node_modules/.bin/vite"
@@ -3385,6 +3392,12 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
         E2E_NATIVE_V3_FILE="payload.bin", E2E_NATIVE_V3_BYTES=str(lifecycle.doc["payload"]["bytes"]),
         E2E_NATIVE_V3_SHA256=lifecycle.doc["payload"]["sha256"], E2E_NATIVE_V3_EXPIRY="0",
         E2E_NATIVE_V3_FAULTS="1" if faults else "0")
+    if contention_clients:
+        return run_native_v3_browser_contention(lifecycle, website=website, vite=vite,
+            playwright=playwright, deal=deal, browser_ports=browser_ports,
+            browser_env=browser_env, processes=processes, check_providers=check_providers, command=command,
+            gateway_base=gateway_base, gateway_pid=process.pid, status=status,
+            clients=contention_clients, diagnostics=diagnostics)
     suffix = "-faults" if faults else ""
     result_path = lifecycle.home / f"native-v3-browser{suffix}-result.json"
     browser_env["E2E_NATIVE_V3_RESULT"] = str(result_path)
@@ -3476,6 +3489,142 @@ def run_native_v3_browser(lifecycle, *, gateway, source, deal, browser_ports, co
     if browser_phases is not None:
         evidence["browser_phases"] = browser_phases
     lifecycle.doc["native_v3_browser_faults" if faults else "native_v3_browser"] = evidence
+    lifecycle.save()
+    return evidence
+
+
+def run_native_v3_browser_contention(lifecycle, *, website, vite, playwright, deal,
+                                     browser_ports, browser_env, processes, check_providers,
+                                     command, gateway_base, gateway_pid, status, clients, diagnostics):
+    """Measure one or two independent paid reads against the same provider signer."""
+    accounts = V3_BROWSER_ACCOUNTS[:artifact.integer(clients, "browser contention clients", 1, 2)]
+    barrier = lifecycle.home / "browser-contention-barrier"
+    barrier.mkdir(mode=0o700)
+    runs = []
+    for index, (account, port) in enumerate(zip(accounts, browser_ports["websites"])):
+        label = f"client-{index + 1}"
+        env = dict(browser_env, VITE_E2E_PK=account["private_key"], E2E_BASE_URL=f'http://127.0.0.1:{port["port"]}',
+                   E2E_NATIVE_V3_PAYER=account["payer"], E2E_NATIVE_V3_CONTENTION_CLIENTS=str(clients),
+                   E2E_NATIVE_V3_CONTENTION_LABEL=label, E2E_NATIVE_V3_CONTENTION_BARRIER=str(barrier),
+                   E2E_NATIVE_V3_RESULT=str(lifecycle.home / f"native-v3-browser-contention-{label}-result.json"))
+        port["reservation"].close()
+        log_path = lifecycle.home / f"website-{label}.log"
+        with log_path.open("xb") as log:
+            process = subprocess.Popen([str(vite), "--host", "127.0.0.1", "--port", str(port["port"]), "--strictPort"],
+                cwd=website, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        processes.append(process)
+        runs.append(dict(label=label, account=account, env=env, port=port["port"], pid=process.pid,
+                         log=str(log_path), result=Path(env["E2E_NATIVE_V3_RESULT"])))
+    for run in runs:
+        while True:
+            check_providers()
+            try:
+                command([lifecycle.doc["provenance"]["curl_binary"], "--silent", "--show-error",
+                         "--fail", "--max-time", "2", run["env"]["E2E_BASE_URL"] + "/"], 3)
+                break
+            except ValueError:
+                time.sleep(min(0.2, lifecycle.remaining()))
+    before_height = lifecycle.wait_height(1) - 1
+    payer_addresses = tuple(account["payer"] for account in accounts)
+    before = browser_v3_snapshot(lifecycle, before_height, deal, payers=payer_addresses)
+    argv = [str(playwright), "test", "tests/native-v3-browser-live.spec.ts", "--workers=1", "--retries=0",
+            "--max-failures=1", "--grep", "contention clients retain busy attempts"]
+    with ThreadPoolExecutor(max_workers=clients) as pool:
+        futures = {pool.submit(artifact.run_bounded_browser_command,
+            [*argv, "--output", str(lifecycle.home / f'browser-{run["label"]}-results')], lifecycle.deadline,
+            lifecycle.home / f'browser-{run["label"]}-memory.json', env=run["env"], cwd=website): run
+            for run in runs}
+        pending = set(futures)
+        while pending:
+            done, pending = wait_futures(pending, timeout=min(0.2, lifecycle.remaining()),
+                                         return_when=FIRST_COMPLETED)
+            check_providers()
+            for future in done:
+                result, memory = future.result()
+                run = futures[future]
+                run.update(command=getattr(result, "args", argv), memory=memory,
+                           stdout=str(lifecycle.home / f'playwright-{run["label"]}.stdout.log'),
+                           stderr=str(lifecycle.home / f'playwright-{run["label"]}.stderr.log'))
+                Path(run["stdout"]).write_text(result.stdout)
+                Path(run["stderr"]).write_text(result.stderr)
+                if result.returncode:
+                    raise ValueError(f'native V3 contention {run["label"]} failed: ' +
+                                     (result.stderr + result.stdout)[-8192:])
+    observed = lifecycle.wait_height(1)
+    lifecycle.wait_height(observed + 1)
+    outcomes, sessions = [], []
+    for run in runs:
+        outcome = json.loads(run["result"].read_text())
+        if (not isinstance(outcome, dict) or outcome.get("success") is not True or
+                outcome.get("label") != run["label"] or outcome.get("payer") != run["account"]["payer"]):
+            raise ValueError("browser contention result does not match its independent client")
+        attempts = outcome.get("continuationAttempts")
+        if (not isinstance(attempts, list) or not attempts or
+                any(not isinstance(row, dict) or row.get("finishedUnixMs") is None or
+                    (row.get("status") is None) == (row.get("failure") is None) for row in attempts)):
+            raise ValueError("browser contention result lacks complete continuation attempts")
+        if outcome.get("dataMduRequests") != outcome.get("dataMduRequestsAfterFirstPass"):
+            raise ValueError("contention recovery reread paid MDU data")
+        sid = producer.b64(outcome["session"]["session_id"], 32).hex()
+        sessions.append(sid)
+        outcomes.append(outcome)
+        run["outcome"] = outcome
+    after = browser_v3_snapshot(lifecycle, observed, deal, session_ids=sessions, payers=payer_addresses)
+    issued = collect_issuance(lifecycle, before, after)
+    receipts = browser_v3_committed_receipts(lifecycle,
+        [receipt for outcome in outcomes for receipt in outcome["evmReceipts"]])
+    rpc_transactions = [transaction for outcome in outcomes for transaction in outcome["evmTransactions"]]
+    if (len(rpc_transactions) != len(receipts) or
+            {row["hash"].lower() for row in rpc_transactions} !=
+            {row["receipt"]["transactionHash"].lower() for row in receipts}):
+        raise ValueError("contention Ethereum transactions differ from committed receipts")
+    proof_transactions, proof_outcomes = [], []
+    for outcome, sid in zip(outcomes, sessions):
+        obligations = after["retrieval"]["sessions"][sid]["obligations"]
+        for index, observed_proof in enumerate(outcome["providerProofOutcomes"]):
+            row = dict(observed_proof["body"], request_id=f'{outcome["label"]}-proof-{index}')
+            slot = producer.uint(row["slot"])
+            matches = [obligation for obligation in obligations if producer.uint(obligation["slot"]) == slot]
+            if len(matches) != 1:
+                raise ValueError("contention proof targets an unrepresented obligation")
+            row["provider"] = matches[0]["assigned_provider"]
+            proof_transactions.append(committed_v3_http_tx(lifecycle, row, kind="session-proof",
+                creator=row["provider"], slot=slot, session_id=sid,
+                proof_count=producer.uint(row["proof_count"])))
+            proof_outcomes.append(row)
+        ordinals = sorted(ordinal for tx in proof_transactions if tx["session_id"].removeprefix("0x") == sid
+                          for ordinal in tx["ordinals"])
+        if ordinals != list(range(producer.uint(after["retrieval"]["sessions"][sid]["sample_count"]))):
+            raise ValueError("contention proof receipts do not cover each sampled ordinal exactly once")
+    phases = validate_v3_provider_phase_timings(proof_outcomes, proof_transactions)
+    if not phases["qualification"]:
+        raise ValueError("contention provider phases lack canonical receipts: " + "; ".join(phases["reasons"]))
+    economics = verify_browser_v3_contention_economics(before, after, sessions=sessions,
+        receipts=receipts, issued_stake=issued, signers=lifecycle.signers, accounts=accounts)
+    attempts = [dict(client=outcome["label"], **attempt)
+                for outcome in outcomes for attempt in outcome["continuationAttempts"]]
+    first = [attempt for attempt in attempts if attempt["phase"] == "first-pass"]
+    if len(first) != clients or (clients == 2 and
+            max(row["startedUnixMs"] for row in first) > min(row["finishedUnixMs"] for row in first)):
+        raise ValueError("contention first-pass continuation attempts did not overlap")
+    status_counts = {}
+    for attempt in attempts:
+        key = str(attempt.get("status", "failed"))
+        status_counts[key] = status_counts.get(key, 0) + 1
+    evidence = dict(diagnostics_enabled=diagnostics, clients=clients,
+        gateway=dict(pid=gateway_pid, base=gateway_base, status=status,
+                     log=str(lifecycle.home / "user-gateway/gateway.log")),
+        browsers=[{key: value for key, value in run.items()
+                   if key not in ("env", "account", "result")} | {"payer": run["account"]["payer"],
+                   "result": str(run["result"])} for run in runs],
+        outcomes=outcomes, attempts=attempts,
+        measurement=dict(first_pass_overlap=True, status_counts=status_counts,
+                         busy_first_pass_clients=sum(row.get("status") == 429 for row in first),
+                         recovery_data_rereads=0),
+        economics=dict(before=before, after=after, **economics), evm_transactions=receipts,
+        evm_rpc_transactions=rpc_transactions, proof_transactions=proof_transactions,
+        provider_phases=phases)
+    lifecycle.doc["native_v3_browser_contention"] = evidence
     lifecycle.save()
     return evidence
 
@@ -3668,24 +3817,33 @@ def prepare_native_v3_browser_expiry(lifecycle, *, main_deal, providers, send, w
     return fixture
 
 
-def browser_v3_snapshot(lifecycle, height, deal, *, session_id=None):
+def browser_v3_snapshot(lifecycle, height, deal, *, session_id=None, session_ids=(), payers=None):
     """Reuse the economic fence and add the sponsor without making it a CLI signer."""
     snapshot = retrieval_snapshot(lifecycle, height, {str(deal["id"]): deal}, [])
-    balances = []
-    for node in lifecycle.nodes:
-        row = {}
-        for denom in ("stake", "aatom"):
-            coin = lifecycle.query(node,
-                f"/cosmos/bank/v1beta1/balances/{V3_BROWSER_PAYER}/by_denom?denom={denom}", height)["balance"]
-            if coin["denom"] != denom:
-                raise ValueError("browser payer balance denomination mismatch")
-            row[denom] = str(producer.uint(coin["amount"], 256))
-        balances.append(row)
-    if any(row != balances[0] for row in balances[1:]):
-        raise ValueError("four validators disagree on pinned browser payer balances")
-    snapshot["payer"] = dict(address=V3_BROWSER_PAYER, **balances[0])
+    payer_addresses = tuple(payers or (V3_BROWSER_PAYER,))
+    payer_rows = {}
+    for payer in payer_addresses:
+        balances = []
+        for node in lifecycle.nodes:
+            row = {}
+            for denom in ("stake", "aatom"):
+                coin = lifecycle.query(node,
+                    f"/cosmos/bank/v1beta1/balances/{payer}/by_denom?denom={denom}", height)["balance"]
+                if coin["denom"] != denom:
+                    raise ValueError("browser payer balance denomination mismatch")
+                row[denom] = str(producer.uint(coin["amount"], 256))
+            balances.append(row)
+        if any(row != balances[0] for row in balances[1:]):
+            raise ValueError("four validators disagree on pinned browser payer balances")
+        payer_rows[payer] = dict(address=payer, **balances[0])
+    if len(payer_rows) == 1:
+        snapshot["payer"] = next(iter(payer_rows.values()))
+    else:
+        snapshot["payers"] = payer_rows
     if session_id is not None:
-        snapshot["retrieval"]["sessions"][session_id] = v3_session_query(lifecycle, session_id, height)["session"]
+        session_ids = (*session_ids, session_id)
+    for identity in session_ids:
+        snapshot["retrieval"]["sessions"][identity] = v3_session_query(lifecycle, identity, height)["session"]
     return snapshot
 
 
@@ -3772,10 +3930,9 @@ def browser_v3_committed_receipts(lifecycle, receipts):
     return result
 
 
-def verify_browser_v3_economics(before, after, *, session_id, receipts, issued_stake, signers):
-    """Reconcile requester funding and per-obligation rounding at pinned heights."""
-    session = after["retrieval"]["sessions"][session_id]
-    if (session["payer"] != V3_BROWSER_PAYER or session["owner"] != V3_BROWSER_PAYER or
+def browser_v3_session_economics(session, payer, signers):
+    """Validate one frozen requester-funded session and return its exact accounting."""
+    if (session["payer"] != payer or session["owner"] != payer or
             session["funding"] != "RETRIEVAL_SESSION_FUNDING_REQUESTER" or session["price_denom"] != "stake"):
         raise ValueError("browser session has the wrong frozen payer/funding authority")
     obligations = session["obligations"]
@@ -3803,7 +3960,15 @@ def verify_browser_v3_economics(before, after, *, session_id, receipts, issued_s
         payouts[payee] = payouts.get(payee, 0) + locked - burn
         variable += locked
         burned += burn
-    charged = producer.uint(session["base_fee"], 256) + variable
+    return dict(charged_stake=producer.uint(session["base_fee"], 256) + variable,
+                provider_payouts=payouts, burned_stake=burned)
+
+
+def verify_browser_v3_economics(before, after, *, session_id, receipts, issued_stake, signers):
+    """Reconcile requester funding and per-obligation rounding at pinned heights."""
+    accounting = browser_v3_session_economics(
+        after["retrieval"]["sessions"][session_id], V3_BROWSER_PAYER, signers)
+    charged = accounting["charged_stake"]
     if producer.uint(before["payer"]["stake"], 256) - producer.uint(after["payer"]["stake"], 256) != charged:
         raise ValueError("browser payer stake debit differs from its one session charge")
     gas = 0
@@ -3811,23 +3976,67 @@ def verify_browser_v3_economics(before, after, *, session_id, receipts, issued_s
         receipt = transaction["receipt"]
         if not before["bank"]["height"] < transaction["height"] <= after["bank"]["height"]:
             raise ValueError("browser receipt falls outside the economic fence")
-        if receipt["from"].lower() != "0x8647e4b22f37b3e30fd3d297f1fb7e13fdf68255" or receipt["to"].lower() != "0x0000000000000000000000000000000000000900":
+        if receipt["from"].lower() != V3_BROWSER_ACCOUNTS[0]["evm"] or receipt["to"].lower() != "0x0000000000000000000000000000000000000900":
             raise ValueError("browser receipt targets the wrong payer/precompile")
         gas += int(receipt["gasUsed"], 16) * int(receipt["effectiveGasPrice"], 16)
     if producer.uint(before["payer"]["aatom"], 256) - producer.uint(after["payer"]["aatom"], 256) != gas:
         raise ValueError("browser payer gas debit differs from committed EVM receipts")
     for name, address in signers.items():
         key = name + ":stake"
-        if int(after["bank"]["balances"][key]) - int(before["bank"]["balances"][key]) != payouts.get(address, 0):
+        if int(after["bank"]["balances"][key]) - int(before["bank"]["balances"][key]) != accounting["provider_payouts"].get(address, 0):
             raise ValueError("browser provider/control stake delta differs from frozen payouts")
     if any(after["retrieval"]["deals"][key]["escrow_balance"] != deal["escrow_balance"]
            for key, deal in before["retrieval"]["deals"].items()):
         raise ValueError("sponsored browser retrieval changed deal escrow")
     if (before["retrieval"]["module_stake"] != after["retrieval"]["module_stake"] or
-            int(after["bank"]["supply"]["stake"]) - int(before["bank"]["supply"]["stake"]) != issued_stake - burned):
+            int(after["bank"]["supply"]["stake"]) - int(before["bank"]["supply"]["stake"]) != issued_stake - accounting["burned_stake"]):
         raise ValueError("browser module/supply conservation mismatch")
+    return dict(**accounting, issued_stake=issued_stake, payer_gas_aatom=gas, completed_sessions=1)
+
+
+def verify_browser_v3_contention_economics(before, after, *, sessions, receipts, issued_stake,
+                                            signers, accounts):
+    """Reconcile independent payer sessions once, across one common economic fence."""
+    if len(sessions) != len(accounts) or len(set(sessions)) != len(sessions):
+        raise ValueError("contention accounting requires one distinct session per payer")
+    before_payers = before.get("payers") or {before["payer"]["address"]: before["payer"]}
+    after_payers = after.get("payers") or {after["payer"]["address"]: after["payer"]}
+    payouts, burned, charged, gas = {}, 0, {}, {}
+    for account, session_id in zip(accounts, sessions):
+        payer = account["payer"]
+        accounting = browser_v3_session_economics(after["retrieval"]["sessions"][session_id], payer, signers)
+        charged[payer] = accounting["charged_stake"]
+        burned += accounting["burned_stake"]
+        for address, amount in accounting["provider_payouts"].items():
+            payouts[address] = payouts.get(address, 0) + amount
+        if (producer.uint(before_payers[payer]["stake"], 256) -
+                producer.uint(after_payers[payer]["stake"], 256) != charged[payer]):
+            raise ValueError("contention payer stake debit differs from its session charge")
+        owned = [row for row in receipts if row["receipt"]["from"].lower() == account["evm"]]
+        gas[payer] = sum(int(row["receipt"]["gasUsed"], 16) *
+                         int(row["receipt"]["effectiveGasPrice"], 16) for row in owned)
+        if any(not before["bank"]["height"] < row["height"] <= after["bank"]["height"] or
+               row["receipt"]["to"].lower() != "0x0000000000000000000000000000000000000900"
+               for row in owned):
+            raise ValueError("contention receipt falls outside the economic fence or precompile")
+        if (producer.uint(before_payers[payer]["aatom"], 256) -
+                producer.uint(after_payers[payer]["aatom"], 256) != gas[payer]):
+            raise ValueError("contention payer gas debit differs from committed EVM receipts")
+    if len(receipts) != sum(1 for account in accounts for row in receipts
+                            if row["receipt"]["from"].lower() == account["evm"]):
+        raise ValueError("contention receipts include an unknown payer")
+    for name, address in signers.items():
+        key = name + ":stake"
+        if int(after["bank"]["balances"][key]) - int(before["bank"]["balances"][key]) != payouts.get(address, 0):
+            raise ValueError("contention provider/control stake delta differs from aggregate payouts")
+    if any(after["retrieval"]["deals"][key]["escrow_balance"] != deal["escrow_balance"]
+           for key, deal in before["retrieval"]["deals"].items()):
+        raise ValueError("contention retrieval changed deal escrow")
+    if (before["retrieval"]["module_stake"] != after["retrieval"]["module_stake"] or
+            int(after["bank"]["supply"]["stake"]) - int(before["bank"]["supply"]["stake"]) != issued_stake - burned):
+        raise ValueError("contention module/supply conservation mismatch")
     return dict(charged_stake=charged, provider_payouts=payouts, burned_stake=burned,
-                issued_stake=issued_stake, payer_gas_aatom=gas, completed_sessions=1)
+                issued_stake=issued_stake, payer_gas_aatom=gas, completed_sessions=len(sessions))
 
 
 def verify_browser_v3_refund_economics(before, after, *, session_id, receipts, issued_stake,
@@ -5260,6 +5469,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
     browser_bytes = artifact.integer(native_browser["file_bytes"], "browser fixture bytes", 1,
                                      1_073_741_824) if native_browser is not None else None
     browser_executor_handoff = bool(native_browser.get("executor_handoff", False)) if native_browser is not None else False
+    contention_clients = (artifact.integer(native_browser["contention_clients"], "browser contention clients", 1, 2)
+                          if native_browser is not None and "contention_clients" in native_browser else 0)
     if browser_bytes is not None and browser_bytes not in V3_BROWSER_SIZES:
         raise ValueError("browser fixture size is outside the retained qualification matrix")
     v3_bytes = browser_bytes if browser_bytes is not None else V3_PILOT_BYTES
@@ -5332,7 +5543,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                      "four-validator-native-v3-cross-audit-diagnostic" if native_cross_audit else
                      "four-validator-native-v3-provider-diagnostic" if native_v3 else "four-validator-healthy-provider-diagnostic"),
         setup_transactions=[], providers=[],
-        workload=(f"one {v3_bytes}-byte FAT v3 K8 PUBLIC deal; production DealDetail sponsored browser retrieval"
+        workload=(f"one {v3_bytes}-byte FAT v3 K8 PUBLIC deal; {contention_clients or 1} independent production DealDetail paid browser retrieval(s)"
                   if native_browser is not None else
                   (f"one 16 MiB FAT v3 K8 deal; {native_chain['profile']} range; "
                    f"{native_chain_inventory}"
@@ -5436,11 +5647,16 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                     pass
             if gateway_port is None:
                 raise ValueError("browser qualification requires an owned user-gateway on port 8080 or 18080")
-            reservation = artifact.reserve_loopback_port(4173)
-            reservations.append(reservation)
+            gateway_reservation = reservations[-1]
+            website_ports = []
+            for port in range(4173, 4173 + (contention_clients or 1)):
+                reservation = artifact.reserve_loopback_port(port)
+                reservations.append(reservation)
+                website_ports.append(dict(port=port, reservation=reservation))
             browser_ports = dict(gateway=gateway_port, website=4173,
-                                 gateway_reservation=reservations[-2],
-                                 website_reservation=reservations[-1])
+                                 gateway_reservation=gateway_reservation,
+                                 website_reservation=website_ports[0]["reservation"],
+                                 websites=website_ports)
         provider_reservations = []
         for i in range(layout["assignments"]):
             reservation = artifact.reserve_loopback_port(19091 + i)
@@ -5483,7 +5699,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             raise ValueError("diagnostic requires the maintained trusted setup")
         lifecycle.prepare(audit_profile=audit_profile, provider_count=layout["provisioned_provider_signers"],
                           enable_retrieval_v3=native_v3,
-                          browser_payer=V3_BROWSER_PAYER if native_browser is not None else None,
+                          browser_payer=([account["payer"] for account in V3_BROWSER_ACCOUNTS[:contention_clients]]
+                                         if contention_clients else V3_BROWSER_PAYER)
+                          if native_browser is not None else None,
                           max_block_gas=native_chain.get("max_block_gas")
                           if native_chain is not None else None)
         # Normal mint is retained for both explicit audit profiles.
@@ -5501,8 +5719,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         lifecycle.start("initial")
         lifecycle.wait_height(3)
         if native_browser is not None:
-            doc["browser_http_preflight"] = browser_http_preflight(lifecycle,
-                f'http://127.0.0.1:{browser_ports["website"]}')
+            preflights = [browser_http_preflight(lifecycle, f'http://127.0.0.1:{row["port"]}')
+                          for row in browser_ports["websites"]]
+            doc["browser_http_preflight"] = preflights if contention_clients else preflights[0]
             lifecycle.save()
         for i in range(layout["assignments"]):
             send(f"provider{i}", ["register-provider", "General", "100000000000", "--endpoint", f"/ip4/127.0.0.1/tcp/{19091+i}/http"])
@@ -5694,8 +5913,9 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                     browser_ports=browser_ports, command=command, processes=processes,
                     check_providers=check_providers, faults=browser_bytes == 16 * 1024 * 1024 + 1,
                     executor_handoff=browser_executor_handoff,
-                    diagnostics=bool(native_browser.get("diagnostics", False)))
-                if browser_bytes == 1024:
+                    diagnostics=bool(native_browser.get("diagnostics", False)),
+                    contention_clients=contention_clients)
+                if browser_bytes == 1024 and not contention_clients:
                     expiry = prepare_native_v3_browser_expiry(lifecycle, main_deal=deal, providers=providers,
                         send=send, wait=wait, command=command, curl=curl)
                     run_native_v3_browser_expiry(lifecycle, source=source, deal=expiry["deal"],
@@ -5778,6 +5998,8 @@ def main():
                         help="Run the fixed Playwright worker on the Mac LAN client; native-v3-browser only")
     parser.add_argument("--retrieval-diagnostics", action="store_true",
                         help="Enable bounded V3 fetch timing for an owned native-v3-browser run")
+    parser.add_argument("--browser-contention-clients", type=int, choices=(1, 2),
+                        help="Measure one or two independent 1 KiB paid browser reads; native-v3-browser only")
     parser.add_argument("--proof-only", action="store_true", help="Prepare six sessions, verify rejected transactions, time proofs, then verify idempotent settlement retries")
     options = vars(parser.parse_args())
     k8, k2 = options.pop("fixture_k8"), options.pop("fixture_k2")
@@ -5795,6 +6017,7 @@ def main():
     browser_bytes = options.pop("browser_bytes")
     browser_executor_handoff = options.pop("browser_executor_handoff")
     retrieval_diagnostics = options.pop("retrieval_diagnostics")
+    browser_contention_clients = options.pop("browser_contention_clients")
     chain_max_gas = options.pop("chain_max_gas")
     chain_capacity_profile = options.pop("chain_capacity_profile")
     chain_capacity_transactions = options.pop("chain_capacity_transactions")
@@ -5819,6 +6042,9 @@ def main():
         parser.error("browser executor handoff requires the clean 1 GiB native-v3-browser pilot")
     if retrieval_diagnostics and mode != "native-v3-browser":
         parser.error("retrieval diagnostics require native-v3-browser")
+    if browser_contention_clients is not None and (mode != "native-v3-browser" or
+            (browser_bytes or V3_BROWSER_DEFAULT_BYTES) != V3_BROWSER_DEFAULT_BYTES or browser_executor_handoff):
+        parser.error("browser contention requires local 1 KiB native-v3-browser without executor handoff")
     if mode == "sustained-providers":
         if not all((gateway, cli, source, exporter, proof_gas)) or k8 or k2 or proof_only or not 4 <= step_seconds <= 180 or not 1 <= proof_gas <= 64000000:
             parser.error("sustained-providers requires product binaries/source, --proof-exporter and --proof-gas; excludes fixtures/--proof-only")
@@ -5865,6 +6091,8 @@ def main():
                 options["timeout"] > 3600 or audit_profile != "normal"):
             parser.error("native-v3-browser requires product binaries/source, normal audits, timeout <= 3600, and excludes fixtures/--proof-only")
         native_browser = dict(file_bytes=browser_bytes or V3_BROWSER_DEFAULT_BYTES)
+        if browser_contention_clients is not None:
+            native_browser["contention_clients"] = browser_contention_clients
         if retrieval_diagnostics:
             native_browser["diagnostics"] = True
         if browser_executor_handoff:
