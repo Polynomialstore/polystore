@@ -1,6 +1,6 @@
 # V3 retrieval-state retention decision (#341)
 
-Status: **measured proposal; no pruning or public-contract change**. Parent:
+Status: **bounded qualification approved; no pruning or public-contract change**. Parent:
 [#337](https://github.com/Polynomialstore/polystore/issues/337). Existing full
 session and nonce queries, exact retries, and refunds remain authoritative.
 This document does not approve an archive service or unlimited operating volume.
@@ -103,8 +103,8 @@ exception: there is no production defect fixed by these tests.
 ## Minimal recommended decision: bounded qualification, unchanged history
 
 Do not add a garbage collector merely to close this issue. Preserve existing
-queries, exact retry and refund rights. Obtain human approval for a bounded,
-isolated qualification envelope:
+queries, exact retry and refund rights. The user approved the following bounded,
+isolated qualification envelope in the execution conversation on 2026-09-12 UTC:
 
 - Stop admitting new test sessions at **1,000,000 cumulative new sessions OR
   4 GiB additional application database data**, whichever comes first.
@@ -124,10 +124,12 @@ isolated qualification envelope:
   >4 KiB/session observed sustained slope, or growing unresolved liabilities.
   A finite approved benchmark cannot approve indefinite archive growth.
 
-**Approval: pending.** A merged analysis PR is not human approval of the
-operating envelope or of changed recovery/refund semantics. #343 must retain
-this explicit decision gate and stop on exhausted budget. Do not close #341
-until that decision and final #338 size delta are recorded.
+**Human decision:** “Approve bounded qualification; preserve history.” This
+authorizes only the envelope above, not changed recovery/refund semantics,
+deployment, or indefinite production operation. #343 must implement and test
+both stops before collection. Final #338 codec verification remains a separate
+measurement gate; close #341 only after it is recorded.
+The approval is recorded in [#341's execution decision](https://github.com/Polynomialstore/polystore/issues/341#issuecomment-5644217749).
 
 ## If finite-history product operation becomes necessary
 
@@ -178,4 +180,3 @@ The current experiment covers serializer validity, all four row phases, bounded
 repeated inserts and committed-store reload. It intentionally does not create
 a second simulated protocol whose passing tests would be mistaken for implemented
 pruning, cryptographic authorization or complete-lifecycle qualification.
-
