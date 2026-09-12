@@ -36,6 +36,14 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             docs,
         )
 
+    def test_public_reset_updates_runtime_workers_before_stopping_services(self):
+        docs = (ROOT / "docs/TRUSTED_DEVNET_SOFT_LAUNCH.md").read_text()
+        update = "sudo sed -i '/^GOMAXPROCS=/d' /etc/polystore/polystorechaind.env"
+        verify = "sudo grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env"
+        stop = "sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind"
+        self.assertLess(docs.index(update), docs.index(verify))
+        self.assertLess(docs.index(verify), docs.index(stop))
+
     def test_legacy_gateway_retrieval_wrapper_disables_v2_only_for_startup(self):
         wrapper = (ROOT / "scripts/ci_e2e_gateway_retrieval_multi_sp.sh").read_text()
         self.assertIn(

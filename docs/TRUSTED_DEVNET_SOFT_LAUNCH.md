@@ -167,11 +167,17 @@ POLYSTORE_RESET_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 POLYSTORE_BACKUP_DIR="/var/backups/polystore/fresh-genesis-${POLYSTORE_RESET_STAMP}"
 POLYSTORE_BACKUP_ARCHIVE="${POLYSTORE_BACKUP_DIR}/hub-state.tar.gz"
 
+sudo install -d -m 0700 "$POLYSTORE_BACKUP_DIR"
+sudo cp -a /etc/polystore/polystorechaind.env \
+  "${POLYSTORE_BACKUP_DIR}/polystorechaind.env"
+sudo sed -i '/^GOMAXPROCS=/d' /etc/polystore/polystorechaind.env
+printf '%s\n' 'GOMAXPROCS=4' | \
+  sudo tee -a /etc/polystore/polystorechaind.env >/dev/null
+sudo grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env
+
 sudo systemctl stop polystore-gateway-router polystore-faucet polystorechaind
-grep -Fxq 'GOMAXPROCS=4' /etc/polystore/polystorechaind.env
 sudo test -d /var/lib/polystore/polystorechaind
 sudo test -d /var/lib/polystore/polystore_gateway/router
-sudo install -d -m 0700 "$POLYSTORE_BACKUP_DIR"
 sudo tar --xattrs --acls --numeric-owner \
   -C /var/lib/polystore \
   -czf "$POLYSTORE_BACKUP_ARCHIVE" \
