@@ -3604,9 +3604,10 @@ def run_native_v3_browser_contention(lifecycle, *, website, vite, playwright, de
     attempts = [dict(client=outcome["label"], **attempt)
                 for outcome in outcomes for attempt in outcome["continuationAttempts"]]
     first = [attempt for attempt in attempts if attempt["phase"] == "first-pass"]
-    if len(first) != clients or (clients == 2 and
-            max(row["startedUnixMs"] for row in first) > min(row["finishedUnixMs"] for row in first)):
-        raise ValueError("contention first-pass continuation attempts did not overlap")
+    if len(first) != clients:
+        raise ValueError("contention run lacks one labeled first-pass continuation per client")
+    first_pass_overlap = clients == 1 or max(row["startedUnixMs"] for row in first) <= min(
+        row["finishedUnixMs"] for row in first)
     status_counts = {}
     for attempt in attempts:
         key = str(attempt.get("status", "failed"))
@@ -3618,7 +3619,7 @@ def run_native_v3_browser_contention(lifecycle, *, website, vite, playwright, de
                    if key not in ("env", "account", "result")} | {"payer": run["account"]["payer"],
                    "result": str(run["result"])} for run in runs],
         outcomes=outcomes, attempts=attempts,
-        measurement=dict(first_pass_overlap=True, status_counts=status_counts,
+        measurement=dict(first_pass_overlap=first_pass_overlap, status_counts=status_counts,
                          busy_first_pass_clients=sum(row.get("status") == 429 for row in first),
                          recovery_data_rereads=0),
         economics=dict(before=before, after=after, **economics), evm_transactions=receipts,

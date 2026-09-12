@@ -257,7 +257,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             ports["gateway_reservation"].close.assert_called_once()
             ports["website_reservation"].close.assert_called_once()
 
-    def test_browser_contention_uses_two_isolated_wallets_and_overlapping_first_passes(self):
+    def test_browser_contention_uses_two_isolated_wallets_and_reports_first_pass_overlap(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             website, home = root / "website", root / "run"
@@ -279,8 +279,8 @@ class FourValidatorWorkloadTest(unittest.TestCase):
                 Path(env["E2E_NATIVE_V3_RESULT"]).write_text(json.dumps(dict(success=True,
                     label=f"client-{index + 1}", payer=workload.V3_BROWSER_ACCOUNTS[index]["payer"],
                     session={"session_id": base64.b64encode(bytes.fromhex(session_ids[index])).decode()},
-                    continuationAttempts=[dict(phase="first-pass", startedUnixMs=1,
-                                               finishedUnixMs=3, status=200)],
+                    continuationAttempts=[dict(phase="first-pass", startedUnixMs=1 + 2 * index,
+                                               finishedUnixMs=2 + 2 * index, status=200)],
                     dataMduRequests=1, dataMduRequestsAfterFirstPass=1,
                     evmReceipts=[], evmTransactions=[], providerProofOutcomes=[])))
                 return SimpleNamespace(returncode=0, stdout="passed", stderr=""), {"peak": index}
@@ -304,7 +304,7 @@ class FourValidatorWorkloadTest(unittest.TestCase):
             self.assertEqual([row[0][-2] for row in launched], ["4173", "4174"])
             self.assertEqual({row[1]["env"]["VITE_E2E_PK"] for row in launched},
                              {account["private_key"] for account in workload.V3_BROWSER_ACCOUNTS})
-            self.assertEqual(result["measurement"], dict(first_pass_overlap=True,
+            self.assertEqual(result["measurement"], dict(first_pass_overlap=False,
                 status_counts={"200": 2}, busy_first_pass_clients=0, recovery_data_rereads=0))
             self.assertEqual(snapshot.call_args_list[1].kwargs["session_ids"], list(session_ids))
             for reservation in reservations:

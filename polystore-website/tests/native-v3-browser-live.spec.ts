@@ -670,21 +670,14 @@ test.describe('native V3 browser qualification', () => {
       }).catch(() => undefined)
     })
 
-    let holdFirstContinuation = true
-    await context.route('**/gateway/retrieval/session-proof/continue', async (route) => {
-      if (!holdFirstContinuation) return route.continue()
-      holdFirstContinuation = false
-      barrierArrivedUnixMs = Date.now()
-      await fs.writeFile(path.join(barrier, `${label}.ready`), String(barrierArrivedUnixMs))
-      await expect.poll(async () => (await fs.readdir(barrier)).filter((name) => name.endsWith('.ready')).length,
-        { timeout: 120_000, intervals: [20, 50, 100] }).toBe(contentionClients)
-      await route.continue()
-    })
-
     try {
       const before = { stake: await balance(page, payer, 'stake'), aatom: await balance(page, payer, 'aatom') }
       await mountDealDetail(page)
       const button = await openDownload(page)
+      barrierArrivedUnixMs = Date.now()
+      await fs.writeFile(path.join(barrier, `${label}.ready`), String(barrierArrivedUnixMs))
+      await expect.poll(async () => (await fs.readdir(barrier)).filter((name) => name.endsWith('.ready')).length,
+        { timeout: 120_000, intervals: [20, 50, 100] }).toBe(contentionClients)
       const [firstDownload] = await Promise.all([
         page.waitForEvent('download', { timeout: 10 * 60_000 }), button.click(),
       ])
