@@ -837,7 +837,7 @@ func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg
 			Slot: entry.Slot, Proofs: proofs,
 		})
 	}
-	if err := PrepayProofCrypto(ctx, uint64(totalProofs)); err != nil {
+	if err := PrepayAggregateProofCrypto(ctx, uint64(totalProofs)); err != nil {
 		return nil, err
 	}
 	verified, err := crypto_ffi.VerifyPolyFSCrossSessionProofBatch(batch, v3IntegrityLeavesPerMDU)
