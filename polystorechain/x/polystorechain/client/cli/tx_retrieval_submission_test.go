@@ -347,13 +347,13 @@ func TestRetrievalProofUnsignedAndSignedLimits(t *testing.T) {
 	ctx = ctx.WithGenerateOnly(false)
 	_, err = boundRetrievalProofTx(cmd, ctx, []sdk.Msg{msg})
 	require.ErrorContains(t, err, "block limits")
-	rpc := &retrievalTestRPC{block: &cmttypes.BlockParams{MaxBytes: 100000, MaxGas: 1_000_000}}
+	rpc := &retrievalTestRPC{block: &cmttypes.BlockParams{MaxBytes: 100000, MaxGas: int64(keeper.ProofCryptoGas)}}
 	ctx = ctx.WithClient(rpc)
 	msg.Proofs = msg.Proofs[:1]
-	require.NoError(t, cmd.Flags().Set(flags.FlagGas, "1000001"))
+	require.NoError(t, cmd.Flags().Set(flags.FlagGas, fmt.Sprint(keeper.ProofCryptoGas+1)))
 	_, err = boundRetrievalProofTx(cmd, ctx, []sdk.Msg{msg})
-	require.ErrorContains(t, err, "gas exceeds 1000000")
-	require.NoError(t, cmd.Flags().Set(flags.FlagGas, "1000000"))
+	require.ErrorContains(t, err, fmt.Sprintf("gas exceeds %d", keeper.ProofCryptoGas))
+	require.NoError(t, cmd.Flags().Set(flags.FlagGas, fmt.Sprint(keeper.ProofCryptoGas)))
 	bounded, err := boundRetrievalProofTx(cmd, ctx, []sdk.Msg{msg})
 	require.NoError(t, err)
 	require.Equal(t, 99990, bounded.TxConfig.(retrievalProofTxConfig).maxBytes)

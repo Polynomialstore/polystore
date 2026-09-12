@@ -18,7 +18,7 @@ const (
 	// ProofCryptoGas prices routes that verify each proof independently. The
 	// PSB2 cross-session route has one shared verification plus bounded marginal
 	// work and uses AggregateProofCryptoGas instead.
-	ProofCryptoGas            = uint64(1_000_000)
+	ProofCryptoGas            = uint64(1_200_000)
 	AggregateProofBaseGas     = uint64(1_000_000)
 	AggregateProofMarginalGas = uint64(100_000)
 	LegacyProofPayloadBytes   = uint64(types.BLOB_SIZE / 32 * 31)

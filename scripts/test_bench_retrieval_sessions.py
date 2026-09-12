@@ -534,7 +534,7 @@ class BenchmarkArtifactTest(unittest.TestCase):
         got = artifact.profile("2", "32", "700", "2147483648", consensus)
         self.assertEqual(got["target_block_interval_ms"], 1000)
         self.assertEqual(got["execution_budget_ms"], 700)
-        self.assertEqual(got["gas_limit"], "33000000")
+        self.assertEqual(got["gas_limit"], "39400000")
         control = artifact.profile("1", "0", "700", "2147483648", consensus)
         self.assertEqual(control["gas_limit"], "1000000")
         for args in (("8193", "1", "700", "1"), ("1", "33", "700", "1"), ("1", "1", "0", "1"), ("1", "1", "700", "0")):

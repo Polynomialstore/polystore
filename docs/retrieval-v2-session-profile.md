@@ -142,7 +142,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Concurrent retained generations per deal | 8 |
 | Concurrent retained session generations globally | 1024 |
 | Shared proof count per message | 64 |
-| Independent prepaid cryptography per proof | 1000000 gas |
+| Independent prepaid cryptography per proof | 1200000 gas |
 | Aggregate V3 prepaid cryptography | 1000000 + 100000 for each proof after the first |
 | Candidate reserved future retention work per open | 100000 gas |
 | Checked-in consensus block gas / bytes | 64000000 / 2097152 |

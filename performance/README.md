@@ -122,7 +122,7 @@ The finite candidate profile is `General:rs=2+1`, slot 0, one user MDU following
 two metadata MDUs, at most 32 proofs per session and 8,192 sessions per run.
 `POLYSTORE_BENCH_PROOFS_PER_SESSION=0` is a control-only run with no completed
 retrieval throughput. The default transaction gas limit is
-`1,000,000 + 500,000 * proofs_per_session`, including 1,000,000 for control runs;
+`1,000,000 + 1,200,000 * proofs_per_session`, including 1,000,000 for control runs;
 `POLYSTORE_BENCH_GAS` can override it. This avoids relying on the unavailable
 transaction simulation RPC (`gas=auto`), whose errors are still reported when
 explicitly requested. The profile fixes 64 million gas, 2 MiB block bytes and a

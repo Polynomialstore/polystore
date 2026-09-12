@@ -4,14 +4,15 @@
 
 The earlier frontier below used the old flat per-proof gas schedule. It is
 historical evidence and no longer controls activation. The current schedule
-charges every independent public proof route 1,000,000 gas per proof and charges
+charges every independent public proof route 1,200,000 gas per proof and charges
 the aggregate V3 route 1,000,000 base gas plus 100,000 for each additional proof.
-The exact PR #334 public-handler benchmark measured 64-entry aggregate acceptance
-at 29.2ms (7.3M crypto gas) and singleton acceptance at 2.685ms (1M crypto gas).
-The aggregate shape therefore consumes about 4.00ms of measured handler work per
-million reserved crypto gas versus 2.69ms for the independent shape. SDK
-transaction work is metered separately, and the retained 192M comparator also
-measured larger bytes and used gas per session for separate transactions.
+An exact-handler comparison at source `67b3f3c1` measured 64-entry aggregate
+acceptance at 36.439ms (7.3M crypto gas) and independent acceptance at 5.332ms
+per proof (now 1.2M crypto gas). The aggregate shape therefore consumes about
+4.99ms of measured handler work per million reserved crypto gas versus 4.44ms
+for independent proofs. SDK transaction work is metered separately, and the
+retained 192M comparator also measured larger bytes and used gas per session for
+separate transactions.
 
 Thus an all-aggregate block is the conservative measured public-proof mix under
 the new schedule: replacing aggregate gas with independent proofs reduces the

@@ -232,11 +232,13 @@ them does not activate challenge v2 or qualify the data-plane requirements above
 | Merkle witnesses | Exactly the siblings consumed for the actual leaf count and index, including odd-node promotion; unused trailing siblings are rejected |
 | User MDU | `WitnessMdus < mdu_index < TotalMdus`; missing/zero legacy `TotalMdus` requires an explicit valid content commit before proving |
 
-After cheap admission of the whole declared list, reserve **500,000 SDK gas per
+After cheap admission of the whole declared list, reserve **1,200,000 SDK gas per
 proof before the first FFI call**. This covers the crypto component for two KZG
 verification hops and Merkle verification. Invalid-first/middle/last positions
 pay the same crypto component. Authenticated no-op retries do no crypto; there
-are no duplicate, cache or batching discounts. Native KV/bank work is additional.
+are no duplicate or cache discounts in these independent routes. Native KV/bank
+work is additional. The versioned PSB2 cross-session aggregate route has a
+separately measured base-plus-marginal schedule.
 The EVM static charge remains `200000 + 64 * len(input)`; the native-action wrapper
 then meters actual native work against the child's remaining gas and charges it
 once, including failures. A budget covering only static work cannot enter FFI.

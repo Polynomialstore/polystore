@@ -35,7 +35,7 @@ Run the existing benchmark with `POLYSTORE_BENCH_FIXTURE_NONCONSTANT=1`,
 `POLYSTORE_BENCH_FIXTURE_SERVICE_HINT=General:rs=8+4` (or `2+1`),
 `-run '^$' -bench 'BenchmarkSubmitRetrievalSessionProof/ffi-verify-only-(1|2|8)$'`
 (or `(1|8|32)`), `-benchtime=3x -benchmem -count=1`.
-The 1,000,000 gas/proof component is fixed by the binary, not derived at runtime
+The 1,200,000 gas/proof component is fixed by the binary, not derived at runtime
 from these timings. The [native allocation probe](../../../../../polystore_core/examples/verifier_allocations.md)
 records sequential Rust heap scratch separately: 2456-byte measured peak,
 54264 cumulative bytes per proof, zero retained bytes for these K8/K2 fixtures.
@@ -64,7 +64,7 @@ Each proof accounts for 131072 encoded bytes (up to 126976 packed payload bytes)
 positions, plus numeric indices and wire framing. Each submission invokes exactly
 2N native FFI calls and 4N single pairings for N proofs. These historical rows
 used 500000*N prepaid cryptography; the current independent route charges
-1000000*N. Go
+1200000*N. Go
 allocations exclude the separately recorded native scratch. #256 must measure
 its v2 integration and batch backend directly; these rows are not a capacity gate.
 

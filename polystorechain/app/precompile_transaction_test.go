@@ -128,7 +128,7 @@ func TestSignedEVMProofReceiptAndBlockGas(t *testing.T) {
 		return raw
 	}
 	// Enough gas for the static precompile work, but not its full crypto reserve.
-	gas := uint64(4000000)
+	gas := static + 3*keeper.ProofCryptoGas + 1_000_000
 	lowGas := static + 3*keeper.ProofCryptoGas - 1
 	for i, limit := range []uint64{lowGas, gas} {
 		before := a.BankKeeper.GetBalance(query(), owner, "aatom").Amount

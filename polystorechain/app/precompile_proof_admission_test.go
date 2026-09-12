@@ -61,7 +61,7 @@ func TestNativeEVMProofAdmissionGas(t *testing.T) {
 			precompile, err := polystoreprecompile.New(&a.PolyStoreChainKeeper)
 			require.NoError(t, err)
 			static := precompile.RequiredGas(input)
-			gas := uint64(4_000_000)
+			gas := static + 3*keeper.ProofCryptoGas + 1_000_000
 			if invalid == 4 {
 				// Valid bytes and owner authority still cannot bypass fresh v2
 				// challenges through the legacy ordinary-payment selector.
