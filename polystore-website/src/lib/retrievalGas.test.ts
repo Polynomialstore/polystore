@@ -5,6 +5,7 @@ import ts from 'typescript'
 import * as transactions from './retrievalTransactions'
 import * as diagnostics from './retrievalDiagnostics'
 import * as retrievalV3 from './retrievalV3'
+import * as recoveryV3 from './retrievalV3Recovery'
 import * as transportMode from './transport/mode'
 import type { FrozenSession, PinnedGeneration, RetrievalWindow } from './retrieval'
 
@@ -53,6 +54,7 @@ function fixture(mode: 'open' | 'openV3' | 'ack' | 'ackV3' | 'refundV3') {
   } }
   const modules: Record<string, unknown> = {
     '../lib/retrievalDiagnostics': diagnostics,
+    '../lib/retrievalV3Recovery': recoveryV3,
     wagmi: { useAccount: () => ({ address }), usePublicClient: () => client, useWalletClient: () => ({ data: wallet }) },
     '@tanstack/react-query': { useQuery: () => ({ data: null }) },
     '../config': { appConfig: { chainId: 1, cosmosChainId: 'chain', polystorePrecompile: precompile,
