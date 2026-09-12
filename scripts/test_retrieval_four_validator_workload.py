@@ -1840,6 +1840,37 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertFalse(workload.is_issue_326_candidate(
                 altered, 160_000_000, "1.6", 4, "1s"))
 
+    def test_native_v3_build_manifest_binds_clean_source_and_every_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binaries = {"chain": root / "chain", "core": root / "core.so"}
+            for name, path in binaries.items():
+                path.write_text(name)
+            manifest = root / "build.json"
+            manifest.write_text(json.dumps({"source_commit": "ab" * 20,
+                "artifacts": {name: artifact.sha256(path) for name, path in binaries.items()}}))
+            with patch.object(artifact, "command", side_effect=["ab" * 20, ""]):
+                result = workload.verify_native_v3_build_manifest(manifest, root, binaries)
+            self.assertTrue(result["verified"])
+            manifest.write_text(json.dumps({"source_commit": "ab" * 20,
+                "artifacts": {"chain": "00" * 32, "core": artifact.sha256(binaries["core"])}}))
+            with patch.object(artifact, "command", side_effect=["ab" * 20, ""]), \
+                 self.assertRaisesRegex(ValueError, "hashes"):
+                workload.verify_native_v3_build_manifest(manifest, root, binaries)
+            (root / "polystore_cli/src").mkdir(parents=True)
+            (root / "polystore_cli/src/main.rs").write_text("")
+            gateway, cli, exporter = (root / name for name in ("gateway", "cli", "exporter"))
+            for path in (gateway, cli, exporter):
+                path.write_text("")
+                path.chmod(0o700)
+            lifecycle = SimpleNamespace(binary=binaries["chain"], library=binaries["core"],
+                env={"GOMAXPROCS": "4"}, timeout_commit="1s")
+            exact = dict(exporter=exporter, profile="1kib", measured_sessions=7680,
+                submission_mode="batch-message", batch_size=64, gas_adjustment="1.6",
+                max_block_gas=160_000_000)
+            with self.assertRaisesRegex(ValueError, "requires --build-manifest"):
+                workload.run_healthy(lifecycle, gateway, cli, root, native_chain=exact)
+
     def test_failed_issue_326_qualification_retains_restart_validation_and_original_failure(self):
         original = "issue #326 qualification gates failed: FinalizeBlock exceeded the gate"
         for restart_result in (

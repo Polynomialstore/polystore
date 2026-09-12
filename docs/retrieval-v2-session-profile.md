@@ -189,6 +189,7 @@ python3 scripts/retrieval_four_validator_workload.py \
   --cli-binary /path/to/polystore_cli \
   --product-source "$PWD" \
   --proof-exporter /path/to/retrieval-inventory-exporter \
+  --build-manifest /path/to/build-manifest.json \
   --home /path/to/new-160m-run \
   --chain-capacity-profile 1kib \
   --chain-capacity-sessions 7680 \
@@ -217,6 +218,12 @@ remains the reported qualification error. After coordinated deployment, run
 `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
 from an external host; the
 local qualification does not claim public routing or TLS health.
+
+The build manifest uses the exact schema documented in the retained
+[batch-frontier evidence](../bench/retrieval_session_capacity/batch-frontier-326/README.md#reproduce).
+The harness requires it for this exact candidate and verifies a clean matching
+source commit plus the SHA-256 of all five supplied runtime artifacts before any
+validator starts.
 
 `retrieval_v2_activation_height=0` is disabled. A positive scheduled height must
 be a one-indexed epoch boundary `(height-1)%epoch_length=0`, with epoch length >=2.

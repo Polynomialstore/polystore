@@ -11,6 +11,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/stretchr/testify/require"
+	polystoretypes "polystorechain/x/polystorechain/types"
 )
 
 func TestRetrievalConsensusProfile(t *testing.T) {
@@ -23,7 +24,7 @@ func TestRetrievalConsensusProfile(t *testing.T) {
 	params := cmttypes.DefaultConsensusParams()
 	params.Block = profile.Block
 	require.NoError(t, params.ValidateBasic())
-	require.Equal(t, int64(160_000_000), params.Block.MaxGas)
+	require.Equal(t, polystoretypes.MaxRetrievalV2BlockGas, params.Block.MaxGas)
 	require.Greater(t, params.Block.MaxBytes, int64(MaxTransactionBytes))
 }
 

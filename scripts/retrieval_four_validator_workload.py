@@ -2177,6 +2177,23 @@ def native_v3_chain_exporter_identity(value):
                           native_chain_exporter_sha256=artifact.sha256(exporter))
 
 
+def verify_native_v3_build_manifest(value, source, artifacts):
+    """Bind supplied qualification artifacts to one clean source commit."""
+    path = Path(value).resolve(strict=True)
+    manifest = json.loads(path.read_text())
+    if not isinstance(manifest, dict) or set(manifest) != {"source_commit", "artifacts"}:
+        raise ValueError("native v3 build manifest has an invalid schema")
+    commit = artifact.command("git", "-C", str(source), "rev-parse", "HEAD").strip()
+    status = artifact.command("git", "-C", str(source), "status", "--porcelain")
+    if manifest["source_commit"] != commit or status:
+        raise ValueError("native v3 build manifest requires its exact clean source commit")
+    expected = {name: artifact.sha256(binary) for name, binary in artifacts.items()}
+    if manifest["artifacts"] != expected:
+        raise ValueError("native v3 build manifest artifact hashes do not match supplied binaries")
+    return dict(path=str(path), sha256=artifact.sha256(path), source_commit=commit,
+                artifacts=expected, verified=True)
+
+
 def validate_broadcast_tx_sync(value, expected_hash, request_id):
     """Accept only an unambiguous CheckTx success for the frozen bytes."""
     if not isinstance(value, dict) or value.get("jsonrpc") != "2.0" or value.get("id") != request_id or value.get("error"):
@@ -3058,7 +3075,8 @@ def validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length):
     return dict(fixed_height=fixed_height, later_height=later, audit_height=audit_height,
         before=before_restart, original_after_restart=original,
         later=lifecycle.snapshot(later), consensus=consensus, normal_audits=restart_audits,
-        nonce_ordered_admission="all 104 frozen per-signer batch sequences committed exactly once before restart",
+        nonce_ordered_admission=(f"all {V3_ISSUE_326_QUALIFICATION_TRANSACTIONS} frozen "
+                                 "per-signer batch sequences committed exactly once before restart"),
         chain_progress_verified=True, qualification=True)
 
 
@@ -5233,8 +5251,23 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         artifact.integer(sustained["proof_gas"], "proof gas", 1, 64000000)
         sustained_offsets(sustained["step_seconds"], rate_scale)
     native_chain_exporter = None
+    build_attestation = None
     if native_chain is not None:
         export_binary, native_chain_exporter = native_v3_chain_exporter_identity(native_chain["exporter"])
+        exact_candidate = (native_chain.get("profile") == "1kib" and
+            native_chain.get("measured_sessions") == V3_ISSUE_326_QUALIFICATION_SESSIONS and
+            native_chain.get("submission_mode") == "batch-message" and
+            native_chain.get("batch_size") == V3_ISSUE_326_QUALIFICATION_BATCH_SIZE and
+            native_chain.get("gas_adjustment", "1.6") == "1.6" and
+            native_chain.get("max_block_gas") == V3_ISSUE_326_QUALIFICATION_GAS and
+            int(lifecycle.env["GOMAXPROCS"]) == 4 and lifecycle.timeout_commit == "1s")
+        if exact_candidate and not native_chain.get("build_manifest"):
+            raise ValueError("the exact issue #326 candidate requires --build-manifest")
+        if native_chain.get("build_manifest"):
+            build_attestation = verify_native_v3_build_manifest(native_chain["build_manifest"], source, {
+                "polystorechaind": lifecycle.binary, "libpolystore_core": lifecycle.library,
+                "polystore_gateway": gateway, "polystore_cli": cli,
+                "retrieval_inventory_exporter": export_binary})
     curl = shutil.which("curl")
     if not curl:
         raise ValueError("curl is required for bounded multipart upload")
@@ -5393,7 +5426,11 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
                 "polystore-website", "scripts"]),
             cli_source_sha256=artifact.sha256(source / "polystore_cli/src/main.rs"),
             curl_binary=curl, curl_sha256=artifact.sha256(curl),
-            artifact_source_match="supplied binaries/library; build correspondence not attested")
+            artifact_source_match=("verified exact clean source commit and artifact hashes"
+                                   if build_attestation else
+                                   "supplied binaries/library; build correspondence not attested"))
+        if build_attestation is not None:
+            doc["provenance"]["build_attestation"] = build_attestation
         if native_browser is not None:
             doc["provenance"]["browser_source_sha256"] = {
                 str(path.relative_to(source)): artifact.sha256(path)
@@ -5662,7 +5699,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for flag in ("binary", "library", "home"):
         parser.add_argument("--" + flag, required=True)
-    for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source", "proof-exporter"):
+    for flag in ("fixture-k8", "fixture-k2", "gateway-binary", "cli-binary", "product-source",
+                 "proof-exporter", "build-manifest"):
         parser.add_argument("--" + flag)
     parser.add_argument("--mode", choices=("settlement-smoke", "healthy-providers", "sustained-providers",
                                            "native-v3-providers", "native-v3-providers-cross-audit",
@@ -5711,6 +5749,7 @@ def main():
     audit_profile = options.pop("audit_profile")
     cli, source = options.pop("cli_binary"), options.pop("product_source")
     exporter = options.pop("proof_exporter")
+    build_manifest = options.pop("build_manifest")
     step_seconds, proof_gas = options.pop("step_seconds"), options.pop("proof_gas")
     sustained_k = options.pop("sustained_k")
     sustained_rate_scale = options.pop("sustained_rate_scale")
@@ -5727,7 +5766,8 @@ def main():
     chain_timeout_commit_ms = options.pop("chain_timeout_commit_ms")
     chain_validator_gomaxprocs = options.pop("chain_validator_gomaxprocs")
     if mode != "native-v3-chain" and any(value is not None for value in
-            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions, chain_capacity_sessions)):
+            (chain_max_gas, chain_capacity_profile, chain_capacity_transactions,
+             chain_capacity_sessions, build_manifest)):
         parser.error("chain capacity controls require native-v3-chain")
     if mode != "native-v3-chain" and (chain_submission_mode != "separate" or chain_batch_size != 1):
         parser.error("chain proof submission controls require native-v3-chain")
@@ -5757,6 +5797,8 @@ def main():
                  (chain_capacity_transactions is None) == (chain_capacity_sessions is None)))):
             parser.error("native-v3-chain requires product binaries/source and --proof-exporter, normal audits, timeout <= 3600, and fixed saturated profile")
         native_chain = dict(exporter=exporter)
+        if build_manifest:
+            native_chain["build_manifest"] = build_manifest
         if chain_timeout_commit_ms != 1000:
             options["consensus_timeout_commit_ms"] = chain_timeout_commit_ms
         options["gomaxprocs"] = chain_validator_gomaxprocs
