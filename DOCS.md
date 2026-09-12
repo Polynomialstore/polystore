@@ -18,6 +18,7 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
     - `rfcs/rfc-pricing-and-escrow-accounting.md` (lock-in pricing + fees + caps)
     - `rfcs/rfc-deal-expiry-and-extension.md` (deal term expiry + renewals)
     - `rfcs/rfc-mandatory-retrieval-sessions-and-batching.md` (sessions-first data-plane gating + batching)
+    - `rfcs/rfc-retrieval-channel-decision.md` (draft funded-channel tradeoffs and executable decision vectors; no implementation approval)
     - `rfcs/rfc-retrieval-access-control-public-deals-and-vouchers.md` (restricted/public deals + allowlists + vouchers)
     - `rfcs/rfc-content-encoding-and-compression.md` (compression-aware pipeline: compress-before-encrypt)
     - `rfcs/rfc-provider-exit-and-draining.md` (provider exit/draining + repair/GC interactions)
