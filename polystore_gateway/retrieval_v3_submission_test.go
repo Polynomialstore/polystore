@@ -125,6 +125,15 @@ func TestProviderV3AggregateFreshSubmissionRecovery(t *testing.T) {
 				if marker.TxHash != wantHash {
 					t.Fatalf("observed hash not durable before pending response: %+v", marker)
 				}
+				actualSigner = sdk.AccAddress(bytes.Repeat([]byte{99}, 20)).String()
+				changedAccount := invokeSubmission(`{"session_id":"` + id + `"}`)
+				if changedAccount.Code != 409 || calls != 1 {
+					t.Fatalf("changed account reused the original signer intent: %d %s", changedAccount.Code, changedAccount.Body.String())
+				}
+				if retained, err := loadPendingSigner(signer); err != nil || retained == nil || !reflect.DeepEqual(*retained, *marker) {
+					t.Fatalf("changed account altered original signer quarantine: %+v %v", retained, err)
+				}
+				actualSigner = signer
 				retry := invokeSubmission(`{"session_id":"` + id + `"}`)
 				var recovery map[string]json.RawMessage
 				if err := json.Unmarshal(retry.Body.Bytes(), &recovery); err != nil || recovery["recorded_session_id"] == nil || recovery["session_id"] != nil || calls != 1 {

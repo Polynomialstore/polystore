@@ -436,8 +436,20 @@ func TestGenerationAcceptanceV3OutcomeStatusCodes(t *testing.T) {
 }
 
 func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
+	for _, tc := range []struct {
+		proofs int
+		bytes  uint64
+	}{{1, 1024}, {2, 16 * retrievalchallenge.DataBlobPayloadBytes}, {8, 64 * retrievalchallenge.DataBlobPayloadBytes}, {16, 128 * retrievalchallenge.DataBlobPayloadBytes}} {
+		t.Run(fmt.Sprintf("proofs=%d", tc.proofs), func(t *testing.T) {
+			testProviderV3FreshHandlersSubmitTrackedNativeTransactions(t, tc.bytes, tc.proofs)
+		})
+	}
+}
+
+func testProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T, size uint64, proofCount int) {
+	t.Helper()
 	submissionTestDB(t)
-	frozen, key, _ := buildProviderV3ArtifactFixture(t)
+	frozen, key, _ := buildProviderV3ArtifactFixtureSize(t, size)
 	frozen.Session.AckedSlotsMask = 1
 	signer := frozen.Session.Obligations[0].AssignedProvider
 	t.Setenv("POLYSTORE_PROVIDER_KEY", "faucet")
@@ -518,6 +530,9 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 	_, proofs, _, err := buildProviderProofBatchV3(t.Context(), frozen, signer)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(proofs) != proofCount {
+		t.Fatalf("real fixture selected %d proofs, want %d", len(proofs), proofCount)
 	}
 	wantProof := &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: signer, Sessions: []types.RetrievalSessionProofBatchEntryV3{{SessionId: bytes.Clone(frozen.Session.SessionId), Slot: 0, Proofs: proofs}}}
 	wantProofJSON, err := (&jsonpb.Marshaler{OrigName: true}).MarshalToString(wantProof)

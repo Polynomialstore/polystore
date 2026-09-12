@@ -1,0 +1,73 @@
+Initializing KZG with path: ../../../trusted_setup.txt
+goos: linux
+goarch: amd64
+pkg: polystorechain/x/polystorechain/keeper
+cpu: AMD Ryzen 7 9700X 8-Core Processor             
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/independent-4         	      50	   4503626 ns/op	   1225374 keeper_gas/op	       833.0 message_B	       222.0 obligations/s	         1.000 proofs/op	   20814 B/op	     233 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/independent-4         	      50	   4493494 ns/op	   1225374 keeper_gas/op	       833.0 message_B	       222.5 obligations/s	         1.000 proofs/op	   20818 B/op	     233 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/independent-4         	      50	   4505230 ns/op	   1225374 keeper_gas/op	       833.0 message_B	       222.0 obligations/s	         1.000 proofs/op	   20819 B/op	     233 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/independent-4         	      50	   4502774 ns/op	   1225374 keeper_gas/op	       833.0 message_B	       222.1 obligations/s	         1.000 proofs/op	   20817 B/op	     233 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/independent-4         	      50	   4497125 ns/op	   1225374 keeper_gas/op	       833.0 message_B	       222.4 obligations/s	         1.000 proofs/op	   20817 B/op	     233 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/aggregate-4           	      50	   2684480 ns/op	   1025374 keeper_gas/op	       836.0 message_B	       372.5 obligations/s	         1.000 proofs/op	   22905 B/op	     240 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/aggregate-4           	      50	   2679095 ns/op	   1025374 keeper_gas/op	       836.0 message_B	       373.3 obligations/s	         1.000 proofs/op	   22905 B/op	     240 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/aggregate-4           	      50	   2668146 ns/op	   1025374 keeper_gas/op	       836.0 message_B	       374.8 obligations/s	         1.000 proofs/op	   22910 B/op	     240 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/aggregate-4           	      50	   2670511 ns/op	   1025374 keeper_gas/op	       836.0 message_B	       374.5 obligations/s	         1.000 proofs/op	   22906 B/op	     240 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=1/aggregate-4           	Initializing KZG with path: ../../../trusted_setup.txt
+      50	   2673459 ns/op	   1025374 keeper_gas/op	       836.0 message_B	       374.0 obligations/s	         1.000 proofs/op	   22905 B/op	     240 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/independent-4         	      50	   9008111 ns/op	   2450016 keeper_gas/op	      1591 message_B	       111.0 obligations/s	         2.000 proofs/op	   47279 B/op	     691 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/independent-4         	      50	   9023744 ns/op	   2450016 keeper_gas/op	      1591 message_B	       110.8 obligations/s	         2.000 proofs/op	   47280 B/op	     691 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/independent-4         	      50	   9002253 ns/op	   2450016 keeper_gas/op	      1591 message_B	       111.1 obligations/s	         2.000 proofs/op	   47278 B/op	     691 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/independent-4         	      50	   9045709 ns/op	   2450016 keeper_gas/op	      1591 message_B	       110.5 obligations/s	         2.000 proofs/op	   47271 B/op	     691 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/independent-4         	      50	   8998137 ns/op	   2450016 keeper_gas/op	      1591 message_B	       111.1 obligations/s	         2.000 proofs/op	   47268 B/op	     691 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/aggregate-4           	      50	   3148923 ns/op	   1150016 keeper_gas/op	      1594 message_B	       317.6 obligations/s	         2.000 proofs/op	   50089 B/op	     696 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/aggregate-4           	      50	   3153468 ns/op	   1150016 keeper_gas/op	      1594 message_B	       317.1 obligations/s	         2.000 proofs/op	   50094 B/op	     696 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/aggregate-4           	      50	   3147994 ns/op	   1150016 keeper_gas/op	      1594 message_B	       317.7 obligations/s	         2.000 proofs/op	   50094 B/op	     696 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/aggregate-4           	      50	   3176822 ns/op	   1150016 keeper_gas/op	      1594 message_B	       314.8 obligations/s	         2.000 proofs/op	   50099 B/op	     696 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=2/aggregate-4           	      50	   3175483 ns/op	   1150016 keeper_gas/op	      1594 message_B	       314.9 obligations/s	         2.000 proofs/op	   50094 B/op	     696 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/independent-4         	      50	  35963150 ns/op	   9650379 keeper_gas/op	      6127 message_B	        27.81 obligations/s	         8.000 proofs/op	  110951 B/op	    1524 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/independent-4         	      50	  35939052 ns/op	   9650379 keeper_gas/op	      6127 message_B	        27.82 obligations/s	         8.000 proofs/op	  110939 B/op	    1524 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/independent-4         	      50	  35932337 ns/op	   9650379 keeper_gas/op	      6127 message_B	        27.83 obligations/s	         8.000 proofs/op	  110950 B/op	    1524 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/independent-4         	      50	  35951070 ns/op	   9650379 keeper_gas/op	      6127 message_B	        27.82 obligations/s	         8.000 proofs/op	  110936 B/op	    1524 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/independent-4         	      50	  35944147 ns/op	   9650379 keeper_gas/op	      6127 message_B	        27.82 obligations/s	         8.000 proofs/op	  110950 B/op	    1524 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/aggregate-4           	      50	   5849491 ns/op	   1750379 keeper_gas/op	      6130 message_B	       171.0 obligations/s	         8.000 proofs/op	  117145 B/op	    1517 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/aggregate-4           	      50	   5849861 ns/op	   1750379 keeper_gas/op	      6130 message_B	       170.9 obligations/s	         8.000 proofs/op	  117145 B/op	    1517 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/aggregate-4           	      50	   5864776 ns/op	   1750379 keeper_gas/op	      6130 message_B	       170.5 obligations/s	         8.000 proofs/op	  117150 B/op	    1517 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/aggregate-4           	      50	   5855315 ns/op	   1750379 keeper_gas/op	      6130 message_B	       170.8 obligations/s	         8.000 proofs/op	  117150 B/op	    1517 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=8/aggregate-4           	      50	   5861941 ns/op	   1750379 keeper_gas/op	      6130 message_B	       170.6 obligations/s	         8.000 proofs/op	  117150 B/op	    1517 allocs/op
+Initializing KZG with path: ../../../trusted_setup.txt
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/independent-4        	      50	  71856071 ns/op	  19250445 keeper_gas/op	     12173 message_B	        13.92 obligations/s	        16.00 proofs/op	  198147 B/op	    2667 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/independent-4        	      50	  71866875 ns/op	  19250445 keeper_gas/op	     12173 message_B	        13.91 obligations/s	        16.00 proofs/op	  198147 B/op	    2667 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/independent-4        	      50	  71869310 ns/op	  19250445 keeper_gas/op	     12173 message_B	        13.91 obligations/s	        16.00 proofs/op	  198147 B/op	    2667 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/independent-4        	      50	  71839125 ns/op	  19250445 keeper_gas/op	     12173 message_B	        13.92 obligations/s	        16.00 proofs/op	  198137 B/op	    2667 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/independent-4        	      50	  71843952 ns/op	  19250445 keeper_gas/op	     12173 message_B	        13.92 obligations/s	        16.00 proofs/op	  198152 B/op	    2667 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/aggregate-4          	      50	   9438511 ns/op	   2550445 keeper_gas/op	     12176 message_B	       105.9 obligations/s	        16.00 proofs/op	  209206 B/op	    2644 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/aggregate-4          	      50	   9434986 ns/op	   2550445 keeper_gas/op	     12176 message_B	       106.0 obligations/s	        16.00 proofs/op	  209214 B/op	    2644 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/aggregate-4          	      50	   9425984 ns/op	   2550445 keeper_gas/op	     12176 message_B	       106.1 obligations/s	        16.00 proofs/op	  209211 B/op	    2644 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/aggregate-4          	      50	   9462332 ns/op	   2550445 keeper_gas/op	     12176 message_B	       105.7 obligations/s	        16.00 proofs/op	  209206 B/op	    2644 allocs/op
+BenchmarkRetrievalV3SameObligationSettlement/proofs=16/aggregate-4          		Command being timed: "/home/mikers/polystore-337-execution.euduqe/339-keeper.test -test.run=^$ -test.bench=^BenchmarkRetrievalV3SameObligationSettlement$ -test.benchmem -test.benchtime=50x -test.count=5 -test.timeout=90s"
+	User time (seconds): 39.76
+	System time (seconds): 0.05
+	Percent of CPU this job got: 102%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:38.89
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 106608
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 52963
+	Voluntary context switches: 102550
+	Involuntary context switches: 651
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+      50	   9458284 ns/op	   2550445 keeper_gas/op	     12176 message_B	       105.7 obligations/s	        16.00 proofs/op	  209206 B/op	    2644 allocs/op
+PASS
+
