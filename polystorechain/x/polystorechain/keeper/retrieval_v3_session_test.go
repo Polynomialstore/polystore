@@ -108,7 +108,7 @@ func openOwnerSessionV3WithPrice(t *testing.T, price int64) (generationV3Fixture
 	return g, session
 }
 
-func ackDigestV3(t *testing.T, session types.RetrievalSessionV3, slot uint32) []byte {
+func ackDigestV3(t testing.TB, session types.RetrievalSessionV3, slot uint32) []byte {
 	t.Helper()
 	var obligation types.RetrievalObligationV3
 	for _, candidate := range session.Obligations {
@@ -600,6 +600,17 @@ func TestRetrievalSessionV3RealProofAckSettlementAndReplay(t *testing.T) {
 	require.Equal(t, uint32(1), settled.AckedSlotsMask)
 	require.Equal(t, uint32(1), settled.SettledSlotsMask)
 	require.True(t, settled.LockedFee.IsZero())
+	live, err := f.g.fixture.keeper.RetrievalSessionLiveCount.Get(response)
+	require.NoError(t, err)
+	require.Zero(t, live, "completed sessions must release admission before the deadline")
+	expiryRef, err := f.g.fixture.keeper.RetrievalSessionExpiryRefs.Has(response, collections.Join(settled.DeadlineHeight, settled.SessionId))
+	require.NoError(t, err)
+	require.False(t, expiryRef)
+	_, err = keeper.NewQueryServerImpl(f.g.fixture.keeper).RetainedGenerations(response, &types.QueryRetainedGenerationsRequest{})
+	require.NoError(t, err)
+	terminalQuery, err := keeper.NewQueryServerImpl(f.g.fixture.keeper).GetRetrievalSessionV3(response, &types.QueryGetRetrievalSessionV3Request{SessionId: s.SessionId})
+	require.NoError(t, err)
+	require.Equal(t, storedAnchor.Seed, terminalQuery.AnchorSeed, "terminal recovery must retain authenticated challenge material")
 	provider, err := sdk.AccAddressFromBech32(settled.Obligations[0].Payee)
 	require.NoError(t, err)
 	require.Equal(t, math.NewInt(2), f.g.bank.accountBalances[provider.String()].AmountOf(sdk.DefaultBondDenom))
@@ -816,6 +827,16 @@ func TestRetrievalSessionV3PartialSettlementExpiryAndRefund(t *testing.T) {
 
 func TestRetrievalSessionV3ZeroPricedRefundPersistsOnce(t *testing.T) {
 	g, s := openOwnerSessionV3WithPrice(t, 0)
+	anchorCtx := g.ctx.WithBlockHeight(3).WithHeaderHash(bytes.Repeat([]byte{0x87}, 32))
+	require.NoError(t, g.fixture.keeper.BeginBlock(anchorCtx))
+	acked, err := g.server.AcknowledgeRetrievalObligationV3(anchorCtx.WithBlockHeight(4), &types.MsgAcknowledgeRetrievalObligationV3{
+		Creator: g.owner, SessionId: s.SessionId, Slot: 0, AckDigest: ackDigestV3(t, s, 0),
+	})
+	require.NoError(t, err)
+	require.False(t, acked.Settled, "zero price does not waive the outstanding proof")
+	live, err := g.fixture.keeper.RetrievalSessionLiveCount.Get(anchorCtx)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), live)
 	expiredCtx := g.ctx.WithBlockHeight(21).WithHeaderHash(bytes.Repeat([]byte{0x88}, 32))
 	require.NoError(t, g.fixture.keeper.BeginBlock(expiredCtx))
 	before := sessionStoreSnapshot(t, expiredCtx, g.fixture.storeService)

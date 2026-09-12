@@ -501,6 +501,42 @@ database restart must preserve session, plan,
 bitmap, ACK, liability, funding source and expiry references. Export/import is
 unsupported until those records are explicitly included and qualified.
 
+Once every represented obligation is settled (ACK plus all assigned samples),
+the common V3 settlement transition releases its live-context, expiry-bucket,
+anchor and generation ownership immediately and exactly once. A zero locked
+amount alone never qualifies: zero-priced unfinished obligations remain live.
+Other sessions and protocol audits retain their own shared references. The
+original response deadline still applies to ACK/proof messages, including
+retries; later expiry processing cannot release a completed session twice or
+alter its settled payment partitions.
+
+Completed sessions retain their full existing session and nonce recovery rows,
+plus the original 32-byte anchor seed in the additive
+`RetrievalSessionV3TerminalAnchors/value/` collection, keyed by the 32-byte session
+ID. The raw application key/value addition is 104 bytes per completed session
+(40-byte prefix, 32-byte key, 32-byte value), excluding database overhead. This
+row is the durable release marker, written in the same transaction cache as
+settlement and reference removal. `GetRetrievalSessionV3.anchor_seed` continues
+to expose the same original seed for browser readiness and cryptographically
+validated proof replay; settled replays with tampered openings still fail.
+Completed rows stay completed rather than acquiring the `expired` flag later;
+clients must continue comparing the current height with `deadline_height` when
+deciding whether a response is allowed.
+
+No protobuf rewrite or full-state migration is needed. On upgrade, old rows
+without a terminal marker keep their existing references until normal expiry or
+a valid ACK/proof retry releases them within their response window. Database
+restart preserves the additional collection; downgrading to software unaware
+of it is not supported after terminal release begins. This bounds outstanding
+admission, not all-time database growth; archival policy is separate (#341).
+
+The bounded fresh-proof churn regression is opt-in because generating 8,193
+distinct real KZG openings is deliberately outside the normal fast unit gate:
+`POLYSTORE_RUN_V3_COMPLETION_CHURN=1 ../scripts/chain_go.sh test -count=1 -timeout 10m ./x/polystorechain/keeper -run '^TestRetrievalSessionV3CompletionChurnBeyondLiveCapacity$'`
+(from `polystorechain/`). It checks completed admission before each original
+deadline while an unfinished V2 session remains charged; it does not measure
+byte delivery or service capacity. Retain its result separately from CPU evidence.
+
 For K8/M4, one range creates at most eight systematic provider obligations and
 Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
 length. One proof message has at most 64 openings; batching changes envelope count,

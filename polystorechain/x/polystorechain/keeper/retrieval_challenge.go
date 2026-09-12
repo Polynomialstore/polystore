@@ -244,55 +244,7 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		if anchorHeight == 0 {
 			return fmt.Errorf("session expiry index/context mismatch")
 		}
-		anchor, err := k.ChallengeAnchors.Get(ctx, anchorHeight)
-		if err != nil {
-			return err
-		}
-		if anchor.SessionReferences == 0 {
-			return fmt.Errorf("session anchor reference underflow")
-		}
-		anchor.SessionReferences--
-		if anchor.SessionReferences == 0 && anchor.AuditReferences == 0 {
-			if err := k.ChallengeAnchors.Remove(ctx, anchorHeight); err != nil {
-				return err
-			}
-		} else if err := k.ChallengeAnchors.Set(ctx, anchorHeight, anchor); err != nil {
-			return err
-		}
-		generationKey := collections.Join(dealID, generation)
-		refs, err := k.RetrievalSessionGenerationRefs.Get(ctx, generationKey)
-		if err != nil {
-			return err
-		}
-		if refs == 0 {
-			return fmt.Errorf("session generation reference underflow")
-		}
-		if refs == 1 {
-			dealCount, err := k.RetrievalSessionGenerationCounts.Get(ctx, dealID)
-			if err != nil {
-				return err
-			}
-			globalCount, err := k.RetrievalSessionGenerationCount.Get(ctx)
-			if err != nil {
-				return err
-			}
-			if dealCount == 0 || globalCount == 0 {
-				return fmt.Errorf("session generation count underflow")
-			}
-			if err := k.RetrievalSessionGenerationRefs.Remove(ctx, generationKey); err != nil {
-				return err
-			}
-			if dealCount == 1 {
-				if err := k.RetrievalSessionGenerationCounts.Remove(ctx, dealID); err != nil {
-					return err
-				}
-			} else if err := k.RetrievalSessionGenerationCounts.Set(ctx, dealID, dealCount-1); err != nil {
-				return err
-			}
-			if err := k.RetrievalSessionGenerationCount.Set(ctx, globalCount-1); err != nil {
-				return err
-			}
-		} else if err := k.RetrievalSessionGenerationRefs.Set(ctx, generationKey, refs-1); err != nil {
+		if err := k.releaseRetrievalSessionChallengeRefs(ctx, dealID, generation, anchorHeight); err != nil {
 			return err
 		}
 		if legacy {
@@ -320,6 +272,60 @@ func (k Keeper) processRetrievalChallengeState(ctx sdk.Context) error {
 		}
 	}
 	return nil
+}
+
+// releaseRetrievalSessionChallengeRefs is shared by deadline expiry and V3
+// completion. It releases only this session's ownership, preserving audits and
+// other sessions that share the same anchor or content generation.
+func (k Keeper) releaseRetrievalSessionChallengeRefs(ctx sdk.Context, dealID, generation, anchorHeight uint64) error {
+	anchor, err := k.ChallengeAnchors.Get(ctx, anchorHeight)
+	if err != nil {
+		return err
+	}
+	if anchor.SessionReferences == 0 {
+		return fmt.Errorf("session anchor reference underflow")
+	}
+	anchor.SessionReferences--
+	if anchor.SessionReferences == 0 && anchor.AuditReferences == 0 {
+		if err := k.ChallengeAnchors.Remove(ctx, anchorHeight); err != nil {
+			return err
+		}
+	} else if err := k.ChallengeAnchors.Set(ctx, anchorHeight, anchor); err != nil {
+		return err
+	}
+	generationKey := collections.Join(dealID, generation)
+	refs, err := k.RetrievalSessionGenerationRefs.Get(ctx, generationKey)
+	if err != nil {
+		return err
+	}
+	if refs == 0 {
+		return fmt.Errorf("session generation reference underflow")
+	}
+	if refs != 1 {
+		return k.RetrievalSessionGenerationRefs.Set(ctx, generationKey, refs-1)
+	}
+	dealCount, err := k.RetrievalSessionGenerationCounts.Get(ctx, dealID)
+	if err != nil {
+		return err
+	}
+	globalCount, err := k.RetrievalSessionGenerationCount.Get(ctx)
+	if err != nil {
+		return err
+	}
+	if dealCount == 0 || globalCount == 0 {
+		return fmt.Errorf("session generation count underflow")
+	}
+	if err := k.RetrievalSessionGenerationRefs.Remove(ctx, generationKey); err != nil {
+		return err
+	}
+	if dealCount == 1 {
+		if err := k.RetrievalSessionGenerationCounts.Remove(ctx, dealID); err != nil {
+			return err
+		}
+	} else if err := k.RetrievalSessionGenerationCounts.Set(ctx, dealID, dealCount-1); err != nil {
+		return err
+	}
+	return k.RetrievalSessionGenerationCount.Set(ctx, globalCount-1)
 }
 
 // prepareRetrievalSession performs all nonce, authority, snapshot and future-work

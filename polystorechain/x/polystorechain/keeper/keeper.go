@@ -53,27 +53,29 @@ type Keeper struct {
 	SetupBumpNonce             collections.Map[collections.Pair[uint64, uint32], uint64]
 	SetupTriedProvider         collections.Map[collections.Pair[collections.Pair[uint64, uint32], string], bool]
 
-	RetrievalSessions                collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsV3              collections.Map[[]byte, types.RetrievalSessionV3]
-	RetrievalSessionV3Nonces         collections.Map[collections.Pair[string, uint64], uint64]
-	RetrievalSessionV3NonceIDs       collections.Map[collections.Pair[collections.Pair[string, uint64], uint64], []byte]
-	RetrievalSessionsByOwner         collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider      collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces           collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
-	RetrievalSessionProofProvider    collections.Map[[]byte, string]
-	RetrievalV2ActivatedHeight       collections.Item[uint64]
-	RetrievalV3ActivatedHeight       collections.Item[uint64]
-	PendingDealGenerationsV3         collections.Map[uint64, types.DealGenerationAdmissionV3]
-	AdmittedDealGenerationsV3        collections.Map[uint64, types.DealGenerationAdmissionV3]
-	ChallengeAnchors                 collections.Map[uint64, types.ChallengeAnchor]
-	ChallengePendingAnchors          collections.Map[uint64, bool]
-	RetrievalSessionExpiryRefs       collections.Map[collections.Pair[uint64, []byte], bool]
-	RetrievalSessionExpiryCounts     collections.Map[uint64, uint64]
-	RetrievalSessionOpenCounts       collections.Map[uint64, uint64]
-	RetrievalSessionLiveCount        collections.Item[uint64]
-	RetrievalSessionGenerationRefs   collections.Map[collections.Pair[uint64, uint64], uint64]
-	RetrievalSessionGenerationCounts collections.Map[uint64, uint64]
-	RetrievalSessionGenerationCount  collections.Item[uint64]
+	RetrievalSessions   collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsV3 collections.Map[[]byte, types.RetrievalSessionV3]
+	// Terminal anchors preserve authenticated retries without owning live refs.
+	RetrievalSessionV3TerminalAnchors collections.Map[[]byte, []byte]
+	RetrievalSessionV3Nonces          collections.Map[collections.Pair[string, uint64], uint64]
+	RetrievalSessionV3NonceIDs        collections.Map[collections.Pair[collections.Pair[string, uint64], uint64], []byte]
+	RetrievalSessionsByOwner          collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider       collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces            collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessionProofProvider     collections.Map[[]byte, string]
+	RetrievalV2ActivatedHeight        collections.Item[uint64]
+	RetrievalV3ActivatedHeight        collections.Item[uint64]
+	PendingDealGenerationsV3          collections.Map[uint64, types.DealGenerationAdmissionV3]
+	AdmittedDealGenerationsV3         collections.Map[uint64, types.DealGenerationAdmissionV3]
+	ChallengeAnchors                  collections.Map[uint64, types.ChallengeAnchor]
+	ChallengePendingAnchors           collections.Map[uint64, bool]
+	RetrievalSessionExpiryRefs        collections.Map[collections.Pair[uint64, []byte], bool]
+	RetrievalSessionExpiryCounts      collections.Map[uint64, uint64]
+	RetrievalSessionOpenCounts        collections.Map[uint64, uint64]
+	RetrievalSessionLiveCount         collections.Item[uint64]
+	RetrievalSessionGenerationRefs    collections.Map[collections.Pair[uint64, uint64], uint64]
+	RetrievalSessionGenerationCounts  collections.Map[uint64, uint64]
+	RetrievalSessionGenerationCount   collections.Item[uint64]
 
 	StorageAuditAssignments    collections.Map[string, types.FrozenStorageAssignment]
 	StorageAuditEpochs         collections.Map[uint64, types.FrozenStorageAuditEpoch]
@@ -175,12 +177,13 @@ func NewKeeper(
 			collections.BoolValue,
 		),
 
-		RetrievalSessions:           collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
-		RetrievalSessionsV3:         collections.NewMap(sb, types.RetrievalSessionsV3Key, "retrieval_sessions_v3", collections.BytesKey, codec.CollValue[types.RetrievalSessionV3](cdc)),
-		RetrievalSessionV3Nonces:    collections.NewMap(sb, types.RetrievalSessionV3NonceKey, "retrieval_session_v3_nonces", collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Value),
-		RetrievalSessionV3NonceIDs:  collections.NewMap(sb, types.RetrievalSessionV3NonceIDKey, "retrieval_session_v3_nonce_ids", collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Key), collections.BytesValue),
-		RetrievalSessionsByOwner:    collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
-		RetrievalSessionsByProvider: collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+		RetrievalSessions:                 collections.NewMap(sb, types.RetrievalSessionsKey, "retrieval_sessions", collections.BytesKey, codec.CollValue[types.RetrievalSession](cdc)),
+		RetrievalSessionsV3:               collections.NewMap(sb, types.RetrievalSessionsV3Key, "retrieval_sessions_v3", collections.BytesKey, codec.CollValue[types.RetrievalSessionV3](cdc)),
+		RetrievalSessionV3TerminalAnchors: collections.NewMap(sb, types.RetrievalSessionV3TerminalAnchorsKey, "retrieval_session_v3_terminal_anchors", collections.BytesKey, collections.BytesValue),
+		RetrievalSessionV3Nonces:          collections.NewMap(sb, types.RetrievalSessionV3NonceKey, "retrieval_session_v3_nonces", collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Value),
+		RetrievalSessionV3NonceIDs:        collections.NewMap(sb, types.RetrievalSessionV3NonceIDKey, "retrieval_session_v3_nonce_ids", collections.PairKeyCodec(collections.PairKeyCodec(collections.StringKey, collections.Uint64Key), collections.Uint64Key), collections.BytesValue),
+		RetrievalSessionsByOwner:          collections.NewMap(sb, types.RetrievalSessionsByOwnerKey, "retrieval_sessions_by_owner", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
+		RetrievalSessionsByProvider:       collections.NewMap(sb, types.RetrievalSessionsByProviderKey, "retrieval_sessions_by_provider", collections.PairKeyCodec(collections.StringKey, collections.BytesKey), collections.Uint64Value),
 		RetrievalSessionNonces: collections.NewMap(
 			sb,
 			types.RetrievalSessionNonceKey,
