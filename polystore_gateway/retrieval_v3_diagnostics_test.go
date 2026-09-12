@@ -108,6 +108,13 @@ func TestGatewayMduV3DiagnosticsPublicSuccessAndFailures(t *testing.T) {
 	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Header().Get("Server-Timing"), "ps3p_lcd") || strings.Contains(w.Header().Get("Server-Timing"), "ps3p_keys") {
 		t.Fatal("admission rejection performed authority or subprocess work")
 	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	w = httptest.NewRecorder()
+	GatewayMdu(w, request(canceled))
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Header().Get("Server-Timing"), "ps3p_lcd") {
+		t.Fatal("cancellation escaped admission or changed failure semantics")
+	}
 	// A real key lookup failure remains fail-closed; no artifact read follows.
 	mockCombinedOutput = func(context.Context, string, ...string) ([]byte, error) {
 		return nil, fmt.Errorf("private-keyring-path")

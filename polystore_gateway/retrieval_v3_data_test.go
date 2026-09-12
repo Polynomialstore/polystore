@@ -528,6 +528,7 @@ func TestGatewayMduRejectsDuplicateSessionAuthority(t *testing.T) {
 }
 
 func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
+	t.Setenv("POLYSTORE_RETRIEVAL_DIAGNOSTICS", "1")
 	response, height := frozenSessionV3Fixture(t, retrievalchallenge.DataBlobPayloadBytes+1, 1)
 	frozen, err := freezeRetrievalSessionV3Response(response, height)
 	if err != nil {
@@ -549,6 +550,7 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 			t.Errorf("router changed frozen v3 request authority: %s", r.URL)
 		}
 		w.Header().Set("Content-Type", "multipart/form-data; boundary=frozen; version=3")
+		w.Header().Set("Server-Timing", `ps3p_lcd;dur=4.000;desc="2"`)
 		_, _ = w.Write([]byte("verified provider response"))
 	}))
 	defer upstream.Close()
@@ -603,6 +605,10 @@ func TestRouterGatewayMduV3PinsFrozenPayeeAndChunk(t *testing.T) {
 	RouterGatewayMdu(w, request(context.Background()))
 	if w.Code != http.StatusOK || w.Body.String() != "verified provider response" {
 		t.Fatalf("v3 user-gateway routing failed: status=%d body=%q", w.Code, w.Body.String())
+	}
+	timing := strings.Join(w.Header().Values("Server-Timing"), ", ")
+	if !strings.Contains(timing, "ps3p_lcd") || !strings.Contains(timing, "ps3g_lcd") || !strings.Contains(timing, "ps3g_endpoint") || strings.Contains(timing, "ps3g_proxy") || strings.Contains(timing, "keys") {
+		t.Fatalf("proxy lost or misattributed phase headers: %s", timing)
 	}
 	shortCtx, cancelShort := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShort()
