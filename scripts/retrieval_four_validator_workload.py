@@ -2177,20 +2177,25 @@ def native_v3_chain_exporter_identity(value):
                           native_chain_exporter_sha256=artifact.sha256(exporter))
 
 
-def verify_native_v3_build_manifest(value, source, artifacts):
-    """Bind supplied qualification artifacts to one clean source commit."""
+def verify_native_v3_build_manifest(value, source, harness_source, artifacts):
+    """Bind supplied qualification artifacts and harness to one clean commit."""
     path = Path(value).resolve(strict=True)
     manifest = json.loads(path.read_text())
     if not isinstance(manifest, dict) or set(manifest) != {"source_commit", "artifacts"}:
         raise ValueError("native v3 build manifest has an invalid schema")
-    commit = artifact.command("git", "-C", str(source), "rev-parse", "HEAD").strip()
-    status = artifact.command("git", "-C", str(source), "status", "--porcelain")
-    if manifest["source_commit"] != commit or status:
-        raise ValueError("native v3 build manifest requires its exact clean source commit")
+    checkouts = tuple(dict.fromkeys((Path(source).resolve(), Path(harness_source).resolve())))
+    identities = [(checkout,
+        artifact.command("git", "-C", str(checkout), "rev-parse", "HEAD").strip(),
+        artifact.command("git", "-C", str(checkout), "status", "--porcelain"))
+        for checkout in checkouts]
+    if any(commit != manifest["source_commit"] or status for _, commit, status in identities):
+        raise ValueError("native v3 build manifest requires exact clean source and harness commits")
     expected = {name: artifact.sha256(binary) for name, binary in artifacts.items()}
     if manifest["artifacts"] != expected:
         raise ValueError("native v3 build manifest artifact hashes do not match supplied binaries")
-    return dict(path=str(path), sha256=artifact.sha256(path), source_commit=commit,
+    return dict(path=str(path), sha256=artifact.sha256(path),
+                source_commit=manifest["source_commit"],
+                checkouts=[str(checkout) for checkout, _, _ in identities],
                 artifacts=expected, verified=True)
 
 
@@ -5264,7 +5269,8 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
         if exact_candidate and not native_chain.get("build_manifest"):
             raise ValueError("the exact issue #326 candidate requires --build-manifest")
         if native_chain.get("build_manifest"):
-            build_attestation = verify_native_v3_build_manifest(native_chain["build_manifest"], source, {
+            build_attestation = verify_native_v3_build_manifest(
+                native_chain["build_manifest"], source, lifecycle.root, {
                 "polystorechaind": lifecycle.binary, "libpolystore_core": lifecycle.library,
                 "polystore_gateway": gateway, "polystore_cli": cli,
                 "retrieval_inventory_exporter": export_binary})

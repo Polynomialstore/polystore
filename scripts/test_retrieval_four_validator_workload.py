@@ -1850,13 +1850,19 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             manifest.write_text(json.dumps({"source_commit": "ab" * 20,
                 "artifacts": {name: artifact.sha256(path) for name, path in binaries.items()}}))
             with patch.object(artifact, "command", side_effect=["ab" * 20, ""]):
-                result = workload.verify_native_v3_build_manifest(manifest, root, binaries)
+                result = workload.verify_native_v3_build_manifest(manifest, root, root, binaries)
             self.assertTrue(result["verified"])
+            harness = root / "harness"
+            harness.mkdir()
+            with patch.object(artifact, "command", side_effect=[
+                    "ab" * 20, "", "cd" * 20, ""]), \
+                 self.assertRaisesRegex(ValueError, "source and harness"):
+                workload.verify_native_v3_build_manifest(manifest, root, harness, binaries)
             manifest.write_text(json.dumps({"source_commit": "ab" * 20,
                 "artifacts": {"chain": "00" * 32, "core": artifact.sha256(binaries["core"])}}))
             with patch.object(artifact, "command", side_effect=["ab" * 20, ""]), \
                  self.assertRaisesRegex(ValueError, "hashes"):
-                workload.verify_native_v3_build_manifest(manifest, root, binaries)
+                workload.verify_native_v3_build_manifest(manifest, root, root, binaries)
             (root / "polystore_cli/src").mkdir(parents=True)
             (root / "polystore_cli/src/main.rs").write_text("")
             gateway, cli, exporter = (root / name for name in ("gateway", "cli", "exporter"))

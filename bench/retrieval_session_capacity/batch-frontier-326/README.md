@@ -26,7 +26,8 @@ Qualification also requires a build manifest that binds the clean source commit
 to the SHA-256 of `polystorechaind`, `libpolystore_core`, `polystore_gateway`,
 `polystore_cli`, and `retrieval_inventory_exporter`. The harness recomputes every
 value and fails the exact candidate before starting validators if the manifest is
-missing, the source is dirty or moved, or an artifact differs.
+missing, the product or harness checkout is dirty or moved from that commit, or
+an artifact differs.
 
 ## Historical frontier
 

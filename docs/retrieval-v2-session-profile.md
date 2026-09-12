@@ -221,9 +221,9 @@ local qualification does not claim public routing or TLS health.
 
 The build manifest uses the exact schema documented in the retained
 [batch-frontier evidence](../bench/retrieval_session_capacity/batch-frontier-326/README.md#reproduce).
-The harness requires it for this exact candidate and verifies a clean matching
-source commit plus the SHA-256 of all five supplied runtime artifacts before any
-validator starts.
+The harness requires it for this exact candidate and verifies clean matching
+product and harness commits plus the SHA-256 of all five supplied runtime
+artifacts before any validator starts.
 
 `retrieval_v2_activation_height=0` is disabled. A positive scheduled height must
 be a one-indexed epoch boundary `(height-1)%epoch_length=0`, with epoch length >=2.
