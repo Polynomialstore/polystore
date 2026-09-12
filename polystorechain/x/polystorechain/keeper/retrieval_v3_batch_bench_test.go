@@ -72,3 +72,39 @@ func BenchmarkRetrievalV3ProofBatchVerify(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkRetrievalV3CrossSessionBatchFirstAcceptance(b *testing.B) {
+	for _, count := range []int{1, 8, 32, 64} {
+		b.Run(fmt.Sprintf("sessions=%d", count), func(b *testing.B) {
+			f, ctx, sessions, samples := openCryptoSessionV3Batch(b, count)
+			creator := sessions[0].Obligations[0].AssignedProvider
+			msg := batchProofMessageV3(creator, sessions, samples)
+			b.ReportAllocs()
+			b.ReportMetric(float64(count), "sessions/op")
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				run, _ := ctx.CacheContext()
+				if _, err := f.g.server.SubmitRetrievalSessionProofBatchV3(run, msg); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkRetrievalV3SingleProofFirstAcceptance(b *testing.B) {
+	f, ctx, sessions, samples := openCryptoSessionV3Batch(b, 1)
+	creator := sessions[0].Obligations[0].AssignedProvider
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		run, _ := ctx.CacheContext()
+		_, err := f.g.server.SubmitRetrievalSessionProofV3(run, &types.MsgSubmitRetrievalSessionProofV3{
+			Creator: creator, SessionId: sessions[0].SessionId, Slot: 0,
+			Proofs: []types.RetrievalSampleProofV3{samples[0]},
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

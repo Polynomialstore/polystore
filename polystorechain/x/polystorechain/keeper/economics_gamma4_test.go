@@ -155,7 +155,7 @@ func safeSubCoins(have sdk.Coins, amt sdk.Coins) (sdk.Coins, error) {
 	return next, nil
 }
 
-func initFixtureWithBankKeeper(t *testing.T, bank types.BankKeeper) *fixture {
+func initFixtureWithBankKeeper(t testing.TB, bank types.BankKeeper) *fixture {
 	t.Helper()
 
 	encCfg := moduletestutil.MakeTestEncodingConfig(module.AppModule{})

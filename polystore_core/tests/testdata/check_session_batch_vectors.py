@@ -1,4 +1,4 @@
-"""Independent PSB1 transcript/coefficient oracle; Python stdlib only.
+"""Independent PSB1/PSB2 transcript/coefficient oracle; Python stdlib only.
 
 Transcribed from the reviewed batch-v1 schema, without reading its Rust
 implementation or output. This checks encoding and Merkle membership, not G1
@@ -134,6 +134,102 @@ def derive(data):
             "root_boundary_raw_digest": boundary_root.hex(), "root_boundaries": boundaries}
 
 
+def challenge_z(context, seed, ordinal, t, mdu, leaf):
+    prefix = lp("polystore/blob-challenge/v3") + context + seed
+    prefix += uint(ordinal, 8) + uint(t, 8) + uint(mdu, 8) + uint(leaf, 4)
+    for counter in range(256):
+        candidate = hashlib.sha256(prefix + uint(counter, 4)).digest()
+        value = int.from_bytes(candidate, "big")
+        if 0 < value < FR and pow(value, 4096, FR) != 1:
+            return candidate
+    raise ValueError("challenge rejection exhausted")
+
+
+def derive_cross(data):
+    if len(data) > 70028:
+        raise ValueError("PSB2 exceeds bounded transport size")
+    offset = 0
+
+    def take(size):
+        nonlocal offset
+        end = offset + size
+        if end > len(data):
+            raise ValueError("truncated PSB2")
+        result = data[offset:end]
+        offset = end
+        return result
+
+    def integer(size):
+        return int.from_bytes(take(size), "big")
+
+    if take(4) != b"PSB2":
+        raise ValueError("wrong PSB2 magic")
+    entry_count, total_proofs, leaf_count = integer(2), integer(2), integer(4)
+    if not 1 <= entry_count <= total_proofs <= 64 or leaf_count != 96:
+        raise ValueError("invalid PSB2 counts")
+    transcript = lp("polystore/kzg-cross-session-batch/v1") + bytes.fromhex(SETUP_DIGEST)
+    transcript += uint(4096, 4) + lp("bls12-381/fr-be/polyfs-natural-order")
+    transcript += uint(entry_count, 2) + uint(total_proofs, 2) + uint(2 * total_proofs, 2)
+    records, parsed_proofs = [], 0
+    for entry_index in range(entry_count):
+        session, context, seed, polyfs_root = take(32), take(32), take(32), take(32)
+        slot, proof_count = integer(4), integer(2)
+        if not 1 <= proof_count <= total_proofs - parsed_proofs:
+            raise ValueError("invalid PSB2 entry proof count")
+        transcript += uint(entry_index, 2) + session + context + seed + polyfs_root
+        transcript += uint(slot, 4) + uint(proof_count, 2)
+        for proof_index in range(proof_count):
+            ordinal, t = integer(8), integer(8)
+            mdu, leaf, raw_root = integer(8), integer(4), take(32)
+            root_c, root_p, blob_c = take(48), take(48), take(48)
+            blob_z, blob_y, blob_p = take(32), take(32), take(48)
+            root_count, blob_count = integer(2), integer(2)
+            if root_count != 6 or blob_count > 14:
+                raise ValueError("unbounded or malformed PSB2 path count")
+            root_path = [take(32) for _ in range(root_count)]
+            blob_path = [take(32) for _ in range(blob_count)]
+            du, cell, root_z, root_y = root_opening(mdu, raw_root)
+            if merkle_root(root_c, du, 64, root_path) != polyfs_root:
+                raise ValueError("PSB2 root-table membership failed")
+            if merkle_root(blob_c, leaf, leaf_count, blob_path) != raw_root:
+                raise ValueError("PSB2 blob membership failed")
+            if blob_z != challenge_z(context, seed, ordinal, t, mdu, leaf):
+                raise ValueError("PSB2 challenge point mismatch")
+            if any(int.from_bytes(v, "big") >= FR for v in (blob_z, blob_y)):
+                raise ValueError("noncanonical PSB2 scalar")
+            transcript += uint(parsed_proofs, 2) + uint(proof_index, 2)
+            transcript += uint(ordinal, 8) + uint(t, 8) + uint(mdu, 8)
+            transcript += uint(leaf, 4) + uint(leaf_count, 4)
+            transcript += uint(32 * root_count, 2) + b"".join(root_path)
+            transcript += uint(32 * blob_count, 2) + b"".join(blob_path)
+            transcript += raw_root + uint(du, 2) + uint(cell, 2)
+            transcript += b"\x00" + root_c + root_z + root_y + root_p
+            transcript += b"\x01" + blob_c + blob_z + blob_y + blob_p
+            records.append({"entry": entry_index, "proof": proof_index,
+                            "session": session.hex(), "ordinal": str(ordinal),
+                            "t": str(t), "mdu": str(mdu), "leaf": leaf})
+            parsed_proofs += 1
+    if parsed_proofs != total_proofs or offset != len(data):
+        raise ValueError("PSB2 proof count or trailing bytes mismatch")
+    transcript_hash = hashlib.sha256(transcript).digest()
+    coefficients = []
+    prefix = lp("polystore/kzg-batch-coefficient/v2") + transcript_hash
+    for index in range(2 * total_proofs):
+        for counter in range(256):
+            candidate = hashlib.sha256(prefix + uint(index, 2) + uint(counter, 2)).digest()
+            if 0 < int.from_bytes(candidate, "big") < FR:
+                coefficients.append({"index": index, "counter": counter, "scalar": candidate.hex()})
+                break
+        else:
+            raise ValueError("PSB2 coefficient rejection exhausted")
+    return {"input_sha256": hashlib.sha256(data).hexdigest(), "input_bytes": len(data),
+            "entry_count": entry_count, "proof_count": total_proofs,
+            "leaf_count": leaf_count, "transcript_hex": transcript.hex(),
+            "transcript_hash": transcript_hash.hex(), "records": records,
+            "coefficients": coefficients,
+            "coefficient_scalars": [item["scalar"] for item in coefficients]}
+
+
 def check_rejections(data):
     for invalid in (data[:-1], data + b"\x00", b"BAD!" + data[4:],
                     data[:4] + b"\x00\x00" + data[6:],
@@ -158,11 +254,15 @@ if __name__ == "__main__":
     data = (BASE / "session-batch-input.bin").read_bytes()
     actual = derive(data)
     check_rejections(data)
+    cross_data = (BASE / "cross-session-batch-input.bin").read_bytes()
+    cross_actual = derive_cross(cross_data)
     if sys.argv[1:] == ["--emit"]:
-        print(json.dumps(actual, indent=2))
+        print(json.dumps({"psb1": actual, "psb2": cross_actual}, indent=2))
     elif sys.argv[1:]:
         raise SystemExit("usage: check_session_batch_vectors.py [--emit]")
     else:
         expected = json.loads((BASE / "session-batch-golden.json").read_text())
         assert actual == expected, "independent PSB1 batch vectors drifted"
-        print("independent PSB1 transcript, coefficients, Merkle and root-boundary vectors match")
+        cross_expected = json.loads((BASE / "cross-session-batch-golden.json").read_text())
+        assert cross_actual == cross_expected, "independent PSB2 batch vectors drifted"
+        print("independent PSB1/PSB2 transcripts, coefficients, Merkle and challenge vectors match")
