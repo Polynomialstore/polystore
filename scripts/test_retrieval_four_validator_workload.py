@@ -1598,19 +1598,19 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         workload.validate_native_v3_capacity_epoch(selected[0], 448_000_000)
         with self.assertRaisesRegex(ValueError, "more than ten"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("1kib", 3184)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 2792)[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("1kib", 3192)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 2800)[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("1kib", 3008)[0], 64_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 2648)[0], 64_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("1kib", 3016)[0], 64_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 2656)[0], 64_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("sample-cap", 1392)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("sample-cap", 1208)[0], 448_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("sample-cap", 1400)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("sample-cap", 1216)[0], 448_000_000)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
@@ -2760,7 +2760,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
         impossible = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "sample-cap",
                                  "--chain-capacity-transactions", "4992"]
         undersized = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "1kib",
-                                 "--chain-capacity-transactions", "3184"]
+                                 "--chain-capacity-transactions", "2792"]
         overhead = required + ["--chain-max-gas", "64000000", "--chain-capacity-profile", "1kib",
                                "--chain-capacity-transactions", "4992"]
         for rejected in (impossible, undersized, overhead):
