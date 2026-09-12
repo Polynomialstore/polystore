@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -435,6 +438,7 @@ func TestGenerationAcceptanceV3OutcomeStatusCodes(t *testing.T) {
 func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 	submissionTestDB(t)
 	frozen, key, _ := buildProviderV3ArtifactFixture(t)
+	frozen.Session.AckedSlotsMask = 1
 	signer := frozen.Session.Obligations[0].AssignedProvider
 	t.Setenv("POLYSTORE_PROVIDER_KEY", "faucet")
 	t.Setenv("POLYSTORE_PROVIDER_ADDRESS", "")
@@ -464,6 +468,17 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 
 	const generationHash = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	const proofHash = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+	var inProvider atomic.Bool
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sp/session-proof" || r.Header.Get(gatewayAuthHeader) != gatewayToProviderAuthToken() {
+			t.Errorf("unexpected continuation target or authentication: %s", r.URL.Path)
+		}
+		inProvider.Store(true)
+		defer inProvider.Store(false)
+		SpSubmitRetrievalSessionProof(w, r)
+	}))
+	defer provider.Close()
+	providerBaseCache = sync.Map{}
 	lcd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/deals/0/generation-v3"):
@@ -474,6 +489,8 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 			_, _ = w.Write([]byte(sessionBody))
 		case strings.Contains(r.URL.Path, "/retrieval-sessions/"):
 			http.NotFound(w, r)
+		case strings.Contains(r.URL.Path, "/providers/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"provider": map[string]any{"endpoints": []string{mustHTTPMultiaddr(t, provider.URL)}}})
 		case strings.Contains(r.URL.Path, "/cosmos/tx/v1beta1/txs/"):
 			hash := generationHash
 			if strings.HasSuffix(r.URL.Path, proofHash) {
@@ -502,7 +519,7 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantProof := &types.MsgSubmitRetrievalSessionProofV3{Creator: signer, SessionId: bytes.Clone(frozen.Session.SessionId), Slot: 0, Proofs: proofs}
+	wantProof := &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: signer, Sessions: []types.RetrievalSessionProofBatchEntryV3{{SessionId: bytes.Clone(frozen.Session.SessionId), Slot: 0, Proofs: proofs}}}
 	wantProofJSON, err := (&jsonpb.Marshaler{OrigName: true}).MarshalToString(wantProof)
 	if err != nil {
 		t.Fatal(err)
@@ -510,6 +527,9 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 	txCalls := 0
 	setupMockCombinedOutput(t, func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		if len(args) > 0 && args[0] == "keys" {
+			if txCalls > 0 && !inProvider.Load() {
+				t.Error("user-gateway continuation accessed the local provider key")
+			}
 			return []byte(signer), nil
 		}
 		txCalls++
@@ -527,8 +547,11 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 			}
 			return []byte(`{"txhash":"` + generationHash + `","code":0}`), nil
 		case 2:
+			if !inProvider.Load() {
+				t.Fatal("proof was not submitted by the authenticated provider handler")
+			}
 			got := args[:len(args)-4]
-			if len(got) < 5 || !reflect.DeepEqual(got[:4], []string{"tx", "polystorechain", "retrieval-session-v3", "prove"}) || !reflect.DeepEqual(got[5:], []string{"--from", "faucet", "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json"}) {
+			if len(got) < 5 || !reflect.DeepEqual(got[:4], []string{"tx", "polystorechain", "retrieval-session-v3", "prove-batch"}) || !reflect.DeepEqual(got[5:], []string{"--from", "faucet", "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes", "--gas", "auto", "--gas-adjustment", "1.6", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json"}) {
 				t.Fatalf("proof CLI args mismatch: %q", got)
 			}
 			proofJSON, err := os.ReadFile(got[4])
@@ -553,7 +576,9 @@ func TestProviderV3FreshHandlersSubmitTrackedNativeTransactions(t *testing.T) {
 		t.Fatalf("generation acceptance retained marker: %+v %v", marker, err)
 	}
 
-	proofResult := invokeSubmission(`{"session_id":"0x` + hex.EncodeToString(frozen.Session.SessionId) + `"}`)
+	proofRequest := httptest.NewRequest(http.MethodPost, "/gateway/retrieval/session-proof/continue", strings.NewReader(`{"session_id":"0x`+hex.EncodeToString(frozen.Session.SessionId)+`","slot":0}`))
+	proofResult := httptest.NewRecorder()
+	RouterGatewayContinueRetrievalSessionProof(proofResult, proofRequest)
 	if proofResult.Code != http.StatusOK || !strings.Contains(proofResult.Body.String(), `"status":"success"`) {
 		t.Fatalf("fresh proof submission failed: code=%d body=%s", proofResult.Code, proofResult.Body.String())
 	}
