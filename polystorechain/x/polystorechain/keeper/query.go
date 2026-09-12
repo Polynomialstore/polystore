@@ -131,12 +131,12 @@ func (q queryServer) GetRetrievalSessionV3(goCtx context.Context, req *types.Que
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	response := &types.QueryGetRetrievalSessionV3Response{Session: session}
-	anchor, err := q.k.ChallengeAnchors.Get(ctx, session.AnchorHeight)
+	anchorSeed, err := q.k.retrievalSessionV3AnchorSeed(ctx, session)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err == nil && len(anchor.Seed) == 32 {
-		response.AnchorSeed = append([]byte(nil), anchor.Seed...)
+	if err == nil && len(anchorSeed) == 32 {
+		response.AnchorSeed = append([]byte(nil), anchorSeed...)
 	}
 	return response, nil
 }

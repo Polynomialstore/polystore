@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { bech32 } from 'bech32'
-import { recoverRetrievalV3Checkpoint } from './retrievalV3Recovery'
+import { recoverRetrievalV3Checkpoint, waitForRetrievalV3Challenge } from './retrievalV3Recovery'
 import { RETRIEVAL_V3_SETUP, type FrozenGenerationV3, type FrozenSessionV3 } from './retrievalV3'
 import type { RetrievalV3CheckpointState } from './retrievalV3Checkpoint'
 
@@ -50,4 +50,41 @@ test('expired paid recovery refunds from frozen chain state without metadata or 
     persist: () => {},
   })
   assert.deepEqual(calls, ['observe', 'refund'])
+})
+
+test('completed recovery uses the retained anchor through actual browser readiness without another open or payment', async () => {
+  const saved = checkpoint(true), calls: string[] = []
+  const terminal = { ...session(), height: 20n, expired: false, lockedFee: 0n, ackedMask: 1, settledMask: 1,
+    anchorSeed: new Uint8Array(32).fill(7) }
+  const recovered = await recoverRetrievalV3Checkpoint(saved, {
+    open: async () => { throw new Error('must not reopen completed retrieval') },
+    observe: async () => { calls.push('observe'); return terminal },
+    ready: value => waitForRetrievalV3Challenge(value, async () => { throw new Error('terminal readiness must not poll until expiry') }),
+    refund: async () => { throw new Error('must not refund completed retrieval') },
+    persist: () => calls.push('persist'),
+  })
+  assert.equal(recovered.session, terminal)
+  assert.equal(recovered.expired, false)
+  assert.deepEqual(calls, ['observe', 'persist', 'persist'])
+})
+
+test('settlement cannot bypass missing authenticated anchor readiness', async () => {
+  const terminal = { ...session(), height: 20n, expired: false, lockedFee: 0n, ackedMask: 1, settledMask: 1 }
+  const controller = new AbortController()
+  controller.abort(new Error('cancelled waiting for authenticated anchor'))
+  await assert.rejects(waitForRetrievalV3Challenge(terminal, async () => terminal, controller.signal), /authenticated anchor/)
+})
+
+test('completed recovery after deadline derives expiry from height without another refund', async () => {
+  const terminal = { ...session(), height: 100n, expired: false, lockedFee: 0n, ackedMask: 1, settledMask: 1,
+    anchorSeed: new Uint8Array(32).fill(7) }
+  const recovered = await recoverRetrievalV3Checkpoint(checkpoint(true), {
+    open: async () => { throw new Error('must not reopen') },
+    observe: async () => terminal,
+    ready: value => waitForRetrievalV3Challenge(value, async () => { throw new Error('must not poll') }),
+    refund: async () => { throw new Error('must not refund') },
+    persist: () => {},
+  })
+  assert.equal(recovered.expired, true)
+  assert.equal(recovered.session.expired, false)
 })

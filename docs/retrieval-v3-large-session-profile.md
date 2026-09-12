@@ -501,14 +501,61 @@ database restart must preserve session, plan,
 bitmap, ACK, liability, funding source and expiry references. Export/import is
 unsupported until those records are explicitly included and qualified.
 
+Once every represented obligation is settled (ACK plus all assigned samples),
+the common V3 settlement transition releases its live-context, expiry-bucket,
+anchor and generation ownership immediately and exactly once. A zero locked
+amount alone never qualifies: zero-priced unfinished obligations remain live.
+Other sessions and protocol audits retain their own shared references. The
+original response deadline still applies to ACK/proof messages, including
+retries; later expiry processing cannot release a completed session twice or
+alter its settled payment partitions.
+
+Completed sessions retain their full existing session and nonce recovery rows,
+plus the original 32-byte anchor seed in the additive
+`RetrievalSessionV3TerminalAnchors/value/` collection, keyed by the 32-byte session
+ID. The raw application key/value addition is 104 bytes per completed session
+(40-byte prefix, 32-byte key, 32-byte value), excluding database overhead. This
+row is the durable release marker, written in the same transaction cache as
+settlement and reference removal. `GetRetrievalSessionV3.anchor_seed` continues
+to expose the same original seed for browser readiness and cryptographically
+validated proof replay; settled replays with tampered openings still fail.
+Completed rows stay completed rather than acquiring the `expired` flag later;
+clients must continue comparing the current height with `deadline_height` when
+deciding whether a response is allowed.
+
+No protobuf rewrite or full-state migration is needed. On upgrade, old rows
+without a terminal marker keep their existing references until normal expiry or
+a valid ACK/proof retry releases them within their response window. Database
+restart preserves the additional collection; downgrading to software unaware
+of it is not supported after terminal release begins. This bounds outstanding
+admission, not all-time database growth; archival policy is separate (#341).
+
+The bounded fresh-proof churn regression is opt-in because generating 8,193
+distinct real KZG openings is deliberately outside the normal fast unit gate:
+`POLYSTORE_RUN_V3_COMPLETION_CHURN=1 ../scripts/chain_go.sh test -count=1 -timeout 10m ./x/polystorechain/keeper -run '^TestRetrievalSessionV3CompletionChurnBeyondLiveCapacity$'`
+(from `polystorechain/`). It checks completed admission before each original
+deadline while an unfinished V2 session remains charged; it does not measure
+byte delivery or service capacity. Retain its result separately from CPU evidence.
+
+[Retained lifecycle qualification](../bench/retrieval_session_capacity/terminal-lifecycle-338/README.md)
+records the 8,193-session pass and matched phase costs. Immediate terminal cleanup
+adds bounded work to the final ACK/proof transaction and removes the corresponding
+later expiry work; it does not accelerate cryptographic verification or establish
+an end-to-end retrieval rate.
+
 For K8/M4, one range creates at most eight systematic provider obligations and
 Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
 length. One proof message has at most 64 openings; batching changes envelope count,
-not sample count or liability. The existing proof gas precharge and canonical
-fresh-genesis consensus profile apply. The current profile is 160,000,000 gas /
-2 MiB block bytes. At the measured reference cost of about 4.134M gas for eight
-openings, 132 openings require many transactions/blocks; this contract makes no
-throughput or completion-latency claim.
+not sample count or liability. The provider-daemon submits each nonempty obligation
+envelope as one `Sessions` entry in `MsgSubmitRetrievalSessionProofBatchV3` via
+`prove-batch`; it does not collect multiple sessions. This route uses native PSB2
+aggregate verification and prepays `1,000,000 + (n-1)*100,000` crypto gas for
+`1 <= n <= 64`. The explicit `prove` route remains available and prepays
+`1,200,000*n` for independent verification; legacy V2 is unchanged.
+Store/transaction gas, proof generation, transport and commit observation are
+additional costs. The canonical fresh-genesis profile remains 160,000,000 gas /
+2 MiB block bytes. These gas schedules alone imply neither end-to-end throughput
+nor completion latency.
 
 | Retained resource | V3 ceiling |
 | --- | ---: |
@@ -592,6 +639,7 @@ in `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`:
 | `open` | `MsgOpenRetrievalSessionV3` |
 | `open-sponsored` | `MsgOpenRetrievalSessionV3Sponsored` |
 | `prove` | `MsgSubmitRetrievalSessionProofV3` |
+| `prove-batch` | `MsgSubmitRetrievalSessionProofBatchV3` |
 | `ack` | `MsgAcknowledgeRetrievalObligationV3` |
 | `refund` | `MsgRefundRetrievalSessionV3` |
 
@@ -599,7 +647,9 @@ in `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`:
 session, progress bitmap, settlement/refund masks and `anchor_seed`. This field
 contains the raw committed H+1 anchor, **not** the derived sampling seed. Derive
 `ContextV3.Seed(anchor_seed)` before calling `ContextV3.Challenges`. It is empty
-before anchor capture and after reference release. The CLI does not generate
+before anchor capture and after ordinary expiry releases the last shared anchor
+reference. Fully settled sessions instead retain their original anchor seed in
+the terminal collection, including after their response deadline. The CLI does not generate
 proofs, authenticate downloaded bytes, or create ACK digests; those require the
 frozen context and provider/client integration specified above.
 
