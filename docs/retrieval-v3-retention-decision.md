@@ -24,11 +24,14 @@ The production paths are `keeper/retrieval_v3_session.go`,
 | Shared anchor with separate session/audit refcounts | Open/audit scheduling / last reference released | Fresh challenge seed; one consumer may not remove another's anchor |
 | Proposed #338 terminal anchor map | Completed-session early release / no pruning proposed | Preserve authenticated pre-deadline replay and query seed after releasing shared refs |
 
-The #338 candidate proposes `RetrievalSessionV3TerminalAnchors/value/`:
+The #338 candidate adds `RetrievalSessionV3TerminalAnchors/value/`:
 40 prefix bytes + 32 ID bytes + 32 seed bytes = **104 additional application
-key/value bytes per early-completed session**. This is a proposal at this
-document's baseline, not a claim that the map is already deployed. Its final
-codec and lifecycle must be remeasured after #338 lands.
+key/value bytes per early-completed session**. Its production collections codec
+is checked by `TestRetrievalSessionV3TerminalAnchorStorageBytes` at
+[#345's candidate `49ddaba7`](https://github.com/Polynomialstore/polystore/blob/49ddaba7b9b00b985209a137085f417a937264bc/polystorechain/x/polystorechain/keeper/retrieval_v3_completion_test.go#L143).
+Completion implementation blob: `24c0282e4c6752c2ed5ae5034ca591a795d971e1`.
+This measures the proposed runtime, not a deployment. #343 must verify that its
+frozen candidate retains this codec and include it in actual database growth.
 
 Expired-but-unrefunded rows retain actual money owed. Zero locked value alone
 does not mean a zero-priced session completed. A partially settled session may
@@ -127,8 +130,9 @@ isolated qualification envelope in the execution conversation on 2026-09-12 UTC:
 **Human decision:** “Approve bounded qualification; preserve history.” This
 authorizes only the envelope above, not changed recovery/refund semantics,
 deployment, or indefinite production operation. #343 must implement and test
-both stops before collection. Final #338 codec verification remains a separate
-measurement gate; close #341 only after it is recorded.
+both stops before collection. The exact #338 candidate codec measurement above
+completes this decision's state-size prerequisite; production-path churn and
+final frozen-runtime growth remain #338/#343 gates, not serializer claims.
 The approval is recorded in [#341's execution decision](https://github.com/Polynomialstore/polystore/issues/341#issuecomment-5644217749).
 
 ## If finite-history product operation becomes necessary
