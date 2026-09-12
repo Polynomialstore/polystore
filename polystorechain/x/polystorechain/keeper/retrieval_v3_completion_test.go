@@ -145,6 +145,83 @@ func TestRetrievalSessionV3TerminalAnchorStorageBytes(t *testing.T) {
 	require.Equal(t, 104, keySize+len(encoded))
 }
 
+func TestRetrievalSessionV3CompletionWaitsForLastSlot(t *testing.T) {
+	f := openCryptoSessionV3(t, retrievalchallenge.DataBlobPayloadBytes+1)
+	k := f.g.fixture.keeper
+	anchorHash := sha256.Sum256([]byte("v3-last-slot-anchor"))
+	ctx := f.g.ctx.WithBlockHeight(3).WithHeaderHash(anchorHash[:])
+	require.NoError(t, k.BeginBlock(ctx))
+	ctx = ctx.WithBlockHeight(4)
+	c := challengeContextV3(t, f.session)
+	seed, err := c.Seed(anchorHash[:])
+	require.NoError(t, err)
+	challenges, err := c.Challenges(seed[:])
+	require.NoError(t, err)
+	for _, ch := range challenges {
+		_, err := f.g.server.SubmitRetrievalSessionProofV3(ctx, &types.MsgSubmitRetrievalSessionProofV3{
+			Creator: f.g.providers[ch.Slot], SessionId: f.session.SessionId, Slot: ch.Slot,
+			Proofs: []types.RetrievalSampleProofV3{f.proof(t, ch)},
+		})
+		require.NoError(t, err)
+	}
+	for i, o := range f.session.Obligations {
+		_, err := f.g.server.AcknowledgeRetrievalObligationV3(ctx, &types.MsgAcknowledgeRetrievalObligationV3{
+			Creator: f.g.owner, SessionId: f.session.SessionId, Slot: o.Slot, AckDigest: ackDigestV3(t, f.session, o.Slot),
+		})
+		require.NoError(t, err)
+		live, err := k.RetrievalSessionLiveCount.Get(ctx)
+		require.NoError(t, err)
+		if i == len(f.session.Obligations)-1 {
+			require.Zero(t, live)
+		} else {
+			require.Equal(t, uint64(1), live)
+		}
+	}
+}
+
+func TestRetrievalSessionV3CompletionLegacyRetryAndMalformedMarker(t *testing.T) {
+	f, ctx, sessions, samples := openCryptoSessionV3Batch(t, 1)
+	k, s := f.g.fixture.keeper, sessions[0]
+	anchor, err := k.ChallengeAnchors.Get(ctx, s.AnchorHeight)
+	require.NoError(t, err)
+	msg := batchProofMessageV3(f.g.providers[0], sessions, samples)
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(ctx, msg)
+	require.NoError(t, err)
+	_, err = f.g.server.AcknowledgeRetrievalObligationV3(ctx, &types.MsgAcknowledgeRetrievalObligationV3{
+		Creator: f.g.owner, SessionId: s.SessionId, Slot: 0, AckDigest: ackDigestV3(t, s, 0),
+	})
+	require.NoError(t, err)
+	// Reconstruct the reference state of a pre-upgrade, fully settled row;
+	// economic state remains the result of real proof verification and payment.
+	require.NoError(t, k.RetrievalSessionV3TerminalAnchors.Remove(ctx, s.SessionId))
+	require.NoError(t, k.ChallengeAnchors.Set(ctx, s.AnchorHeight, anchor))
+	require.NoError(t, k.RetrievalSessionExpiryRefs.Set(ctx, collections.Join(s.DeadlineHeight, s.SessionId), true))
+	require.NoError(t, k.RetrievalSessionExpiryCounts.Set(ctx, s.DeadlineHeight, 1))
+	require.NoError(t, k.RetrievalSessionLiveCount.Set(ctx, 1))
+	require.NoError(t, k.RetrievalSessionGenerationRefs.Set(ctx, collections.Join(s.DealId, s.Generation), 1))
+	require.NoError(t, k.RetrievalSessionGenerationCounts.Set(ctx, s.DealId, 1))
+	require.NoError(t, k.RetrievalSessionGenerationCount.Set(ctx, 1))
+	before := sessionStoreSnapshot(t, ctx, f.g.fixture.storeService)
+	bad := samples[0]
+	bad.Proof.YValue = append([]byte(nil), bad.Proof.YValue...)
+	bad.Proof.YValue[31] ^= 1
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(ctx, batchProofMessageV3(f.g.providers[0], sessions, []types.RetrievalSampleProofV3{bad}))
+	require.ErrorContains(t, err, "invalid v3 chained proof")
+	require.Equal(t, before, sessionStoreSnapshot(t, ctx, f.g.fixture.storeService))
+	replayed, err := f.g.server.SubmitRetrievalSessionProofBatchV3(ctx, msg)
+	require.NoError(t, err)
+	require.True(t, replayed.Results[0].Settled)
+	require.Zero(t, replayed.Results[0].NewlyAccepted)
+	live, err := k.RetrievalSessionLiveCount.Get(ctx)
+	require.NoError(t, err)
+	require.Zero(t, live)
+	require.NoError(t, k.RetrievalSessionV3TerminalAnchors.Set(ctx, s.SessionId, []byte{1}))
+	before = sessionStoreSnapshot(t, ctx, f.g.fixture.storeService)
+	_, err = f.g.server.SubmitRetrievalSessionProofBatchV3(ctx, msg)
+	require.ErrorContains(t, err, "v3 session challenge seed unavailable")
+	require.Equal(t, before, sessionStoreSnapshot(t, ctx, f.g.fixture.storeService))
+}
+
 // This is bounded keeper admission correctness, not a service-capacity run.
 // All accepted samples are fresh real proofs; byte delivery is not simulated.
 func TestRetrievalSessionV3CompletionChurnBeyondLiveCapacity(t *testing.T) {

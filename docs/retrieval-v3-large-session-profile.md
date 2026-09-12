@@ -540,11 +540,16 @@ byte delivery or service capacity. Retain its result separately from CPU evidenc
 For K8/M4, one range creates at most eight systematic provider obligations and
 Q is at most 132. Chain state is therefore O(8+132), independent of logical byte
 length. One proof message has at most 64 openings; batching changes envelope count,
-not sample count or liability. The existing proof gas precharge and canonical
-fresh-genesis consensus profile apply. The current profile is 160,000,000 gas /
-2 MiB block bytes. At the measured reference cost of about 4.134M gas for eight
-openings, 132 openings require many transactions/blocks; this contract makes no
-throughput or completion-latency claim.
+not sample count or liability. The provider-daemon submits each nonempty obligation
+envelope as one `Sessions` entry in `MsgSubmitRetrievalSessionProofBatchV3` via
+`prove-batch`; it does not collect multiple sessions. This route uses native PSB2
+aggregate verification and prepays `1,000,000 + (n-1)*100,000` crypto gas for
+`1 <= n <= 64`. The explicit `prove` route remains available and prepays
+`1,200,000*n` for independent verification; legacy V2 is unchanged.
+Store/transaction gas, proof generation, transport and commit observation are
+additional costs. The canonical fresh-genesis profile remains 160,000,000 gas /
+2 MiB block bytes. These gas schedules alone imply neither end-to-end throughput
+nor completion latency.
 
 | Retained resource | V3 ceiling |
 | --- | ---: |
@@ -628,6 +633,7 @@ in `polystorechain/proto/polystorechain/polystorechain/v1/tx.proto`:
 | `open` | `MsgOpenRetrievalSessionV3` |
 | `open-sponsored` | `MsgOpenRetrievalSessionV3Sponsored` |
 | `prove` | `MsgSubmitRetrievalSessionProofV3` |
+| `prove-batch` | `MsgSubmitRetrievalSessionProofBatchV3` |
 | `ack` | `MsgAcknowledgeRetrievalObligationV3` |
 | `refund` | `MsgRefundRetrievalSessionV3` |
 
