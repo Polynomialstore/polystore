@@ -1,6 +1,6 @@
 # Retrieval V3 batch gas frontier (#326)
 
-## 160M qualification candidate
+## Selected 160M activation candidate
 
 The earlier frontier below used the old flat per-proof gas schedule. It is
 historical evidence and no longer controls activation. The current schedule
@@ -20,8 +20,8 @@ measured proof-handler work admitted by that gas. The final qualification uses
 only the aggregate shape and does not require another mixed-chain sweep. The
 fixed 160M candidate is 7,680 one-opening sessions in 120 batches of 64,
 `GOMAXPROCS=4`, one-second `timeout_commit`, at least ten saturated blocks, and at
-least ten seconds of positive backlog. Retained collection follows after this
-harness and gas schedule land; the checked-in consensus profile remains 64M.
+least ten seconds of positive backlog. The activation PR must retain the
+exact-head result, evidence path, and SHA-256 before this profile can merge.
 
 Qualification also requires a build manifest that binds the clean source commit
 to the SHA-256 of `polystorechaind`, `libpolystore_core`, `polystore_gateway`,
@@ -47,9 +47,9 @@ million sessions/day** by short-run extrapolation.
 This is a **batch-route diagnostic, not an activation qualification**. The
 unbatched V3 proof route remains enabled and synchronously verifies each proof.
 A global gas increase would also admit more of that slower workload. Its earlier
-128M run missed validator signatures and exceeded the execution gate. Therefore
-the checked-in profile remains 64M until either unbatched submissions are
-disabled or a worst-case mixed batch/unbatched workload passes the same gates.
+128M run missed validator signatures and exceeded the execution gate. Therefore,
+at that revision, the checked-in profile remained 64M pending a worst-case
+public-route qualification under the revised gas schedule.
 
 The gas step is discrete. Each 64-session batch requested about 37.44M gas.
 The 160M profile admitted four batches per full block. The retained 384M

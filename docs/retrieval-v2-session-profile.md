@@ -145,7 +145,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Independent prepaid cryptography per proof | 1200000 gas |
 | Aggregate V3 prepaid cryptography | 1000000 + 100000 for each proof after the first |
 | Candidate reserved future retention work per open | 100000 gas |
-| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 160000000 / 2097152 |
 | Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
@@ -174,9 +174,10 @@ benchmark uses that profile by default; an explicit `--chain-max-gas` remains
 available only for bounded capacity experiments. Changing the gas value requires
 a coordinated fresh-genesis rollout because it is a consensus parameter;
 changing only a healthcheck expectation or one validator is invalid. The
-checked-in profile remains 64000000 until the fixed 160000000 aggregate V3
-candidate passes the retained exact-head qualification below. Issue #328 owns
-the separate default-off parallel-execution feasibility spike.
+checked-in 160000000 profile is accepted only if the fixed aggregate V3 workload
+below passes its retained exact-head qualification. The activation PR records
+the evidence path, SHA-256, and measured result. Issue #328 owns the separate
+default-off parallel-execution feasibility spike.
 
 The bounded activation qualification is one fresh four-validator run on Linux:
 

@@ -125,7 +125,7 @@ retrieval throughput. The default transaction gas limit is
 `1,000,000 + 1,200,000 * proofs_per_session`, including 1,000,000 for control runs;
 `POLYSTORE_BENCH_GAS` can override it. This avoids relying on the unavailable
 transaction simulation RPC (`gas=auto`), whose errors are still reported when
-explicitly requested. The profile fixes 64 million gas, 2 MiB block bytes and a
+explicitly requested. The profile fixes 160 million gas, 2 MiB block bytes and a
 1,000 ms target interval. Before starting, the driver records an execution budget
 (default 700 ms, `POLYSTORE_BENCH_EXECUTION_BUDGET_MS`) and memory ceiling (default
 2 GiB, `POLYSTORE_BENCH_MEMORY_CEILING_BYTES`). These budgets are **declared, not

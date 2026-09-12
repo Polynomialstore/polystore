@@ -153,6 +153,13 @@ PROVIDER_COUNT=0 START_WEB=0 ./scripts/run_devnet_alpha_multi_sp.sh stop
 
 Important: `run_devnet_alpha_multi_sp.sh start` **wipes/re-initializes** its chain home when the home is under `_artifacts/` (default) or when `POLYSTORE_REINIT_HOME=1` is set. Use it only for bootstrap and local smoke tests.
 
+The checked-in retrieval consensus profile uses 160000000 max block gas. Apply
+that change only through a coordinated fresh genesis: stop every validator,
+rebuild every validator home from the same generated genesis, and compare the
+genesis SHA-256 on all nodes before starting them. This discards existing
+devnet chain state and sessions; the routine stack updater does not change an
+existing chain's consensus parameters.
+
 ### 3) systemd (hub services)
 
 Systemd templates live in `ops/systemd/` (also see `ops/systemd/README.md`).
@@ -195,14 +202,14 @@ sudo systemctl enable --now polystore-gateway-router
 sudo systemctl enable --now polystore-faucet
 ```
 
-Verify the running validator inherited the configured execution and consensus
+Verify the running validator inherited the selected execution and consensus
 settings:
 
 ```bash
 pid="$(systemctl show polystorechaind -p MainPID --value)"
 sudo tr '\0' '\n' <"/proc/$pid/environ" | grep -Fx 'GOMAXPROCS=4'
 curl -fsS http://127.0.0.1:26657/consensus_params | jq -e \
-  '.result.consensus_params.block == {"max_bytes":"2097152","max_gas":"64000000"}'
+  '.result.consensus_params.block == {"max_bytes":"2097152","max_gas":"160000000"}'
 ```
 
 ### 4) Caddy (HTTPS reverse proxy, Profile A)

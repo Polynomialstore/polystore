@@ -251,10 +251,10 @@ activation must quarantine these unbound routes; they are not a substitute for
 the all-opened-blob challenge session contract in #254.
 
 `scripts/retrieval_consensus_profile.json` is the canonical fresh-genesis profile:
-positive finite **2 MiB block bytes / 64,000,000 block gas**. Devnet bootstrap,
+positive finite **2 MiB block bytes / 160,000,000 block gas**. Devnet bootstrap,
 install-time health checks and benchmark defaults load this file strictly. A
 benchmark sweep may explicitly override gas up to the compiled 448,000,000
-activation ceiling while retaining the 2 MiB byte limit. The same 64,000,000
+activation ceiling while retaining the 2 MiB byte limit. The same 160,000,000
 bound is the maximum estimated gas admitted for one retrieval transaction.
 The candidate gas rate and block limits are preliminary bounds, not a throughput
 or permissionless-security claim. #260 must measure honest generation/admission
