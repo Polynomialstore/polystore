@@ -1,6 +1,6 @@
 # Retrieval V3 batch gas frontier (#326)
 
-## Selected 160M profile
+## 160M qualification candidate
 
 The earlier frontier below used the old flat per-proof gas schedule. It is
 historical evidence and no longer controls activation. The current schedule
@@ -19,8 +19,8 @@ measured proof-handler work admitted by that gas. The final qualification uses
 only the aggregate shape and does not require another mixed-chain sweep. The
 fixed 160M candidate is 7,680 one-opening sessions in 120 batches of 64,
 `GOMAXPROCS=4`, one-second `timeout_commit`, at least ten saturated blocks, and at
-least ten seconds of positive backlog. Its exact-head result is retained in PR
-#335 with the evidence path and SHA-256.
+least ten seconds of positive backlog. Retained collection follows after this
+harness and gas schedule land; the checked-in consensus profile remains 64M.
 
 Qualification also requires a build manifest that binds the clean source commit
 to the SHA-256 of `polystorechaind`, `libpolystore_core`, `polystore_gateway`,
