@@ -334,8 +334,8 @@ func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testin
 	serialGas := serialCtx.GasMeter().GasConsumed() - serialGasBefore
 
 	require.Equal(t, serialResults, batchResult.Results)
-	// The proof charge is identical; batching saves one feature-gate store read
-	// for each additional session because activation is checked once per message.
+	// Aggregate verification charges less crypto gas, and batching checks
+	// activation once for the whole message.
 	require.Less(t, batchGas, serialGas)
 	require.Equal(t,
 		sessionStoreSnapshot(t, serialCtx, serialFixture.g.fixture.storeService),

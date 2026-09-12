@@ -1877,6 +1877,12 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "requires --build-manifest"):
                 workload.run_healthy(lifecycle, gateway, cli, root, native_chain=exact)
 
+    def test_native_v3_harness_source_rejects_copied_driver(self):
+        self.assertEqual(workload.native_v3_harness_source(), Path(workload.__file__).resolve().parent.parent)
+        with patch.object(workload, "__file__", "/tmp/copied/scripts/retrieval_four_validator_workload.py"), \
+             self.assertRaisesRegex(ValueError, "one checkout"):
+            workload.native_v3_harness_source()
+
     def test_failed_issue_326_qualification_retains_restart_validation_and_original_failure(self):
         original = "issue #326 qualification gates failed: FinalizeBlock exceeded the gate"
         for restart_result in (

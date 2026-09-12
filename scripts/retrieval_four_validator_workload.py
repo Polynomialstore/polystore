@@ -2177,6 +2177,16 @@ def native_v3_chain_exporter_identity(value):
                           native_chain_exporter_sha256=artifact.sha256(exporter))
 
 
+def native_v3_harness_source():
+    """Require the executing driver and its helpers to come from one checkout."""
+    driver = Path(__file__).resolve()
+    scripts = driver.parent
+    helpers = (artifact, commit_metrics, producer)
+    if any(Path(module.__file__).resolve().parent != scripts for module in helpers):
+        raise ValueError("native v3 harness driver and helpers must come from one checkout")
+    return scripts.parent
+
+
 def verify_native_v3_build_manifest(value, source, harness_source, artifacts):
     """Bind supplied qualification artifacts and harness to one clean commit."""
     path = Path(value).resolve(strict=True)
@@ -5270,7 +5280,7 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
             raise ValueError("the exact issue #326 candidate requires --build-manifest")
         if native_chain.get("build_manifest"):
             build_attestation = verify_native_v3_build_manifest(
-                native_chain["build_manifest"], source, lifecycle.root, {
+                native_chain["build_manifest"], source, native_v3_harness_source(), {
                 "polystorechaind": lifecycle.binary, "libpolystore_core": lifecycle.library,
                 "polystore_gateway": gateway, "polystore_cli": cli,
                 "retrieval_inventory_exporter": export_binary})
