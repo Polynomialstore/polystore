@@ -27,7 +27,7 @@ fixed committed anchors, enforces exact proof targets and settles once. See the
 The [frozen storage obligation implementation](../docs/retrieval-v2-storage-audits.md)
 adds independent ACTIVE audits, pending repair readiness and the complete retained
 generation query. Scheduled activation defaults to disabled and remains unqualified
-until coordinated #256/#257 integration and #260 qualification pass. The pure package itself does not authenticate a setup,
+until coordinated #256/#257 integration and #251 qualification pass. The pure package itself does not authenticate a setup,
 perform KZG verification or establish byte delivery. Deployment and qualification obligations of #255 remain open.
 
 This section supersedes the historical v1 assumptions below **for future v2
@@ -200,7 +200,7 @@ The candidate cap is 64 combined assignments and 128 current/previous records;
 the funded retrieval-task cap of 64 is separate. The default activation parameter
 remains zero. The cap, quota min=max132 profile and local helper measurements do
 not qualify whole-chain capacity or funded release. Existing global EndBlock
-health, jail, underbonding, draining and rotation work still requires #260
+health, jail, underbonding, draining and rotation work still requires #251
 measurement. No permissionless beacon or stronger C1–C6 trust claim is added.
 
 ### Integration and migration gates (not implemented by this slice)
@@ -239,7 +239,7 @@ The remaining #255 integration belongs in the existing seams:
 these integrations, bounded gas and actual EVM rollback. Network activation remains
 unavailable until compatible provider-daemon, user-gateway, browser and EVM paths
 verify bytes before normal confirmation and
-[#260](https://github.com/Polynomialstore/polystore/issues/260) qualifies the named
+[#251](https://github.com/Polynomialstore/polystore/issues/251) qualifies the named
 finite-gas deployment profile. Passing vector tests is not runtime signer binding,
 seed capture, delivery, reward or rollback qualification. Pricing is unchanged.
 

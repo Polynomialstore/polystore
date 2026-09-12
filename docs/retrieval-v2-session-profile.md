@@ -3,7 +3,7 @@
 Status: SESSION implementation candidate for #255. Network activation remains
 **disabled by default**. Merging this code does not qualify activation. Independent
 C4 audits, native setup enforcement and prover support (#256), provider/browser
-integration (#257), and integrated resource/security qualification (#260) must
+integration (#257), and the bounded activation qualification (#251) must
 pass first. #254 remains the authority for outstanding deployment dispositions.
 
 The separate [v3 large-session contract](retrieval-v3-large-session-profile.md)
