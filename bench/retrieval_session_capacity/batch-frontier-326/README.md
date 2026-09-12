@@ -1,5 +1,37 @@
 # Retrieval V3 batch gas frontier (#326)
 
+## 160M qualification candidate
+
+The earlier frontier below used the old flat per-proof gas schedule. It is
+historical evidence and no longer controls activation. The current schedule
+charges every independent public proof route 1,200,000 gas per proof and charges
+the aggregate V3 route 1,000,000 base gas plus 100,000 for each additional proof.
+An exact-handler comparison at source `67b3f3c1` measured 64-entry aggregate
+acceptance at 36.439ms (7.3M crypto gas) and independent acceptance at 5.332ms
+per proof (now 1.2M crypto gas). The aggregate shape therefore consumes about
+4.99ms of measured handler work per million reserved crypto gas versus 4.44ms
+for independent proofs. SDK transaction work is metered separately, and the
+retained 192M comparator also measured larger bytes and used gas per session for
+separate transactions.
+
+Thus an all-aggregate block is the conservative measured public-proof mix under
+the new schedule: replacing aggregate gas with independent proofs reduces the
+measured proof-handler work admitted by that gas. The final qualification uses
+only the aggregate shape and does not require another mixed-chain sweep. The
+fixed 160M candidate is 7,680 one-opening sessions in 120 batches of 64,
+`GOMAXPROCS=4`, one-second `timeout_commit`, at least ten saturated blocks, and at
+least ten seconds of positive backlog. Retained collection follows after this
+harness and gas schedule land; the checked-in consensus profile remains 64M.
+
+Qualification also requires a build manifest that binds the clean source commit
+to the SHA-256 of `polystorechaind`, `libpolystore_core`, `polystore_gateway`,
+`polystore_cli`, and `retrieval_inventory_exporter`. The harness recomputes every
+value and fails the exact candidate before starting validators if the manifest is
+missing, the product or harness checkout is dirty or moved from that commit, or
+an artifact differs.
+
+## Historical frontier
+
 The exact four-validator run at `76d7ce549b422d9991011afbf567225e0454c034`
 committed 6,656 one-opening, 1 KiB retrieval sessions in 104 same-provider
 batches of 64. At 160M block gas, a 2 MiB byte limit, `GOMAXPROCS=4`, and a
@@ -58,14 +90,30 @@ python3 scripts/retrieval_four_validator_workload.py \
   --cli-binary /path/to/polystore_cli \
   --product-source "$PWD" \
   --proof-exporter /path/to/retrieval-inventory-exporter \
+  --build-manifest /path/to/build-manifest.json \
   --home /path/to/new-run-directory \
   --chain-capacity-profile 1kib \
-  --chain-capacity-sessions 6656 \
+  --chain-capacity-sessions 7680 \
   --chain-proof-submission-mode batch-message \
   --chain-proof-batch-size 64 \
-  --chain-proof-gas-adjustment 1.1 \
+  --chain-proof-gas-adjustment 1.6 \
   --chain-max-gas 160000000 \
   --chain-timeout-commit-ms 1000 \
   --chain-validator-gomaxprocs 4 \
   --timeout 3600
+```
+
+The manifest has exactly this schema; hashes are lowercase SHA-256 hex:
+
+```json
+{
+  "source_commit": "40-character Git commit",
+  "artifacts": {
+    "polystorechaind": "sha256",
+    "libpolystore_core": "sha256",
+    "polystore_gateway": "sha256",
+    "polystore_cli": "sha256",
+    "retrieval_inventory_exporter": "sha256"
+  }
+}
 ```

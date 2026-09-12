@@ -15,10 +15,13 @@ const (
 	MaxProofLeafCount     = 256 * types.BlobsPerMdu
 	MaxProofEnvelopeBytes = 128 * 1024
 	MaxReceiptPathBytes   = 4096
-	// Two KZG verification hops plus canonical Merkle verification per proof.
-	// No cache, duplicate, batching or invalid-position discounts are permitted.
-	ProofCryptoGas          = uint64(500_000)
-	LegacyProofPayloadBytes = uint64(types.BLOB_SIZE / 32 * 31)
+	// ProofCryptoGas prices routes that verify each proof independently. The
+	// PSB2 cross-session route has one shared verification plus bounded marginal
+	// work and uses AggregateProofCryptoGas instead.
+	ProofCryptoGas            = uint64(1_200_000)
+	AggregateProofBaseGas     = uint64(1_000_000)
+	AggregateProofMarginalGas = uint64(100_000)
+	LegacyProofPayloadBytes   = uint64(types.BLOB_SIZE / 32 * 31)
 )
 
 // MerkleSiblingCount matches rs_merkle's promotion of an unpaired final node.
@@ -102,6 +105,25 @@ func PrepayProofCrypto(ctx sdk.Context, count uint64) error {
 		return fmt.Errorf("proof crypto charge overflow")
 	}
 	ctx.GasMeter().ConsumeGas(count*ProofCryptoGas, "retrieval proof crypto")
+	return nil
+}
+
+func AggregateProofCryptoGas(count uint64) (uint64, error) {
+	if err := ValidateProofCount(count); err != nil {
+		return 0, err
+	}
+	if count-1 > (math.MaxUint64-AggregateProofBaseGas)/AggregateProofMarginalGas {
+		return 0, fmt.Errorf("aggregate proof crypto charge overflow")
+	}
+	return AggregateProofBaseGas + (count-1)*AggregateProofMarginalGas, nil
+}
+
+func PrepayAggregateProofCrypto(ctx sdk.Context, count uint64) error {
+	gas, err := AggregateProofCryptoGas(count)
+	if err != nil {
+		return err
+	}
+	ctx.GasMeter().ConsumeGas(gas, "aggregate retrieval proof crypto")
 	return nil
 }
 

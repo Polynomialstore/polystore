@@ -1598,19 +1598,19 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         workload.validate_native_v3_capacity_epoch(selected[0], 448_000_000)
         with self.assertRaisesRegex(ValueError, "more than ten"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("1kib", 4952)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 2792)[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("1kib", 4960)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 2800)[0], 448_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("1kib", 4608)[0], 64_000_000)
+            workload.native_v3_chain_capacity_profiles("1kib", 2648)[0], 64_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("1kib", 4616)[0], 64_000_000)
+                workload.native_v3_chain_capacity_profiles("1kib", 2656)[0], 64_000_000)
         workload.validate_native_v3_capacity_epoch(
-            workload.native_v3_chain_capacity_profiles("sample-cap", 2248)[0], 448_000_000)
+            workload.native_v3_chain_capacity_profiles("sample-cap", 1208)[0], 448_000_000)
         with self.assertRaisesRegex(ValueError, "cannot fit"):
             workload.validate_native_v3_capacity_epoch(
-                workload.native_v3_chain_capacity_profiles("sample-cap", 2256)[0], 448_000_000)
+                workload.native_v3_chain_capacity_profiles("sample-cap", 1216)[0], 448_000_000)
         rotated = workload.native_v3_range_shape(1024, range_start=7 * 126_976)
         self.assertEqual((rotated["first_blob"], rotated["last_blob"],
                           rotated["obligation_slots"]), (7, 7, [7]))
@@ -1798,7 +1798,7 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         self.assertEqual(imbalanced_metrics["partial_proof_sets_in_saturated_interval"], 1)
 
     def test_issue_326_qualification_gates_mempool_memory_and_consensus(self):
-        metrics = dict(saturated_commit_interval={"blocks": 25}, positive_backlog_seconds=10,
+        metrics = dict(saturated_commit_interval={"blocks": 10}, positive_backlog_seconds=10,
             commit_interval_seconds={"p95": 1.6}, peak_observed_mempool_transactions=4999,
             validator_resources_during_backlog={"validators": [
                 {"sampled_peak_rss_bytes": 1024} for _ in range(4)]},
@@ -1807,38 +1807,81 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
         finalize = [{"summary": {"p95_within_700ms": True}} for _ in range(4)]
         consensus = {"maximum_round": 0, "missed_signatures": 0}
         result = workload.native_v3_issue_326_qualification(
-            metrics, finalize, consensus, 104, 104, 5000, 2048)
+            metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertTrue(result["qualified"])
         metrics["peak_observed_mempool_transactions"] = 5000
         result = workload.native_v3_issue_326_qualification(
-            metrics, finalize, consensus, 104, 104, 5000, 2048)
+            metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertFalse(result["qualified"])
         self.assertIn("mempool", " ".join(result["reasons"]))
         metrics["peak_observed_mempool_transactions"] = 4999
         metrics["validator_resources_during_backlog"]["validators"][0]["sampled_peak_rss_bytes"] = 2048
         result = workload.native_v3_issue_326_qualification(
-            metrics, finalize, consensus, 104, 104, 5000, 2048)
+            metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertIn("memory", " ".join(result["reasons"]))
         metrics["validator_resources_during_backlog"]["validators"][0]["sampled_peak_rss_bytes"] = 1024
         finalize[0]["summary"]["p95_within_700ms"] = False
         result = workload.native_v3_issue_326_qualification(
-            metrics, finalize, consensus, 104, 104, 5000, 2048)
+            metrics, finalize, consensus, 120, 120, 5000, 2048)
         self.assertIn("FinalizeBlock", " ".join(result["reasons"]))
 
     def test_issue_326_candidate_is_exact_current_profile(self):
         profile = dict(name="1kib", submission_mode="batch-message", batch_size=64,
-                       sessions=6656, measured_transactions=104)
-        self.assertTrue(workload.is_issue_326_candidate(profile, 160_000_000, "1.1", 4, "1s"))
-        for changed in (dict(max_block_gas=192_000_000), dict(gas_adjustment="1.6"),
+                       sessions=7680, measured_transactions=120)
+        self.assertTrue(workload.is_issue_326_candidate(profile, 160_000_000, "1.6", 4, "1s"))
+        for changed in (dict(max_block_gas=192_000_000), dict(gas_adjustment="1.1"),
                         dict(gomaxprocs=2), dict(timeout_commit="500ms")):
-            arguments = dict(max_block_gas=160_000_000, gas_adjustment="1.1",
+            arguments = dict(max_block_gas=160_000_000, gas_adjustment="1.6",
                              gomaxprocs=4, timeout_commit="1s")
             arguments.update(changed)
             self.assertFalse(workload.is_issue_326_candidate(profile, **arguments))
         for changed in (dict(sessions=6592), dict(batch_size=32)):
             altered = dict(profile, **changed)
             self.assertFalse(workload.is_issue_326_candidate(
-                altered, 160_000_000, "1.1", 4, "1s"))
+                altered, 160_000_000, "1.6", 4, "1s"))
+
+    def test_native_v3_build_manifest_binds_clean_source_and_every_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binaries = {"chain": root / "chain", "core": root / "core.so"}
+            for name, path in binaries.items():
+                path.write_text(name)
+            manifest = root / "build.json"
+            manifest.write_text(json.dumps({"source_commit": "ab" * 20,
+                "artifacts": {name: artifact.sha256(path) for name, path in binaries.items()}}))
+            with patch.object(artifact, "command", side_effect=["ab" * 20, ""]):
+                result = workload.verify_native_v3_build_manifest(manifest, root, root, binaries)
+            self.assertTrue(result["verified"])
+            harness = root / "harness"
+            harness.mkdir()
+            with patch.object(artifact, "command", side_effect=[
+                    "ab" * 20, "", "cd" * 20, ""]), \
+                 self.assertRaisesRegex(ValueError, "source and harness"):
+                workload.verify_native_v3_build_manifest(manifest, root, harness, binaries)
+            manifest.write_text(json.dumps({"source_commit": "ab" * 20,
+                "artifacts": {"chain": "00" * 32, "core": artifact.sha256(binaries["core"])}}))
+            with patch.object(artifact, "command", side_effect=["ab" * 20, ""]), \
+                 self.assertRaisesRegex(ValueError, "hashes"):
+                workload.verify_native_v3_build_manifest(manifest, root, root, binaries)
+            (root / "polystore_cli/src").mkdir(parents=True)
+            (root / "polystore_cli/src/main.rs").write_text("")
+            gateway, cli, exporter = (root / name for name in ("gateway", "cli", "exporter"))
+            for path in (gateway, cli, exporter):
+                path.write_text("")
+                path.chmod(0o700)
+            lifecycle = SimpleNamespace(binary=binaries["chain"], library=binaries["core"],
+                env={"GOMAXPROCS": "4"}, timeout_commit="1s")
+            exact = dict(exporter=exporter, profile="1kib", measured_sessions=7680,
+                submission_mode="batch-message", batch_size=64, gas_adjustment="1.6",
+                max_block_gas=160_000_000)
+            with self.assertRaisesRegex(ValueError, "requires --build-manifest"):
+                workload.run_healthy(lifecycle, gateway, cli, root, native_chain=exact)
+
+    def test_native_v3_harness_source_rejects_copied_driver(self):
+        self.assertEqual(workload.native_v3_harness_source(), Path(workload.__file__).resolve().parent.parent)
+        with patch.object(workload, "__file__", "/tmp/copied/scripts/retrieval_four_validator_workload.py"), \
+             self.assertRaisesRegex(ValueError, "one checkout"):
+            workload.native_v3_harness_source()
 
     def test_failed_issue_326_qualification_retains_restart_validation_and_original_failure(self):
         original = "issue #326 qualification gates failed: FinalizeBlock exceeded the gate"
@@ -2517,6 +2560,22 @@ class NativeV3PilotHelpersTest(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--from") + 1], "provider0")
             self.assertEqual(run.call_args.args[0][run.call_args.args[0].index("--gas-adjustment") + 1], "1.6")
             self.assertEqual(job["submit"][job["submit"].index("--from") + 1], AUDIT_ADDRESSES[0])
+            large = copy.deepcopy(unsigned)
+            large["auth_info"]["fee"]["gas_limit"] = "67920000"
+            for name, max_gas, succeeds in (("old-cap", 64_000_000, False),
+                                             ("raised-cap", 160_000_000, True)):
+                large_path = Path(tmp) / f"{name}.json"
+                large_path.write_text(json.dumps(message))
+                with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
+                        returncode=0, stdout=json.dumps(large), stderr="")):
+                    if succeeds:
+                        _, large_evidence = workload.v3_generate_only_gas(
+                            life, large_path, AUDIT_ADDRESSES[0], max_gas=max_gas)
+                        self.assertEqual(large_evidence["gas_limit"], 67_920_000)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "exceeds chain diagnostic bound"):
+                            workload.v3_generate_only_gas(
+                                life, large_path, AUDIT_ADDRESSES[0], max_gas=max_gas)
             adjusted_path = Path(tmp) / "adjusted.json"
             adjusted_path.write_text(json.dumps(message))
             with patch.object(artifact, "run_bounded_command", return_value=result) as adjusted_run:
@@ -2707,7 +2766,7 @@ class HealthyAuditViewsTest(unittest.TestCase):
         impossible = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "sample-cap",
                                  "--chain-capacity-transactions", "4992"]
         undersized = required + ["--chain-max-gas", "448000000", "--chain-capacity-profile", "1kib",
-                                 "--chain-capacity-transactions", "4944"]
+                                 "--chain-capacity-transactions", "2792"]
         overhead = required + ["--chain-max-gas", "64000000", "--chain-capacity-profile", "1kib",
                                "--chain-capacity-transactions", "4992"]
         for rejected in (impossible, undersized, overhead):
@@ -2969,6 +3028,15 @@ class NativeV3BatchCapacityHarnessTest(unittest.TestCase):
             self.assertGreater(Path(simulation["unsigned_path"]).stat().st_size, 64 * 1024)
             self.assertEqual(workload.native_v3_minimum_gas_blocks(
                 simulation["gas_limit"] * 12, simulation["gas_limit"]), 12)
+            large_result = SimpleNamespace(returncode=0,
+                stdout=json.dumps({"gas_info": {"gas_used": "42450000"}}), stderr="")
+            with patch.object(artifact, "run_bounded_command", return_value=large_result), \
+                 self.assertRaisesRegex(ValueError, "exceeds chain diagnostic bound"):
+                workload.v3_simulate_serial_outer_gas(lifecycle, intent)
+            with patch.object(artifact, "run_bounded_command", return_value=large_result):
+                large_simulation = workload.v3_simulate_serial_outer_gas(
+                    lifecycle, intent, max_gas=160_000_000)
+            self.assertEqual(large_simulation["gas_limit"], 67_920_000)
             with patch.object(artifact, "run_bounded_command", return_value=SimpleNamespace(
                     returncode=0, stdout="{}", stderr="")), self.assertRaisesRegex(
                         ValueError, "returned malformed gas"):

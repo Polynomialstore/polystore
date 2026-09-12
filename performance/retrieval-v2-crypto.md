@@ -32,7 +32,8 @@ Proofs/s is proof count divided by median keeper time, excluding generation.
 | K2 | 8 | 40.869 [40.712, 46.300] | 7.049 [6.792, 7.191] | 5.798x | 195.7 | 1134.9 | 4,025,644 |
 | K2 | 32 | 166.608 [163.134, 185.236] | 19.392 [19.245, 21.335] | 8.592x | 192.1 | 1650.2 | 16,025,710 |
 
-Gas remains 500,000 per proof plus the same SDK work. Ordinary v2 dispatch changes
+The measured revision charged 500,000 gas per proof plus the same SDK work; the
+current independent route charges 1,200,000. Ordinary v2 dispatch changes
 from two independent native calls per proof to one native call per complete list.
 The batch performs two MSMs, one generator multiplication and two Miller-loop
 terms with one final exponentiation; the corrected independent path uses four

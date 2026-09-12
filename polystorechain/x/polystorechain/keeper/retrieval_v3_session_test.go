@@ -334,8 +334,8 @@ func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testin
 	serialGas := serialCtx.GasMeter().GasConsumed() - serialGasBefore
 
 	require.Equal(t, serialResults, batchResult.Results)
-	// The proof charge is identical; batching saves one feature-gate store read
-	// for each additional session because activation is checked once per message.
+	// Aggregate verification charges less crypto gas, and batching checks
+	// activation once for the whole message.
 	require.Less(t, batchGas, serialGas)
 	require.Equal(t,
 		sessionStoreSnapshot(t, serialCtx, serialFixture.g.fixture.storeService),
@@ -345,7 +345,9 @@ func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testin
 	require.Equal(t, serialFixture.g.bank.accountBalances, batchFixture.g.bank.accountBalances)
 	require.Equal(t, serialFixture.g.bank.transfers, batchFixture.g.bank.transfers)
 	require.Equal(t, serialCtx.EventManager().Events(), batchCtx.EventManager().Events())
-	require.GreaterOrEqual(t, batchGas, uint64(len(batchSamples))*keeper.ProofCryptoGas)
+	batchCryptoGas, err := keeper.AggregateProofCryptoGas(uint64(len(batchSamples)))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, batchGas, batchCryptoGas)
 	require.True(t, batchResult.Results[0].Settled)
 	require.False(t, batchResult.Results[1].Settled)
 	require.True(t, batchResult.Results[2].Settled)
@@ -358,7 +360,7 @@ func TestRetrievalSessionProofBatchV3MatchesSerialStateGasAndResponses(t *testin
 		require.Zero(t, result.NewlyAccepted)
 		require.Equal(t, batchResult.Results[i].Settled, result.Settled)
 	}
-	require.GreaterOrEqual(t, batchCtx.GasMeter().GasConsumed()-replayGasBefore, uint64(len(batchSamples))*keeper.ProofCryptoGas)
+	require.GreaterOrEqual(t, batchCtx.GasMeter().GasConsumed()-replayGasBefore, batchCryptoGas)
 }
 
 func TestRetrievalSessionProofV3PersistsMaterializedSamplePartitionOnReplay(t *testing.T) {

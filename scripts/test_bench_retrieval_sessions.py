@@ -25,6 +25,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import retrieval_bench_artifact as artifact
+import retrieval_four_validator_workload as workload
 
 
 SCRIPT = Path(__file__).with_name("bench_retrieval_sessions.sh")
@@ -533,7 +534,7 @@ class BenchmarkArtifactTest(unittest.TestCase):
         got = artifact.profile("2", "32", "700", "2147483648", consensus)
         self.assertEqual(got["target_block_interval_ms"], 1000)
         self.assertEqual(got["execution_budget_ms"], 700)
-        self.assertEqual(got["gas_limit"], "17000000")
+        self.assertEqual(got["gas_limit"], "39400000")
         control = artifact.profile("1", "0", "700", "2147483648", consensus)
         self.assertEqual(control["gas_limit"], "1000000")
         for args in (("8193", "1", "700", "1"), ("1", "33", "700", "1"), ("1", "1", "0", "1"), ("1", "1", "700", "0")):
@@ -1537,7 +1538,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
                             "unchanged_fee": "17"}}, "evm": {"params": {"active_static_precompiles": []}},
                         "feemarket": {"params": {"min_gas_price": "0.000000000000000000"}}}}
                     (config / "genesis.json").write_text(json.dumps(genesis))
-                    (config / "config.toml").write_text('[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[mempool]\\nsize = 5000\\nmax_txs_bytes = 1073741824\\nmax_tx_bytes = 1048576\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
+                    (config / "config.toml").write_text('[rpc]\\npprof_laddr = "localhost:6060"\\n[consensus]\\ntimeout_commit = "5s"\\n[p2p]\\naddr_book_strict = true\\n[mempool]\\nsize = 5000\\nmax_txs_bytes = 1073741824\\nmax_tx_bytes = 1048576\\n[instrumentation]\\nprometheus = false\\nprometheus_listen_addr = ":26660"\\n')
                     (config / "app.toml").write_text('[grpc]\\naddress = "localhost:9090"\\n[api]\\naddress = "tcp://localhost:1317"\\nenabled-unsafe-cors = false\\n[mempool]\\nmax-txs = -1\\n')
                     (config / "priv_validator_key.json").write_text(json.dumps({"pub_key": {
                         "type": "tendermint/PubKeyEd25519", "value": base64.b64encode(bytes([i + 1]) * 32).decode()},
@@ -1664,6 +1665,8 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             home = Path(node["home"])
             self.assertEqual(artifact.sha256(home / "config/genesis.json"), doc["genesis_sha256"])
             self.assertIn('timeout_commit = "1s"', (home / "config/config.toml").read_text())
+            self.assertIn(f'pprof_laddr = "127.0.0.1:{node["pprof"]}"',
+                          (home / "config/config.toml").read_text())
             self.assertIn("prometheus = true", (home / "config/config.toml").read_text())
             self.assertIn("max_txs_bytes = 1073741824", (home / "config/config.toml").read_text())
             self.assertTrue((home / "initial.log").exists())
@@ -1958,6 +1961,15 @@ class FourValidatorLifecycleTest(unittest.TestCase):
 
 
 class RetrievalArithmeticTest(unittest.TestCase):
+    def test_native_v3_epoch_capacity_uses_route_specific_crypto_gas(self):
+        separate = {"sessions": 4608, "sample_count": 1,
+                    "measured_transactions": 4608, "submission_mode": "separate"}
+        aggregate = {**separate, "sessions": 7680,
+                     "measured_transactions": 120, "submission_mode": "batch-message"}
+        with self.assertRaisesRegex(ValueError, "cannot fit"):
+            workload.validate_native_v3_capacity_epoch(separate, 64_000_000)
+        workload.validate_native_v3_capacity_epoch(aggregate, 192_000_000)
+
     def test_encoding_constants_match_production_sources(self):
         root = SCRIPT.parent.parent
         kzg = (root / "polystore_core/src/kzg.rs").read_text()

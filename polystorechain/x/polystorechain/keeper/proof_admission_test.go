@@ -112,6 +112,26 @@ func TestProofCryptoPrepayment(t *testing.T) {
 	require.Zero(t, ctx.GasMeter().GasConsumed())
 }
 
+func TestAggregateProofCryptoPrepayment(t *testing.T) {
+	for _, tc := range []struct{ count, gas uint64 }{
+		{1, 1_000_000}, {2, 1_100_000}, {8, 1_700_000}, {32, 4_100_000}, {64, 7_300_000},
+	} {
+		gas, err := AggregateProofCryptoGas(tc.count)
+		require.NoError(t, err)
+		require.Equal(t, tc.gas, gas)
+		ctx := sdk.Context{}.WithGasMeter(storetypes.NewGasMeter(gas))
+		require.NoError(t, PrepayAggregateProofCrypto(ctx, tc.count))
+		require.Equal(t, gas, ctx.GasMeter().GasConsumed())
+		require.Panics(t, func() {
+			_ = PrepayAggregateProofCrypto(ctx.WithGasMeter(storetypes.NewGasMeter(gas-1)), tc.count)
+		})
+	}
+	for _, count := range []uint64{0, 65, math.MaxUint64} {
+		_, err := AggregateProofCryptoGas(count)
+		require.Error(t, err)
+	}
+}
+
 func TestWholeLivenessListAdmittedBeforeCrypto(t *testing.T) {
 	p := admissionProof()
 	deal := types.Deal{WitnessMdus: 1, TotalMdus: 3, Size_: 1 << 20, ManifestRoot: make([]byte, 32)}

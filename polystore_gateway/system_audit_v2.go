@@ -426,7 +426,7 @@ func submitFrozenSystemAudit(ctx context.Context, key string, in *systemAuditInt
 	_, err = submitTxAndRecord(ctx, func(hash string) error { in.TxHash = hash; return storeSystemAuditIntent(in) },
 		"tx", "polystorechain", "prove-liveness-system", strconv.FormatUint(in.Context.DealID, 10), strconv.FormatUint(in.Context.EpochID, 10), file.Name(),
 		"--from", key, "--chain-id", chainID, "--home", homeDir, "--keyring-backend", "test", "--yes",
-		// Includes 500k native verification and <=409,600 bounded sample derivation.
+		// Includes 1.2M native verification and <=409,600 bounded sample derivation.
 		"--gas", "2000000", "--gas-prices", gasPrices, "--broadcast-mode", "sync", "--output", "json")
 	if errors.Is(err, errTxNotSubmitted) {
 		// No transaction exists to reconcile. Release the exact intent and allow

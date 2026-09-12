@@ -81,7 +81,8 @@ func retrievalNativeFinalize(tb testing.TB, a *App, height int64, txs ...[]byte)
 func retrievalNativeSign(tb testing.TB, a *App, key *secp256k1.PrivKey, sequence uint64, msgs ...sdk.Msg) []byte {
 	tb.Helper()
 	account := a.AuthKeeper.GetAccount(retrievalNativeQuery(tb, a), sdk.AccAddress(key.PubKey().Address()))
-	gas := uint64(len(msgs)) * 1000000
+	// Cover deterministic ante/message overhead as well as the prepaid crypto.
+	gas := uint64(len(msgs)) * (keeper.ProofCryptoGas + 200_000)
 	require.LessOrEqual(tb, gas, uint64(types.MaxRetrievalV2BlockGas))
 	config := a.TxConfig()
 	builder := config.NewTxBuilder()
@@ -391,8 +392,10 @@ func TestRetrievalMultiSessionTransactionMatrix(t *testing.T) {
 	if runGenesisTestInFreshProcess(t) {
 		return
 	}
-	f := newRetrievalNativeFixture(t, 64)
-	for _, count := range []int{1, 8, 32, 64} {
+	// Sixty-four independent messages exceed the canonical 64M block after SDK overhead.
+	// The PSB2 64-proof message bound is covered by the keeper suite.
+	f := newRetrievalNativeFixture(t, 32)
+	for _, count := range []int{1, 8, 32} {
 		t.Run(fmt.Sprintf("sessions%d", count), func(t *testing.T) {
 			var moduleState, bankState map[string][]byte
 			for _, batched := range []bool{false, true} {

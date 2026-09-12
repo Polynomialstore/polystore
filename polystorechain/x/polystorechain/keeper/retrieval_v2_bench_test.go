@@ -16,6 +16,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 	"polystorechain/x/crypto_ffi"
+	"polystorechain/x/polystorechain/keeper"
 	"polystorechain/x/polystorechain/types"
 )
 
@@ -46,7 +47,7 @@ func TestRetrievalV2BatchFirstMiddleLastFailure(t *testing.T) {
 	}
 	// Even a late crypto failure cannot enter native code without all eight charges.
 	require.Panics(t, func() {
-		_, _ = e.msgServer.SubmitRetrievalSessionProof(ctx.WithGasMeter(storetypes.NewGasMeter(8*500000-1)), msg)
+		_, _ = e.msgServer.SubmitRetrievalSessionProof(ctx.WithGasMeter(storetypes.NewGasMeter(8*keeper.ProofCryptoGas-1)), msg)
 	})
 	_, err = e.msgServer.SubmitRetrievalSessionProof(ctx, msg)
 	require.NoError(t, err)
@@ -281,7 +282,7 @@ func TestRetrievalV2MixedBenchmarkFixture(t *testing.T) {
 		_, err = cases[i].env.f.keeper.RetrievalSessions.Get(ctx, msg.SessionId)
 		require.ErrorIs(t, err, collections.ErrNotFound, "iteration cache must not accumulate sessions in its parent")
 	}
-	require.GreaterOrEqual(t, branch.GasMeter().GasConsumed(), uint64(mixedRetrievalProofs*500000))
+	require.GreaterOrEqual(t, branch.GasMeter().GasConsumed(), uint64(mixedRetrievalProofs)*keeper.ProofCryptoGas)
 	assertMixedRetrievalAccepted(t, branch, cases, msgs)
 }
 

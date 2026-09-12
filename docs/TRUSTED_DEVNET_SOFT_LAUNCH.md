@@ -178,6 +178,7 @@ sudoedit /etc/polystore/polystore-faucet.env
 Minimum required edits:
 - set `POLYSTORE_HOME` to the persistent chain home printed by the bootstrap script
 - set `POLYSTORE_CHAIN_ID` (use the value printed by the bootstrap script, or your chosen chain id)
+- keep `GOMAXPROCS=4` in `polystorechaind.env`
 - set `POLYSTORE_GATEWAY_SP_AUTH` on the router and providers (shared secret)
 - set `POLYSTORE_FAUCET_AUTH_TOKEN` (recommended for invite-only; share with collaborators out-of-band)
 - set `LD_LIBRARY_PATH=/opt/polystore/polystore_core/target/release` in all polystore env files
@@ -192,6 +193,16 @@ Minimum required edits:
 sudo systemctl enable --now polystorechaind
 sudo systemctl enable --now polystore-gateway-router
 sudo systemctl enable --now polystore-faucet
+```
+
+Verify the running validator inherited the configured execution and consensus
+settings:
+
+```bash
+pid="$(systemctl show polystorechaind -p MainPID --value)"
+sudo tr '\0' '\n' <"/proc/$pid/environ" | grep -Fx 'GOMAXPROCS=4'
+curl -fsS http://127.0.0.1:26657/consensus_params | jq -e \
+  '.result.consensus_params.block == {"max_bytes":"2097152","max_gas":"64000000"}'
 ```
 
 ### 4) Caddy (HTTPS reverse proxy, Profile A)
