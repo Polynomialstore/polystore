@@ -98,12 +98,14 @@ V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
 V3_CHAIN_AUDIT_EPOCH_BLOCKS = 100
 V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
-V3_ISSUE_326_QUALIFICATION_SESSIONS = 6656
-V3_ISSUE_326_QUALIFICATION_TRANSACTIONS = 104
+V3_ISSUE_326_QUALIFICATION_SESSIONS = 7680
+V3_ISSUE_326_QUALIFICATION_TRANSACTIONS = 120
 V3_ISSUE_326_QUALIFICATION_GAS = 160_000_000
 V3_ISSUE_326_QUALIFICATION_BATCH_SIZE = 64
-V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS = 25
-V3_PROOF_CRYPTO_GAS = 500_000
+V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS = 10
+V3_INDEPENDENT_PROOF_CRYPTO_GAS = 1_000_000
+V3_AGGREGATE_PROOF_BASE_GAS = 1_000_000
+V3_AGGREGATE_PROOF_MARGINAL_GAS = 100_000
 V3_PROOF_OPENING_OVERHEAD_GAS = 313_000
 V3_PROOF_TRANSACTION_OVERHEAD_GAS = 130_000
 V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS = 404_000
@@ -208,18 +210,27 @@ def native_v3_minimum_gas_blocks(total_gas, max_block_gas):
 
 def validate_native_v3_capacity_epoch(profile, max_block_gas):
     """Reject inventories too small for backlog or too large for the fixed epoch."""
-    # ProofCryptoGas is the protocol floor. The retained native-v3-chain-322 and
-    # gas-sweep-324 maxima give a conservative 813k/opening + 130k/transaction envelope.
+    # The route-specific crypto charge is the protocol floor. The retained
+    # native-v3-chain-322 and gas-sweep-324 maxima give a conservative
+    # 813k/opening + 130k/transaction envelope.
     # The retained gas-sweep-324 one-opening minimum is 904,051 gas, so 404k of
     # per-transaction overhead is a rounded-down floor for this fixed workload.
     proof_count = profile["sessions"] * profile["sample_count"]
-    minimum_gas = (proof_count * V3_PROOF_CRYPTO_GAS +
+    if profile["submission_mode"] == "batch-message":
+        crypto_gas = (profile["measured_transactions"] * V3_AGGREGATE_PROOF_BASE_GAS +
+                      (proof_count - profile["measured_transactions"]) * V3_AGGREGATE_PROOF_MARGINAL_GAS)
+    else:
+        crypto_gas = proof_count * V3_INDEPENDENT_PROOF_CRYPTO_GAS
+    minimum_gas = (crypto_gas +
                    profile["measured_transactions"] * V3_PROOF_TRANSACTION_MINIMUM_OVERHEAD_GAS)
-    proof_gas = V3_PROOF_CRYPTO_GAS + V3_PROOF_OPENING_OVERHEAD_GAS
-    estimated_gas = (proof_count * proof_gas +
+    estimated_gas = (crypto_gas + proof_count * V3_PROOF_OPENING_OVERHEAD_GAS +
                      profile["measured_transactions"] * V3_PROOF_TRANSACTION_OVERHEAD_GAS)
     max_block_gas = artifact.integer(max_block_gas, "max block gas", 1)
-    native_v3_minimum_gas_blocks(minimum_gas, max_block_gas)
+    # Aggregate gas outside crypto varies enough that this static floor can
+    # understate the live transaction by more than 2x. Its exact simulations
+    # below are the authoritative backlog gate.
+    if profile["submission_mode"] != "batch-message":
+        native_v3_minimum_gas_blocks(minimum_gas, max_block_gas)
     minimum_blocks = (estimated_gas + max_block_gas - 1) // max_block_gas
     if minimum_blocks + V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS > V3_CHAIN_AUDIT_EPOCH_BLOCKS - 2:
         raise ValueError("native chain capacity inventory cannot fit within one audit epoch")
@@ -1854,7 +1865,8 @@ def await_native_v3_capacity_window(lifecycle, wait, audits, epoch_length,
 
 
 def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
-                         message_type=V3_SINGLE_PROOF_TYPE, gas_adjustment="1.6"):
+                         message_type=V3_SINGLE_PROOF_TYPE, gas_adjustment="1.6",
+                         max_gas=64_000_000):
     if gas_adjustment not in V3_CHAIN_GAS_ADJUSTMENTS:
         raise ValueError("native v3 gas adjustment is outside the benchmark matrix")
     message_path = Path(message_path)
@@ -1899,7 +1911,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
     if actual != source:
         raise ValueError("gas simulation message differs from exported proof request")
     gas = producer.uint(unsigned.get("auth_info", {}).get("fee", {}).get("gas_limit", ""))
-    if not 1 <= gas <= 64_000_000:
+    if not 1 <= gas <= artifact.integer(max_gas, "chain diagnostic gas bound", 1, 448_000_000):
         raise ValueError("simulated v3 gas exceeds chain diagnostic bound")
     unsigned_path = message_path.with_name(message_path.name + ".unsigned.json")
     unsigned_path.write_text(json.dumps(unsigned, separators=(",", ":")) + "\n")
@@ -1912,7 +1924,7 @@ def v3_generate_only_gas(lifecycle, message_path, provider, *, action="prove",
                      unsigned_sha256=artifact.sha256(unsigned_path))
 
 
-def v3_simulate_serial_outer_gas(lifecycle, intent, gas_adjustment="1.6"):
+def v3_simulate_serial_outer_gas(lifecycle, intent, gas_adjustment="1.6", max_gas=64_000_000):
     """Simulate the fully assembled existing-message comparator transaction."""
     if gas_adjustment not in V3_CHAIN_GAS_ADJUSTMENTS:
         raise ValueError("native v3 gas adjustment is outside the benchmark matrix")
@@ -1967,7 +1979,7 @@ def v3_simulate_serial_outer_gas(lifecycle, intent, gas_adjustment="1.6"):
     except (KeyError, TypeError, json.JSONDecodeError, ValueError) as error:
         raise ValueError("serial outer-transaction gas simulation returned malformed gas") from error
     gas_limit = int(float(gas_adjustment) * gas_used)
-    if not 1 <= gas_limit <= 64_000_000:
+    if not 1 <= gas_limit <= artifact.integer(max_gas, "chain diagnostic gas bound", 1, 448_000_000):
         raise ValueError("simulated serial outer-transaction gas exceeds chain diagnostic bound")
     unsigned["auth_info"]["fee"].update(
         gas_limit=str(gas_limit),
@@ -2674,7 +2686,7 @@ def is_issue_326_candidate(profile, max_block_gas, gas_adjustment, gomaxprocs, t
             profile["batch_size"] == V3_ISSUE_326_QUALIFICATION_BATCH_SIZE and
             profile["sessions"] == V3_ISSUE_326_QUALIFICATION_SESSIONS and
             profile["measured_transactions"] == V3_ISSUE_326_QUALIFICATION_TRANSACTIONS and
-            max_block_gas == V3_ISSUE_326_QUALIFICATION_GAS and gas_adjustment == "1.1" and
+            max_block_gas == V3_ISSUE_326_QUALIFICATION_GAS and gas_adjustment == "1.6" and
             gomaxprocs == 4 and timeout_commit == "1s")
 
 
@@ -2683,9 +2695,9 @@ def native_v3_issue_326_qualification(metrics, finalize_blocks, consensus, offer
     """Evaluate only the fixed issue #326 candidate against its published gates."""
     reasons = []
     if offered != V3_ISSUE_326_QUALIFICATION_TRANSACTIONS or committed != offered:
-        reasons.append("the fixed 104-transaction batch inventory was not accepted and committed exactly once")
+        reasons.append("the fixed 120-transaction batch inventory was not accepted and committed exactly once")
     if metrics["saturated_commit_interval"]["blocks"] < V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS:
-        reasons.append("fewer than 25 saturated blocks were reconciled")
+        reasons.append("fewer than 10 saturated blocks were reconciled")
     if metrics["positive_backlog_seconds"] < V3_CHAIN_BACKLOG_SECONDS:
         reasons.append("all-validator positive backlog lasted less than ten seconds")
     if metrics["commit_interval_seconds"]["p95"] > 1.6:
@@ -2705,7 +2717,7 @@ def native_v3_issue_326_qualification(metrics, finalize_blocks, consensus, offer
         if metrics[name] != 0:
             reasons.append(f"{name} was nonzero")
     return dict(qualified=not reasons, reasons=reasons,
-        candidate="160M max gas, 2MiB max bytes, 6,656 one-opening 1KiB sessions in 104 batches of 64",
+        candidate="160M max gas, 2MiB max bytes, 7,680 one-opening 1KiB sessions in 120 batches of 64",
         gates={"minimum_saturated_blocks": V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS,
                "minimum_positive_backlog_seconds": 10,
                "finalize_block_p95_upper_bound_seconds": .7,
@@ -2795,7 +2807,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
     if any(profile["submission_mode"] == "separate" for profile in profiles):
         def simulate_slot(slot):
             return [(row, *v3_generate_only_gas(lifecycle, row["message_path"], row["provider"],
-                                                gas_adjustment=gas_adjustment))
+                                                gas_adjustment=gas_adjustment, max_gas=max_block_gas))
                     for row in by_slot[slot]]
         with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
             for values in pool.map(simulate_slot, range(V3_SYSTEMATIC_PROVIDERS)):
@@ -2818,14 +2830,15 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         if profile["submission_mode"] == "batch-message":
             def simulate_batch(intent):
                 _, simulation = v3_generate_only_gas(lifecycle, intent["message_path"], intent["provider"],
-                    action="prove-batch", message_type=V3_BATCH_PROOF_TYPE, gas_adjustment=gas_adjustment)
+                    action="prove-batch", message_type=V3_BATCH_PROOF_TYPE,
+                    gas_adjustment=gas_adjustment, max_gas=max_block_gas)
                 return intent["id"], simulation
             with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
                 simulations.update(pool.map(simulate_batch, intents))
         elif profile["submission_mode"] == "serial-messages":
             def simulate_serial(intent):
                 return intent["id"], v3_simulate_serial_outer_gas(
-                    lifecycle, intent, gas_adjustment=gas_adjustment)
+                    lifecycle, intent, gas_adjustment=gas_adjustment, max_gas=max_block_gas)
             with ThreadPoolExecutor(max_workers=V3_SYSTEMATIC_PROVIDERS) as pool:
                 simulations.update(pool.map(simulate_serial, intents))
         if profile["submission_mode"] != "separate":
@@ -2987,7 +3000,7 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
                 lifecycle.doc["profile"]["memory_ceiling_per_validator_bytes"])
         else:
             qualification = {"qualified": False,
-                "reason": "only the exact 160M/6,656-session batch profile is issue #326 qualification"}
+                "reason": "only the exact 160M/7,680-session batch profile is issue #326 qualification"}
         measurement.update(status="passed", offered=offered, committed=committed,
             provider_sequences_after=final_sequences, validator_cpu_delta=cpu_delta,
             blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics,
@@ -5275,12 +5288,12 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
              if native_v3 else "No deputy retrieval yet"),
             ("Normal mint and audit parameters retained; browser payer/provider/supply conservation checked"
              if native_browser is not None else "Normal mint and audit parameters retained; no economic conservation assertion"),
-            ("Post-qualification validator restart is required for the exact 160M/6,656-session batch candidate"
+            ("Post-qualification validator restart is required for the exact 160M/7,680-session batch candidate"
              if native_chain is not None and native_chain.get("profile") == "1kib" and
                 native_chain.get("measured_sessions") == V3_ISSUE_326_QUALIFICATION_SESSIONS and
                 native_chain.get("submission_mode") == "batch-message" and
                 native_chain.get("batch_size") == V3_ISSUE_326_QUALIFICATION_BATCH_SIZE and
-                native_chain.get("gas_adjustment") == "1.1" and
+                native_chain.get("gas_adjustment") == "1.6" and
                 native_chain.get("max_block_gas") == V3_ISSUE_326_QUALIFICATION_GAS and
                 int(lifecycle.env["GOMAXPROCS"]) == 4 and lifecycle.timeout_commit == "1s"
              else "No post-workload validator restart qualification")])

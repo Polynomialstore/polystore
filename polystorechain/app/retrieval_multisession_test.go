@@ -81,7 +81,8 @@ func retrievalNativeFinalize(tb testing.TB, a *App, height int64, txs ...[]byte)
 func retrievalNativeSign(tb testing.TB, a *App, key *secp256k1.PrivKey, sequence uint64, msgs ...sdk.Msg) []byte {
 	tb.Helper()
 	account := a.AuthKeeper.GetAccount(retrievalNativeQuery(tb, a), sdk.AccAddress(key.PubKey().Address()))
-	gas := uint64(len(msgs)) * 1000000
+	// Cover deterministic ante/message overhead as well as the prepaid crypto.
+	gas := uint64(len(msgs)) * 1200000
 	require.LessOrEqual(tb, gas, uint64(types.MaxRetrievalV2BlockGas))
 	config := a.TxConfig()
 	builder := config.NewTxBuilder()

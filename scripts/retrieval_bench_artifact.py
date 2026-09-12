@@ -1583,7 +1583,7 @@ def profile(sessions, proofs, execution_ms, memory_bytes, consensus):
     integer(block["max_gas"], "max_gas", 1, 448000000)
     integer(block["max_bytes"], "max_bytes", 1, 2097152)
     return {"sessions": sessions, "proofs_per_session": proofs,
-            "gas_limit": str(1000000 + proofs * 500000),
+            "gas_limit": str(1000000 + proofs * 1000000),
             "mode": "legacy-serial", "challenge_kind": "legacy-fixed-z",
             "target_block_interval_ms": 1000, "execution_budget_ms": execution_ms,
             "memory_ceiling_bytes": memory_bytes, "max_in_flight": 1,

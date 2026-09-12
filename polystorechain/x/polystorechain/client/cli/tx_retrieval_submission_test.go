@@ -332,7 +332,7 @@ func TestRetrievalProofUnsignedAndSignedLimits(t *testing.T) {
 	_, err = cfg.TxJSONEncoder()(builder.GetTx())
 	require.ErrorContains(t, err, "reserved for signing")
 	ctx := client.Context{}.WithCodec(cdc).WithTxConfig(config).WithFromAddress(sdk.AccAddress(bytes20(7))).WithChainID("cli-test").WithGenerateOnly(true)
-	for _, gas := range []string{"64000001", "not-gas"} {
+	for _, gas := range []string{fmt.Sprint(types.MaxRetrievalV2BlockGas + 1), "not-gas"} {
 		cmd := CmdSubmitRetrievalProof()
 		cmd.SetContext(context.Background())
 		require.NoError(t, cmd.Flags().Set(flags.FlagGas, gas))
