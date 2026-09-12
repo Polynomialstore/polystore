@@ -26,8 +26,8 @@ The browser keeps its existing two-chunk prefetch bound within an obligation.
 Whole-chunk integrity verification still precedes any decode/write. Successful
 writes, durable flush, and checkpoint advance still precede the obligation ACK.
 Body reading and multipart parsing now have separate child spans; no buffers or
-copies were removed. The public parser still bounds, validates and authenticates
-the same response before returning it to the existing verifier.
+copies were removed. The public parser still bounds and validates the same
+response, binds it to the frozen request, and returns it to the existing verifier.
 
 ## Enable and collect
 
