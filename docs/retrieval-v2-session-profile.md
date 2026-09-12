@@ -142,9 +142,10 @@ deputy service or session cancellation independently punishes an assigned provid
 | Concurrent retained generations per deal | 8 |
 | Concurrent retained session generations globally | 1024 |
 | Shared proof count per message | 64 |
-| Candidate prepaid cryptography per proof | 500000 gas |
+| Independent prepaid cryptography per proof | 1000000 gas |
+| Aggregate V3 prepaid cryptography | 1000000 + 100000 for each proof after the first |
 | Candidate reserved future retention work per open | 100000 gas |
-| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 160000000 / 2097152 |
 | Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
@@ -173,9 +174,9 @@ benchmark uses that profile by default; an explicit `--chain-max-gas` remains
 available only for bounded capacity experiments. Changing the gas value requires
 a coordinated fresh-genesis rollout because it is a consensus parameter;
 changing only a healthcheck expectation or one validator is invalid. The
-128000000 candidate failed the #326 execution-latency, validator-headroom, and
-signature gates, so the checked-in profile remains 64000000. Issue #328 owns
-the separate default-off parallel-execution feasibility spike.
+160000000 profile was selected after the fixed aggregate V3 workload sustained
+12 gas-limited blocks at round zero with all four validator signatures. Issue
+#328 owns the separate default-off parallel-execution feasibility spike.
 
 The bounded activation qualification is one fresh four-validator run on Linux:
 
@@ -188,14 +189,19 @@ python3 scripts/retrieval_four_validator_workload.py \
   --cli-binary /path/to/polystore_cli \
   --product-source "$PWD" \
   --proof-exporter /path/to/retrieval-inventory-exporter \
-  --home /path/to/new-128m-run \
+  --home /path/to/new-160m-run \
   --chain-capacity-profile 1kib \
-  --chain-capacity-transactions 4992 \
-  --chain-max-gas 128000000 \
+  --chain-capacity-sessions 7680 \
+  --chain-proof-submission-mode batch-message \
+  --chain-proof-batch-size 64 \
+  --chain-proof-gas-adjustment 1.6 \
+  --chain-max-gas 160000000 \
+  --chain-timeout-commit-ms 1000 \
+  --chain-validator-gomaxprocs 4 \
   --timeout 3600
 ```
 
-Only that exact candidate enables the #326 gates. The evidence records native
+Only that exact 120-transaction candidate enables the #326 gates. The evidence records native
 CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
 reported as unknown), block-header commit-interval quantiles, canonical commit
 rounds and signatures, validator `/proc` CPU and sampled RSS during the longest

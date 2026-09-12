@@ -39,7 +39,7 @@ insufficient. Canonical zero and constant blobs remain valid.
 ## One bounded synchronous call
 
 Go authenticates the stored C2 context, frozen payee, fixed anchor, full ordered
-range and every expected z; it validates every shape and prepays **500000 gas per
+range and every expected z; it validates every shape and prepays **1000000 gas per
 proof** before entering native code. All admitted v2 lists, including singleton
 lists, use `polystore_verify_polyfs_session_batch_v1` once. Legacy sessions retain
 the corrected independent primitives. Retry/admission rejection performs no batch

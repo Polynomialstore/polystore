@@ -63,7 +63,7 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             path.write_text(json.dumps(genesis))
             profile_path = Path(raw) / "profile.json"
             profile_path.write_text(json.dumps(profile or {
-                "block": {"max_bytes": "2097152", "max_gas": "64000000"}}))
+                "block": {"max_bytes": "2097152", "max_gas": "160000000"}}))
             env = os.environ.copy()
             env.update(
                 EVM_CHAIN_ID="20260211",
@@ -90,7 +90,7 @@ class DevnetGenesisGuardTest(unittest.TestCase):
             genesis["app_state"]["evm"]["params"]["active_static_precompiles"],
         )
         self.assertTrue(any(m["base"] == "aatom" for m in genesis["app_state"]["bank"]["denom_metadata"]))
-        self.assertEqual(genesis["consensus"]["params"]["block"]["max_gas"], "64000000")
+        self.assertEqual(genesis["consensus"]["params"]["block"]["max_gas"], "160000000")
         self.assertEqual(genesis["consensus"]["params"]["block"]["max_bytes"], "2097152")
 
     def test_final_genesis_current_nilchain_module(self):
