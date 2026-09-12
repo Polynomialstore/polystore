@@ -3,7 +3,8 @@
 Status: SESSION implementation delivered by #255. A zero parameter value disables
 the protocol, while the canonical trusted-devnet bootstrap explicitly sets activation
 height 1. Activation on another network remains a coordinated deployment decision;
-the closed #254–#260 stack retains its security, integration and qualification record.
+closed #254–#258 and #260 retain the security, integration and qualification record;
+#259 remains open and deferred.
 #251 qualifies only its named V3 proof-confirmation capacity profile.
 
 The separate [v3 large-session contract](retrieval-v3-large-session-profile.md)
@@ -256,10 +257,10 @@ an explicit recovery blocker, not an invitation to infer a beneficiary.
 
 Durable database restart preserves the latch, seeds, sessions and nonces. Current
 module genesis export omits non-parameter module state; **export/import is not a
-supported recovery path** for these liabilities or challenges. Before deployment,
-#254 must record the affected-state inventory, supported snapshot/database restore
-procedure and disposition of malformed records. No broader restore guarantee is
-made by this slice.
+supported recovery path** for these liabilities or challenges. Closed #254 retains
+the affected-state inventory and disposition record. Deployment recovery uses the
+snapshot/database procedure in [the soft-launch runbook](TRUSTED_DEVNET_SOFT_LAUNCH.md#back-up-and-restore-a-fresh-genesis-change).
+No broader restore guarantee is made.
 
 ## Transaction evidence
 

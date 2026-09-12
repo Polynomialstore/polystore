@@ -1,23 +1,23 @@
 # RFC: Challenge Derivation & Proof Quota Policy
 
-**Status:** Legacy v1 default; v2 primitives, SESSION runtime and frozen storage obligations implemented, coordinated activation unqualified
+**Status:** V2 implemented; canonical trusted-devnet bootstrap activates at height 1
 **Scope:** Chain protocol policy (`polystorechain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
 
 ---
 
-## Version 3 large-session amendment (contract only)
+## Version 3 large-session amendment
 
 The [retrieval v3 large-session profile](../docs/retrieval-v3-large-session-profile.md)
 fixes its own context, committed-anchor seed, session-wide sparse sampling and
 fresh off-domain point transcripts. Its population is the exact frozen set of
 encoded blobs needed by a logical range, rather than every MDU/slot proof or 132
-samples per provider. The checked-in Python oracle and golden fixture pin the
-inactive bytes. No v3 keeper path exists or activates through this amendment;
-the v2 package and rules below remain unchanged.
+samples per provider. The keeper, provider, browser and shared primitives are
+implemented. V3 remains disabled while its activation parameter is zero; target
+activation needs matching end-to-end qualification. The v2 rules below are unchanged.
 
-## Version 2: canonical challenge primitives (inactive)
+## Version 2: canonical challenge primitives
 
 The pure Go package `polystorechain/pkg/retrievalchallenge` implements this section's
 serialization, response windows, distinct sampling and off-domain evaluation points.
@@ -26,12 +26,13 @@ fixed committed anchors, enforces exact proof targets and settles once. See the
 [session wire/profile/recovery contract](../docs/retrieval-v2-session-profile.md).
 The [frozen storage obligation implementation](../docs/retrieval-v2-storage-audits.md)
 adds independent ACTIVE audits, pending repair readiness and the complete retained
-generation query. Scheduled activation defaults to disabled and remains unqualified
-until coordinated #256/#257 integration and #251 qualification pass. The pure package itself does not authenticate a setup,
-perform KZG verification or establish byte delivery. Deployment and qualification obligations of #255 remain open.
+generation query. Zero is the disabled activation sentinel; the canonical
+trusted-devnet bootstrap sets height 1. Closed #254–#258 and #260 retain its security,
+integration and qualification record; #259 remains open and deferred. The pure package
+itself does not authenticate a setup, perform KZG verification or establish byte delivery.
 
-This section supersedes the historical v1 assumptions below **for future v2
-activation**. In particular, ordinary retrieval cannot reduce independent storage
+This section supersedes the historical v1 assumptions below **for version-2
+operation**. In particular, ordinary retrieval cannot reduce independent storage
 audits, a public proof cannot select its payee, and a proposer-influenced block
 hash is not an unbiased beacon. No absolute anti-grinding or delivery claim is
 supported by the legacy description.
@@ -179,7 +180,7 @@ ordered tuple list before FFI. A one-tuple SystemProof request samples membershi
 and derives only that tuple's field point, rather than all Q points. No lower-level
 sampling helper authenticates the supplied context hash or seed.
 
-### Frozen storage audit runtime (activation disabled by default)
+### Frozen storage audit runtime
 
 The [C4 implementation contract](../docs/retrieval-v2-storage-audits.md) defines the
 bounded ACTIVE/pending view, BeginBlock snapshots, shared anchor/generation
@@ -196,16 +197,18 @@ explicit readiness evidence and slot promotion guard, with no storage reward or
 provider-health credit. Missing seeds and empty windows produce no provider
 failure or fulfilled reward.
 
-The candidate cap is 64 combined assignments and 128 current/previous records;
-the funded retrieval-task cap of 64 is separate. The default activation parameter
-remains zero. The cap, quota min=max132 profile and local helper measurements do
-not qualify whole-chain capacity or funded release. Existing global EndBlock
-health, jail, underbonding, draining and rotation work still requires #251
-measurement. No permissionless beacon or stronger C1–C6 trust claim is added.
+The cap is 64 combined assignments and 128 current/previous records; the funded
+retrieval-task cap of 64 is separate. Zero remains the disabled protocol sentinel,
+while the canonical trusted-devnet bootstrap sets activation height 1. The cap,
+quota min=max132 profile and local helper measurements do not qualify whole-chain
+capacity or funded release. Existing global EndBlock health, jail, underbonding,
+draining and rotation work is outside #251's fixed proof-confirmation workload and
+needs separate evidence for materially different state sizes. No permissionless
+beacon or stronger C1–C6 trust claim is added.
 
-### Integration and migration gates (not implemented by this slice)
+### Integration and migration contract
 
-The authenticated native/sponsored/EVM open must normalize and persist the effective
+The authenticated native/sponsored/EVM open normalizes and persists the effective
 `authorized_proof_provider`, defaulting to assigned, in durable session state
 including COMPLETED. A deputy requires the requester's authority and registration.
 Sponsored opens must preserve the voucher issuer's provider restriction; protocol
@@ -214,13 +217,13 @@ arbitrary budget payees or bypass `VoucherAuth.provider`. An unassigned deputy
 needs an issuer-authorized voucher version; no consumed-voucher reuse. A later
 fallback uses a new authorized funded session and the old expiry/refund path.
 
-The remaining #255 integration belongs in the existing seams:
+The #255 integration uses the existing seams:
 
 - [session opens, proof admission and settlement](../polystorechain/x/polystorechain/keeper/msg_server.go),
   [protobuf state](../polystorechain/proto/polystorechain/polystorechain/v1/types.proto)
   and [messages](../polystorechain/proto/polystorechain/polystorechain/v1/tx.proto):
   durable normalized authority, generated ABI/bindings, authoritative context query,
-  shared native/EVM validation and once-only settlement. Nothing here installs them.
+  shared native/EVM validation and once-only settlement.
 - [unified liveness](../polystorechain/x/polystorechain/keeper/unified_liveness.go),
   [rewards](../polystorechain/x/polystorechain/keeper/base_rewards.go) and
   [epoch finalization](../polystorechain/x/polystorechain/keeper/slashing.go):
@@ -233,15 +236,16 @@ The remaining #255 integration belongs in the existing seams:
   Secure continuation uses a new funded session without consumed-voucher reuse.
 - Retain immutable generations for both session and audit references; historical
   reads cannot change `.active_generation`. Reject mutations if required reference
-  capacity cannot be preserved. No migration or retention mechanism is installed here.
+  capacity cannot be preserved. The implemented retention guard enforces this
+  requirement; the trusted-devnet rollout uses fresh genesis instead of an in-place
+  legacy-state migration.
 
-[#255](https://github.com/Polynomialstore/polystore/issues/255) remains open for
-these integrations, bounded gas and actual EVM rollback. Network activation remains
-unavailable until compatible provider-daemon, user-gateway, browser and EVM paths
-verify bytes before normal confirmation and
-[#251](https://github.com/Polynomialstore/polystore/issues/251) qualifies the named
-finite-gas deployment profile. Passing vector tests is not runtime signer binding,
-seed capture, delivery, reward or rollback qualification. Pricing is unchanged.
+Closed #255–#258 and #260 retain the integration, bounded-gas, EVM rollback and
+trusted-devnet qualification evidence; #259 remains open and deferred. Activation
+on another network requires matching provider-daemon, user-gateway, browser and EVM
+qualification. #251 qualifies only its named proof-confirmation workload. Passing
+vector tests alone is not runtime signer binding, seed capture, delivery, reward or
+rollback qualification. Pricing is unchanged.
 
 ### Reproducible checks
 
@@ -268,8 +272,8 @@ KZG throughput result, capacity qualification or speedup claim.
 ## Historical v1 reference
 
 The sections below describe legacy policy and implementation history. Their organic
-credit subtraction and anti-grinding claims are not the v2 contract, and must not
-be used to claim secure v2 behavior before the integration gates above pass.
+credit subtraction and anti-grinding claims are not the v2 contract and must not
+be used to describe current version-2 behavior.
 
 ## 0. Executive Summary
 

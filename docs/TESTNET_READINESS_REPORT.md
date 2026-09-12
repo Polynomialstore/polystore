@@ -4,9 +4,9 @@ Date: 2026-02-05
 
 This report is the Phase 8 deliverable from `docs/AGENTS_AUTONOMOUS_RUNBOOK.md`.
 
-## Retrieval v2 qualification update (2026-09-08)
+## Historical retrieval v2 qualification snapshot (2026-09-08)
 
-Retrieval v2 remains disabled by default. Its challenge, signer/payee, verified
+At the time of this snapshot, retrieval v2 remained disabled. Its challenge, signer/payee, verified
 byte and independent storage-audit boundaries are documented in the
 [qualification report](../performance/retrieval-v2-qualification.md).
 The profile assumes trusted non-grinding block proposers; it does not qualify

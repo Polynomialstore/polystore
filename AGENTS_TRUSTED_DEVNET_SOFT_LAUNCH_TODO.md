@@ -14,7 +14,7 @@ Conventions:
 ## Retrieval challenge activation status
 
 - [x] The security, client/provider integration and trusted-devnet qualification
-  record is retained in closed #254–#260.
+  record is retained in closed #254–#258 and #260; #259 remains open and deferred.
 - [x] The canonical trusted-devnet bootstrap sets version-2 activation height 1.
 - [ ] Treat activation on any other network as an explicit coordinated deployment
   change. Follow the
