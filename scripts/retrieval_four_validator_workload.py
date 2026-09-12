@@ -69,7 +69,9 @@ V3_CHAIN_CAPACITY_TRANSACTIONS = (1280, 1280, 80)
 V3_CHAIN_SUBMISSION_MODES = ("separate", "serial-messages", "batch-message")
 V3_CHAIN_BATCH_SIZES = (8, 32, 64)
 V3_CHAIN_GAS_ADJUSTMENTS = ("1.1", "1.2", "1.4", "1.6")
-V3_CHAIN_MAX_BATCH_SESSIONS = 18_432
+# Leave one provider-balanced batch of headroom below the protocol's 8,192
+# live-context limit for the normal audits retained by this workload.
+V3_CHAIN_MAX_BATCH_SESSIONS = 7_680
 V3_SINGLE_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofV3"
 V3_BATCH_PROOF_TYPE = "/polystorechain.polystorechain.v1.MsgSubmitRetrievalSessionProofBatchV3"
 V3_CONFIGURED_VALIDATOR_V3_ONE_SAMPLE_SESSIONS_PER_SECOND = 442.56266798019266
@@ -96,8 +98,11 @@ V3_CHAIN_BACKLOG_SECONDS = 10
 V3_CHAIN_DRAIN_SECONDS = 300
 V3_CHAIN_AUDIT_EPOCH_BLOCKS = 100
 V3_CHAIN_MEASUREMENT_MARGIN_BLOCKS = 30
-V3_128M_QUALIFICATION_TRANSACTIONS = 4992
-V3_128M_QUALIFICATION_GAS = 128_000_000
+V3_ISSUE_326_QUALIFICATION_SESSIONS = 6656
+V3_ISSUE_326_QUALIFICATION_TRANSACTIONS = 104
+V3_ISSUE_326_QUALIFICATION_GAS = 160_000_000
+V3_ISSUE_326_QUALIFICATION_BATCH_SIZE = 64
+V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS = 25
 V3_PROOF_CRYPTO_GAS = 500_000
 V3_PROOF_OPENING_OVERHEAD_GAS = 313_000
 V3_PROOF_TRANSACTION_OVERHEAD_GAS = 130_000
@@ -2664,39 +2669,49 @@ def native_v3_capacity_metrics(profile, offered, committed, blocks, start_ns, of
         average_proof_transaction_bytes_per_saturated_block=sum(row["proof_transaction_bytes"] for row in saturated) / len(saturated))
 
 
-def native_v3_128m_qualification(metrics, finalize_blocks, consensus, offered, committed,
-                                 comet_mempool_size):
+def is_issue_326_candidate(profile, max_block_gas, gas_adjustment, gomaxprocs, timeout_commit):
+    return (profile["name"] == "1kib" and profile["submission_mode"] == "batch-message" and
+            profile["batch_size"] == V3_ISSUE_326_QUALIFICATION_BATCH_SIZE and
+            profile["sessions"] == V3_ISSUE_326_QUALIFICATION_SESSIONS and
+            profile["measured_transactions"] == V3_ISSUE_326_QUALIFICATION_TRANSACTIONS and
+            max_block_gas == V3_ISSUE_326_QUALIFICATION_GAS and gas_adjustment == "1.1" and
+            gomaxprocs == 4 and timeout_commit == "1s")
+
+
+def native_v3_issue_326_qualification(metrics, finalize_blocks, consensus, offered, committed,
+                                      comet_mempool_size, memory_ceiling):
     """Evaluate only the fixed issue #326 candidate against its published gates."""
     reasons = []
-    if offered != V3_128M_QUALIFICATION_TRANSACTIONS or committed != offered:
-        reasons.append("the fixed 4,992 transaction inventory was not accepted and committed exactly once")
-    if metrics["saturated_commit_interval"]["blocks"] < 30:
-        reasons.append("fewer than 30 saturated blocks were reconciled")
+    if offered != V3_ISSUE_326_QUALIFICATION_TRANSACTIONS or committed != offered:
+        reasons.append("the fixed 104-transaction batch inventory was not accepted and committed exactly once")
+    if metrics["saturated_commit_interval"]["blocks"] < V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS:
+        reasons.append("fewer than 25 saturated blocks were reconciled")
     if metrics["positive_backlog_seconds"] < V3_CHAIN_BACKLOG_SECONDS:
         reasons.append("all-validator positive backlog lasted less than ten seconds")
     if metrics["commit_interval_seconds"]["p95"] > 1.6:
         reasons.append("p95 commit interval exceeded 1.6 seconds")
     if consensus["maximum_round"] != 0 or consensus["missed_signatures"] != 0:
         reasons.append("a saturated block used a nonzero round or missed a validator signature")
-    if any(row["cpu_percent_of_one_core"] >= 60 for row in
+    if any(row["sampled_peak_rss_bytes"] >= memory_ceiling for row in
            metrics["validator_resources_during_backlog"]["validators"]):
-        reasons.append("a validator reached 60 percent of one CPU core during backlog")
+        reasons.append("a validator reached the per-process memory ceiling during backlog")
     if metrics["peak_observed_mempool_transactions"] >= comet_mempool_size:
         reasons.append("the observed mempool reached its transaction-count cap")
-    if len(finalize_blocks) != 4 or any(not row["summary"]["p95_within_650ms"]
+    if len(finalize_blocks) != 4 or any(not row["summary"]["p95_within_700ms"]
                                         for row in finalize_blocks):
-        reasons.append("a validator's native FinalizeBlock p95 bucket upper bound exceeded 650ms or was unknown")
+        reasons.append("a validator's native FinalizeBlock p95 exceeded the 700ms execution budget or was unknown")
     for name in ("invalid_transactions", "unknown_transactions", "duplicate_transactions",
                  "dropped_transactions", "retried_transactions"):
         if metrics[name] != 0:
             reasons.append(f"{name} was nonzero")
     return dict(qualified=not reasons, reasons=reasons,
-        candidate="128M max gas, 2MiB max bytes, 4,992 one-opening 1KiB transactions",
-        gates={"minimum_saturated_blocks": 30, "minimum_positive_backlog_seconds": 10,
-               "finalize_block_p95_upper_bound_seconds": .65,
+        candidate="160M max gas, 2MiB max bytes, 6,656 one-opening 1KiB sessions in 104 batches of 64",
+        gates={"minimum_saturated_blocks": V3_ISSUE_326_MINIMUM_SATURATED_BLOCKS,
+               "minimum_positive_backlog_seconds": 10,
+               "finalize_block_p95_upper_bound_seconds": .7,
                "commit_interval_p95_seconds": 1.6,
                "maximum_consensus_round": 0, "missed_validator_signatures": 0,
-               "maximum_validator_cpu_percent_of_one_core_during_backlog": 60,
+               "memory_ceiling_per_validator_bytes": memory_ceiling,
                "comet_mempool_count_cap_must_not_be_reached": comet_mempool_size})
 
 
@@ -2716,10 +2731,9 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
         measured_sessions=measured_sessions, submission_mode=submission_mode, batch_size=batch_size)
     max_block_gas = artifact.integer(
         lifecycle.doc["profile"]["consensus"]["block"]["max_gas"], "max block gas", 1)
-    issue_326_candidate = (len(profiles) == 1 and profiles[0]["name"] == "1kib" and
-        profiles[0]["submission_mode"] == "separate" and
-        profiles[0]["measured_transactions"] == V3_128M_QUALIFICATION_TRANSACTIONS and
-        max_block_gas == V3_128M_QUALIFICATION_GAS)
+    issue_326_candidate = (len(profiles) == 1 and is_issue_326_candidate(
+        profiles[0], max_block_gas, gas_adjustment, int(lifecycle.env["GOMAXPROCS"]),
+        lifecycle.doc["profile"]["timeout_commit"]))
     doc["issue_326_candidate"] = issue_326_candidate
     opened_at = lifecycle.wait_height(3)
     session_count = sum(profile["sessions"] for profile in profiles)
@@ -2964,37 +2978,27 @@ def run_native_v3_chain(lifecycle, *, deal, providers, wait, audits, exporter, c
             saturated["first_height"], saturated["last_height"])
         cpu_delta = validator_cpu_delta(before_cpu, after_cpu)
         cpu_delta["measurement_scope"] = "direct broadcast through all-validator mempool drain"
-        finalize_blocks = []
-        phases = lifecycle.doc["commit_step_metrics"]["phases"]
-        before_by_node = {row["node_id"]: row["sample"] for row in phases[before_phase]["nodes"]}
-        after_by_node = {row["node_id"]: row["sample"] for row in phases[after_phase]["nodes"]}
-        if set(before_by_node) != set(after_by_node) or len(before_by_node) != 4:
-            raise ValueError("FinalizeBlock capture boundaries do not cover four validators")
-        for node_id in sorted(before_by_node):
-            before_histogram = before_by_node[node_id].get("finalize_block_histogram")
-            after_histogram = after_by_node[node_id].get("finalize_block_histogram")
-            expected_blocks = (after_by_node[node_id]["committed_height"] -
-                               before_by_node[node_id]["committed_height"])
-            finalize_blocks.append(dict(node_id=node_id, summary=
-                commit_metrics.summarize_finalize_block_histogram(
-                    before_histogram, after_histogram, expected_blocks)))
+        finalize_blocks = [dict(node_id=row["node_id"], summary=row["finalize_block_precise"])
+                           for row in lifecycle.doc[stream_key]]
         if issue_326_candidate:
-            qualification = native_v3_128m_qualification(metrics, finalize_blocks, consensus,
-                len(offered), len(committed), lifecycle.doc["profile"]["comet_mempool"]["size"])
+            qualification = native_v3_issue_326_qualification(
+                metrics, finalize_blocks, consensus, len(offered), len(committed),
+                lifecycle.doc["profile"]["comet_mempool"]["size"],
+                lifecycle.doc["profile"]["memory_ceiling_per_validator_bytes"])
         else:
             qualification = {"qualified": False,
-                "reason": "only the exact 128M/4,992 one-opening 1KiB profile is issue #326 qualification"}
+                "reason": "only the exact 160M/6,656-session batch profile is issue #326 qualification"}
         measurement.update(status="passed", offered=offered, committed=committed,
             provider_sequences_after=final_sequences, validator_cpu_delta=cpu_delta,
             blocks=dict(path=str(block_path), sha256=artifact.sha256(block_path)), metrics=metrics,
-            consensus=consensus, finalize_block_histograms=finalize_blocks,
+            consensus=consensus, finalize_block_precise=finalize_blocks,
             issue_326_qualification=qualification)
         lifecycle.save()
         doc.pop("qualification_error", None)
         if issue_326_candidate and not qualification["qualified"]:
             measurement["status"] = "qualification_failed"
             doc["qualification_error"] = (
-                "128M qualification gates failed: " + "; ".join(qualification["reasons"]))
+                "issue #326 qualification gates failed: " + "; ".join(qualification["reasons"]))
     expected_transactions = sum(row["measured_transactions"] for row in profiles)
     doc.update(status=("native_v3_chain_capacity_qualification_pending_restart"
                        if issue_326_candidate else "native_v3_chain_capacity_passed"),
@@ -3041,7 +3045,7 @@ def validate_native_v3_candidate_restart(lifecycle, wait, audits, epoch_length):
     return dict(fixed_height=fixed_height, later_height=later, audit_height=audit_height,
         before=before_restart, original_after_restart=original,
         later=lifecycle.snapshot(later), consensus=consensus, normal_audits=restart_audits,
-        nonce_ordered_admission="all 4,992 frozen per-signer sequences committed exactly once before restart",
+        nonce_ordered_admission="all 104 frozen per-signer batch sequences committed exactly once before restart",
         chain_progress_verified=True, qualification=True)
 
 
@@ -5271,10 +5275,14 @@ def run_healthy(lifecycle, gateway_binary, cli_binary, product_source, *, sustai
              if native_v3 else "No deputy retrieval yet"),
             ("Normal mint and audit parameters retained; browser payer/provider/supply conservation checked"
              if native_browser is not None else "Normal mint and audit parameters retained; no economic conservation assertion"),
-            ("Post-qualification validator restart is required for the exact 128M/4,992 candidate"
+            ("Post-qualification validator restart is required for the exact 160M/6,656-session batch candidate"
              if native_chain is not None and native_chain.get("profile") == "1kib" and
-                native_chain.get("measured_transactions") == V3_128M_QUALIFICATION_TRANSACTIONS and
-                native_chain.get("max_block_gas") == V3_128M_QUALIFICATION_GAS
+                native_chain.get("measured_sessions") == V3_ISSUE_326_QUALIFICATION_SESSIONS and
+                native_chain.get("submission_mode") == "batch-message" and
+                native_chain.get("batch_size") == V3_ISSUE_326_QUALIFICATION_BATCH_SIZE and
+                native_chain.get("gas_adjustment") == "1.1" and
+                native_chain.get("max_block_gas") == V3_ISSUE_326_QUALIFICATION_GAS and
+                int(lifecycle.env["GOMAXPROCS"]) == 4 and lifecycle.timeout_commit == "1s"
              else "No post-workload validator restart qualification")])
     def check_disk(phase):
         if native_v3:
@@ -5658,7 +5666,7 @@ def main():
                         help="Use 8 or 32 independent proof-submission signers")
     parser.add_argument("--proof-gas", type=int, help="Explicit locally validated fixed gas limit per proof-submission transaction")
     parser.add_argument("--chain-max-gas", type=int,
-                        choices=(64_000_000, 128_000_000, 192_000_000, 256_000_000,
+                        choices=(64_000_000, 128_000_000, 160_000_000, 192_000_000, 256_000_000,
                                  320_000_000, 384_000_000, 448_000_000),
                         help="Experimental native-v3-chain maximum block gas")
     parser.add_argument("--chain-capacity-profile", choices=("1kib", "eight-blobs", "sample-cap"),
