@@ -1,8 +1,6 @@
 # 128M retrieval-v3 qualification (issue #326)
 
-The exact-head 128M candidate **failed qualification**, so the canonical profile remained **64M max block gas at the time of this run**. The run tested commit `1bbcd77068b5ad0f34c287f3bcf6be3a90bbc86c` on one local four-validator chain using 4,992 frozen one-opening 1 KiB retrieval-v3 proof transactions.
-
-This separate-transaction result remains historical evidence and does not evaluate the later same-provider batching work. The [current 160M post-batch operational profile](../../../scripts/retrieval_consensus_profile.json) depends on [PR #331](https://github.com/Polynomialstore/polystore/pull/331).
+The exact-head 128M candidate **failed qualification**, so the canonical profile remains **64M max block gas**. The run tested commit `1bbcd77068b5ad0f34c287f3bcf6be3a90bbc86c` on one local four-validator chain using 4,992 frozen one-opening 1 KiB retrieval-v3 proof transactions.
 
 The capacity path worked correctly. All 4,992 offered transactions committed exactly once with zero invalid, unknown, duplicate, dropped, or retried transactions. Across 36 saturated blocks, the observed rate was 98.60 proof sessions/s, or 8.52 million/day when the short saturated rate is multiplied by 86,400. Positive all-validator backlog lasted 50.63 seconds, and the peak observed mempool count was 4,851, below CometBFT's 5,000-entry cap. Blocks held 57–141 proof transactions, requested 51.57M–127.58M gas, used 33.16M–82.03M gas, and carried 61,674–152,562 proof-transaction bytes. The 2 MiB block-byte limit did not constrain the run.
 

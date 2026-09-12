@@ -144,7 +144,7 @@ deputy service or session cancellation independently punishes an assigned provid
 | Shared proof count per message | 64 |
 | Candidate prepaid cryptography per proof | 500000 gas |
 | Candidate reserved future retention work per open | 100000 gas |
-| Checked-in consensus block gas / bytes | 160000000 / 2097152 |
+| Checked-in consensus block gas / bytes | 64000000 / 2097152 |
 | Compiled first-activation gas / bytes ceilings | 448000000 / 2097152 |
 
 All session capacity checks precede fee transfers and voucher consumption. Gas is
@@ -173,34 +173,41 @@ benchmark uses that profile by default; an explicit `--chain-max-gas` remains
 available only for bounded capacity experiments. Changing the gas value requires
 a coordinated fresh-genesis rollout because it is a consensus parameter;
 changing only a healthcheck expectation or one validator is invalid. The
-checked-in fresh-genesis profile is 160000000 gas and 2097152 bytes. This
-selection depends on the same-provider V3 batch route in #329. It retains the
-1-second CometBFT `timeout_commit` and the separate 64000000 maximum estimated
-gas admitted for one retrieval transaction. The failed 128000000
-separate-transaction qualification remains historical evidence; it did not
-exercise the batch route.
+128000000 candidate failed the #326 execution-latency, validator-headroom, and
+signature gates, so the checked-in profile remains 64000000. Issue #328 owns
+the separate default-off parallel-execution feasibility spike.
 
-The activation evidence comes from a fresh four-validator Linux run at exact
-commit `76d7ce549b422d9991011afbf567225e0454c034`. With 160M gas, one-second
-`timeout_commit`, four workers per validator, and 104 batches of 64 one-opening
-1 KiB sessions, it committed all 6,656 sessions once at 188.35 sessions/s
-(16.27 million/day extrapolated). All 26 measured blocks were saturated;
-all commits stayed in round zero with no missed signatures; and exact
-per-validator `FinalizeBlock` p95 was 602-621ms. The evidence is retained in
-[`bench/retrieval_session_capacity/qualification-160m-326/`](../bench/retrieval_session_capacity/qualification-160m-326/).
+The bounded activation qualification is one fresh four-validator run on Linux:
 
-The benchmark records precise per-block `FinalizeBlock` observations,
-block-header commit-interval quantiles, canonical commit rounds and signatures,
-validator `/proc` CPU and sampled RSS during the longest all-validator-positive
-backlog, and per-node mempool depth. Reconciliation fails on every rejected
-CheckTx or missing, duplicate, failed, retried, or unknown transaction.
-Qualification also fails if the observed mempool reaches the retained
-5,000-transaction Comet limit, so that limit cannot be reported as proof-execution
-capacity. The run restarts every validator afterward, checks fixed-height state
-and consensus limits, waits for a proof in a new normal audit epoch, and verifies
-continued chain progress. A failed candidate still runs and retains this restart
-validation; if restart also fails, the original gate failure remains the reported
-qualification error. After coordinated deployment, run
+```sh
+python3 scripts/retrieval_four_validator_workload.py \
+  --mode native-v3-chain \
+  --binary /path/to/polystorechaind \
+  --library /path/to/libpolystore_core.so \
+  --gateway-binary /path/to/polystore_gateway \
+  --cli-binary /path/to/polystore_cli \
+  --product-source "$PWD" \
+  --proof-exporter /path/to/retrieval-inventory-exporter \
+  --home /path/to/new-128m-run \
+  --chain-capacity-profile 1kib \
+  --chain-capacity-transactions 4992 \
+  --chain-max-gas 128000000 \
+  --timeout 3600
+```
+
+Only that exact candidate enables the #326 gates. The evidence records native
+CometBFT `FinalizeBlock` histogram p50/p95/p99 bucket upper bounds (with `+Inf`
+reported as unknown), block-header commit-interval quantiles, canonical commit
+rounds and signatures, validator `/proc` CPU and sampled RSS during the longest
+all-validator-positive backlog, and per-node mempool depth. Reconciliation still
+fails on every rejected CheckTx or missing, duplicate, failed, retried, or
+unknown transaction. Qualification also fails if the observed mempool reaches
+the retained 5,000-transaction Comet limit, so that limit cannot be reported as
+proof-execution capacity. The run restarts every validator afterward, checks
+fixed-height state and consensus limits, waits for a proof in a new normal audit
+epoch, and verifies continued chain progress. A failed candidate still runs and
+retains this restart validation; if restart also fails, the original gate failure
+remains the reported qualification error. After coordinated deployment, run
 `scripts/run_public_devnet_healthcheck.sh ops/systemd/env/polystore-public-healthcheck.env`
 from an external host; the
 local qualification does not claim public routing or TLS health.

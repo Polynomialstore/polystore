@@ -1,7 +1,7 @@
 {
-  "schema": "polystore-retrieval-v3-chain-qualification-v1",
+  "schema": "polystore-retrieval-v3-chain-batch-frontier-v1",
   "issue": 326,
-  "scope": "proof confirmation only; file transport, proof generation, session opening, signing, acknowledgement, and refund excluded",
+  "scope": "batch-route proof confirmation only; unbatched proof transactions, file transfer, proof generation, session opening, signing, acknowledgement, and refund excluded",
   "provenance": {
     "source_commit": "76d7ce549b422d9991011afbf567225e0454c034",
     "host": "mikers@192.168.0.111",
@@ -45,7 +45,7 @@
     "finalize_block_p95_seconds": [
       0.6077405300018802,
       0.6022347080026245,
-      0.6146405460015411,
+      0.614640546001541,
       0.6207667140008027
     ],
     "maximum_consensus_round": 0,
@@ -69,10 +69,12 @@
       561754112,
       560660480
     ],
-    "post_qualification_restart": true,
-    "qualification": true,
     "source_evidence_path": "/home/mikers/polystore-bench-332-76d7ce54/runs/76d7ce54-batch64-6656-160m-1s-a11-gmp4-formal/evidence.json",
-    "source_evidence_sha256": "4013cfe020da7caed5da8cde6542441090b0004bda230a00ea5d7b6fabbcb061"
+    "source_evidence_sha256": "4013cfe020da7caed5da8cde6542441090b0004bda230a00ea5d7b6fabbcb061",
+    "post_run_restart": true,
+    "batch_only_gates_passed": true,
+    "activation_safe": false,
+    "activation_blocker": "the unbatched V3 proof route remains enabled and was not qualified at 160M"
   },
   "cadence_diagnostic": {
     "max_block_gas": 160000000,
@@ -133,9 +135,9 @@
     },
     "finalize_block_p95_seconds": [
       1.5397325590012743,
-      1.5805032780015414,
+      1.5805032780015413,
       1.5390046720015316,
-      1.5608510810023858
+      1.560851081002386
     ],
     "maximum_consensus_round": 0,
     "missed_validator_signatures": 5,

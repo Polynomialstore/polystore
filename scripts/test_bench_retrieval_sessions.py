@@ -1669,7 +1669,7 @@ class FourValidatorLifecycleTest(unittest.TestCase):
             self.assertTrue((home / "initial.log").exists())
             self.assertTrue((home / "restart.log").exists())
         self.assertEqual(doc["frozen_module_params"]["unchanged_fee"], "17")
-        self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "160000000")
+        self.assertEqual(doc["profile"]["consensus"]["block"]["max_gas"], "64000000")
         self.assertEqual(doc["profile"]["comet_mempool"], {
             "size": 5000, "max_txs_bytes": 1073741824, "max_tx_bytes": 1048576})
         self.assertEqual(doc["profile"]["app_mempool_max_txs"], 0)

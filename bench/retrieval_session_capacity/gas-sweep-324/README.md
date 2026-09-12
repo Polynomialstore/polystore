@@ -15,7 +15,7 @@ Increasing block gas therefore moves proof confirmation close to this implementa
 
 The recommended next activation candidate is **128M**. It provides 93% more capacity than 64M while retaining about half a core of measured validator headroom. Issue #326 owns its sustained consensus qualification and coordinated activation. A 256M activation needs a separate sustained consensus and `FinalizeBlock` latency qualification because it raises mean commit cadence to 1.98 seconds and uses about 78% of one core. The 448M point identifies the plateau and should not be activated: it adds only 10% capacity over 256M while stretching mean commit cadence to 3.19 seconds.
 
-The 128M recommendation was superseded by the [failed 128M qualification](../qualification-128m-326/). That separate-transaction result remains historical evidence. The [current 160M post-batch operational profile](../../../scripts/retrieval_consensus_profile.json) depends on the same-provider batching work in [PR #331](https://github.com/Polynomialstore/polystore/pull/331).
+This recommendation is superseded by the [failed 128M qualification](../qualification-128m-326/); the canonical profile remains 64M.
 
 The sessions/day values are the short saturated rate multiplied by 86,400. They are chain proof-confirmation capacity, not a sustained 24-hour claim or file-transfer throughput. Session opening, data transfer, proof preparation, local verification, signing, owner ACK, settlement recovery, expiry, and refunds are outside the timed interval. The runs retained normal audit traffic but did not measure the configured 700ms execution budget or validator restart behavior.
 
