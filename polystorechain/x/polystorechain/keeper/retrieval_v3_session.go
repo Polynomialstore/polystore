@@ -840,17 +840,7 @@ func (k msgServer) SubmitRetrievalSessionProofBatchV3(goCtx context.Context, msg
 	if err := PrepayProofCrypto(ctx, uint64(totalProofs)); err != nil {
 		return nil, err
 	}
-	var verified bool
-	var err error
-	if totalProofs == 1 {
-		verified, err = verifyPolyFSChainedProof(
-			prepared[0].session.PolyfsRoot,
-			&prepared[0].proofs[0].Proof,
-			v3IntegrityLeavesPerMDU,
-		)
-	} else {
-		verified, err = crypto_ffi.VerifyPolyFSCrossSessionProofBatch(batch, v3IntegrityLeavesPerMDU)
-	}
+	verified, err := crypto_ffi.VerifyPolyFSCrossSessionProofBatch(batch, v3IntegrityLeavesPerMDU)
 	if err != nil || !verified {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid v3 chained proof batch")
 	}
