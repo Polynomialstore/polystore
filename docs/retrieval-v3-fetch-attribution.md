@@ -177,19 +177,25 @@ small local phase-coverage check, not retained qualification evidence.
 Local diagnostic medians (three repeats of three iterations, Apple M3 / Go
 1.25.5 / 16 GiB RAM, development host not isolated from other work):
 
-| Logical fixture | Preparation | Handler ms/op | Go B/op | Go allocs/op |
-| --- | --- | ---: | ---: | ---: |
-| 1 KiB / 1 chunk | cold metadata/index | 19.868 | 33,923,120 | 2,831 |
-| 1 KiB / 1 chunk | warm | 0.615 | 278,642 | 2,034 |
-| two MDUs / 16 chunks | cold metadata/index | 53.710 | 59,203,053 | 100,124 |
-| two MDUs / 16 chunks | warm | 34.230 | 23,340,058 | 98,696 |
+| Logical fixture | Preparation | Handler ms/op | Fixture reads/s | Go B/op | Go allocs/op |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1 KiB / 1 chunk | cold metadata/index | 19.868 | 50.33 | 33,923,120 | 2,831 |
+| 1 KiB / 1 chunk | warm | 0.615 | 1,625.80 | 278,642 | 2,034 |
+| two MDUs / 16 chunks | cold metadata/index | 53.710 | 18.62 | 59,203,053 | 100,124 |
+| two MDUs / 16 chunks | warm | 34.230 | 29.21 | 23,340,058 | 98,696 |
+
+Fixture reads/s is the reciprocal of median handler seconds/op: one logical
+fixture read invokes the public handler once or sixteen times, respectively.
+It measures only this stubbed/discarded-response fixture, **not paid-service
+throughput, sessions/s or network-delivered downloads/s**.
 
 One complete fixture read reported respectively 2 / 32 LCD calls and 1 / 16 key
 dispatches, matching the actual chunk counts. Cold-local metadata/index work and
 warm per-blob work are now visible, but the stubbed key and discarded body phases
 cannot rank production bottlenecks. Timing variation on this non-isolated host
 is another reason not to derive capacity or an optimization claim from these
-small samples. No throughput conversion is reported.
+small samples. The reciprocal fixture rate must not be extrapolated to deployed
+throughput or daily paid capacity.
 
 ## Remaining #342 attribution and the #343 qualification gate
 
@@ -212,8 +218,10 @@ physical I/O, browser first verified write, durable verified throughput, and
 complete paid qualification time. For browser allocation/GC, collect a supported
 heap/allocation timeline; if unavailable, explicitly report that limit and use
 bounded retained-buffer accounting plus browser-process RSS/GC observations.
-Neither substitute proves JS allocation counts. Measure instrumentation-on/off
-overhead before treating its enabled times as a capacity baseline.
+Neither substitute proves JS allocation counts. A matched diagnostics-on/off
+comparison is still missing and blocks #342's measured closure: establish its
+overhead before treating enabled real-route times as a baseline or issuing the
+measured disposition. The phase-coverage sample above does not fill this gap.
 
 Remaining gaps here: no giant-range browser allocation/GC profile, real
 keys-show timings, production RPC/network latency, socket backpressure, actual
