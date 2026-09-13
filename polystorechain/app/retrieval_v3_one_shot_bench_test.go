@@ -40,9 +40,10 @@ var oneShotV3Benchmark struct {
 // BenchmarkRetrievalV3OneShotPipeline is a native-envelope chain-control
 // ceiling, not the public EVM or delivered-service result. Each timed block
 // opens one cohort and settles an equally sized mature cohort in production
-// ACK-before-proof order. Signing, FinalizeBlock and Commit are timed; fixture
-// construction, anchor warm-up, proof generation, consensus, RPC and fsync are
-// not. Cohorts never bypass the current 128-open block guard.
+// ACK-before-proof order, then one final block captures the last cohort's
+// anchors. Signing, FinalizeBlock and Commit are timed; fixture construction,
+// anchor warm-up, proof generation, consensus, RPC and fsync are not. Cohorts
+// never bypass the current 128-open block guard.
 func BenchmarkRetrievalV3OneShotPipeline(b *testing.B) {
 	count := oneShotV3EnvInt(b, "POLYSTORE_RETRIEVAL_BENCH_SESSIONS", 128)
 	require.Contains(b, []int{1, 8, 32, 64, 128, 256, 512, 1024}, count)
@@ -90,7 +91,7 @@ func BenchmarkRetrievalV3OneShotPipeline(b *testing.B) {
 	b.ReportMetric(float64(txBytes)/sessions, "tx-B/session")
 	b.ReportMetric(3, "txs/session")
 	b.ReportMetric(float64(cohort), "opens/block")
-	b.ReportMetric(float64(count/cohort), "blocks/op")
+	b.ReportMetric(float64(count/cohort+1), "blocks/op")
 	b.ReportMetric(0, "failures/op")
 }
 
@@ -105,7 +106,7 @@ func TestRetrievalV3OneShotPipelineControl(t *testing.T) {
 	a := f.restore(t)
 	defer a.Close()
 	result := f.submit(t, a, 8, types.MaxRetrievalV2BlockGas)
-	require.Len(t, result.responses, 1)
+	require.Len(t, result.responses, 2)
 	f.assertState(t, a)
 }
 
@@ -359,6 +360,8 @@ func (f *oneShotV3Fixture) submit(tb testing.TB, a *App, cohort int, maxGas int6
 		}
 		result.elapsed = time.Since(started)
 	}
+	result.responses = append(result.responses,
+		oneShotV3Finalize(tb, a, f.height+1+int64(len(result.responses)), maxGas))
 	result.elapsed = time.Since(started)
 	return result
 }
