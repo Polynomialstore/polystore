@@ -117,7 +117,7 @@ type oneShotV3Fixture struct {
 	count           int
 	height          int64
 	initialPayerSeq uint64
-	proofs          []*types.MsgSubmitRetrievalSessionProofV3
+	proofs          []*types.MsgSubmitRetrievalSessionProofBatchV3
 	acks            []*types.MsgAcknowledgeRetrievalObligationV3
 	root            []byte
 	payerStake      math.Int
@@ -300,8 +300,9 @@ func newOneShotV3Fixture(tb testing.TB, count int, maxGas int64) *oneShotV3Fixtu
 		proof.ZValue = bytes.Clone(challenges[0].Z[:])
 		proof.KzgOpeningProof, proof.YValue, err = crypto_ffi.ComputeBlobProof(blob, proof.ZValue)
 		require.NoError(tb, err)
-		f.proofs = append(f.proofs, &types.MsgSubmitRetrievalSessionProofV3{Creator: provider.String(), SessionId: session.SessionId,
-			Slot: 0, Proofs: []types.RetrievalSampleProofV3{{Ordinal: challenges[0].Ordinal, Proof: proof}}})
+		f.proofs = append(f.proofs, &types.MsgSubmitRetrievalSessionProofBatchV3{Creator: provider.String(),
+			Sessions: []types.RetrievalSessionProofBatchEntryV3{{SessionId: session.SessionId, Slot: 0,
+				Proofs: []types.RetrievalSampleProofV3{{Ordinal: challenges[0].Ordinal, Proof: proof}}}}})
 		f.acks = append(f.acks, &types.MsgAcknowledgeRetrievalObligationV3{Creator: payer.String(), SessionId: session.SessionId,
 			Slot: 0, AckDigest: oneShotV3AckDigest(tb, session, 0)})
 	}
@@ -334,12 +335,13 @@ func (f *oneShotV3Fixture) submit(tb testing.TB, a *App, cohort int, maxGas int6
 	payerSeq, providerSeq := f.initialPayerSeq, uint64(0)
 	for offset := 0; offset < f.count; offset += cohort {
 		end := min(offset+cohort, f.count)
+		height := f.height + 1 + int64(len(result.responses))
 		txs := make([][]byte, 0, 3*(end-offset))
 		signStarted := time.Now()
 		for i := offset; i < end; i++ {
 			open := &types.MsgOpenRetrievalSessionV3Sponsored{Creator: f.acks[i].Creator, DealId: f.dealID, Generation: 1,
 				Range: types.RetrievalRangeV3{FileRecordIndex: 1, FileLength: 1024, RangeLength: 1024},
-				Nonce: uint64(f.count + i + 1), DeadlineHeight: uint64(f.height) + types.MaxRetrievalSessionTTL,
+				Nonce: uint64(f.count + i + 1), DeadlineHeight: uint64(height) + types.MaxRetrievalSessionTTL,
 				MaxTotalFee: math.NewInt(23)}
 			txs = append(txs, retrievalNativeSign(tb, a, f.payer, payerSeq, open))
 			payerSeq++
@@ -349,7 +351,7 @@ func (f *oneShotV3Fixture) submit(tb testing.TB, a *App, cohort int, maxGas int6
 			providerSeq++
 		}
 		result.signEncode += time.Since(signStarted)
-		response := oneShotV3Finalize(tb, a, f.height+1+int64(len(result.responses)), maxGas, txs...)
+		response := oneShotV3Finalize(tb, a, height, maxGas, txs...)
 		result.responses = append(result.responses, response)
 		for txIndex, tx := range txs {
 			result.gas += uint64(response.TxResults[txIndex].GasUsed)
