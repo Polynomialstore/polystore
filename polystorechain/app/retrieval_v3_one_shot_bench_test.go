@@ -98,6 +98,9 @@ func TestRetrievalV3OneShotPipelineControl(t *testing.T) {
 	if testing.Short() {
 		t.Skip("native proof control")
 	}
+	if runGenesisTestInFreshProcess(t) {
+		return
+	}
 	f := newOneShotV3Fixture(t, 8, types.MaxRetrievalV2BlockGas)
 	a := f.restore(t)
 	defer a.Close()
