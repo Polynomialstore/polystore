@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,6 +30,13 @@ import (
 
 const oneShotV3CohortLimit = 128
 
+var oneShotV3Benchmark struct {
+	sync.Once
+	fixture *oneShotV3Fixture
+	count   int
+	maxGas  int64
+}
+
 // BenchmarkRetrievalV3OneShotPipeline is a native-envelope chain-control
 // ceiling, not the public EVM or delivered-service result. Each timed block
 // opens one cohort and settles an equally sized mature cohort in production
@@ -48,7 +56,14 @@ func BenchmarkRetrievalV3OneShotPipeline(b *testing.B) {
 	require.Contains(b, []int{1, 8, 32, 64, 96, 128}, cohort)
 	require.LessOrEqual(b, cohort, count)
 	require.Zero(b, count%cohort)
-	f := newOneShotV3Fixture(b, count, maxGas)
+	oneShotV3Benchmark.Do(func() {
+		oneShotV3Benchmark.fixture = newOneShotV3Fixture(b, count, maxGas)
+		oneShotV3Benchmark.count = count
+		oneShotV3Benchmark.maxGas = maxGas
+	})
+	require.Equal(b, oneShotV3Benchmark.count, count, "select N in a fresh process")
+	require.Equal(b, oneShotV3Benchmark.maxGas, maxGas, "select max gas in a fresh process")
+	f := oneShotV3Benchmark.fixture
 
 	b.ReportAllocs()
 	b.ResetTimer()
