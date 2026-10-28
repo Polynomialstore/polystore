@@ -2417,8 +2417,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		if startSlot != endSlot {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range must stay within a single slot in Mode 2")
 		}
-		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
-		if !ok || providerSlot != startSlot {
+		if !providerAssignedToSlot(deal, msg.Provider, startSlot) {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
 		}
 	}
@@ -2640,8 +2639,7 @@ func (k msgServer) OpenRetrievalSessionSponsored(goCtx context.Context, msg *typ
 		if startSlot != endSlot {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("blob range must stay within a single slot in Mode 2")
 		}
-		providerSlot, ok := providerSlotIndex(deal, msg.Provider)
-		if !ok || providerSlot != startSlot {
+		if !providerAssignedToSlot(deal, msg.Provider, startSlot) {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("provider does not match slot for blob range")
 		}
 	}

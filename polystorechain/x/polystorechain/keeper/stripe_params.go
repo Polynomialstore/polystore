@@ -66,6 +66,26 @@ func stripeParamsForDeal(deal types.Deal) (stripeParams, error) {
 	return params, nil
 }
 
+// providerAssignedToSlot authorizes the requested range directly. A provider can
+// hold multiple current or pending assignments, so its first matching slot is
+// insufficient to authorize retrieval. An initialized canonical map takes
+// precedence over the legacy providers list.
+func providerAssignedToSlot(deal types.Deal, provider string, slot uint64) bool {
+	target := strings.TrimSpace(provider)
+	if target == "" {
+		return false
+	}
+	if deal.RedundancyMode == 2 && deal.Mode2Profile != nil && len(deal.Mode2Slots) > 0 {
+		if slot >= uint64(len(deal.Mode2Slots)) {
+			return false
+		}
+		entry := deal.Mode2Slots[slot]
+		return entry != nil && uint64(entry.Slot) == slot &&
+			(strings.TrimSpace(entry.Provider) == target || strings.TrimSpace(entry.PendingProvider) == target)
+	}
+	return slot < uint64(len(deal.Providers)) && strings.TrimSpace(deal.Providers[slot]) == target
+}
+
 func providerSlotIndex(deal types.Deal, provider string) (uint64, bool) {
 	target := strings.TrimSpace(provider)
 	if target == "" {
