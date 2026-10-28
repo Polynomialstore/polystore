@@ -89,6 +89,12 @@ journalctl -u polystorechaind -f
 
 ## User-level Cloudflare tunnel units
 
+For a checksum-verified upgrade without root, and persistent overrides that
+select the upgraded executable, follow
+[the cloudflared upgrade runbook](../../docs/networking/CLOUDFLARED_UPGRADE.md).
+Always inspect the service's `ExecStart`; the shell's `cloudflared version`
+can report a different installation.
+
 Cloudflare tunnels can run cleanly as user services:
 
 ```bash
@@ -97,7 +103,8 @@ cp ops/systemd/cloudflared-hub.service ~/.config/systemd/user/
 cp ops/systemd/cloudflared-providers.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now cloudflared-hub.service
-systemctl --user enable --now cloudflared-providers.service
+# Only when provider DNS is routed through its fallback tunnel:
+# systemctl --user enable --now cloudflared-providers.service
 ```
 
 These units intentionally use `Restart=always`. `cloudflared` can exit with status `0`
